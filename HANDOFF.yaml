@@ -51,23 +51,29 @@ items:
   - id: crux-4
     title: "Phase 5-6: Replay engine and TaskRegistry"
     description: >
-      Step matching by name + ordinal. Strict vs lenient. TaskRegistry typed API
-      over RegistryBackend port. submit/get/update_status/checkpoint/resume lifecycle.
+      ReplayMode (Strict/Lenient) with by-name step matching. TaskRegistry<B>
+      typed API: submit/get/update_status/checkpoint/load_checkpoint/pending.
+      Task struct with status, input, checkpoint, attempts. ConfidenceRange for
+      route validation.
     priority: P1
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - crates/crux-core/src/replay.rs
+      - crates/crux-core/src/registry/task.rs
       - crates/crux-core/src/registry/mod.rs
 
   - id: crux-5
     title: "Phase 7: SQLite adapter"
     description: >
-      crux-sqlite crate or feature-gated module implementing RegistryBackend
-      with rusqlite. Single table tasks(id, data). Feature flag: sqlite.
+      SqliteBackend behind cfg(feature = "sqlite"). Single tasks(id, data) table,
+      Arc<Mutex<Connection>> for Send+Sync, upsert semantics, LIKE-escaped prefix
+      list, Mutex-guarded CAS. In-memory convenience constructor for tests.
     priority: P2
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
-      - crates/crux-core/src/registry/
+      - crates/crux-core/src/registry/sqlite.rs
 
   - id: crux-6
     title: "CLAUDE.md and Justfile"
@@ -117,14 +123,24 @@ items:
     name: route-on-confidence
     title: "route_on_confidence, pipe operator, join_all"
     description: >
-      Remaining crux-3 scope: route_on_confidence with runtime range validation,
-      pipe operator for sequential composition, Crux::join_all for parallel fan-out.
+      ConfidenceRange with exclusive/inclusive constructors. route_on_confidence
+      validates non-overlapping, gap-free, [0.0,1.0]-covering ranges. pipe chains
+      sequential closures with per-stage step recording. join_all fans out via
+      futures::join_all with per-arm step recording.
     priority: P2
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - crates/crux-core/src/ctx.rs
 
 log:
+  - date: 2026-04-11
+    summary: >
+      Session 3: Closed crux-4 (ReplayMode strict/lenient, by-name step matching,
+      TaskRegistry with submit/get/update_status/checkpoint/pending), crux-5
+      (SqliteBackend behind sqlite feature flag), crux-9 (route_on_confidence,
+      pipe, join_all combinators on CruxCtx). 77 -> 113 tests (120 with sqlite).
+      All open items closed.
   - date: 2026-04-11
     summary: >
       Session 2: Implemented lifecycle hooks (on_low_confidence, on_step_failure,

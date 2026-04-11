@@ -13,7 +13,9 @@ pub mod types;
 pub mod prelude {
     pub use crate::agent::Agent;
     pub use crate::context::Context;
-    pub use crate::ctx::CruxCtx;
+    pub use crate::ctx::{BoxFut, ConfidenceRange, ConfidenceRoute, CruxCtx, JoinArm, PipeStage};
+    pub use crate::registry::{Task, TaskRegistry, TaskStatus};
+    pub use crate::replay::ReplayMode;
     pub use crate::types::budget::Budget;
     pub use crate::types::crux_value::Crux;
     pub use crate::types::error::CruxErr;

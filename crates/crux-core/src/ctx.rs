@@ -1,5 +1,67 @@
-/// CruxCtx — the production adapter for the Context trait.
+//! CruxCtx — the production adapter for the Context trait.
+//!
+//! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
+
+/// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
+/// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
+#[derive(Debug, Clone, Copy)]
+pub struct ConfidenceRange {
+    lo: f32,
+    hi: f32,
+    inclusive: bool,
+}
+
+impl ConfidenceRange {
+    /// Exclusive upper bound: `lo <= x < hi`.
+    pub fn exclusive(lo: f32, hi: f32) -> Self {
+        Self {
+            lo,
+            hi,
+            inclusive: false,
+        }
+    }
+
+    /// Inclusive upper bound: `lo <= x <= hi`.
+    pub fn inclusive(lo: f32, hi: f32) -> Self {
+        Self {
+            lo,
+            hi,
+            inclusive: true,
+        }
+    }
+
+    fn contains(&self, x: f32) -> bool {
+        if self.inclusive {
+            x >= self.lo && x <= self.hi
+        } else {
+            x >= self.lo && x < self.hi
+        }
+    }
+
+    /// Upper end as exclusive for overlap/coverage arithmetic.
+    fn hi_exclusive(&self) -> f32 {
+        if self.inclusive {
+            self.hi + f32::EPSILON
+        } else {
+            self.hi
+        }
+    }
+}
+
+/// A pinned, boxed, Send future returning `Result<T, CruxErr>`.
+pub type BoxFut<T> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, CruxErr>> + Send>>;
+
+/// A named route for `route_on_confidence`: (range, label, future).
+pub type ConfidenceRoute<'a, T> = (ConfidenceRange, &'a str, BoxFut<T>);
+
+/// A named stage for `pipe`: (label, closure producing a future).
+pub type PipeStage<'a, T> = (&'a str, Box<dyn FnOnce(T) -> BoxFut<T> + Send>);
+
+/// A named arm for `join_all`: (label, future).
+pub type JoinArm<'a, T> = (&'a str, BoxFut<T>);
+
 /// Coordinates StepRecorder, HookRegistry, BudgetTracker, and ReplayCache.
 /// Injected as `t` inside `#[crux::agent]` functions.
 use std::future::Future;
@@ -48,6 +110,11 @@ impl CruxCtx {
     /// Seed replay from a previous trace.
     pub fn replay_from(&mut self, previous: &Crux<serde_json::Value>) {
         self.replay.seed_from(previous);
+    }
+
+    /// Set the replay mode (strict or lenient).
+    pub fn set_replay_mode(&mut self, mode: crate::replay::ReplayMode) {
+        self.replay.set_mode(mode);
     }
 
     /// Finalize the context into a `Crux<T>`.
@@ -142,6 +209,162 @@ impl CruxCtx {
         A::Output: Send + serde::Serialize + serde::de::DeserializeOwned,
     {
         crate::delegation::DelegationBuilder::new(self, name, input)
+    }
+
+    /// Route execution based on a confidence score to the first matching named range.
+    ///
+    /// Each route is a `(ConfidenceRange, label, future)` tuple.
+    /// Validates at call time that ranges are non-overlapping and collectively cover `[0.0, 1.0]`.
+    /// Returns `Err` if validation fails or no range matches the given confidence.
+    pub async fn route_on_confidence<T>(
+        &mut self,
+        name: &str,
+        confidence: f32,
+        routes: Vec<ConfidenceRoute<'_, T>>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        // Extract (lo, hi_exclusive) for validation; sort by lo
+        let mut bounds: Vec<(f32, f32)> = routes
+            .iter()
+            .map(|(r, _, _)| (r.lo, r.hi_exclusive()))
+            .collect();
+        bounds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Check non-overlapping and gap-free (consecutive ranges must be contiguous)
+        for i in 1..bounds.len() {
+            if bounds[i].0 < bounds[i - 1].1 {
+                return Err(CruxErr::step_failed(
+                    name,
+                    format!("route_on_confidence: overlapping ranges at index {i}"),
+                ));
+            }
+            if bounds[i].0 > bounds[i - 1].1 {
+                return Err(CruxErr::step_failed(
+                    name,
+                    format!(
+                        "route_on_confidence: gap between ranges at index {} and {}",
+                        i - 1,
+                        i
+                    ),
+                ));
+            }
+        }
+
+        // Check coverage of [0.0, 1.0]
+        let covers_start = bounds.first().map(|b| b.0 <= 0.0).unwrap_or(false);
+        let covers_end = bounds.last().map(|b| b.1 > 1.0).unwrap_or(false);
+        if !covers_start || !covers_end {
+            return Err(CruxErr::step_failed(
+                name,
+                "route_on_confidence: ranges do not fully cover [0.0, 1.0]",
+            ));
+        }
+
+        // Find and run the matching route
+        for (range, label, fut) in routes {
+            if range.contains(confidence) {
+                let step_name = format!("{name}::{label}");
+                return self.step(&step_name, move || fut).await;
+            }
+        }
+
+        Err(CruxErr::step_failed(
+            name,
+            format!("route_on_confidence: no route matched confidence {confidence}"),
+        ))
+    }
+
+    /// Sequential pipeline: each closure receives the output of the previous one.
+    ///
+    /// Each stage is recorded as a separate step named `"{name}::{stage_name}"`.
+    pub async fn pipe<T>(
+        &mut self,
+        name: &str,
+        input: T,
+        stages: Vec<PipeStage<'_, T>>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        let mut current = input;
+        for (stage_name, f) in stages {
+            let step_name = format!("{name}::{stage_name}");
+            let val = current;
+            current = self.step(&step_name, move || f(val)).await?;
+        }
+        Ok(current)
+    }
+
+    /// Parallel fan-out: run named futures concurrently, record each as a step.
+    ///
+    /// All futures are driven to completion concurrently. Each arm is recorded
+    /// as a step named `"{name}::{arm_name}"`. Returns a `Vec` of results in
+    /// input order.
+    pub async fn join_all<T>(
+        &mut self,
+        name: &str,
+        arms: Vec<JoinArm<'_, T>>,
+    ) -> Result<Vec<T>, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        use chrono::Utc;
+
+        let arm_names: Vec<String> = arms
+            .iter()
+            .map(|(arm_name, _)| format!("{name}::{arm_name}"))
+            .collect();
+        let futs: Vec<_> = arms.into_iter().map(|(_, fut)| fut).collect();
+
+        let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
+            futures::future::join_all(futs.into_iter().map(|fut| async move {
+                let start = Utc::now();
+                let result = fut.await;
+                let duration_ms = (Utc::now() - start).num_milliseconds().unsigned_abs();
+                (start, duration_ms, result)
+            }))
+            .await;
+
+        let mut results = Vec::with_capacity(outcomes.len());
+        for (step_name, (started_at, duration_ms, result)) in
+            arm_names.into_iter().zip(outcomes.into_iter())
+        {
+            let (input_hash, _ordinal) = {
+                let (ord, hash) = self.recorder.next_ordinal(&step_name);
+                (hash, ord)
+            };
+            match result {
+                Ok(val) => {
+                    let rec = crate::recorder::StepRecord {
+                        name: &step_name,
+                        input_hash,
+                        confidence: 1.0,
+                        started_at,
+                        duration_ms,
+                        attempt: 1,
+                    };
+                    self.recorder
+                        .record_ok(&rec, serde_json::to_value(&val).ok());
+                    results.push(val);
+                }
+                Err(e) => {
+                    let rec = crate::recorder::StepRecord {
+                        name: &step_name,
+                        input_hash,
+                        confidence: 1.0,
+                        started_at,
+                        duration_ms,
+                        attempt: 1,
+                    };
+                    self.recorder.record_err(&rec, &e.to_string());
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Start a speculation: run multiple approaches, pick the best.
@@ -323,8 +546,8 @@ impl Context for CruxCtx {
     {
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
-        // Replay check
-        match self.replay.check(ordinal, input_hash) {
+        // Replay check (by-name for better matching in both modes).
+        match self.replay.check_by_name(name, ordinal, input_hash) {
             ReplayResult::Hit(cached) => {
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
@@ -794,5 +1017,254 @@ mod tests {
         assert_eq!(ctx2.snapshot_steps().len(), 2);
         assert_eq!(ctx2.snapshot_steps()[0].attempt, 0);
         assert_eq!(ctx2.snapshot_steps()[1].attempt, 1);
+    }
+
+    // -- route_on_confidence --------------------------------------------------
+
+    fn three_way_routes(
+        low_val: String,
+        med_val: String,
+        high_val: String,
+    ) -> Vec<ConfidenceRoute<'static, String>> {
+        vec![
+            (
+                ConfidenceRange::exclusive(0.0, 0.5),
+                "low",
+                Box::pin(async move { Ok(low_val) }),
+            ),
+            (
+                ConfidenceRange::exclusive(0.5, 0.8),
+                "medium",
+                Box::pin(async move { Ok(med_val) }),
+            ),
+            (
+                ConfidenceRange::inclusive(0.8, 1.0),
+                "high",
+                Box::pin(async move { Ok(high_val) }),
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_routes_correctly() {
+        let mut ctx = CruxCtx::new("test");
+        let result: String = ctx
+            .route_on_confidence(
+                "classify",
+                0.6,
+                three_way_routes("low".into(), "medium".into(), "high".into()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, "medium");
+        assert!(
+            ctx.snapshot_steps()
+                .iter()
+                .any(|s| s.name == "classify::medium")
+        );
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_low_boundary() {
+        let mut ctx = CruxCtx::new("test");
+        let result: String = ctx
+            .route_on_confidence(
+                "r",
+                0.1,
+                three_way_routes("low".into(), "medium".into(), "high".into()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, "low");
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_rejects_gap() {
+        let mut ctx = CruxCtx::new("test");
+        // Gap between 0.5 and 0.6 — doesn't cover [0.0, 1.0]
+        let result: Result<String, _> = ctx
+            .route_on_confidence(
+                "r",
+                0.3,
+                vec![
+                    (
+                        ConfidenceRange::exclusive(0.0, 0.5),
+                        "low",
+                        Box::pin(async { Ok("x".to_string()) })
+                            as std::pin::Pin<
+                                Box<
+                                    dyn std::future::Future<Output = Result<String, CruxErr>>
+                                        + Send,
+                                >,
+                            >,
+                    ),
+                    (
+                        ConfidenceRange::inclusive(0.6, 1.0),
+                        "high",
+                        Box::pin(async { Ok("x".to_string()) }),
+                    ),
+                ],
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_rejects_overlap() {
+        let mut ctx = CruxCtx::new("test");
+        // 0.0..0.6 and 0.5..=1.0 overlap
+        let result: Result<String, _> = ctx
+            .route_on_confidence(
+                "r",
+                0.3,
+                vec![
+                    (
+                        ConfidenceRange::exclusive(0.0, 0.6),
+                        "a",
+                        Box::pin(async { Ok("x".to_string()) })
+                            as std::pin::Pin<
+                                Box<
+                                    dyn std::future::Future<Output = Result<String, CruxErr>>
+                                        + Send,
+                                >,
+                            >,
+                    ),
+                    (
+                        ConfidenceRange::inclusive(0.5, 1.0),
+                        "b",
+                        Box::pin(async { Ok("x".to_string()) }),
+                    ),
+                ],
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    // -- pipe -----------------------------------------------------------------
+
+    #[tokio::test]
+    async fn pipe_chains_stages() {
+        let mut ctx = CruxCtx::new("test");
+        let result: i32 = ctx
+            .pipe(
+                "transform",
+                1_i32,
+                vec![
+                    (
+                        "double",
+                        Box::new(|v: i32| {
+                            Box::pin(async move { Ok(v * 2) })
+                                as std::pin::Pin<
+                                    Box<
+                                        dyn std::future::Future<Output = Result<i32, CruxErr>>
+                                            + Send,
+                                    >,
+                                >
+                        })
+                            as Box<
+                                dyn FnOnce(
+                                        i32,
+                                    ) -> std::pin::Pin<
+                                        Box<
+                                            dyn std::future::Future<Output = Result<i32, CruxErr>>
+                                                + Send,
+                                        >,
+                                    > + Send,
+                            >,
+                    ),
+                    (
+                        "add_ten",
+                        Box::new(|v: i32| Box::pin(async move { Ok(v + 10) })),
+                    ),
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, 12); // (1*2)+10
+        assert_eq!(ctx.snapshot_steps().len(), 2);
+        assert_eq!(ctx.snapshot_steps()[0].name, "transform::double");
+        assert_eq!(ctx.snapshot_steps()[1].name, "transform::add_ten");
+    }
+
+    #[tokio::test]
+    async fn pipe_short_circuits_on_error() {
+        let mut ctx = CruxCtx::new("test");
+        let result: Result<i32, _> = ctx
+            .pipe(
+                "p",
+                0_i32,
+                vec![
+                    (
+                        "fail",
+                        Box::new(|_v: i32| {
+                            Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })
+                                as std::pin::Pin<
+                                    Box<
+                                        dyn std::future::Future<Output = Result<i32, CruxErr>>
+                                            + Send,
+                                    >,
+                                >
+                        })
+                            as Box<
+                                dyn FnOnce(
+                                        i32,
+                                    ) -> std::pin::Pin<
+                                        Box<
+                                            dyn std::future::Future<Output = Result<i32, CruxErr>>
+                                                + Send,
+                                        >,
+                                    > + Send,
+                            >,
+                    ),
+                    (
+                        "unreachable",
+                        Box::new(|v: i32| Box::pin(async move { Ok(v + 1) })),
+                    ),
+                ],
+            )
+            .await;
+        assert!(result.is_err());
+        assert_eq!(ctx.snapshot_steps().len(), 1);
+    }
+
+    // -- join_all -------------------------------------------------------------
+
+    #[tokio::test]
+    async fn join_all_runs_concurrently_and_collects() {
+        let mut ctx = CruxCtx::new("test");
+        let results: Vec<i32> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { Ok(1_i32) })),
+                    ("b", Box::pin(async { Ok(2_i32) })),
+                    ("c", Box::pin(async { Ok(3_i32) })),
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(results, vec![1, 2, 3]);
+        assert_eq!(ctx.snapshot_steps().len(), 3);
+        assert_eq!(ctx.snapshot_steps()[0].name, "fetch::a");
+        assert_eq!(ctx.snapshot_steps()[1].name, "fetch::b");
+        assert_eq!(ctx.snapshot_steps()[2].name, "fetch::c");
+    }
+
+    #[tokio::test]
+    async fn join_all_returns_first_error() {
+        let mut ctx = CruxCtx::new("test");
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("ok", Box::pin(async { Ok(1_i32) })),
+                    (
+                        "bad",
+                        Box::pin(async { Err(CruxErr::step_failed("bad", "oops")) }),
+                    ),
+                ],
+            )
+            .await;
+        assert!(result.is_err());
     }
 }
