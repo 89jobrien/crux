@@ -132,10 +132,12 @@ mod tests {
     #[test]
     fn transient_classification() {
         assert!(CruxErr::step_failed("x", "timeout").is_transient());
-        assert!(!CruxErr::Cancelled {
-            reason: "user".into()
-        }
-        .is_transient());
+        assert!(
+            !CruxErr::Cancelled {
+                reason: "user".into()
+            }
+            .is_transient()
+        );
     }
 
     #[test]

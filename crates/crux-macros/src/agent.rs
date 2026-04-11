@@ -10,7 +10,7 @@
 ///   - HelloAgent struct implementing Agent trait
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse2, ItemFn};
+use syn::{ItemFn, parse2};
 
 use crate::parse::AgentArgs;
 
@@ -27,10 +27,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let output_type = extract_crux_inner_type(&func.sig.output)?;
 
     // Generate agent struct name: hello -> HelloAgent
-    let agent_struct = format_ident!(
-        "{}Agent",
-        to_pascal_case(&fn_name.to_string())
-    );
+    let agent_struct = format_ident!("{}Agent", to_pascal_case(&fn_name.to_string()));
 
     let _inner_fn = format_ident!("__crux_{}_inner", fn_name);
 
@@ -63,19 +60,11 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
 
     // For single param, Input = that type. For multiple, use a tuple.
     let (input_type, input_destructure, input_forward) = match param_types.len() {
-        0 => (
-            quote! { () },
-            quote! { () },
-            quote! { () },
-        ),
+        0 => (quote! { () }, quote! { () }, quote! { () }),
         1 => {
             let ty = &param_types[0];
             let name = &param_names[0];
-            (
-                quote! { #ty },
-                quote! { #name },
-                quote! { #name },
-            )
+            (quote! { #ty }, quote! { #name }, quote! { #name })
         }
         _ => {
             let types = &param_types;
@@ -121,9 +110,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     })
 }
 
-fn extract_crux_inner_type(
-    output: &syn::ReturnType,
-) -> syn::Result<TokenStream> {
+fn extract_crux_inner_type(output: &syn::ReturnType) -> syn::Result<TokenStream> {
     match output {
         syn::ReturnType::Default => Err(syn::Error::new_spanned(
             output,

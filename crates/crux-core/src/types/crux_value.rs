@@ -70,9 +70,8 @@ impl<T> Crux<T> {
 
     /// Total duration in milliseconds.
     pub fn duration_ms(&self) -> Option<u64> {
-        self.finished_at.map(|end| {
-            (end - self.started_at).num_milliseconds().unsigned_abs()
-        })
+        self.finished_at
+            .map(|end| (end - self.started_at).num_milliseconds().unsigned_abs())
     }
 
     /// Number of steps that completed successfully.

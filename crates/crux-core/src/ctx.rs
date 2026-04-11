@@ -15,9 +15,7 @@ use crate::types::step::{Step, StepKind, StepStatus};
 
 /// Boxed async handler for low-confidence recovery.
 type ConfidenceHandler = Box<
-    dyn Fn(f32) -> Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>
-        + Send
-        + Sync,
+    dyn Fn(f32) -> Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>> + Send + Sync,
 >;
 
 /// Boxed async handler for step-failure recovery.
@@ -203,7 +201,9 @@ impl CruxCtx {
             if let Some(ref handler) = self.budget_handler {
                 let budget = self.budget_tracker.budget().clone();
                 let recovery = handler(budget).await;
-                return self.apply_recovery_value(name, input_hash, confidence, recovery).await;
+                return self
+                    .apply_recovery_value(name, input_hash, confidence, recovery)
+                    .await;
             }
             return Err(CruxErr::BudgetExceeded {
                 budget_kind: self.budget_tracker.budget().kind(),
@@ -213,7 +213,8 @@ impl CruxCtx {
         }
 
         // -- Execute with retry loop ----------------------------------------
-        self.execute_with_hooks(name, confidence, input_hash, f).await
+        self.execute_with_hooks(name, confidence, input_hash, f)
+            .await
     }
 
     /// Core execution loop: run the closure, apply hooks on failure or low confidence.
@@ -254,7 +255,9 @@ impl CruxCtx {
                             error: None,
                             attempt: 1,
                         });
-                        return self.apply_recovery_value(name, input_hash, confidence, recovery).await;
+                        return self
+                            .apply_recovery_value(name, input_hash, confidence, recovery)
+                            .await;
                     }
                 }
 
@@ -290,7 +293,9 @@ impl CruxCtx {
                 // Check failure hook
                 if let Some(ref handler) = self.failure_handler {
                     let recovery = handler(e).await;
-                    return self.apply_recovery_value(name, input_hash, confidence, recovery).await;
+                    return self
+                        .apply_recovery_value(name, input_hash, confidence, recovery)
+                        .await;
                 }
 
                 Err(e)
@@ -334,9 +339,8 @@ impl CruxCtx {
                     error: None,
                     attempt: 0, // substituted
                 });
-                serde_json::from_value(val).map_err(|e| {
-                    CruxErr::step_failed(name, format!("substitute deserialize: {e}"))
-                })
+                serde_json::from_value(val)
+                    .map_err(|e| CruxErr::step_failed(name, format!("substitute deserialize: {e}")))
             }
             Recovery::Skip => {
                 self.steps.push(Step {
@@ -462,9 +466,9 @@ impl CruxCtx {
                             match recovery {
                                 Recovery::Retry => continue,
                                 other => {
-                                    return self.apply_recovery_value(
-                                        name, input_hash, confidence, other,
-                                    ).await;
+                                    return self
+                                        .apply_recovery_value(name, input_hash, confidence, other)
+                                        .await;
                                 }
                             }
                         }
@@ -533,9 +537,9 @@ impl CruxCtx {
                                 }
                             }
                             other => {
-                                return self.apply_recovery_value(
-                                    name, input_hash, confidence, other,
-                                ).await;
+                                return self
+                                    .apply_recovery_value(name, input_hash, confidence, other)
+                                    .await;
                             }
                         }
                     } else {
@@ -649,7 +653,10 @@ mod tests {
     #[tokio::test]
     async fn finalize_produces_crux() {
         let mut ctx = CruxCtx::new("hello");
-        let _: String = ctx.step("a", || async { Ok("hi".to_string()) }).await.unwrap();
+        let _: String = ctx
+            .step("a", || async { Ok("hi".to_string()) })
+            .await
+            .unwrap();
         let crux = ctx.finalize(Ok("done".to_string()));
         assert_eq!(crux.agent, "hello");
         assert_eq!(crux.value().unwrap(), "done");
@@ -835,9 +842,7 @@ mod tests {
         ctx.set_budget(Budget::tokens(10));
         ctx.consume_budget(100); // exceed
 
-        ctx.on_budget_exceeded(|_budget| async {
-            Recovery::Substitute(serde_json::json!(0))
-        });
+        ctx.on_budget_exceeded(|_budget| async { Recovery::Substitute(serde_json::json!(0)) });
 
         let val: i32 = ctx.step("over_budget", || async { Ok(42) }).await.unwrap();
         assert_eq!(val, 0);
@@ -861,7 +866,10 @@ mod tests {
     async fn replay_returns_cached_output() {
         // First run: build a trace
         let mut ctx1 = CruxCtx::new("agent");
-        let _: String = ctx1.step("fetch", || async { Ok("cached_data".to_string()) }).await.unwrap();
+        let _: String = ctx1
+            .step("fetch", || async { Ok("cached_data".to_string()) })
+            .await
+            .unwrap();
         let crux1 = ctx1.finalize(Ok("done".to_string()));
         let snapshot = crux1.to_snapshot().unwrap();
 
@@ -883,7 +891,10 @@ mod tests {
     #[tokio::test]
     async fn replay_mismatch_errors() {
         let mut ctx1 = CruxCtx::new("agent");
-        let _: String = ctx1.step("fetch", || async { Ok("data".to_string()) }).await.unwrap();
+        let _: String = ctx1
+            .step("fetch", || async { Ok("data".to_string()) })
+            .await
+            .unwrap();
         let crux1 = ctx1.finalize(Ok("done".to_string()));
         let snapshot = crux1.to_snapshot().unwrap();
 

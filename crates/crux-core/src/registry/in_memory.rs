@@ -20,18 +20,27 @@ impl InMemoryBackend {
 
 impl RegistryBackend for InMemoryBackend {
     async fn get(&self, id: &TaskId) -> Result<Option<Vec<u8>>, RegistryErr> {
-        let store = self.store.read().map_err(|e| RegistryErr::Storage(e.to_string()))?;
+        let store = self
+            .store
+            .read()
+            .map_err(|e| RegistryErr::Storage(e.to_string()))?;
         Ok(store.get(id.as_str()).cloned())
     }
 
     async fn put(&self, id: &TaskId, data: Vec<u8>) -> Result<(), RegistryErr> {
-        let mut store = self.store.write().map_err(|e| RegistryErr::Storage(e.to_string()))?;
+        let mut store = self
+            .store
+            .write()
+            .map_err(|e| RegistryErr::Storage(e.to_string()))?;
         store.insert(id.as_str().to_string(), data);
         Ok(())
     }
 
     async fn list(&self, prefix: &str) -> Result<Vec<TaskId>, RegistryErr> {
-        let store = self.store.read().map_err(|e| RegistryErr::Storage(e.to_string()))?;
+        let store = self
+            .store
+            .read()
+            .map_err(|e| RegistryErr::Storage(e.to_string()))?;
         let ids = store
             .keys()
             .filter(|k| k.starts_with(prefix))
@@ -40,13 +49,11 @@ impl RegistryBackend for InMemoryBackend {
         Ok(ids)
     }
 
-    async fn cas(
-        &self,
-        id: &TaskId,
-        expected: Vec<u8>,
-        new: Vec<u8>,
-    ) -> Result<bool, RegistryErr> {
-        let mut store = self.store.write().map_err(|e| RegistryErr::Storage(e.to_string()))?;
+    async fn cas(&self, id: &TaskId, expected: Vec<u8>, new: Vec<u8>) -> Result<bool, RegistryErr> {
+        let mut store = self
+            .store
+            .write()
+            .map_err(|e| RegistryErr::Storage(e.to_string()))?;
         let key = id.as_str().to_string();
         match store.get(&key) {
             Some(current) if *current == expected => {
@@ -85,7 +92,10 @@ mod tests {
         let id = TaskId::new();
         backend.put(&id, b"v1".to_vec()).await.unwrap();
 
-        let ok = backend.cas(&id, b"v1".to_vec(), b"v2".to_vec()).await.unwrap();
+        let ok = backend
+            .cas(&id, b"v1".to_vec(), b"v2".to_vec())
+            .await
+            .unwrap();
         assert!(ok);
         assert_eq!(backend.get(&id).await.unwrap(), Some(b"v2".to_vec()));
     }
@@ -96,7 +106,10 @@ mod tests {
         let id = TaskId::new();
         backend.put(&id, b"v1".to_vec()).await.unwrap();
 
-        let ok = backend.cas(&id, b"wrong".to_vec(), b"v2".to_vec()).await.unwrap();
+        let ok = backend
+            .cas(&id, b"wrong".to_vec(), b"v2".to_vec())
+            .await
+            .unwrap();
         assert!(!ok);
         assert_eq!(backend.get(&id).await.unwrap(), Some(b"v1".to_vec()));
     }

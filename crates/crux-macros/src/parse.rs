@@ -40,7 +40,9 @@ impl Parse for AgentArgs {
                         other => {
                             return Err(syn::Error::new(
                                 lit.span(),
-                                format!("unknown replay mode: '{other}', expected 'strict' or 'lenient'"),
+                                format!(
+                                    "unknown replay mode: '{other}', expected 'strict' or 'lenient'"
+                                ),
                             ));
                         }
                     };

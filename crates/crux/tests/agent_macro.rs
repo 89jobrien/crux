@@ -66,15 +66,19 @@ fn multi_param_agent_trait_name() {
 
 #[crux::agent]
 async fn two_step(input: String) -> Crux<String> {
-    let upper: String = t.step("uppercase", || {
-        let inp = input.clone();
-        async move { Ok(inp.to_uppercase()) }
-    }).await?;
+    let upper: String = t
+        .step("uppercase", || {
+            let inp = input.clone();
+            async move { Ok(inp.to_uppercase()) }
+        })
+        .await?;
 
-    let result: String = t.step("append", || {
-        let u = upper.clone();
-        async move { Ok(format!("{u}!")) }
-    }).await?;
+    let result: String = t
+        .step("append", || {
+            let u = upper.clone();
+            async move { Ok(format!("{u}!")) }
+        })
+        .await?;
 
     Ok(result)
 }
@@ -113,9 +117,11 @@ async fn agent_failure_captured_in_crux() {
 #[crux::agent]
 async fn step_fails() -> Crux<i32> {
     let _: i32 = t.step("ok_step", || async { Ok(1) }).await?;
-    let _: i32 = t.step("bad_step", || async {
-        Err(CruxErr::step_failed("bad_step", "oops"))
-    }).await?;
+    let _: i32 = t
+        .step("bad_step", || async {
+            Err(CruxErr::step_failed("bad_step", "oops"))
+        })
+        .await?;
     Ok(0) // unreachable
 }
 
@@ -133,9 +139,9 @@ async fn step_failure_propagates_through_macro() {
 
 #[crux::agent]
 async fn uncertain() -> Crux<String> {
-    let val: String = t.step_with_confidence("guess", 0.4, || async {
-        Ok("maybe".to_string())
-    }).await?;
+    let val: String = t
+        .step_with_confidence("guess", 0.4, || async { Ok("maybe".to_string()) })
+        .await?;
     Ok(val)
 }
 
@@ -150,13 +156,13 @@ async fn step_confidence_recorded() {
 
 #[crux::agent]
 async fn hooked() -> Crux<i32> {
-    t.on_step_failure(|_err| async {
-        Recovery::Substitute(serde_json::json!(42))
-    });
+    t.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!(42)) });
 
-    let val: i32 = t.step("will_fail", || async {
-        Err(CruxErr::step_failed("will_fail", "expected"))
-    }).await?;
+    let val: i32 = t
+        .step("will_fail", || async {
+            Err(CruxErr::step_failed("will_fail", "expected"))
+        })
+        .await?;
 
     Ok(val)
 }

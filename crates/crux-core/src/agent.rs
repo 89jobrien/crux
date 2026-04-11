@@ -3,7 +3,7 @@
 /// Agents have typed inputs and outputs, a name, and optional lifecycle hooks.
 /// You rarely implement this directly — the `#[crux::agent]` macro generates
 /// an impl from a free function.
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::types::budget::Budget;
 use crate::types::error::CruxErr;

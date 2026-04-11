@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -e
+
+echo "pre-commit: fmt check"
+cargo fmt --all -- --check
+
+echo "pre-commit: clippy"
+cargo clippy --all-targets -- -D warnings
