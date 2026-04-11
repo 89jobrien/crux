@@ -8,6 +8,11 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 authors = ["Joseph O'Brien"]
+repository = "https://github.com/89jobrien/crux"
+homepage = "https://github.com/89jobrien/crux"
+readme = "README.md"
+keywords = ["agent", "agentic", "dsl", "replay", "trace"]
+categories = ["development-tools", "asynchronous"]
 
 [workspace.dependencies]
 # Core
@@ -37,3 +42,4 @@ tracing = "0.1"
 
 # Testing
 tokio-test = "0.4"
+proptest = "1.11.0"
