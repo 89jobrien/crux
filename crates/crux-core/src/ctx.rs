@@ -14,7 +14,24 @@ pub struct ConfidenceRange {
 
 impl ConfidenceRange {
     /// Exclusive upper bound: `lo <= x < hi`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either bound is NaN or infinite, if `lo >= hi`, or if either
+    /// bound is outside `[0.0, 1.0]`.
     pub fn exclusive(lo: f32, hi: f32) -> Self {
+        assert!(
+            lo.is_finite() && hi.is_finite(),
+            "ConfidenceRange: bounds must be finite (got lo={lo}, hi={hi})"
+        );
+        assert!(
+            lo >= 0.0 && hi <= 1.0,
+            "ConfidenceRange: bounds must be in [0.0, 1.0] (got lo={lo}, hi={hi})"
+        );
+        assert!(
+            lo < hi,
+            "ConfidenceRange: lo must be strictly less than hi (got lo={lo}, hi={hi})"
+        );
         Self {
             lo,
             hi,
@@ -23,7 +40,24 @@ impl ConfidenceRange {
     }
 
     /// Inclusive upper bound: `lo <= x <= hi`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either bound is NaN or infinite, if `lo >= hi`, or if either
+    /// bound is outside `[0.0, 1.0]`.
     pub fn inclusive(lo: f32, hi: f32) -> Self {
+        assert!(
+            lo.is_finite() && hi.is_finite(),
+            "ConfidenceRange: bounds must be finite (got lo={lo}, hi={hi})"
+        );
+        assert!(
+            lo >= 0.0 && hi <= 1.0,
+            "ConfidenceRange: bounds must be in [0.0, 1.0] (got lo={lo}, hi={hi})"
+        );
+        assert!(
+            lo < hi,
+            "ConfidenceRange: lo must be strictly less than hi (got lo={lo}, hi={hi})"
+        );
         Self {
             lo,
             hi,
@@ -40,9 +74,17 @@ impl ConfidenceRange {
     }
 
     /// Upper end as exclusive for overlap/coverage arithmetic.
+    ///
+    /// For inclusive ranges we return the next representable `f32` above `hi`
+    /// (i.e. `nextafter(hi, +∞)`). This ensures that a contiguous pair such as
+    /// `[0.8, 1.0]` and `[0.0, 0.8)` is detected as touching without any
+    /// floating-point precision issues, and that inclusive `1.0` correctly
+    /// satisfies the `> 1.0` coverage check.
     fn hi_exclusive(&self) -> f32 {
         if self.inclusive {
-            self.hi + f32::EPSILON
+            // For finite positive floats the bit pattern increments monotonically,
+            // so adding 1 to the bit representation gives the next float above hi.
+            f32::from_bits(self.hi.to_bits() + 1)
         } else {
             self.hi
         }
@@ -225,12 +267,23 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        // Extract (lo, hi_exclusive) for validation; sort by lo
+        // Validate confidence score.
+        if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
+            return Err(CruxErr::step_failed(
+                name,
+                format!(
+                    "route_on_confidence: confidence must be finite and in [0.0, 1.0], got {confidence}"
+                ),
+            ));
+        }
+
+        // Extract (lo, hi_exclusive) for validation; sort by lo using total_cmp
+        // to handle any remaining non-finite values without silent NaN misordering.
         let mut bounds: Vec<(f32, f32)> = routes
             .iter()
             .map(|(r, _, _)| (r.lo, r.hi_exclusive()))
             .collect();
-        bounds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        bounds.sort_by(|a, b| a.0.total_cmp(&b.0));
 
         // Check non-overlapping and gap-free (consecutive ranges must be contiguous)
         for i in 1..bounds.len() {
@@ -299,9 +352,22 @@ impl CruxCtx {
 
     /// Parallel fan-out: run named futures concurrently, record each as a step.
     ///
-    /// All futures are driven to completion concurrently. Each arm is recorded
-    /// as a step named `"{name}::{arm_name}"`. Returns a `Vec` of results in
-    /// input order.
+    /// Ordinals are allocated for all arms **before** any future is dispatched,
+    /// matching the semantics of `step()` and `pipe()`. Each arm also checks the
+    /// replay cache before executing: if a cached result exists the future is
+    /// dropped and the cached value is used directly.
+    ///
+    /// Each arm is recorded as a step named `"{name}::{arm_name}"`. Returns a
+    /// `Vec` of results in input order.
+    ///
+    /// # Replay semantics
+    ///
+    /// Unlike bare `step()`, arms whose futures are not in the replay cache are
+    /// still dispatched concurrently. Only arms that hit the cache skip execution.
+    /// This means a partial replay (some arms cached, some not) is supported, but
+    /// the non-cached arms will execute live even during an otherwise-replaying
+    /// run. Callers that need strict all-or-nothing replay should use sequential
+    /// `step()` calls instead.
     pub async fn join_all<T>(
         &mut self,
         name: &str,
@@ -312,14 +378,59 @@ impl CruxCtx {
     {
         use chrono::Utc;
 
-        let arm_names: Vec<String> = arms
-            .iter()
-            .map(|(arm_name, _)| format!("{name}::{arm_name}"))
+        // Phase 1: allocate ordinals and check replay cache for each arm before
+        // dispatching any future. This mirrors step()/pipe() ordinal-first semantics.
+        struct ArmMeta {
+            step_name: String,
+            input_hash: u64,
+        }
+
+        let mut metas: Vec<ArmMeta> = Vec::with_capacity(arms.len());
+        let mut replay_hits: Vec<Option<T>> = Vec::with_capacity(arms.len());
+
+        for (arm_name, _) in &arms {
+            let step_name = format!("{name}::{arm_name}");
+            let (ordinal, input_hash) = self.recorder.next_ordinal(&step_name);
+
+            let hit = match self.replay.check_by_name(&step_name, ordinal, input_hash) {
+                ReplayResult::Hit(cached) => {
+                    let value: T = deserialize_replay(&step_name, cached.clone())?;
+                    self.recorder
+                        .record_replay(&step_name, input_hash, 1.0, cached);
+                    Some(value)
+                }
+                ReplayResult::Mismatch { expected, actual } => {
+                    return Err(CruxErr::ReplayMismatch {
+                        step: step_name.clone(),
+                        expected,
+                        actual,
+                    });
+                }
+                ReplayResult::Miss => None,
+            };
+
+            let _ = ordinal; // allocated to advance the ordinal counter; not stored
+            metas.push(ArmMeta {
+                step_name,
+                input_hash,
+            });
+            replay_hits.push(hit);
+        }
+
+        // Phase 2: dispatch only the futures whose arms missed the replay cache.
+        // Futures for cache-hit arms are dropped here (never polled).
+        let live_futs: Vec<(usize, _)> = arms
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| replay_hits[*i].is_none())
+            .map(|(i, (_, fut))| (i, fut))
             .collect();
-        let futs: Vec<_> = arms.into_iter().map(|(_, fut)| fut).collect();
+
+        let live_indices: Vec<usize> = live_futs.iter().map(|(i, _)| *i).collect();
+        let futs_only: Vec<_> = live_futs.into_iter().map(|(_, f)| f).collect();
 
         let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
-            futures::future::join_all(futs.into_iter().map(|fut| async move {
+            futures::future::join_all(futs_only.into_iter().map(|fut| async move {
                 let start = Utc::now();
                 let result = fut.await;
                 let duration_ms = (Utc::now() - start).num_milliseconds().unsigned_abs();
@@ -327,18 +438,19 @@ impl CruxCtx {
             }))
             .await;
 
-        let mut results = Vec::with_capacity(outcomes.len());
-        for (step_name, (started_at, duration_ms, result)) in
-            arm_names.into_iter().zip(outcomes.into_iter())
-        {
-            let (input_hash, _ordinal) = {
-                let (ord, hash) = self.recorder.next_ordinal(&step_name);
-                (hash, ord)
-            };
+        // Phase 3: record live outcomes back against pre-allocated ordinal metadata.
+        let mut live_outcome_iter = outcomes.into_iter();
+
+        let mut results: Vec<Option<T>> = replay_hits;
+        for idx in live_indices {
+            let (started_at, duration_ms, result) = live_outcome_iter.next().unwrap();
+            let step_name = &metas[idx].step_name;
+            let input_hash = metas[idx].input_hash;
+
             match result {
                 Ok(val) => {
                     let rec = crate::recorder::StepRecord {
-                        name: &step_name,
+                        name: step_name,
                         input_hash,
                         confidence: 1.0,
                         started_at,
@@ -347,11 +459,11 @@ impl CruxCtx {
                     };
                     self.recorder
                         .record_ok(&rec, serde_json::to_value(&val).ok());
-                    results.push(val);
+                    results[idx] = Some(val);
                 }
                 Err(e) => {
                     let rec = crate::recorder::StepRecord {
-                        name: &step_name,
+                        name: step_name,
                         input_hash,
                         confidence: 1.0,
                         started_at,
@@ -364,7 +476,8 @@ impl CruxCtx {
             }
         }
 
-        Ok(results)
+        // All slots filled — unwrap is safe.
+        Ok(results.into_iter().map(Option::unwrap).collect())
     }
 
     /// Start a speculation: run multiple approaches, pick the best.
@@ -1248,6 +1361,158 @@ mod tests {
         assert_eq!(ctx.snapshot_steps()[0].name, "fetch::a");
         assert_eq!(ctx.snapshot_steps()[1].name, "fetch::b");
         assert_eq!(ctx.snapshot_steps()[2].name, "fetch::c");
+    }
+
+    // -- ConfidenceRange validation -------------------------------------------
+
+    #[test]
+    #[should_panic(expected = "bounds must be finite")]
+    fn confidence_range_exclusive_rejects_nan() {
+        ConfidenceRange::exclusive(f32::NAN, 1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "bounds must be finite")]
+    fn confidence_range_exclusive_rejects_inf() {
+        ConfidenceRange::exclusive(0.0, f32::INFINITY);
+    }
+
+    #[test]
+    #[should_panic(expected = "lo must be strictly less than hi")]
+    fn confidence_range_exclusive_rejects_reversed() {
+        ConfidenceRange::exclusive(0.8, 0.2);
+    }
+
+    #[test]
+    #[should_panic(expected = "lo must be strictly less than hi")]
+    fn confidence_range_exclusive_rejects_equal() {
+        ConfidenceRange::exclusive(0.5, 0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "bounds must be in [0.0, 1.0]")]
+    fn confidence_range_exclusive_rejects_out_of_range() {
+        ConfidenceRange::exclusive(-0.1, 0.5);
+    }
+
+    #[test]
+    #[should_panic(expected = "bounds must be finite")]
+    fn confidence_range_inclusive_rejects_nan() {
+        ConfidenceRange::inclusive(0.0, f32::NAN);
+    }
+
+    #[test]
+    #[should_panic(expected = "bounds must be in [0.0, 1.0]")]
+    fn confidence_range_inclusive_rejects_out_of_range() {
+        ConfidenceRange::inclusive(0.5, 1.1);
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_rejects_nan_confidence() {
+        let mut ctx = CruxCtx::new("test");
+        let result: Result<String, _> = ctx
+            .route_on_confidence(
+                "r",
+                f32::NAN,
+                three_way_routes("a".into(), "b".into(), "c".into()),
+            )
+            .await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("confidence must be finite"));
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_rejects_infinite_confidence() {
+        let mut ctx = CruxCtx::new("test");
+        let result: Result<String, _> = ctx
+            .route_on_confidence(
+                "r",
+                f32::INFINITY,
+                three_way_routes("a".into(), "b".into(), "c".into()),
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn route_on_confidence_rejects_out_of_range_confidence() {
+        let mut ctx = CruxCtx::new("test");
+        let result: Result<String, _> = ctx
+            .route_on_confidence(
+                "r",
+                1.5,
+                three_way_routes("a".into(), "b".into(), "c".into()),
+            )
+            .await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("confidence must be finite"));
+    }
+
+    // -- join_all replay semantics --------------------------------------------
+
+    #[tokio::test]
+    async fn join_all_replays_from_cache() {
+        // Record a first run.
+        let mut ctx1 = CruxCtx::new("agent");
+        let results1: Vec<String> = ctx1
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { Ok("alpha".to_string()) })),
+                    ("b", Box::pin(async { Ok("beta".to_string()) })),
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(results1, vec!["alpha", "beta"]);
+        let crux1 = ctx1.finalize(Ok("done".to_string()));
+        let snapshot = crux1.to_snapshot().unwrap();
+
+        // Replay: futures must not execute.
+        let mut ctx2 = CruxCtx::new("agent");
+        ctx2.replay_from(&snapshot);
+        let results2: Vec<String> = ctx2
+            .join_all(
+                "fetch",
+                vec![
+                    (
+                        "a",
+                        Box::pin(async { panic!("should not run during replay") }),
+                    ),
+                    (
+                        "b",
+                        Box::pin(async { panic!("should not run during replay") }),
+                    ),
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(results2, vec!["alpha", "beta"]);
+        // Replayed steps have attempt == 0.
+        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0);
+        assert_eq!(ctx2.snapshot_steps()[1].attempt, 0);
+    }
+
+    #[tokio::test]
+    async fn join_all_ordinals_allocated_before_dispatch() {
+        // Verify step names and count are correct even after a join_all.
+        let mut ctx = CruxCtx::new("test");
+        let _ = ctx
+            .join_all(
+                "fan",
+                vec![
+                    ("x", Box::pin(async { Ok(10_i32) })),
+                    ("y", Box::pin(async { Ok(20_i32) })),
+                ],
+            )
+            .await
+            .unwrap();
+        // A step recorded after join_all must have ordinal 3 (after the two arms).
+        let _ = ctx.step("post", || async { Ok(99_i32) }).await.unwrap();
+        assert_eq!(ctx.step_count(), 3);
+        assert_eq!(ctx.snapshot_steps()[2].name, "post");
     }
 
     #[tokio::test]

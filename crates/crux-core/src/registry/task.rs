@@ -68,50 +68,64 @@ impl<B: RegistryBackend> TaskRegistry<B> {
         Ok(serde_json::from_slice(&data)?)
     }
 
-    /// Update a task's status.
+    /// Update a task's status using a bounded CAS retry loop.
+    ///
+    /// Attempts up to 3 read-modify-CAS cycles. If all attempts fail due to
+    /// concurrent writes, returns `RegistryErr::Conflict`.
     pub async fn update_status(&self, id: &TaskId, status: TaskStatus) -> Result<(), RegistryErr> {
-        let old_data = self
-            .backend
-            .get(id)
-            .await?
-            .ok_or_else(|| RegistryErr::NotFound(id.to_string()))?;
-        let mut task: Task = serde_json::from_slice(&old_data)?;
-        task.status = status;
-        let new_data = serde_json::to_vec(&task)?;
-        let swapped = self.backend.cas(id, old_data, new_data.clone()).await?;
-        if !swapped {
-            // Concurrent update — retry with fresh read.
-            let fresh = self
+        const MAX_ATTEMPTS: u32 = 3;
+        for attempt in 0..MAX_ATTEMPTS {
+            let old_data = self
                 .backend
                 .get(id)
                 .await?
                 .ok_or_else(|| RegistryErr::NotFound(id.to_string()))?;
-            let mut task2: Task = serde_json::from_slice(&fresh)?;
-            task2.status = task.status;
-            let data2 = serde_json::to_vec(&task2)?;
-            self.backend.put(id, data2).await?;
+            let mut task: Task = serde_json::from_slice(&old_data)?;
+            task.status = status.clone();
+            let new_data = serde_json::to_vec(&task)?;
+            let swapped = self.backend.cas(id, old_data, new_data).await?;
+            if swapped {
+                return Ok(());
+            }
+            // CAS lost — another writer modified the task; retry unless exhausted.
+            if attempt == MAX_ATTEMPTS - 1 {
+                return Err(RegistryErr::Conflict(id.to_string()));
+            }
         }
-        Ok(())
+        Err(RegistryErr::Conflict(id.to_string()))
     }
 
-    /// Save an execution checkpoint (Crux snapshot) into the task.
+    /// Save an execution checkpoint (Crux snapshot) into the task using a bounded CAS retry loop.
+    ///
+    /// Attempts up to 3 read-modify-CAS cycles. If all attempts fail due to
+    /// concurrent writes, returns `RegistryErr::Conflict`.
     pub async fn checkpoint<T: Serialize>(
         &self,
         id: &TaskId,
         crux: &Crux<T>,
     ) -> Result<(), RegistryErr> {
         let snapshot = crux.to_snapshot().map_err(RegistryErr::Serialization)?;
-        let old_data = self
-            .backend
-            .get(id)
-            .await?
-            .ok_or_else(|| RegistryErr::NotFound(id.to_string()))?;
-        let mut task: Task = serde_json::from_slice(&old_data)?;
-        task.checkpoint = Some(snapshot);
-        task.attempts += 1;
-        let new_data = serde_json::to_vec(&task)?;
-        self.backend.put(id, new_data).await?;
-        Ok(())
+        const MAX_ATTEMPTS: u32 = 3;
+        for attempt in 0..MAX_ATTEMPTS {
+            let old_data = self
+                .backend
+                .get(id)
+                .await?
+                .ok_or_else(|| RegistryErr::NotFound(id.to_string()))?;
+            let mut task: Task = serde_json::from_slice(&old_data)?;
+            task.checkpoint = Some(snapshot.clone());
+            task.attempts += 1;
+            let new_data = serde_json::to_vec(&task)?;
+            let swapped = self.backend.cas(id, old_data, new_data).await?;
+            if swapped {
+                return Ok(());
+            }
+            // CAS lost — another writer modified the task; retry unless exhausted.
+            if attempt == MAX_ATTEMPTS - 1 {
+                return Err(RegistryErr::Conflict(id.to_string()));
+            }
+        }
+        Err(RegistryErr::Conflict(id.to_string()))
     }
 
     /// List all pending tasks of the given kind. Pass "" to return all pending tasks
@@ -145,6 +159,54 @@ impl<B: RegistryBackend> TaskRegistry<B> {
 mod tests {
     use super::*;
     use crate::registry::InMemoryBackend;
+    use crate::registry::backend::RegistryBackend;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// A backend wrapper that fails CAS for the first `fail_count` attempts,
+    /// then delegates to the inner backend.
+    struct FailingCasBackend {
+        inner: InMemoryBackend,
+        cas_fail_remaining: Arc<AtomicU32>,
+    }
+
+    impl FailingCasBackend {
+        fn new(fail_count: u32) -> Self {
+            Self {
+                inner: InMemoryBackend::new(),
+                cas_fail_remaining: Arc::new(AtomicU32::new(fail_count)),
+            }
+        }
+    }
+
+    impl RegistryBackend for FailingCasBackend {
+        async fn get(&self, id: &TaskId) -> Result<Option<Vec<u8>>, RegistryErr> {
+            self.inner.get(id).await
+        }
+
+        async fn put(&self, id: &TaskId, data: Vec<u8>) -> Result<(), RegistryErr> {
+            self.inner.put(id, data).await
+        }
+
+        async fn list(&self, prefix: &str) -> Result<Vec<TaskId>, RegistryErr> {
+            self.inner.list(prefix).await
+        }
+
+        async fn cas(
+            &self,
+            id: &TaskId,
+            expected: Vec<u8>,
+            new: Vec<u8>,
+        ) -> Result<bool, RegistryErr> {
+            let remaining = self.cas_fail_remaining.load(Ordering::SeqCst);
+            if remaining > 0 {
+                self.cas_fail_remaining.fetch_sub(1, Ordering::SeqCst);
+                // Return false (CAS lost) without touching the store.
+                return Ok(false);
+            }
+            self.inner.cas(id, expected, new).await
+        }
+    }
     use crate::types::crux_value::Crux;
     use crate::types::id::CruxId;
     use crate::types::step::{Step, StepKind, StepStatus};
@@ -298,6 +360,62 @@ mod tests {
         reg.checkpoint(&id, &crux).await.unwrap();
         let task = reg.get(&id).await.unwrap();
         assert_eq!(task.attempts, 2);
+    }
+
+    // -- CAS retry behavior ---------------------------------------------------
+
+    #[tokio::test]
+    async fn update_status_succeeds_after_cas_retries() {
+        // Two CAS failures then success on the third attempt.
+        let backend = FailingCasBackend::new(2);
+        let reg = TaskRegistry::new(backend);
+        let id = reg.submit("build", serde_json::json!(null)).await.unwrap();
+        reg.update_status(&id, TaskStatus::Running).await.unwrap();
+        let task = reg.get(&id).await.unwrap();
+        assert_eq!(task.status, TaskStatus::Running);
+    }
+
+    #[tokio::test]
+    async fn update_status_returns_conflict_when_all_retries_fail() {
+        // Three CAS failures exhaust all attempts.
+        let backend = FailingCasBackend::new(3);
+        let reg = TaskRegistry::new(backend);
+        let id = reg.submit("build", serde_json::json!(null)).await.unwrap();
+        let err = reg
+            .update_status(&id, TaskStatus::Running)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, RegistryErr::Conflict(_)));
+    }
+
+    #[tokio::test]
+    async fn checkpoint_succeeds_after_cas_retries() {
+        // Two CAS failures then success on the third attempt.
+        let backend = FailingCasBackend::new(2);
+        let reg = TaskRegistry::new(backend);
+        let id = reg
+            .submit("analyze", serde_json::json!(null))
+            .await
+            .unwrap();
+        let crux = make_crux();
+        reg.checkpoint(&id, &crux).await.unwrap();
+        let task = reg.get(&id).await.unwrap();
+        assert!(task.checkpoint.is_some());
+        assert_eq!(task.attempts, 1);
+    }
+
+    #[tokio::test]
+    async fn checkpoint_returns_conflict_when_all_retries_fail() {
+        // Three CAS failures exhaust all attempts.
+        let backend = FailingCasBackend::new(3);
+        let reg = TaskRegistry::new(backend);
+        let id = reg
+            .submit("analyze", serde_json::json!(null))
+            .await
+            .unwrap();
+        let crux = make_crux();
+        let err = reg.checkpoint(&id, &crux).await.unwrap_err();
+        assert!(matches!(err, RegistryErr::Conflict(_)));
     }
 
     #[tokio::test]
