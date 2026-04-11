@@ -5,20 +5,20 @@
 > just an `if`.
 
 Regular Rust gives you `if`, `match`, and `tokio::spawn`. `crux::` gives
-you four additional primitives that each correspond to a different *kind* of
+you four additional primitives that each correspond to a different _kind_ of
 decision an agent makes. The four exist because they have different replay,
 budget, and recovery semantics — not because any one of them is "better".
 
 ## The four branching kinds
 
-| Primitive | When to use | Records in crux as |
-|-----------|-------------|---------------------|
-| `match` (plain Rust) | Pure pattern match on known-shape data | `Step { kind: Branch, ... }` |
-| `t.route_on_confidence` | Dispatch on a model's confidence score | `Step { kind: Branch, ... }` with the score |
-| `t.speculate` | Run several approaches, pick the winner | Winner as `Ok`, losers as `Rejected` |
-| `t.delegate::<A>` | Hand off to a separate agent | `Step { kind: Delegation, children: [...] }` |
+| Primitive               | When to use                             | Records in crux as                           |
+| ----------------------- | --------------------------------------- | -------------------------------------------- |
+| `match` (plain Rust)    | Pure pattern match on known-shape data  | `Step { kind: Branch, ... }`                 |
+| `t.route_on_confidence` | Dispatch on a model's confidence score  | `Step { kind: Branch, ... }` with the score  |
+| `t.speculate`           | Run several approaches, pick the winner | Winner as `Ok`, losers as `Rejected`         |
+| `t.delegate::<A>`       | Hand off to a separate agent            | `Step { kind: Delegation, children: [...] }` |
 
-Pick the primitive by asking: *what does "failure" mean here?*
+Pick the primitive by asking: _what does "failure" mean here?_
 
 - `match` — failure is impossible, or handled by another arm
 - `route_on_confidence` — failure means "we weren't sure enough"
@@ -49,7 +49,7 @@ async fn classify(doc: Document) -> Crux<Category> {
 }
 ```
 
-The `match` is inside `t.step`, so the step records *which* arm fired (via
+The `match` is inside `t.step`, so the step records _which_ arm fired (via
 the closure's output). The unknown case fails the step with a `LowConfidence`
 error — which will trip any `on_low_confidence` hook attached upstream.
 
@@ -115,11 +115,11 @@ async fn finalize(draft: Draft) -> Crux<Itinerary> {
 
 Three terminators, each with different semantics:
 
-| Terminator | Picks | Cancels losers? |
-|------------|-------|-----------------|
-| `.first_ok()` | First arm to succeed | Yes, via drop |
-| `.pick_best_by(f)` | Highest `f(result)` after all finish | No |
-| `.pick_best_by_racing(f)` | Highest `f` among those that finish in time | Yes |
+| Terminator                | Picks                                       | Cancels losers? |
+| ------------------------- | ------------------------------------------- | --------------- |
+| `.first_ok()`             | First arm to succeed                        | Yes, via drop   |
+| `.pick_best_by(f)`        | Highest `f(result)` after all finish        | No              |
+| `.pick_best_by_racing(f)` | Highest `f` among those that finish in time | Yes             |
 
 ### What speculation records
 
@@ -135,9 +135,9 @@ did the model consider?", this is that.
 
 ### Budget sharing across arms
 
-`with_budget` applies to the *whole speculation*, not per arm. Arms share a
+`with_budget` applies to the _whole speculation_, not per arm. Arms share a
 single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
-2000 between them. This is the one place in `crux::` where arms are *not*
+2000 between them. This is the one place in `crux::` where arms are _not_
 independent — speculation is explicitly cooperative.
 
 ## Delegation with `t.delegate::<A>`
@@ -176,7 +176,7 @@ Three things that are painful to get right by hand:
 
 2. **Lifecycle hooks attach per call site.** Same `DraftAgent`, two
    different call sites with two different `on_low_confidence` handlers.
-   The hooks live on the *builder*, not the agent type — so the agent
+   The hooks live on the _builder_, not the agent type — so the agent
    stays reusable.
 
 3. **Budgets compose.** Parent has 10k tokens. Delegation gets 4k.
@@ -185,7 +185,7 @@ Three things that are painful to get right by hand:
 
 ### Delegation vs. calling another `#[crux::agent]` function directly
 
-You *can* just call another agent function:
+You _can_ just call another agent function:
 
 ```rust
 let sub_crux = drafter(input).await;
@@ -244,13 +244,13 @@ every sub-crux as a child. If any child fails, you can choose:
 
 - **You're writing a function that dispatches to one of three tools based
   on a model's self-reported confidence.** Which primitive?
-  *`route_on_confidence`.*
+  _`route_on_confidence`._
 - **You want to try three draft styles and keep the best.** Which one?
-  *`speculate` + `pick_best_by`.*
+  _`speculate` + `pick_best_by`._
 - **You want to call a helper you wrote five minutes ago.** Which one?
-  *Plain function call. The crux still rolls up.*
+  _Plain function call. The crux still rolls up._
 - **You want a sub-agent with its own budget and human-escalation hook.**
-  Which one? *`delegate`.*
+  Which one? _`delegate`._
 
 Chapter **04** is where the tutorial gets useful: we wire in the task
 registry so these cruxs can survive a crash.

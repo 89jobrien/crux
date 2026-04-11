@@ -207,13 +207,13 @@ pub struct Task<S> {
 crux = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
 ```
 
-| Flag | Turns on |
-|------|----------|
-| `serde` | Serde impls for `Crux`, `Step`, `Task`, `CruxErr` |
-| `tokio` | `tokio::spawn` for `delegate`, `tokio::join!` for `join_all` |
-| `sqlite` | `TaskRegistry::sqlite` |
-| `tracing` | Emit `tracing` events alongside `crux::` steps |
-| `postgres` | `TaskRegistry::postgres` (requires `sqlx`) |
+| Flag       | Turns on                                                     |
+| ---------- | ------------------------------------------------------------ |
+| `serde`    | Serde impls for `Crux`, `Step`, `Task`, `CruxErr`            |
+| `tokio`    | `tokio::spawn` for `delegate`, `tokio::join!` for `join_all` |
+| `sqlite`   | `TaskRegistry::sqlite`                                       |
+| `tracing`  | Emit `tracing` events alongside `crux::` steps               |
+| `postgres` | `TaskRegistry::postgres` (requires `sqlx`)                   |
 
 ## Prelude
 

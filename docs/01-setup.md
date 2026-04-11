@@ -105,7 +105,7 @@ json: {
 }
 ```
 
-## What just happened
+## What just happened?
 
 Three things, and each one is new vs. a hand-rolled agent:
 
