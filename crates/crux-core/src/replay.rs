@@ -141,8 +141,10 @@ impl ReplayCache {
         }
 
         // Lenient mode: scan forward from ordinal for a matching name.
-        // Hash comparison is skipped because hash_step_identity includes the ordinal,
-        // so the same logical step at a different ordinal produces a different hash.
+        // Note: input_hash encodes both step name and ordinal (via hash_step_identity),
+        // so a step that shifted ordinals will always have a different hash. We therefore
+        // match by name only in the forward scan — this is the intended behavior for the
+        // "skipped step" scenario where a step moves to a lower ordinal.
         let start = (ordinal as usize).saturating_add(1);
         for entry in self.entries.iter().skip(start) {
             if entry.name == name {
@@ -311,7 +313,7 @@ mod tests {
 
         // Asking for "parse" at ordinal 1 (where "transform" is cached).
         // Lenient mode scans forward by name and finds "parse" at index 2.
-        // Hash 999 differs from cached 30, but lenient scan matches by name only.
+        // The hash differs (input_hash encodes ordinal), but lenient matches by name.
         match cache.check_by_name("parse", 1, 999) {
             ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("parsed")),
             other => panic!("expected Hit from forward scan, got {other:?}"),

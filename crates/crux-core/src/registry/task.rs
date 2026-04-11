@@ -114,14 +114,16 @@ impl<B: RegistryBackend> TaskRegistry<B> {
         Ok(())
     }
 
-    /// List all pending tasks (filtered from all tasks with a given prefix).
+    /// List all pending tasks of the given kind. Pass "" to return all pending tasks
+    /// regardless of kind. Kind-based filtering is done in memory after listing all
+    /// tasks, because task keys are ULIDs (not prefixed by kind).
     pub async fn pending(&self, kind: &str) -> Result<Vec<Task>, RegistryErr> {
-        let ids = self.backend.list(kind).await?;
+        let ids = self.backend.list("").await?;
         let mut tasks = Vec::new();
         for id in &ids {
             if let Some(data) = self.backend.get(id).await? {
                 let task: Task = serde_json::from_slice(&data)?;
-                if task.status == TaskStatus::Pending {
+                if task.status == TaskStatus::Pending && (kind.is_empty() || task.kind == kind) {
                     tasks.push(task);
                 }
             }
@@ -254,17 +256,37 @@ mod tests {
     #[tokio::test]
     async fn pending_filters_by_status() {
         let reg = make_registry();
-        // InMemoryBackend list uses prefix match on the TaskId string.
-        // Since TaskIds are random ULIDs, we can't filter by kind prefix directly.
-        // Instead, pending() takes a kind parameter to list with "" prefix (all).
         let id1 = reg.submit("build", serde_json::json!(1)).await.unwrap();
         let _id2 = reg.submit("build", serde_json::json!(2)).await.unwrap();
         reg.update_status(&id1, TaskStatus::Done).await.unwrap();
 
-        // List all tasks and filter pending.
+        // List all pending (kind = "") — only the second build task remains.
         let pending = reg.pending("").await.unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].input, serde_json::json!(2));
+    }
+
+    #[tokio::test]
+    async fn pending_filters_by_kind() {
+        let reg = make_registry();
+        let _build1 = reg.submit("build", serde_json::json!(1)).await.unwrap();
+        let _build2 = reg.submit("build", serde_json::json!(2)).await.unwrap();
+        let _deploy = reg.submit("deploy", serde_json::json!(3)).await.unwrap();
+
+        // pending("build") must return only the two build tasks.
+        let build_pending = reg.pending("build").await.unwrap();
+        assert_eq!(build_pending.len(), 2);
+        assert!(build_pending.iter().all(|t| t.kind == "build"));
+
+        // pending("deploy") must return only the deploy task.
+        let deploy_pending = reg.pending("deploy").await.unwrap();
+        assert_eq!(deploy_pending.len(), 1);
+        assert_eq!(deploy_pending[0].kind, "deploy");
+
+        // After completing one build, pending("build") drops to one.
+        reg.update_status(&_build1, TaskStatus::Done).await.unwrap();
+        let build_pending2 = reg.pending("build").await.unwrap();
+        assert_eq!(build_pending2.len(), 1);
     }
 
     #[tokio::test]
