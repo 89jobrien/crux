@@ -1,23 +1,23 @@
-# `trace::` syntax reference card
+# `crux::` syntax reference card
 
 > Every macro, trait, type, and method in one place. Use as a cheat sheet.
 
 ## Attribute macros
 
 ```rust
-#[trace::agent]
-async fn name(args) -> Trace<T> { ... }
+#[crux::agent]
+async fn name(args) -> Crux<T> { ... }
 
-#[trace::agent(registry = "reg", checkpoint_every_step)]
-#[trace::agent(replay = "strict")]   // default
-#[trace::agent(replay = "lenient")]  // re-run mismatches instead of failing
+#[crux::agent(registry = "reg", checkpoint_every_step)]
+#[crux::agent(replay = "strict")]   // default
+#[crux::agent(replay = "lenient")]  // re-run mismatches instead of failing
 ```
 
-Injects a `&mut TraceCtx` binding called `t` into the function body. Wraps
-the body so the return type `Trace<T>` is built from the steps recorded on
+Injects a `&mut CruxCtx` binding called `t` into the function body. Wraps
+the body so the return type `Crux<T>` is built from the steps recorded on
 `t` plus the final value.
 
-## `TraceCtx` methods
+## `CruxCtx` methods
 
 ```rust
 t.step(name, closure).await?;                       // Plain step
@@ -53,33 +53,33 @@ t.on_budget_exceeded(handler);
 t.budget();                                         // &Budget
 t.remaining_budget();                               // u64
 t.attempt();                                        // current attempt count
-t.snapshot();                                       // Trace<Value> so far
+t.snapshot();                                       // Crux<Value> so far
 ```
 
-## `Trace<T>`
+## `Crux<T>`
 
 ```rust
-pub struct Trace<T> {
-    pub id: TraceId,
+pub struct Crux<T> {
+    pub id: CruxId,
     pub agent: &'static str,
-    pub value: Result<T, TraceErr>,
+    pub value: Result<T, CruxErr>,
     pub steps: Vec<Step>,
-    pub children: Vec<Trace<serde_json::Value>>,
+    pub children: Vec<Crux<serde_json::Value>>,
     pub started_at: Instant,
     pub finished_at: Option<Instant>,
 }
 
 // Inspection
-trace.value() -> Result<T, TraceErr>;
-trace.causal_chain() -> Vec<&Step>;
-trace.delegations() -> Vec<Delegation>;
-trace.rejected_branches() -> Vec<&Step>;
-trace.replay_from(snapshot) -> Trace<T>;
+crux.value() -> Result<T, CruxErr>;
+crux.causal_chain() -> Vec<&Step>;
+crux.delegations() -> Vec<Delegation>;
+crux.rejected_branches() -> Vec<&Step>;
+crux.replay_from(snapshot) -> Crux<T>;
 
 // Composition
-Trace::join_all(futures) -> Trace<Vec<T>>;
-Trace::join_all_best_effort(futures) -> Trace<Vec<Result<T, TraceErr>>>;
-trace_a | trace_b  // pipe operator; chains via & output -> input
+Crux::join_all(futures) -> Crux<Vec<T>>;
+Crux::join_all_best_effort(futures) -> Crux<Vec<Result<T, CruxErr>>>;
+crux_a | crux_b  // pipe operator; chains via & output -> input
 ```
 
 ## `Step`
@@ -102,20 +102,20 @@ pub enum StepKind { Plain, Delegation, Branch, Speculation }
 pub enum StepStatus { Ok, Err, Rejected, Skipped }
 ```
 
-## `TraceErr`
+## `CruxErr`
 
 ```rust
-pub enum TraceErr {
+pub enum CruxErr {
     StepFailed { step: String, source: Box<dyn Error + Send + Sync> },
     LowConfidence { step: String, score: f32, threshold: f32 },
     BudgetExceeded { kind: BudgetKind, limit: u64, actual: u64 },
-    Delegation { to: String, source: Box<TraceErr> },
+    Delegation { to: String, source: Box<CruxErr> },
     Cancelled { reason: String },
     ReplayMismatch { step: String, expected: u64, actual: u64 },
 }
 
-TraceErr::step_failed(name, msg);
-TraceErr::low_confidence(name, score, threshold);
+CruxErr::step_failed(name, msg);
+CruxErr::low_confidence(name, score, threshold);
 err.failed_step() -> Option<&str>;
 err.is_transient() -> bool;
 ```
@@ -129,12 +129,12 @@ pub trait Agent: Send + Sync + 'static {
     type Output: Serialize + DeserializeOwned + Send;
 
     fn name() -> &'static str;
-    async fn run(ctx: &mut TraceCtx, input: Self::Input)
-        -> Result<Self::Output, TraceErr>;
+    async fn run(ctx: &mut CruxCtx, input: Self::Input)
+        -> Result<Self::Output, CruxErr>;
 
     fn budget() -> Budget { Budget::default() }
     fn on_low_confidence(_score: f32) -> Recovery<Self::Output> { Recovery::Continue }
-    fn on_step_failure(_err: &TraceErr) -> Recovery<Self::Output> { Recovery::Propagate }
+    fn on_step_failure(_err: &CruxErr) -> Recovery<Self::Output> { Recovery::Propagate }
 }
 ```
 
@@ -143,9 +143,9 @@ pub trait Agent: Send + Sync + 'static {
 ```rust
 pub enum Recovery<T> {
     Retry,
-    RetryWith(Box<dyn FnOnce() -> BoxFuture<'static, Result<T, TraceErr>>>),
+    RetryWith(Box<dyn FnOnce() -> BoxFuture<'static, Result<T, CruxErr>>>),
     Substitute(T),
-    Escalate(BoxFuture<'static, Result<T, TraceErr>>),
+    Escalate(BoxFuture<'static, Result<T, CruxErr>>),
     Propagate,
     Skip,
     Continue,
@@ -179,9 +179,9 @@ reg.submit::<S, I>(kind, input).await?           -> TaskId
 reg.submit_child::<S, I>(parent, kind, input).await?
 reg.get::<S>(id).await?                          -> Task<S>
 reg.update_status::<S>(id, status).await?
-reg.checkpoint::<T>(id, &trace).await?
+reg.checkpoint::<T>(id, &crux).await?
 reg.pending::<S>().await?                        -> Vec<Task<S>>
-reg.resume::<S, A>(id).await?                    -> Trace<A::Output>
+reg.resume::<S, A>(id).await?                    -> Crux<A::Output>
 reg.children::<S>(parent).await?                 -> Vec<Task<S>>
 ```
 
@@ -194,7 +194,7 @@ pub struct Task<S> {
     pub kind: String,
     pub status: S,
     pub input: serde_json::Value,
-    pub trace: Option<Trace<serde_json::Value>>,
+    pub crux: Option<Crux<serde_json::Value>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub attempts: u32,
@@ -204,21 +204,21 @@ pub struct Task<S> {
 ## Feature flags
 
 ```toml
-trace = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
+crux = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
 ```
 
 | Flag | Turns on |
 |------|----------|
-| `serde` | Serde impls for `Trace`, `Step`, `Task`, `TraceErr` |
+| `serde` | Serde impls for `Crux`, `Step`, `Task`, `CruxErr` |
 | `tokio` | `tokio::spawn` for `delegate`, `tokio::join!` for `join_all` |
 | `sqlite` | `TaskRegistry::sqlite` |
-| `tracing` | Emit `tracing` events alongside `trace::` steps |
+| `tracing` | Emit `tracing` events alongside `crux::` steps |
 | `postgres` | `TaskRegistry::postgres` (requires `sqlx`) |
 
 ## Prelude
 
 ```rust
-use trace::prelude::*;
-// brings in: Trace, TraceErr, TraceCtx, Agent, Budget, Recovery,
+use crux::prelude::*;
+// brings in: Crux, CruxErr, CruxCtx, Agent, Budget, Recovery,
 //            Step, StepKind, StepStatus, TaskId
 ```

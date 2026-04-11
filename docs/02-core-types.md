@@ -7,23 +7,23 @@
 
 | Type | Analogue you already know | What it adds |
 |------|---------------------------|--------------|
-| `Trace<T>` | `Result<T, E>` + `tracing::Span` fused | Records every step as part of the value |
+| `Crux<T>` | `Result<T, E>` + `tracing::Span` fused | Records every step as part of the value |
 | `Step` | A span event or log line | First-class, typed, serializable |
-| `TraceErr` | `anyhow::Error` | Keeps the failing step in scope |
+| `CruxErr` | `anyhow::Error` | Keeps the failing step in scope |
 | `Agent` | A struct with an `async fn run` | Declarative lifecycle hooks |
-| `TraceCtx` | `tokio::task_local!` context | Scoped to the `#[trace::agent]` function |
+| `CruxCtx` | `tokio::task_local!` context | Scoped to the `#[crux::agent]` function |
 
 The rest of this chapter walks through each one.
 
-## `Trace<T>`
+## `Crux<T>`
 
 ```rust
-pub struct Trace<T> {
-    pub id: TraceId,
+pub struct Crux<T> {
+    pub id: CruxId,
     pub agent: &'static str,
-    pub value: Result<T, TraceErr>,
+    pub value: Result<T, CruxErr>,
     pub steps: Vec<Step>,
-    pub children: Vec<Trace<serde_json::Value>>,
+    pub children: Vec<Crux<serde_json::Value>>,
     pub started_at: Instant,
     pub finished_at: Option<Instant>,
 }
@@ -31,56 +31,56 @@ pub struct Trace<T> {
 
 ### Why the value is inside
 
-`Trace<T>` holds the value *and* the causal chain. You don't return a value
-and separately emit a trace — they're one thing. This sounds pedantic, but it
+`Crux<T>` holds the value *and* the causal chain. You don't return a value
+and separately emit a crux — they're one thing. This sounds pedantic, but it
 has two downstream effects:
 
-1. **You can't forget the trace.** If you return a `Trace<T>`, the trace goes
+1. **You can't forget the crux.** If you return a `Crux<T>`, the crux goes
    with it. There's no "oh, I logged this but forgot to attach the span ID"
    class of bug.
-2. **Replay is trivial.** Because the trace *is* the return value, replaying
-   a function means re-running it with a snapshot of `Trace<T>` as the seed.
+2. **Replay is trivial.** Because the crux *is* the return value, replaying
+   a function means re-running it with a snapshot of `Crux<T>` as the seed.
    See chapter 04.
 
 ### Using it like `Result`
 
 ```rust
-let t: Trace<String> = hello("world".into()).await;
+let t: Crux<String> = hello("world".into()).await;
 
-// Unwrap just the value (ignores trace):
+// Unwrap just the value (ignores crux):
 let s: String = t.value()?;
 
-// Pattern match on the result while keeping the trace:
+// Pattern match on the result while keeping the crux:
 match t.value() {
     Ok(s) => println!("got {s} in {} steps", t.steps.len()),
     Err(e) => println!("failed at step {:?}: {e}", e.failed_step),
 }
 ```
 
-The `?` operator works *inside* an `#[trace::agent]` function because the
+The `?` operator works *inside* an `#[crux::agent]` function because the
 macro rewrites it to propagate through `t`. Outside an agent, you call
 `.value()` to extract the inner `Result`.
 
-### Querying the trace
+### Querying the crux
 
 ```rust
 // Every step, in causal order:
-for step in trace.causal_chain() {
+for step in crux.causal_chain() {
     println!("{}: {:?} ({}ms)", step.name, step.status, step.duration_ms);
 }
 
 // Only the delegations:
-for d in trace.delegations() {
+for d in crux.delegations() {
     println!("delegated {} -> {}", d.from_agent, d.to_agent);
 }
 
 // Branches that were considered but rejected:
-for r in trace.rejected_branches() {
+for r in crux.rejected_branches() {
     println!("rejected {}: confidence={}", r.name, r.confidence);
 }
 ```
 
-These are plain methods, not macros. They work on any `Trace<T>` you have a
+These are plain methods, not macros. They work on any `Crux<T>` you have a
 reference to — including one you deserialized from JSON.
 
 ## `Step`
@@ -106,7 +106,7 @@ The important fields for day-to-day work are **`kind`**, **`status`**, and
 
 This is the biggest single departure from `tracing` / OpenTelemetry. Those
 libraries treat a span as a timing primitive — it happened, here's how long.
-`trace::` treats a step as an *epistemic* primitive: it happened, here's how
+`crux::` treats a step as an *epistemic* primitive: it happened, here's how
 sure we are the output is right.
 
 That score is what powers:
@@ -118,14 +118,14 @@ That score is what powers:
 You set it with a closure return type that implements `Confidence`, or
 explicitly via `t.step_with_confidence("name", 0.82, || ...)`.
 
-## `TraceErr`
+## `CruxErr`
 
 ```rust
-pub enum TraceErr {
+pub enum CruxErr {
     StepFailed { step: String, source: Box<dyn Error + Send + Sync> },
     LowConfidence { step: String, score: f32, threshold: f32 },
     BudgetExceeded { kind: BudgetKind, limit: u64, actual: u64 },
-    Delegation { to: String, source: Box<TraceErr> },
+    Delegation { to: String, source: Box<CruxErr> },
     Cancelled { reason: String },
     ReplayMismatch { step: String, expected: u64, actual: u64 },
 }
@@ -139,8 +139,8 @@ Three things to notice:
    `Delegation { to: "drafter", source: Box::new(StepFailed { ... }) }`. You
    can unwrap as deep as you need to know where the real fault was.
 3. **`ReplayMismatch` is a real variant.** Replay isn't a library concern in
-   `trace::` — it's a language feature, and it can fail loudly if your code
-   changed in a way that invalidates a saved trace.
+   `crux::` — it's a language feature, and it can fail loudly if your code
+   changed in a way that invalidates a saved crux.
 
 ## `Agent` trait
 
@@ -152,17 +152,17 @@ pub trait Agent: Send + Sync + 'static {
 
     fn name() -> &'static str;
 
-    async fn run(ctx: &mut TraceCtx, input: Self::Input)
-        -> Result<Self::Output, TraceErr>;
+    async fn run(ctx: &mut CruxCtx, input: Self::Input)
+        -> Result<Self::Output, CruxErr>;
 
     // Optional — defaults are sensible.
     fn budget() -> Budget { Budget::default() }
     fn on_low_confidence(_score: f32) -> Recovery { Recovery::Continue }
-    fn on_step_failure(_err: &TraceErr) -> Recovery { Recovery::Propagate }
+    fn on_step_failure(_err: &CruxErr) -> Recovery { Recovery::Propagate }
 }
 ```
 
-You almost never implement this by hand. The `#[trace::agent]` attribute
+You almost never implement this by hand. The `#[crux::agent]` attribute
 generates an impl from a free function. You implement it directly only when
 you need to override the lifecycle hooks at the *type* level — usually for an
 agent that's going to be delegated to from many places and needs consistent
@@ -176,20 +176,20 @@ recovery behavior.
 | Lifecycle hooks differ per call | Lifecycle hooks are stable per agent |
 | Fast to iterate | You want `AgentId` in the registry (chapter 04) |
 
-## `TraceCtx`
+## `CruxCtx`
 
-The `t` binding you see inside `#[trace::agent]` functions is of type
-`&mut TraceCtx`. You don't construct it yourself — the macro does.
+The `t` binding you see inside `#[crux::agent]` functions is of type
+`&mut CruxCtx`. You don't construct it yourself — the macro does.
 
 ```rust
-impl TraceCtx {
-    pub async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, TraceErr>
-    where F: FnOnce() -> Fut, Fut: Future<Output = Result<T, TraceErr>>;
+impl CruxCtx {
+    pub async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where F: FnOnce() -> Fut, Fut: Future<Output = Result<T, CruxErr>>;
 
     pub async fn delegate<A: Agent>(&mut self, name: &str, input: A::Input)
         -> DelegationBuilder<A>;
 
-    pub fn speculate<T>(&mut self, name: &str, arms: impl IntoIterator<Item = (&'static str, impl FnOnce() -> BoxFuture<'static, Result<T, TraceErr>>)>)
+    pub fn speculate<T>(&mut self, name: &str, arms: impl IntoIterator<Item = (&'static str, impl FnOnce() -> BoxFuture<'static, Result<T, CruxErr>>)>)
         -> Speculation<T>;
 
     pub fn budget(&self) -> &Budget;
@@ -210,8 +210,8 @@ Three things worth knowing:
 
 Before moving on, make sure you can answer these:
 
-- **Where does the value live?** *Inside `Trace<T>`, alongside the steps.*
-- **How do you fail a step loudly?** *Return `Err(TraceErr::StepFailed { ... })`
+- **Where does the value live?** *Inside `Crux<T>`, alongside the steps.*
+- **How do you fail a step loudly?** *Return `Err(CruxErr::StepFailed { ... })`
   from the closure, or let `?` propagate.*
 - **What's the difference between a `Step` and a `tracing::Event`?** *A step
   has confidence, typed output, and is part of a value you can serialize and
@@ -220,4 +220,4 @@ Before moving on, make sure you can answer these:
   type-level lifecycle hooks across many callers.*
 
 Chapter **03** puts these types to work on branching and delegation — where
-`trace::` diverges most from regular Rust.
+`crux::` diverges most from regular Rust.

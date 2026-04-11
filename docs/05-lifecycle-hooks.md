@@ -5,7 +5,7 @@
 > gracefully" — without scattering the recovery logic across your business
 > code.
 
-Lifecycle hooks are the reason `trace::` treats recovery as a language
+Lifecycle hooks are the reason `crux::` treats recovery as a language
 feature instead of a pattern. In a regular Rust agent, you'd write:
 
 ```rust
@@ -35,7 +35,7 @@ Hooks solve all three.
 | Hook | Fires when | Signature |
 |------|------------|-----------|
 | `on_low_confidence(threshold, handler)` | A step finishes with `confidence < threshold` | `async fn(score, ctx) -> Recovery<T>` |
-| `on_step_failure(handler)` | A step returns `Err(TraceErr)` | `async fn(err, ctx) -> Recovery<T>` |
+| `on_step_failure(handler)` | A step returns `Err(CruxErr)` | `async fn(err, ctx) -> Recovery<T>` |
 | `on_budget_exceeded(handler)` | A step or delegation would push us over budget | `async fn(budget, ctx) -> Recovery<T>` |
 
 All three return a `Recovery<T>`:
@@ -43,9 +43,9 @@ All three return a `Recovery<T>`:
 ```rust
 pub enum Recovery<T> {
     Retry,                                // Re-run the same step
-    RetryWith(Box<dyn FnOnce() -> BoxFuture<'static, Result<T, TraceErr>>>),
+    RetryWith(Box<dyn FnOnce() -> BoxFuture<'static, Result<T, CruxErr>>>),
     Substitute(T),                        // Use this value as the step's output
-    Escalate(BoxFuture<'static, Result<T, TraceErr>>),
+    Escalate(BoxFuture<'static, Result<T, CruxErr>>),
     Propagate,                            // Let the error bubble up
     Skip,                                 // Mark step as Skipped, continue
 }
@@ -92,8 +92,8 @@ behavior. Call-site hooks override the per-agent ones if both are set.
 ### 3. Scoped with `t.on_low_confidence`
 
 ```rust
-#[trace::agent]
-async fn session(input: Input) -> Trace<Output> {
+#[crux::agent]
+async fn session(input: Input) -> Crux<Output> {
     t.on_low_confidence(0.8, escalate_handler);
     t.on_step_failure(retry_handler);
 
@@ -116,8 +116,8 @@ Here's the classic three-tier escalation (cheap model → expensive model →
 human) expressed with hooks instead of nested `if`s:
 
 ```rust
-#[trace::agent]
-async fn answer(question: String) -> Trace<Answer> {
+#[crux::agent]
+async fn answer(question: String) -> Crux<Answer> {
     let draft = t.delegate::<CheapModel>("draft", question.clone())
         .on_low_confidence(0.7, |score, ctx| async move {
             Recovery::Escalate(Box::pin(
@@ -139,13 +139,13 @@ async fn answer(question: String) -> Trace<Answer> {
 Read that as: *try cheap; if confidence < 0.7, try expensive; if that's still
 < 0.9, get a human.*
 
-The trace records:
+The crux records:
 
 - Every tier that fired
 - Which confidence scores triggered each escalation
 - The final answer and which tier produced it
 
-When you look at this trace two weeks later, you know *exactly* why the
+When you look at this crux two weeks later, you know *exactly* why the
 answer came from a human instead of the cheap model.
 
 ## Worked example: retry with backoff
@@ -154,8 +154,8 @@ answer came from a human instead of the cheap model.
 writing a retry loop:
 
 ```rust
-#[trace::agent]
-async fn fetch_data(url: String) -> Trace<Vec<Record>> {
+#[crux::agent]
+async fn fetch_data(url: String) -> Crux<Vec<Record>> {
     t.on_step_failure(|err, ctx| async move {
         if ctx.attempt() >= 3 {
             return Recovery::Propagate;
@@ -177,16 +177,16 @@ Three things to notice:
    per-step retry state without maintaining it yourself.
 2. **Backoff is your code.** The hook runs arbitrary async; `tokio::time`
    works fine.
-3. **The trace records every attempt.** Failed attempts become `Step {
+3. **The crux records every attempt.** Failed attempts become `Step {
    status: Err, attempt: 1 }`, the successful one becomes `Step { status:
-   Ok, attempt: 3 }`. When you look at the trace later, the full retry
+   Ok, attempt: 3 }`. When you look at the crux later, the full retry
    history is there.
 
 ## Worked example: budget-aware degradation
 
 ```rust
-#[trace::agent]
-async fn generate_report(docs: Vec<Doc>) -> Trace<Report> {
+#[crux::agent]
+async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
     t.on_budget_exceeded(|budget, ctx| async move {
         // Out of tokens? Fall back to a cheaper path.
         Recovery::Escalate(Box::pin(
@@ -194,7 +194,7 @@ async fn generate_report(docs: Vec<Doc>) -> Trace<Report> {
         ))
     });
 
-    let summaries = Trace::join_all(
+    let summaries = Crux::join_all(
         docs.into_iter().map(|d| summarize(d))
     ).await?;
 
@@ -205,7 +205,7 @@ async fn generate_report(docs: Vec<Doc>) -> Trace<Report> {
 ```
 
 When the polish step would exceed budget, the hook swaps in a template-based
-report instead. The trace records the budget-exceeded event *and* the
+report instead. The crux records the budget-exceeded event *and* the
 substitution. You can tell, per request, whether it got the polished output
 or the template fallback.
 
@@ -217,7 +217,7 @@ Hooks and the registry (chapter 04) play nicely:
   counter in the registry.
 - **A hook that returns `Recovery::Escalate`** to a human-review agent
   will typically leave the task in an `AwaitingApproval` status. The
-  registry has the full trace, so the human reviewer can see exactly what
+  registry has the full crux, so the human reviewer can see exactly what
   the agent tried.
 - **`Recovery::Propagate`** causes the registry to mark the task `Failed`
   with the full error chain preserved.
@@ -233,9 +233,9 @@ debugging harder if you overuse them. Two anti-patterns:
 
 1. **Hooks that mutate global state.** A hook should be about recovery for
    *this* step, not about bumping a global counter or sending a webhook.
-   Put those in `t.step` so they appear in the trace as ordinary steps.
+   Put those in `t.step` so they appear in the crux as ordinary steps.
 2. **Hooks that silently succeed.** `Recovery::Substitute(default_value)`
-   makes every failure look like success in your business code. The trace
+   makes every failure look like success in your business code. The crux
    still records the substitution, but callers 500 feet downstream have no
    idea the real step failed. Use it sparingly; prefer `Escalate`.
 
@@ -243,7 +243,7 @@ debugging harder if you overuse them. Two anti-patterns:
 
 - **Where do you attach a hook that applies to all steps in one function?**
   *Call `t.on_low_confidence(...)` / `t.on_step_failure(...)` inside the
-  `#[trace::agent]` function.*
+  `#[crux::agent]` function.*
 - **Which `Recovery` variant replays the same step?** *`Retry`.*
 - **Which one replaces the output without retrying?** *`Substitute(T)`.*
 - **What happens if you don't attach any hook?** *Errors propagate to the

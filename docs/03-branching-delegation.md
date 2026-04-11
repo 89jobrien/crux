@@ -4,14 +4,14 @@
 > `delegate`, and why each one is a separate language construct instead of
 > just an `if`.
 
-Regular Rust gives you `if`, `match`, and `tokio::spawn`. `trace::` gives
+Regular Rust gives you `if`, `match`, and `tokio::spawn`. `crux::` gives
 you four additional primitives that each correspond to a different *kind* of
 decision an agent makes. The four exist because they have different replay,
 budget, and recovery semantics — not because any one of them is "better".
 
 ## The four branching kinds
 
-| Primitive | When to use | Records in trace as |
+| Primitive | When to use | Records in crux as |
 |-----------|-------------|---------------------|
 | `match` (plain Rust) | Pure pattern match on known-shape data | `Step { kind: Branch, ... }` |
 | `t.route_on_confidence` | Dispatch on a model's confidence score | `Step { kind: Branch, ... }` with the score |
@@ -25,15 +25,15 @@ Pick the primitive by asking: *what does "failure" mean here?*
 - `speculate` — failure means "none of the approaches worked"
 - `delegate` — failure means "the sub-agent couldn't handle it"
 
-Each one leaves a different shape of record in the trace.
+Each one leaves a different shape of record in the crux.
 
 ## Value branching with `match`
 
 No macro needed. Just `match`:
 
 ```rust
-#[trace::agent]
-async fn classify(doc: Document) -> Trace<Category> {
+#[crux::agent]
+async fn classify(doc: Document) -> Crux<Category> {
     let embedding = t.step("embed", || embed(&doc)).await?;
 
     let category = t.step("match", || async {
@@ -41,7 +41,7 @@ async fn classify(doc: Document) -> Trace<Category> {
             Topic::Code     => Ok(Category::Technical),
             Topic::News     => Ok(Category::Current),
             Topic::Story    => Ok(Category::Creative),
-            Topic::Unknown  => Err(TraceErr::low_confidence("match", 0.3, 0.8)),
+            Topic::Unknown  => Err(CruxErr::low_confidence("match", 0.3, 0.8)),
         }
     }).await?;
 
@@ -59,12 +59,12 @@ If any arm involves calling out to another model, reach for
 
 ## Confidence branching with `route_on_confidence`
 
-This is the primitive that makes `trace::` feel agentic rather than
+This is the primitive that makes `crux::` feel agentic rather than
 procedural. You hand it a score and a set of arms keyed by threshold:
 
 ```rust
-#[trace::agent]
-async fn answer(question: String) -> Trace<Answer> {
+#[crux::agent]
+async fn answer(question: String) -> Crux<Answer> {
     let draft = t.step("draft", || quick_draft(&question)).await?;
 
     t.route_on_confidence(draft.confidence, [
@@ -83,14 +83,14 @@ What the compiler checks for you:
    ambiguity about which arm runs.
 3. **Arms must return the same type.** Exactly like `match`.
 
-What the trace records:
+What the crux records:
 
 - The score (`0.82`)
 - The range that matched (`0.70..0.90`)
 - The step name you gave (`"answer_route"` by default)
-- The sub-trace of whatever the arm did (because `delegate` is used inside)
+- The sub-crux of whatever the arm did (because `delegate` is used inside)
 
-When you're debugging later, you can filter `trace.steps.iter().filter(|s|
+When you're debugging later, you can filter `crux.steps.iter().filter(|s|
 s.kind == StepKind::Branch)` and see the exact confidence score at each
 decision point. That's the kind of thing you'd normally build an entire
 eval harness for.
@@ -100,8 +100,8 @@ eval harness for.
 Run several approaches concurrently, let them race, pick the best:
 
 ```rust
-#[trace::agent]
-async fn finalize(draft: Draft) -> Trace<Itinerary> {
+#[crux::agent]
+async fn finalize(draft: Draft) -> Crux<Itinerary> {
     t.speculate("finalize", [
         ("cheap", || async { finalize_cheap(&draft).await }),
         ("fast",  || async { finalize_fast(&draft).await }),
@@ -123,12 +123,12 @@ Three terminators, each with different semantics:
 
 ### What speculation records
 
-This is the interesting bit. The trace records:
+This is the interesting bit. The crux records:
 
 - The winner as a normal `Ok` step
-- **Every loser as a `Rejected` step**, complete with its own sub-trace
+- **Every loser as a `Rejected` step**, complete with its own sub-crux
 
-That means you can replay `trace.rejected_branches()` later, or pipe them
+That means you can replay `crux.rejected_branches()` later, or pipe them
 into an eval dataset. Nothing is thrown away silently. If you've ever
 built an LLM app where you wished you had a record of "what other options
 did the model consider?", this is that.
@@ -137,7 +137,7 @@ did the model consider?", this is that.
 
 `with_budget` applies to the *whole speculation*, not per arm. Arms share a
 single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
-2000 between them. This is the one place in `trace::` where arms are *not*
+2000 between them. This is the one place in `crux::` where arms are *not*
 independent — speculation is explicitly cooperative.
 
 ## Delegation with `t.delegate::<A>`
@@ -146,8 +146,8 @@ Delegation is a handoff to another `Agent`. It's the only primitive that
 crosses the "who owns this decision" boundary:
 
 ```rust
-#[trace::agent]
-async fn plan_trip(goal: String) -> Trace<Itinerary> {
+#[crux::agent]
+async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = t.step("research", || search_web(&goal)).await?;
 
     let draft = t.delegate::<DraftAgent>("draft", research)
@@ -168,10 +168,10 @@ async fn plan_trip(goal: String) -> Trace<Itinerary> {
 
 Three things that are painful to get right by hand:
 
-1. **Trace context crosses the boundary.** The child agent runs with its
-   own `TraceCtx`, but that context carries the parent's `TraceId` as
-   `parent`. When the child finishes, its `Trace<_>` is appended to
-   `parent.children`. `trace.causal_chain()` walks across the boundary
+1. **Crux context crosses the boundary.** The child agent runs with its
+   own `CruxCtx`, but that context carries the parent's `CruxId` as
+   `parent`. When the child finishes, its `Crux<_>` is appended to
+   `parent.children`. `crux.causal_chain()` walks across the boundary
    transparently.
 
 2. **Lifecycle hooks attach per call site.** Same `DraftAgent`, two
@@ -183,16 +183,16 @@ Three things that are painful to get right by hand:
    Inside the child, speculation gets 3k. The runtime tracks all three
    and fails with a specific `BudgetExceeded` if any is exceeded.
 
-### Delegation vs. calling another `#[trace::agent]` function directly
+### Delegation vs. calling another `#[crux::agent]` function directly
 
 You *can* just call another agent function:
 
 ```rust
-let sub_trace = drafter(input).await;
-let draft = sub_trace.value()?;
+let sub_crux = drafter(input).await;
+let draft = sub_crux.value()?;
 ```
 
-That works, and the child trace rolls up into the parent automatically.
+That works, and the child crux rolls up into the parent automatically.
 But you don't get:
 
 - Budget scoping per call site
@@ -211,7 +211,7 @@ branching code that they belong in this chapter.
 ### Pipe operator `|` (sequential)
 
 ```rust
-let trace = drafter(input) | refiner() | finalizer();
+let crux = drafter(input) | refiner() | finalizer();
 ```
 
 Desugars to:
@@ -220,21 +220,21 @@ Desugars to:
 let t1 = drafter(input).await;
 let t2 = refiner(t1.value()?).await;
 let t3 = finalizer(t2.value()?).await;
-merge_traces(&[t1, t2, t3])
+merge_cruxs(&[t1, t2, t3])
 ```
 
-Errors short-circuit. Traces concatenate. Useful for linear pipelines.
+Errors short-circuit. Cruxs concatenate. Useful for linear pipelines.
 
-### `Trace::join_all` (parallel fan-out)
+### `Crux::join_all` (parallel fan-out)
 
 ```rust
-let results: Trace<Vec<Answer>> = Trace::join_all(
+let results: Crux<Vec<Answer>> = Crux::join_all(
     questions.into_iter().map(|q| answer(q))
 ).await;
 ```
 
-All sub-agents run concurrently. The parent `Trace<Vec<Answer>>` carries
-every sub-trace as a child. If any child fails, you can choose:
+All sub-agents run concurrently. The parent `Crux<Vec<Answer>>` carries
+every sub-crux as a child. If any child fails, you can choose:
 
 - `.join_all(...)` — propagate the first error
 - `.join_all_best_effort(...)` — collect successes, record failures as
@@ -248,9 +248,9 @@ every sub-trace as a child. If any child fails, you can choose:
 - **You want to try three draft styles and keep the best.** Which one?
   *`speculate` + `pick_best_by`.*
 - **You want to call a helper you wrote five minutes ago.** Which one?
-  *Plain function call. The trace still rolls up.*
+  *Plain function call. The crux still rolls up.*
 - **You want a sub-agent with its own budget and human-escalation hook.**
   Which one? *`delegate`.*
 
 Chapter **04** is where the tutorial gets useful: we wire in the task
-registry so these traces can survive a crash.
+registry so these cruxs can survive a crash.

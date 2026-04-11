@@ -51,7 +51,7 @@ trip-planner/
 
 ```toml
 [dependencies]
-trace = { version = "0.1", features = ["serde", "tokio", "sqlite"] }
+crux = { version = "0.1", features = ["serde", "tokio", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -119,14 +119,14 @@ what the variants are. The `#[default]` attribute is used by
 `src/decomposer.rs`:
 
 ```rust
-use trace::prelude::*;
+use crux::prelude::*;
 use crate::types::{Plan, Subtask};
 use anyhow::Result;
 use chrono::Utc;
 use uuid::Uuid;
 
-#[trace::agent]
-pub async fn decompose(goal: String) -> Trace<Plan> {
+#[crux::agent]
+pub async fn decompose(goal: String) -> Crux<Plan> {
     // 1. Draft a plan with a cheap model.
     let draft = t.step("draft_plan", || async {
         let raw = call_model(&format!("Plan for: {goal}")).await?;
@@ -170,10 +170,10 @@ What's new vs. chapters 01-05:
 - **Three different branching primitives in 30 lines.** Plain `t.step` for
   the draft, `delegate` with a call-site hook for the critic, and
   `route_on_confidence` for the revise/keep decision. Each one corresponds
-  to a different *kind* of choice — and the trace records each one with a
+  to a different *kind* of choice — and the crux records each one with a
   different `StepKind`.
 - **`validate_dag` is a `t.step`**, not a free function. That's deliberate:
-  if someone hands us a cyclic plan, we want the trace to record "validation
+  if someone hands us a cyclic plan, we want the crux to record "validation
   ran and failed" as a first-class step, not as a hidden panic deep in a
   helper.
 
@@ -185,19 +185,19 @@ concurrently, and updates the registry as tasks move through states.
 `src/executor.rs`:
 
 ```rust
-use trace::prelude::*;
-use trace::registry::{TaskRegistry, TaskId};
+use crux::prelude::*;
+use crux::registry::{TaskRegistry, TaskId};
 use crate::types::{Plan, Subtask, SubtaskId, ExecStatus, Report};
 use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use anyhow::Result;
 
-#[trace::agent(registry = "reg", checkpoint_every_step)]
+#[crux::agent(registry = "reg", checkpoint_every_step)]
 pub async fn execute(
     reg: &TaskRegistry,
     plan_task_id: TaskId,
     plan: Plan,
-) -> Trace<Report> {
+) -> Crux<Report> {
     // 1. Submit every subtask to the registry, hanging them off the parent.
     let ids = t.step("enqueue_subtasks", || async {
         let mut ids = HashMap::new();
@@ -263,7 +263,7 @@ async fn run_one_subtask(
     reg: &TaskRegistry,
     task_id: TaskId,
     subtask: Subtask,
-) -> Result<serde_json::Value, TraceErr> {
+) -> Result<serde_json::Value, CruxErr> {
     reg.update_status(task_id, ExecStatus::Running {
         started_at: Utc::now(),
     }).await?;
@@ -272,7 +272,7 @@ async fn run_one_subtask(
         "code" => crate::skills::code::run(subtask.input).await?,
         "test" => crate::skills::test::run(subtask.input).await?,
         "docs" => crate::skills::docs::run(subtask.input).await?,
-        other  => return Err(TraceErr::step_failed(
+        other  => return Err(CruxErr::step_failed(
             "dispatch", format!("unknown skill: {other}"),
         )),
     };
@@ -320,24 +320,24 @@ the full tree.
 We run the DAG in waves — one wave per topological level — rather than
 continuously draining a ready-queue. Three reasons:
 
-1. **The trace stays readable.** Each wave is one `t.step`, so the final
-   trace has a flat sequence of wave steps instead of an interleaved mess.
+1. **The crux stays readable.** Each wave is one `t.step`, so the final
+   crux has a flat sequence of wave steps instead of an interleaved mess.
 2. **Checkpointing happens at wave boundaries.** If the process crashes
    during wave 3, replay restarts at wave 3 — not at wave 1.
-3. **Concurrency is obvious.** Anyone reading the trace can see "wave 2 had
+3. **Concurrency is obvious.** Anyone reading the crux can see "wave 2 had
    4 subtasks running in parallel" without parsing span timings.
 
 If you need continuous scheduling, you can build it — but waves are almost
 always enough, and they're easier to reason about.
 
-### `futures::future::join_all` instead of `Trace::join_all`
+### `futures::future::join_all` instead of `Crux::join_all`
 
 This is a subtle one. We're using raw `join_all` here because the
-per-subtask futures are *not* `#[trace::agent]` functions — they're helper
-functions that return `Result<_, TraceErr>`. If we wanted each subtask to
-get its own sub-trace attached to the parent, we'd convert `run_one_subtask`
-into a `#[trace::agent]` and use `Trace::join_all(...)` instead. Both work;
-the agent version gives richer traces at the cost of slightly more
+per-subtask futures are *not* `#[crux::agent]` functions — they're helper
+functions that return `Result<_, CruxErr>`. If we wanted each subtask to
+get its own sub-crux attached to the parent, we'd convert `run_one_subtask`
+into a `#[crux::agent]` and use `Crux::join_all(...)` instead. Both work;
+the agent version gives richer cruxs at the cost of slightly more
 ceremony.
 
 ### Where does replay pick up?
@@ -365,7 +365,7 @@ code" payoff.
 
 ```rust
 use clap::{Parser, Subcommand};
-use trace::registry::TaskRegistry;
+use crux::registry::TaskRegistry;
 use std::path::PathBuf;
 
 mod types;
@@ -389,7 +389,7 @@ enum Cmd {
     Run { goal: String },
     /// Resume any tasks left pending by a prior crash.
     Resume,
-    /// Show the latest trace as pretty JSON.
+    /// Show the latest crux as pretty JSON.
     Show { task_id: String },
 }
 
@@ -400,12 +400,12 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.cmd {
         Cmd::Run { goal } => {
-            let plan_trace = decomposer::decompose(goal.clone()).await;
-            let plan = plan_trace.value()?;
+            let plan_crux = decomposer::decompose(goal.clone()).await;
+            let plan = plan_crux.value()?;
 
             let plan_id = reg.submit::<types::ExecStatus, _>("plan", &plan).await?;
-            let exec_trace = executor::execute(&reg, plan_id, plan).await;
-            let report = exec_trace.value()?;
+            let exec_crux = executor::execute(&reg, plan_id, plan).await;
+            let report = exec_crux.value()?;
 
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
@@ -429,14 +429,14 @@ async fn main() -> anyhow::Result<()> {
 ## Exercises
 
 If you want to push the tutorial further, try one of these. Each uses a
-different set of `trace::` features.
+different set of `crux::` features.
 
 | # | Exercise | Which features |
 |---|----------|----------------|
 | 1 | Add an `on_budget_exceeded` hook that downgrades `PolishedReport` to `TemplateReport` when tokens run low | Lifecycle hooks + delegation |
 | 2 | Add a `speculate` call in the decomposer that runs three draft models and picks the best | Speculation + rejected branches |
 | 3 | Implement `skills::review` as a human-in-the-loop task that leaves the task in `AwaitingApproval` until marked done via a CLI command | Status machines + registry |
-| 4 | Add a `--replay` flag to the CLI that loads a saved task and re-runs it, asserting the trace is identical | Replay + input hashes |
+| 4 | Add a `--replay` flag to the CLI that loads a saved task and re-runs it, asserting the crux is identical | Replay + input hashes |
 | 5 | Switch from waves to continuous scheduling, building a `reg.ready_to_run::<ExecStatus>()` query on top of the registry | Registry internals |
 
 ## The payoff
@@ -454,7 +454,7 @@ goal.
 
 ## Check your understanding
 
-- **Why run waves instead of continuous scheduling?** *Cleaner traces,
+- **Why run waves instead of continuous scheduling?** *Cleaner cruxs,
   checkpoint alignment, obvious concurrency.*
 - **What happens if you crash mid-wave?** *On resume, `enqueue_subtasks`
   and `plan_waves` are replayed from cache; previous completed waves are
@@ -462,9 +462,9 @@ goal.
 - **How does the Decomposer use three different branching primitives?**
   *`t.step` for the draft, `delegate` + hook for the critic,
   `route_on_confidence` for revise-or-keep.*
-- **Why isn't `run_one_subtask` a `#[trace::agent]`?** *It's a helper, and
+- **Why isn't `run_one_subtask` a `#[crux::agent]`?** *It's a helper, and
   we wanted raw `join_all`. You could absolutely convert it and use
-  `Trace::join_all` for richer sub-traces.*
+  `Crux::join_all` for richer sub-cruxs.*
 
 Chapter **07** is the comparison against existing agentic patterns — the
 one you originally asked for.

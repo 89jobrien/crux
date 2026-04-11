@@ -3,9 +3,9 @@
 > Goal: understand `TaskRegistry` and `Task<S>`, use them to make an agent
 > crash-safe, and know exactly where the state lives at every step.
 
-This is the chapter that makes `trace::` more than a logging library. Every
-step, every delegation, every rejected branch in a `Trace<T>` is
-serializable — so you can persist the trace, crash the process, and resume
+This is the chapter that makes `crux::` more than a logging library. Every
+step, every delegation, every rejected branch in a `Crux<T>` is
+serializable — so you can persist the crux, crash the process, and resume
 from exactly where you left off.
 
 ## The problem we're solving
@@ -24,7 +24,7 @@ When you restart, you have three bad options:
    this step" code in every agent, and it's always slightly wrong.
 3. **Ship it and pray** — the industry standard.
 
-`trace::` gives you a fourth option: the runtime persists every step as it
+`crux::` gives you a fourth option: the runtime persists every step as it
 happens, and replay is a language feature.
 
 ## The two types
@@ -51,7 +51,7 @@ pub struct Task<S> {
     pub kind: String,          // "build", "deploy", "research", etc.
     pub status: S,
     pub input: serde_json::Value,
-    pub trace: Option<Trace<serde_json::Value>>,
+    pub crux: Option<Crux<serde_json::Value>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub attempts: u32,
@@ -61,9 +61,9 @@ pub struct Task<S> {
 The key fields:
 
 - **`status: S`** — your own type. The runtime doesn't care what the states
-  are; it just persists the enum. This is where `trace::` leans on Rust's
+  are; it just persists the enum. This is where `crux::` leans on Rust's
   type system instead of inventing its own status primitives.
-- **`trace: Option<Trace<...>>`** — the trace so far. On restart, this is
+- **`crux: Option<Crux<...>>`** — the crux so far. On restart, this is
   the seed for replay.
 - **`attempts`** — the runtime bumps this every time a `Failed` task gets
   retried. Your lifecycle hooks can inspect it.
@@ -84,10 +84,10 @@ impl TaskRegistry {
     pub async fn get<S>(&self, id: TaskId) -> Result<Task<S>, RegistryErr>;
     pub async fn update_status<S>(&self, id: TaskId, status: S) -> Result<(), RegistryErr>;
 
-    pub async fn checkpoint<T: Serialize>(&self, id: TaskId, trace: &Trace<T>) -> Result<(), RegistryErr>;
+    pub async fn checkpoint<T: Serialize>(&self, id: TaskId, crux: &Crux<T>) -> Result<(), RegistryErr>;
 
     pub async fn pending<S>(&self) -> Result<Vec<Task<S>>, RegistryErr>;
-    pub async fn resume<S, A: Agent>(&self, id: TaskId) -> Result<Trace<A::Output>, TraceErr>;
+    pub async fn resume<S, A: Agent>(&self, id: TaskId) -> Result<Crux<A::Output>, CruxErr>;
 }
 ```
 
@@ -107,8 +107,8 @@ never need to write one yourself.
 Here's a real example — the scaffolding for a build-and-deploy agent:
 
 ```rust
-use trace::prelude::*;
-use trace::registry::{TaskRegistry, Task, TaskId};
+use crux::prelude::*;
+use crux::registry::{TaskRegistry, Task, TaskId};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -129,9 +129,9 @@ struct DeployInput {
     env: String,
 }
 
-#[trace::agent(registry = "reg", checkpoint_every_step)]
+#[crux::agent(registry = "reg", checkpoint_every_step)]
 async fn deploy(reg: &TaskRegistry, task_id: TaskId, input: DeployInput)
-    -> Trace<String>
+    -> Crux<String>
 {
     reg.update_status::<DeployStatus>(task_id, DeployStatus::Building).await?;
     let artifact = t.step("build", || build(&input.repo, &input.ref_)).await?;
@@ -163,7 +163,7 @@ The macro takes two optional arguments:
 
 If you need something custom, omit both and call `reg.checkpoint(task_id,
 &t.snapshot()).await?` explicitly at the points you care about. `t.snapshot()`
-returns a `Trace<serde_json::Value>` that's a live view of the trace so far.
+returns a `Crux<serde_json::Value>` that's a live view of the crux so far.
 
 ### `update_status` is separate from `checkpoint`
 
@@ -171,7 +171,7 @@ Two different things, easy to confuse:
 
 - **`update_status`** changes your `Task<S>::status` field — the business-
   level state machine.
-- **`checkpoint`** persists the `Trace<T>` — the execution history.
+- **`checkpoint`** persists the `Crux<T>` — the execution history.
 
 Typically you call `update_status` when your business logic advances (about
 to start building), and `checkpoint` when the *runtime* wants to save
@@ -183,23 +183,23 @@ When you call `reg.resume::<DeployStatus, DeployAgent>(task_id)`, here's
 what the runtime does:
 
 1. Load the `Task<DeployStatus>` from the backend.
-2. Read `task.trace` — the `Trace<Value>` snapshot.
-3. Start a new `TraceCtx` seeded from that snapshot.
+2. Read `task.crux` — the `Crux<Value>` snapshot.
+3. Start a new `CruxCtx` seeded from that snapshot.
 4. Re-run the agent function. For every `t.step("name", ...)`:
    - Compute the input hash.
    - If the snapshot has a step with the same name and matching input hash,
      skip the closure entirely and return the recorded output.
    - Otherwise, run the closure fresh and record a new step.
-5. Return a `Trace<T>` with the reconstructed history plus any new work.
+5. Return a `Crux<T>` with the reconstructed history plus any new work.
 
 The skip-if-input-matches step is what makes replay *correct* — not just
 fast. If you changed the code between crash and restart in a way that makes
 step 2's input different, the input hashes won't match, the closure re-runs,
-and the trace records a new step. Correctness first, speed second.
+and the crux records a new step. Correctness first, speed second.
 
 ### What fails at replay time
 
-Replay is strict by default. You'll get a `TraceErr::ReplayMismatch` in these
+Replay is strict by default. You'll get a `CruxErr::ReplayMismatch` in these
 cases:
 
 | Situation | Why it fails |
@@ -207,11 +207,11 @@ cases:
 | You renamed a step | Can't correlate old step to new step |
 | You reordered steps | Causal chain no longer matches |
 | A step's input hash changed | Would return stale output |
-| A delegation target changed | Old sub-trace can't be replayed against new agent |
+| A delegation target changed | Old sub-crux can't be replayed against new agent |
 
-You can loosen this with `#[trace::agent(replay = "lenient")]` which will
+You can loosen this with `#[crux::agent(replay = "lenient")]` which will
 re-run mismatched steps instead of failing — but default-strict is the right
-default. An agent that silently replays the wrong trace is worse than one
+default. An agent that silently replays the wrong crux is worse than one
 that refuses to replay at all.
 
 ## The full lifecycle
@@ -240,7 +240,7 @@ let reg = TaskRegistry::sqlite(Path::new("./tasks.db"))?;
 ```
 
 The in-memory registry is *not* just for tests — it's genuinely useful when
-you want trace/replay semantics inside a single process without persistence.
+you want crux/replay semantics inside a single process without persistence.
 Example: a long-running CLI that wants to retry failed steps but doesn't
 need to survive a restart.
 
@@ -256,7 +256,7 @@ changes.
 - **What's the difference between `update_status` and `checkpoint`?**
   *Status is business-level; checkpoint is execution history.*
 - **What does `checkpoint_every_step` do?** *Tells the macro to persist the
-  trace after every `t.step` call, not just at delegation boundaries.*
+  crux after every `t.step` call, not just at delegation boundaries.*
 - **What makes replay correct rather than just fast?** *Input hashes — a
   step only gets skipped if its input matches the recorded one.*
 
