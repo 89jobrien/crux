@@ -4,15 +4,18 @@ use std::pin::Pin;
 
 use super::error::CruxErr;
 
+/// A boxed future returning `Result<T, CruxErr>`.
+pub type BoxFut<T> = Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>;
+
 pub enum Recovery<T> {
     /// Re-run the same step.
     Retry,
     /// Re-run with a different closure.
-    RetryWith(Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>> + Send>),
+    RetryWith(Box<dyn FnOnce() -> BoxFut<T> + Send>),
     /// Use this value instead of the step's output.
     Substitute(T),
     /// Run this future as an escalation path.
-    Escalate(Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>),
+    Escalate(BoxFut<T>),
     /// Let the error propagate to the caller.
     Propagate,
     /// Mark the step as skipped and continue.

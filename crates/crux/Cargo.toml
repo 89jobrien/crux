@@ -11,6 +11,11 @@ authors.workspace = true
 crux-core = { path = "../crux-core" }
 crux-macros = { path = "../crux-macros" }
 
+[dev-dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 [features]
 default = ["tokio-runtime"]
 tokio-runtime = ["crux-core/tokio-runtime"]
