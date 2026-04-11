@@ -104,6 +104,17 @@ impl HookRegistry {
         }
     }
 
+    /// Register a pre-boxed confidence handler (used by DelegationBuilder).
+    pub(crate) fn on_low_confidence_boxed(&mut self, threshold: f32, handler: ConfidenceHandler) {
+        self.confidence_threshold = Some(threshold);
+        self.confidence_handler = Some(handler);
+    }
+
+    /// Register a pre-boxed failure handler (used by DelegationBuilder).
+    pub(crate) fn on_step_failure_boxed(&mut self, handler: FailureHandler) {
+        self.failure_handler = Some(handler);
+    }
+
     pub fn has_failure_handler(&self) -> bool {
         self.failure_handler.is_some()
     }

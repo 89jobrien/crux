@@ -6,6 +6,7 @@ use std::future::Future;
 
 use chrono::Utc;
 
+use crate::agent::Agent;
 use crate::context::Context;
 use crate::hooks::HookRegistry;
 use crate::recorder::{StepRecord, StepRecorder};
@@ -60,6 +61,110 @@ impl CruxCtx {
             started_at: self.started_at,
             finished_at: Some(Utc::now()),
         }
+    }
+
+    // -- Internal helpers for delegation/speculation --------------------------
+
+    /// Allocate an ordinal and return the input hash for a delegation step.
+    pub(crate) fn next_delegation_hash(&mut self, name: &str) -> u64 {
+        let (_ordinal, hash) = self.recorder.next_ordinal(name);
+        hash
+    }
+
+    /// Set budget directly (used by DelegationBuilder for child contexts).
+    pub(crate) fn set_budget_direct(&mut self, budget: Budget) {
+        self.budget_tracker = BudgetTracker::new(budget);
+    }
+
+    /// Expose hooks for per-call-site hook wiring.
+    pub(crate) fn hooks_mut(&mut self) -> &mut HookRegistry {
+        &mut self.hooks
+    }
+
+    /// Expose recorder for ordinal allocation.
+    pub(crate) fn recorder_mut(&mut self) -> &mut StepRecorder {
+        &mut self.recorder
+    }
+
+    /// Push a raw step (used by delegation/speculation).
+    pub(crate) fn push_step(&mut self, step: crate::types::step::Step) {
+        self.recorder.push_raw(step);
+    }
+
+    /// Push a child crux (used by delegation).
+    pub(crate) fn push_child(&mut self, child: Crux<serde_json::Value>) {
+        self.children.push(child);
+    }
+
+    /// Record a delegation step and append the child crux.
+    pub(crate) fn record_delegation_step<T: serde::Serialize>(
+        &mut self,
+        name: &str,
+        input_hash: u64,
+        child_crux: &Crux<T>,
+        output: Option<serde_json::Value>,
+        error: Option<String>,
+    ) {
+        use crate::types::step::{StepKind, StepStatus};
+
+        let status = if child_crux.value.is_ok() {
+            StepStatus::Ok
+        } else {
+            StepStatus::Err
+        };
+
+        self.push_step(crate::types::step::Step {
+            name: name.to_string(),
+            kind: StepKind::Delegation,
+            status,
+            confidence: 1.0,
+            started_at: child_crux.started_at,
+            duration_ms: child_crux.duration_ms().unwrap_or(0),
+            input_hash,
+            output,
+            error,
+            attempt: 1,
+        });
+
+        if let Ok(snapshot) = child_crux.to_snapshot() {
+            self.push_child(snapshot);
+        }
+    }
+
+    /// Start building a delegation to agent `A`.
+    pub fn delegate<'a, A: Agent>(
+        &'a mut self,
+        name: &str,
+        input: A::Input,
+    ) -> crate::delegation::DelegationBuilder<'a, A>
+    where
+        A::Input: Send,
+        A::Output: Send + serde::Serialize + serde::de::DeserializeOwned,
+    {
+        crate::delegation::DelegationBuilder::new(self, name, input)
+    }
+
+    /// Start a speculation: run multiple approaches, pick the best.
+    #[allow(clippy::type_complexity)]
+    pub fn speculate<'a, T>(
+        &'a mut self,
+        name: &str,
+        arms: Vec<(
+            &str,
+            std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, CruxErr>> + Send>>,
+        )>,
+    ) -> crate::speculation::SpeculationBuilder<'a, T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        let spec_arms = arms
+            .into_iter()
+            .map(|(arm_name, fut)| crate::speculation::SpecArm {
+                name: arm_name.to_string(),
+                fut,
+            })
+            .collect();
+        crate::speculation::SpeculationBuilder::new(self, name, spec_arms)
     }
 
     /// Apply a `Recovery<serde_json::Value>` and convert back to `T`.

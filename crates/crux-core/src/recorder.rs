@@ -109,6 +109,11 @@ impl StepRecorder {
         });
     }
 
+    /// Push a pre-built step directly (used by delegation/speculation).
+    pub(crate) fn push_raw(&mut self, step: Step) {
+        self.steps.push(step);
+    }
+
     /// Get the last recorded step's output, if any.
     pub fn last_output(&self) -> Option<&serde_json::Value> {
         self.steps.last().and_then(|s| s.output.as_ref())

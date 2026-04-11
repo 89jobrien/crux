@@ -2,10 +2,12 @@
 pub mod agent;
 pub mod context;
 pub mod ctx;
+pub mod delegation;
 pub mod hooks;
 pub mod recorder;
 pub mod registry;
 pub mod replay;
+pub mod speculation;
 pub mod types;
 
 pub mod prelude {
