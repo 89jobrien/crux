@@ -1,0 +1,87 @@
+project: crux
+updated: 2026-04-11
+description: >
+  An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
+  Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
+  step, branch, delegation, and failure is a first-class value.
+
+items:
+  - id: crux-1
+    title: "Phase 2: Lifecycle hooks and replay in CruxCtx"
+    description: >
+      Add hook stack (on_low_confidence, on_step_failure, on_budget_exceeded),
+      Recovery dispatch inside step(), replay engine with input hash matching,
+      strict/lenient modes.
+    priority: P0
+    status: open
+    files:
+      - crates/crux-core/src/ctx.rs
+      - crates/crux-core/src/types/recovery.rs
+
+  - id: crux-2
+    title: "Phase 3: End-to-end proc macro testing"
+    description: >
+      Write integration tests that use #[crux::agent] macro, verify generated
+      wrapper function and Agent struct compile and run correctly.
+      Add trybuild tests for error cases.
+    priority: P0
+    status: open
+    files:
+      - crates/crux-macros/src/agent.rs
+      - tests/
+
+  - id: crux-3
+    title: "Phase 4: DelegationBuilder and Speculation"
+    description: >
+      Implement DelegationBuilder with IntoFuture, per-call-site hooks, budget
+      scoping. Speculation builder with pick_best_by, first_ok, pick_best_by_racing.
+      route_on_confidence with runtime range validation. Pipe operator. join_all.
+    priority: P1
+    status: open
+    files:
+      - crates/crux-core/src/delegation.rs
+      - crates/crux-core/src/speculation.rs
+      - crates/crux-core/src/confidence.rs
+      - crates/crux-core/src/compose.rs
+
+  - id: crux-4
+    title: "Phase 5-6: Replay engine and TaskRegistry"
+    description: >
+      Step matching by name + ordinal. Strict vs lenient. TaskRegistry typed API
+      over RegistryBackend port. submit/get/update_status/checkpoint/resume lifecycle.
+    priority: P1
+    status: open
+    files:
+      - crates/crux-core/src/replay.rs
+      - crates/crux-core/src/registry/mod.rs
+
+  - id: crux-5
+    title: "Phase 7: SQLite adapter"
+    description: >
+      crux-sqlite crate or feature-gated module implementing RegistryBackend
+      with rusqlite. Single table tasks(id, data). Feature flag: sqlite.
+    priority: P2
+    status: open
+    files:
+      - crates/crux-core/src/registry/
+
+  - id: crux-6
+    title: "CLAUDE.md and Justfile"
+    description: >
+      Add project CLAUDE.md with architecture, build commands, conventions.
+      Add Justfile for dev automation (check, test, fmt, clippy).
+    priority: P2
+    status: open
+    files:
+      - CLAUDE.md
+      - justfile
+
+log:
+  - date: 2026-04-11
+    summary: >
+      Scaffolded workspace (crux, crux-core, crux-macros). Implemented all core
+      types (Crux<T>, Step, CruxErr, Budget, Recovery, IDs), CruxCtx with step()
+      and finalize(), Agent trait, RegistryBackend port, InMemoryBackend adapter,
+      #[crux::agent] proc macro with code generation. 24 tests passing.
+      Renamed project from trace to crux. Feature flags: tokio-runtime (default),
+      sqlite, tracing. Commits: 500e7cc, bd9a5e1.

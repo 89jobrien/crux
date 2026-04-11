@@ -1,0 +1,32 @@
+[package]
+name = "crux-core"
+description = "Core types, traits, and runtime for the crux agentic DSL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Always required — Step.output is Option<Value>, children are type-erased
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+ulid = { workspace = true }
+
+# Optional
+tokio = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+futures = { workspace = true }
+
+[features]
+default = ["tokio-runtime"]
+tokio-runtime = ["dep:tokio", "dep:futures"]
+sqlite = ["dep:rusqlite"]
+tracing = ["dep:tracing"]

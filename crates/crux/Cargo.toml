@@ -1,0 +1,18 @@
+[package]
+name = "crux"
+description = "An agentic DSL for Rust — inspectable, serializable, replayable agent execution"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+crux-core = { path = "../crux-core" }
+crux-macros = { path = "../crux-macros" }
+
+[features]
+default = ["tokio-runtime"]
+tokio-runtime = ["crux-core/tokio-runtime"]
+sqlite = ["crux-core/sqlite"]
+tracing = ["crux-core/tracing"]
