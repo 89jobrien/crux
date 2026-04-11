@@ -371,3 +371,167 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod proptest_replay {
+    use super::*;
+    use crate::types::step::{Step, StepKind, StepStatus};
+    use chrono::Utc;
+    use proptest::prelude::*;
+
+    fn arb_step_name() -> impl Strategy<Value = String> {
+        "[a-z]{1,8}"
+    }
+
+    fn arb_input_hash() -> impl Strategy<Value = u64> {
+        any::<u64>()
+    }
+
+    fn make_step_prop(name: String, hash: u64, output: Option<serde_json::Value>) -> Step {
+        Step {
+            name,
+            kind: StepKind::Plain,
+            status: StepStatus::Ok,
+            confidence: 1.0,
+            started_at: Utc::now(),
+            duration_ms: 0,
+            input_hash: hash,
+            output,
+            error: None,
+            attempt: 1,
+        }
+    }
+
+    fn make_snapshot_prop(steps: Vec<Step>) -> Crux<serde_json::Value> {
+        use crate::types::id::CruxId;
+        Crux {
+            id: CruxId::new(),
+            agent: "test".into(),
+            value: Ok(serde_json::json!(null)),
+            steps,
+            children: vec![],
+            started_at: Utc::now(),
+            finished_at: Some(Utc::now()),
+        }
+    }
+
+    proptest! {
+        /// Disabled cache always returns Miss, regardless of ordinal/hash.
+        #[test]
+        fn disabled_cache_always_misses(ordinal in 0u32..100, hash in arb_input_hash()) {
+            let cache = ReplayCache::new();
+            prop_assert!(!cache.is_enabled());
+            prop_assert!(matches!(cache.check(ordinal, hash), ReplayResult::Miss));
+        }
+
+        /// After seeding, looking up ordinal 0 with the correct hash returns Hit.
+        #[test]
+        fn seeded_cache_hits_first_entry(name in arb_step_name(), hash in arb_input_hash()) {
+            let mut cache = ReplayCache::new();
+            let output = serde_json::json!("cached");
+            let snapshot = make_snapshot_prop(vec![make_step_prop(
+                name,
+                hash,
+                Some(output.clone()),
+            )]);
+            cache.seed_from(&snapshot);
+            prop_assert!(cache.is_enabled());
+            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Hit(_)));
+        }
+
+        /// Out-of-bounds ordinal always returns Miss.
+        #[test]
+        fn out_of_bounds_ordinal_is_miss(
+            name in arb_step_name(),
+            hash in arb_input_hash(),
+        ) {
+            let mut cache = ReplayCache::new();
+            let snapshot = make_snapshot_prop(vec![make_step_prop(
+                name,
+                hash,
+                Some(serde_json::json!(1)),
+            )]);
+            cache.seed_from(&snapshot);
+            // Ordinal 1 is past the end of a 1-entry cache.
+            prop_assert!(matches!(cache.check(1, hash), ReplayResult::Miss));
+        }
+
+        /// In Strict mode, a hash mismatch at a valid ordinal returns Mismatch.
+        #[test]
+        fn strict_hash_mismatch_returns_mismatch(
+            name in arb_step_name(),
+            stored_hash in 1u64..u64::MAX,
+        ) {
+            let lookup_hash = stored_hash - 1; // guaranteed different
+            let mut cache = ReplayCache::with_mode(ReplayMode::Strict);
+            let snapshot = make_snapshot_prop(vec![make_step_prop(
+                name,
+                stored_hash,
+                Some(serde_json::json!(1)),
+            )]);
+            cache.seed_from(&snapshot);
+            match cache.check(0, lookup_hash) {
+                ReplayResult::Mismatch { expected, actual } => {
+                    prop_assert_eq!(expected, stored_hash);
+                    prop_assert_eq!(actual, lookup_hash);
+                }
+                other => prop_assert!(false, "expected Mismatch, got {other:?}"),
+            }
+        }
+
+        /// In Lenient mode, a hash mismatch at a valid ordinal returns Miss (not Mismatch).
+        #[test]
+        fn lenient_hash_mismatch_returns_miss(
+            name in arb_step_name(),
+            stored_hash in 1u64..u64::MAX,
+        ) {
+            let lookup_hash = stored_hash - 1;
+            let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+            let snapshot = make_snapshot_prop(vec![make_step_prop(
+                name,
+                stored_hash,
+                Some(serde_json::json!(1)),
+            )]);
+            cache.seed_from(&snapshot);
+            prop_assert!(matches!(cache.check(0, lookup_hash), ReplayResult::Miss));
+        }
+
+        /// A step with no output returns Miss even on hash match.
+        #[test]
+        fn no_output_returns_miss_on_match(name in arb_step_name(), hash in arb_input_hash()) {
+            let mut cache = ReplayCache::new();
+            let snapshot = make_snapshot_prop(vec![make_step_prop(name, hash, None)]);
+            cache.seed_from(&snapshot);
+            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Miss));
+        }
+
+        /// Seeding multiple steps, then checking each ordinal with the correct hash hits.
+        #[test]
+        fn multi_step_all_hit(
+            names in prop::collection::vec(arb_step_name(), 1..8),
+            hashes in prop::collection::vec(arb_input_hash(), 1..8),
+        ) {
+            // Use the shorter of the two vecs.
+            let len = names.len().min(hashes.len());
+            let names = &names[..len];
+            let hashes = &hashes[..len];
+
+            let steps: Vec<Step> = names
+                .iter()
+                .zip(hashes.iter())
+                .map(|(n, &h)| make_step_prop(n.clone(), h, Some(serde_json::json!(h))))
+                .collect();
+
+            let mut cache = ReplayCache::new();
+            let snapshot = make_snapshot_prop(steps);
+            cache.seed_from(&snapshot);
+
+            for (i, &hash) in hashes.iter().enumerate() {
+                prop_assert!(
+                    matches!(cache.check(i as u32, hash), ReplayResult::Hit(_)),
+                    "expected Hit at ordinal {i}"
+                );
+            }
+        }
+    }
+}

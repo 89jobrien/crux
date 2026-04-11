@@ -24,6 +24,7 @@ tracing = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true }
 futures = { workspace = true }
+proptest = "1.11.0"
 
 [features]
 default = ["tokio-runtime"]

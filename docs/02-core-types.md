@@ -5,13 +5,13 @@
 
 ## The five types that matter
 
-| Type | Analogue you already know | What it adds |
-|------|---------------------------|--------------|
+| Type      | Analogue you already know              | What it adds                            |
+| --------- | -------------------------------------- | --------------------------------------- |
 | `Crux<T>` | `Result<T, E>` + `tracing::Span` fused | Records every step as part of the value |
-| `Step` | A span event or log line | First-class, typed, serializable |
-| `CruxErr` | `anyhow::Error` | Keeps the failing step in scope |
-| `Agent` | A struct with an `async fn run` | Declarative lifecycle hooks |
-| `CruxCtx` | `tokio::task_local!` context | Scoped to the `#[crux::agent]` function |
+| `Step`    | A span event or log line               | First-class, typed, serializable        |
+| `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope         |
+| `Agent`   | A struct with an `async fn run`        | Declarative lifecycle hooks             |
+| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[crux::agent]` function |
 
 The rest of this chapter walks through each one.
 
@@ -31,14 +31,14 @@ pub struct Crux<T> {
 
 ### Why the value is inside
 
-`Crux<T>` holds the value *and* the causal chain. You don't return a value
+`Crux<T>` holds the value _and_ the causal chain. You don't return a value
 and separately emit a crux — they're one thing. This sounds pedantic, but it
 has two downstream effects:
 
 1. **You can't forget the crux.** If you return a `Crux<T>`, the crux goes
    with it. There's no "oh, I logged this but forgot to attach the span ID"
    class of bug.
-2. **Replay is trivial.** Because the crux *is* the return value, replaying
+2. **Replay is trivial.** Because the crux _is_ the return value, replaying
    a function means re-running it with a snapshot of `Crux<T>` as the seed.
    See chapter 04.
 
@@ -57,7 +57,7 @@ match t.value() {
 }
 ```
 
-The `?` operator works *inside* an `#[crux::agent]` function because the
+The `?` operator works _inside_ an `#[crux::agent]` function because the
 macro rewrites it to propagate through `t`. Outside an agent, you call
 `.value()` to extract the inner `Result`.
 
@@ -106,7 +106,7 @@ The important fields for day-to-day work are **`kind`**, **`status`**, and
 
 This is the biggest single departure from `tracing` / OpenTelemetry. Those
 libraries treat a span as a timing primitive — it happened, here's how long.
-`crux::` treats a step as an *epistemic* primitive: it happened, here's how
+`crux::` treats a step as an _epistemic_ primitive: it happened, here's how
 sure we are the output is right.
 
 That score is what powers:
@@ -164,17 +164,17 @@ pub trait Agent: Send + Sync + 'static {
 
 You almost never implement this by hand. The `#[crux::agent]` attribute
 generates an impl from a free function. You implement it directly only when
-you need to override the lifecycle hooks at the *type* level — usually for an
+you need to override the lifecycle hooks at the _type_ level — usually for an
 agent that's going to be delegated to from many places and needs consistent
 recovery behavior.
 
 ### When to use a free function vs. an Agent impl
 
-| Use a free function | Use an `impl Agent` |
-|---------------------|---------------------|
-| You call it from one place | Many callers delegate to it |
-| Lifecycle hooks differ per call | Lifecycle hooks are stable per agent |
-| Fast to iterate | You want `AgentId` in the registry (chapter 04) |
+| Use a free function             | Use an `impl Agent`                             |
+| ------------------------------- | ----------------------------------------------- |
+| You call it from one place      | Many callers delegate to it                     |
+| Lifecycle hooks differ per call | Lifecycle hooks are stable per agent            |
+| Fast to iterate                 | You want `AgentId` in the registry (chapter 04) |
 
 ## `CruxCtx`
 
@@ -210,14 +210,14 @@ Three things worth knowing:
 
 Before moving on, make sure you can answer these:
 
-- **Where does the value live?** *Inside `Crux<T>`, alongside the steps.*
-- **How do you fail a step loudly?** *Return `Err(CruxErr::StepFailed { ... })`
-  from the closure, or let `?` propagate.*
-- **What's the difference between a `Step` and a `tracing::Event`?** *A step
+- **Where does the value live?** _Inside `Crux<T>`, alongside the steps._
+- **How do you fail a step loudly?** _Return `Err(CruxErr::StepFailed { ... })`
+  from the closure, or let `?` propagate._
+- **What's the difference between a `Step` and a `tracing::Event`?** _A step
   has confidence, typed output, and is part of a value you can serialize and
-  replay.*
-- **When do you implement `Agent` directly?** *When you need stable,
-  type-level lifecycle hooks across many callers.*
+  replay._
+- **When do you implement `Agent` directly?** _When you need stable,
+  type-level lifecycle hooks across many callers._
 
 Chapter **03** puts these types to work on branching and delegation — where
 `crux::` diverges most from regular Rust.

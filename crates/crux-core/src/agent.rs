@@ -11,8 +11,7 @@ use crate::types::recovery::Recovery;
 
 /// Port: defines what an agent must provide.
 ///
-/// Small and focused (ISP). Lifecycle hooks have sensible defaults
-/// so simple agents only need `name()` and `run()`.
+/// Lifecycle hooks have sensible defaults so simple agents only need `name()` and `run()`.
 pub trait Agent: Send + Sync + 'static {
     type Input: Serialize + DeserializeOwned + Send;
     type Output: Serialize + DeserializeOwned + Send;

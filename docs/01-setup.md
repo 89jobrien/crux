@@ -43,11 +43,11 @@ serde_json = "1"
 
 Three feature flags matter on `crux`:
 
-| Feature | What it turns on |
-|---------|------------------|
-| `serde` | `Serialize`/`Deserialize` on `Crux<T>`, `TaskRegistry`, `Step` |
-| `tokio` | `t.delegate` uses `tokio::spawn`, `Crux::join_all` uses `tokio::join!` |
-| `sqlite` | `TaskRegistry` can persist to SQLite (chapter 04) |
+| Feature  | What it turns on                                                       |
+| -------- | ---------------------------------------------------------------------- |
+| `serde`  | `Serialize`/`Deserialize` on `Crux<T>`, `TaskRegistry`, `Step`         |
+| `tokio`  | `t.delegate` uses `tokio::spawn`, `Crux::join_all` uses `tokio::join!` |
+| `sqlite` | `TaskRegistry` can persist to SQLite (chapter 04)                      |
 
 If you omit `tokio`, `crux::` falls back to a synchronous executor — useful
 for tests but not for real agents.
@@ -122,7 +122,7 @@ function call**. The macro wires it up. If you want to call another `#[crux::age
 function from this one, the child's `t` automatically becomes a sub-crux of
 the parent's `t`.
 
-### 2. `t.step` is *not* just a log line
+### 2. `t.step` is _not_ just a log line
 
 In a regular Rust agent, you'd write:
 
@@ -132,7 +132,7 @@ let greeting = format!("hello, {}", name);
 ```
 
 That emits an event. It does not produce a value you can inspect from outside.
-`t.step` does both — it runs the closure *and* records a `Step` that's now
+`t.step` does both — it runs the closure _and_ records a `Step` that's now
 part of the returned `Crux<T>`. You can serialize it, replay it, or branch
 on it.
 

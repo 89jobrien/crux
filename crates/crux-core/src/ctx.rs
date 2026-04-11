@@ -172,7 +172,7 @@ impl CruxCtx {
         }
     }
 
-    // -- Internal helpers for delegation/speculation --------------------------
+    // -- Internal helpers for orchestration --------------------------
 
     /// Allocate an ordinal and return the input hash for a delegation step.
     pub(crate) fn next_delegation_hash(&mut self, name: &str) -> u64 {
@@ -1531,5 +1531,71 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+    }
+}
+
+#[cfg(test)]
+mod proptest_confidence_range {
+    use super::ConfidenceRange;
+    use proptest::prelude::*;
+
+    // Generate valid (lo, hi) pairs: both in [0.0, 1.0], lo < hi, both finite.
+    fn valid_pair() -> impl Strategy<Value = (f32, f32)> {
+        (0.0f32..1.0f32).prop_flat_map(|lo| {
+            let hi_range = (lo + f32::EPSILON)..=1.0f32;
+            (Just(lo), hi_range)
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn exclusive_accepts_valid_ranges((lo, hi) in valid_pair()) {
+            let range = ConfidenceRange::exclusive(lo, hi);
+            // A value at lo should be contained.
+            prop_assert!(range.contains(lo));
+            // A value exactly at hi should NOT be contained (exclusive upper bound).
+            prop_assert!(!range.contains(hi));
+        }
+
+        #[test]
+        fn inclusive_accepts_valid_ranges((lo, hi) in valid_pair()) {
+            let range = ConfidenceRange::inclusive(lo, hi);
+            // A value at lo should be contained.
+            prop_assert!(range.contains(lo));
+            // A value exactly at hi SHOULD be contained (inclusive upper bound).
+            prop_assert!(range.contains(hi));
+        }
+
+        #[test]
+        fn exclusive_rejects_equal_bounds(v in 0.0f32..1.0f32) {
+            let result = std::panic::catch_unwind(|| ConfidenceRange::exclusive(v, v));
+            prop_assert!(result.is_err(), "exclusive with lo==hi should panic");
+        }
+
+        #[test]
+        fn exclusive_rejects_lo_greater_than_hi((lo, hi) in valid_pair()) {
+            // Swapping makes hi < lo — should panic.
+            let result = std::panic::catch_unwind(|| ConfidenceRange::exclusive(hi, lo));
+            prop_assert!(result.is_err(), "exclusive with lo>hi should panic");
+        }
+
+        #[test]
+        fn contains_is_monotone_between_bounds((lo, hi) in valid_pair()) {
+            let range = ConfidenceRange::exclusive(lo, hi);
+            let mid = lo + (hi - lo) / 2.0;
+            // Midpoint must be inside.
+            prop_assert!(range.contains(mid));
+        }
+
+        #[test]
+        fn out_of_bounds_values_not_contained((lo, hi) in valid_pair()) {
+            let range = ConfidenceRange::exclusive(lo, hi);
+            // Values strictly below lo.
+            if lo > 0.0 {
+                prop_assert!(!range.contains(lo - f32::EPSILON));
+            }
+            // Values at or above hi.
+            prop_assert!(!range.contains(hi));
+        }
     }
 }

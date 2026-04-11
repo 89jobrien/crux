@@ -175,3 +175,151 @@ where
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ctx::CruxCtx;
+    use crate::types::error::CruxErr;
+    use crate::types::step::StepStatus;
+
+    fn ok_arm<T: Send + 'static>(name: &str, val: T) -> SpecArm<T> {
+        SpecArm {
+            name: name.to_string(),
+            fut: Box::pin(async move { Ok(val) }),
+        }
+    }
+
+    fn err_arm<T: Send + 'static>(name: &str) -> SpecArm<T> {
+        let name = name.to_string();
+        SpecArm {
+            name: name.clone(),
+            fut: Box::pin(async move { Err(CruxErr::step_failed(&name, "forced failure")) }),
+        }
+    }
+
+    // pick_best tests
+
+    #[tokio::test]
+    async fn pick_best_selects_highest_score() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            ok_arm("low", serde_json::json!(1)),
+            ok_arm("high", serde_json::json!(2)),
+            ok_arm("mid", serde_json::json!(3)),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        // Score by the integer value — "mid" arm with json(3) scores 3.0 but
+        // we use the integer to discriminate; score by the array index via
+        // a closure that reads the i64 out of the Value.
+        let result = builder
+            .pick_best_by(|v| v.as_i64().unwrap_or(0) as f32)
+            .await
+            .unwrap();
+        assert_eq!(result.as_i64().unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn pick_best_all_fail_returns_err() {
+        let mut ctx = CruxCtx::new("test");
+        let arms: Vec<SpecArm<serde_json::Value>> = vec![err_arm("a"), err_arm("b"), err_arm("c")];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.pick_best_by(|_| 1.0).await;
+        assert!(result.is_err(), "expected Err when all arms fail");
+    }
+
+    #[tokio::test]
+    async fn pick_best_all_fail_records_err_steps() {
+        let mut ctx = CruxCtx::new("test");
+        let arms: Vec<SpecArm<serde_json::Value>> = vec![err_arm("x"), err_arm("y")];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let _ = builder.pick_best_by(|_| 1.0).await;
+
+        let crux = ctx.finalize::<()>(Ok(()));
+        assert_eq!(crux.steps.len(), 2);
+        assert!(crux.steps.iter().all(|s| s.status == StepStatus::Err));
+    }
+
+    #[tokio::test]
+    async fn pick_best_winner_ok_losers_rejected() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            ok_arm("winner", serde_json::json!(10)),
+            ok_arm("loser", serde_json::json!(1)),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let _ = builder
+            .pick_best_by(|v| v.as_i64().unwrap_or(0) as f32)
+            .await
+            .unwrap();
+
+        let crux = ctx.finalize::<()>(Ok(()));
+        assert_eq!(crux.steps.len(), 2);
+        let winner = crux.steps.iter().find(|s| s.status == StepStatus::Ok);
+        let loser = crux.steps.iter().find(|s| s.status == StepStatus::Rejected);
+        assert!(winner.is_some(), "expected one Ok step");
+        assert!(loser.is_some(), "expected one Rejected step");
+    }
+
+    #[tokio::test]
+    async fn pick_best_tie_break_favors_first_arm() {
+        // When two arms have the same score, the first one encountered wins.
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            ok_arm("first", serde_json::json!("a")),
+            ok_arm("second", serde_json::json!("b")),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        // Both arms score 5.0; first arm should win (strict > comparison).
+        let result = builder.pick_best_by(|_| 5.0).await.unwrap();
+        assert_eq!(result.as_str().unwrap(), "a");
+    }
+
+    // first_ok tests
+
+    #[tokio::test]
+    async fn first_ok_returns_first_success() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            err_arm("fail1"),
+            ok_arm("pass", serde_json::json!("found")),
+            ok_arm("never", serde_json::json!("skipped")),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.first_ok().await.unwrap();
+        assert_eq!(result.as_str().unwrap(), "found");
+    }
+
+    #[tokio::test]
+    async fn first_ok_all_fail_returns_last_err() {
+        let mut ctx = CruxCtx::new("test");
+        let arms: Vec<SpecArm<serde_json::Value>> = vec![err_arm("a"), err_arm("b")];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.first_ok().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn first_ok_empty_arms_returns_err() {
+        let mut ctx = CruxCtx::new("test");
+        let arms: Vec<SpecArm<serde_json::Value>> = vec![];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.first_ok().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn first_ok_records_failed_as_rejected() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![err_arm("fail1"), ok_arm("pass", serde_json::json!(true))];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let _ = builder.first_ok().await.unwrap();
+
+        let crux = ctx.finalize::<()>(Ok(()));
+        assert_eq!(crux.steps.len(), 2);
+        let rejected = crux.steps.iter().find(|s| s.status == StepStatus::Rejected);
+        assert!(rejected.is_some());
+        let ok = crux.steps.iter().find(|s| s.status == StepStatus::Ok);
+        assert!(ok.is_some());
+    }
+}

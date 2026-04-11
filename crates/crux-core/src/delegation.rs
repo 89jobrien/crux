@@ -118,3 +118,122 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::Context as _;
+    use crate::types::budget::Budget;
+    use crate::types::error::CruxErr;
+
+    // Minimal agent that doubles its input.
+    struct DoubleAgent;
+
+    impl crate::agent::Agent for DoubleAgent {
+        type Input = i32;
+        type Output = i32;
+
+        fn name() -> &'static str {
+            "double"
+        }
+
+        async fn run(
+            ctx: &mut crate::ctx::CruxCtx,
+            input: Self::Input,
+        ) -> Result<Self::Output, CruxErr> {
+            ctx.step("double_step", || async move { Ok(input * 2) })
+                .await
+        }
+    }
+
+    // Agent that always fails.
+    struct FailAgent;
+
+    impl crate::agent::Agent for FailAgent {
+        type Input = ();
+        type Output = i32;
+
+        fn name() -> &'static str {
+            "fail"
+        }
+
+        async fn run(
+            _ctx: &mut crate::ctx::CruxCtx,
+            _input: Self::Input,
+        ) -> Result<Self::Output, CruxErr> {
+            Err(CruxErr::step_failed("fail", "always fails"))
+        }
+    }
+
+    #[tokio::test]
+    async fn builder_runs_child_agent_and_returns_output() {
+        let mut ctx = CruxCtx::new("parent");
+        let result = DelegationBuilder::<DoubleAgent>::new(&mut ctx, "double_it", 21)
+            .run()
+            .await;
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn builder_records_delegation_step_in_parent() {
+        let mut ctx = CruxCtx::new("parent");
+        DelegationBuilder::<DoubleAgent>::new(&mut ctx, "my_step", 5)
+            .run()
+            .await
+            .unwrap();
+
+        let crux = ctx.finalize::<i32>(Ok(0));
+        assert_eq!(crux.steps.len(), 1);
+        assert_eq!(crux.steps[0].name, "my_step");
+        assert_eq!(crux.steps[0].kind, crate::types::step::StepKind::Delegation);
+    }
+
+    #[tokio::test]
+    async fn builder_with_budget_propagates_to_child() {
+        let mut ctx = CruxCtx::new("parent");
+        let result = DelegationBuilder::<DoubleAgent>::new(&mut ctx, "budgeted", 7)
+            .with_budget(Budget::calls(100))
+            .run()
+            .await;
+        assert_eq!(result.unwrap(), 14);
+    }
+
+    #[tokio::test]
+    async fn failing_agent_returns_delegation_error() {
+        let mut ctx = CruxCtx::new("parent");
+        let err = DelegationBuilder::<FailAgent>::new(&mut ctx, "will_fail", ())
+            .run()
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, CruxErr::Delegation { ref to, .. } if to == "fail"),
+            "expected Delegation error, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn failing_agent_records_err_step() {
+        let mut ctx = CruxCtx::new("parent");
+        let _ = DelegationBuilder::<FailAgent>::new(&mut ctx, "fail_step", ())
+            .run()
+            .await;
+
+        let crux = ctx.finalize::<()>(Ok(()));
+        assert_eq!(crux.steps.len(), 1);
+        assert_eq!(crux.steps[0].status, crate::types::step::StepStatus::Err);
+    }
+
+    #[tokio::test]
+    async fn builder_appends_child_crux_to_parent() {
+        let mut ctx = CruxCtx::new("parent");
+        DelegationBuilder::<DoubleAgent>::new(&mut ctx, "child_run", 3)
+            .run()
+            .await
+            .unwrap();
+
+        let crux = ctx.finalize::<i32>(Ok(0));
+        assert_eq!(crux.children.len(), 1);
+        assert_eq!(crux.children[0].agent, "double");
+    }
+}

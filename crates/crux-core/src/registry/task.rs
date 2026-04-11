@@ -435,3 +435,114 @@ mod tests {
         assert_eq!(back.attempts, 3);
     }
 }
+
+#[cfg(test)]
+mod proptest_task_status {
+    use super::*;
+    use crate::registry::InMemoryBackend;
+    use proptest::prelude::*;
+
+    fn arb_status() -> impl Strategy<Value = TaskStatus> {
+        prop_oneof![
+            Just(TaskStatus::Pending),
+            Just(TaskStatus::Running),
+            Just(TaskStatus::Done),
+            Just(TaskStatus::Failed),
+        ]
+    }
+
+    fn arb_kind() -> impl Strategy<Value = String> {
+        "[a-z]{3,10}"
+    }
+
+    proptest! {
+        /// Any status transition applied to a submitted task should persist correctly.
+        #[test]
+        fn update_status_persists_any_status(
+            kind in arb_kind(),
+            target_status in arb_status(),
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                let reg = TaskRegistry::new(InMemoryBackend::new());
+                let id = reg.submit(&kind, serde_json::json!(null)).await.unwrap();
+                reg.update_status(&id, target_status.clone()).await.unwrap();
+                let task = reg.get(&id).await.unwrap();
+                prop_assert_eq!(task.status, target_status);
+                Ok(())
+            })?;
+        }
+
+        /// After any transition, get() returns the correct kind.
+        #[test]
+        fn update_status_does_not_change_kind(
+            kind in arb_kind(),
+            target_status in arb_status(),
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                let reg = TaskRegistry::new(InMemoryBackend::new());
+                let id = reg.submit(&kind, serde_json::json!(null)).await.unwrap();
+                reg.update_status(&id, target_status).await.unwrap();
+                let task = reg.get(&id).await.unwrap();
+                prop_assert_eq!(&task.kind, &kind);
+                Ok(())
+            })?;
+        }
+
+        /// Applying the same status twice is idempotent.
+        #[test]
+        fn update_status_idempotent(
+            kind in arb_kind(),
+            status in arb_status(),
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                let reg = TaskRegistry::new(InMemoryBackend::new());
+                let id = reg.submit(&kind, serde_json::json!(null)).await.unwrap();
+                reg.update_status(&id, status.clone()).await.unwrap();
+                reg.update_status(&id, status.clone()).await.unwrap();
+                let task = reg.get(&id).await.unwrap();
+                prop_assert_eq!(task.status, status);
+                Ok(())
+            })?;
+        }
+
+        /// Pending tasks appear in pending() list; non-pending ones do not.
+        #[test]
+        fn pending_list_reflects_status(
+            kind in arb_kind(),
+            non_pending in prop_oneof![
+                Just(TaskStatus::Running),
+                Just(TaskStatus::Done),
+                Just(TaskStatus::Failed),
+            ],
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                let reg = TaskRegistry::new(InMemoryBackend::new());
+                let id1 = reg.submit(&kind, serde_json::json!(1)).await.unwrap();
+                let id2 = reg.submit(&kind, serde_json::json!(2)).await.unwrap();
+                // Move id2 to a non-pending status.
+                reg.update_status(&id2, non_pending).await.unwrap();
+
+                let pending = reg.pending(&kind).await.unwrap();
+                prop_assert_eq!(pending.len(), 1);
+                prop_assert_eq!(&pending[0].id, &id1);
+                Ok(())
+            })?;
+        }
+    }
+}

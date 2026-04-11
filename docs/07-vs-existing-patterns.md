@@ -32,7 +32,7 @@ You end up with:
 - A bespoke `PlanEvent` enum per agent
 - Retry logic at the `rx.recv()` site
 - Tracing via `tracing::info!` scattered through the code
-- No record of what the agent *considered* — only what it did
+- No record of what the agent _considered_ — only what it did
 
 **Under `crux::`:**
 
@@ -45,14 +45,14 @@ if let Err(e) = crux.value() {
 
 What moved:
 
-| Hand-rolled | `crux::` |
-|-------------|-----------|
-| Event enum per agent | `Crux<T>` is the universal event type |
-| Retry logic at receiver | `on_step_failure` hook at the agent |
-| Tracing via `info!` | Every `t.step` is already a recorded event |
-| No record of rejected options | `speculate` + `rejected_branches()` |
+| Hand-rolled                   | `crux::`                                   |
+| ----------------------------- | ------------------------------------------ |
+| Event enum per agent          | `Crux<T>` is the universal event type      |
+| Retry logic at receiver       | `on_step_failure` hook at the agent        |
+| Tracing via `info!`           | Every `t.step` is already a recorded event |
+| No record of rejected options | `speculate` + `rejected_branches()`        |
 
-The tradeoff is that `crux::` enforces its shape — you *must* structure
+The tradeoff is that `crux::` enforces its shape — you _must_ structure
 work as steps, delegations, and speculations. If your agent looks like
 "one big LLM call and then save the result", `crux::` is overkill and
 you should just use `tokio::spawn`.
@@ -71,17 +71,17 @@ observability.
 
 **Where they diverge:**
 
-| `tracing` | `crux::` |
-|-----------|-----------|
-| Spans are observability | Steps are program state |
-| `Span` is a side effect | `Crux<T>` is the return value |
-| Events are fire-and-forget | Steps hold their output |
-| No concept of confidence | `confidence: f32` is a first-class field |
-| No concept of rejected branches | `speculate` records losers |
-| Replay is not a goal | Replay is a language feature |
+| `tracing`                       | `crux::`                                 |
+| ------------------------------- | ---------------------------------------- |
+| Spans are observability         | Steps are program state                  |
+| `Span` is a side effect         | `Crux<T>` is the return value            |
+| Events are fire-and-forget      | Steps hold their output                  |
+| No concept of confidence        | `confidence: f32` is a first-class field |
+| No concept of rejected branches | `speculate` records losers               |
+| Replay is not a goal            | Replay is a language feature             |
 
 The one-sentence version: **`tracing` tells you what happened; `crux::`
-tells you what happened *and* lets you re-run it.**
+tells you what happened _and_ lets you re-run it.**
 
 Concretely, you can't replay a `tracing` span back through your code
 because the span doesn't contain the inputs to the functions that ran
@@ -92,7 +92,7 @@ correct-by-construction.
 
 - Stick with `tracing` for RPC services, web servers, CI systems — places
   where you want observability but not replay.
-- Use `crux::` for agents — places where the *decision process* is
+- Use `crux::` for agents — places where the _decision process_ is
   itself the interesting artifact.
 - You can use both in the same process. `crux::` emits `tracing` events
   under the hood if the `tracing` feature flag is on, so your existing
@@ -104,13 +104,13 @@ If you've built something like `agent_crux` yourself, you've probably
 reinvented most of `crux::`. The patterns converge because the problems
 are the same. The differences tend to be:
 
-| Your hand-rolled version | `crux::` |
-|--------------------------|-----------|
-| `AgentRun` struct in your code | `Crux<T>` as a generic type |
-| Manual `run.record_step(...)` calls | `t.step(...)` via macro |
-| Checkpointing bolted on later | `#[crux::agent(checkpoint_every_step)]` |
-| `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work |
-| Status enum per agent | `Task<S>` with user-defined `S` |
+| Your hand-rolled version            | `crux::`                                |
+| ----------------------------------- | --------------------------------------- |
+| `AgentRun` struct in your code      | `Crux<T>` as a generic type             |
+| Manual `run.record_step(...)` calls | `t.step(...)` via macro                 |
+| Checkpointing bolted on later       | `#[crux::agent(checkpoint_every_step)]` |
+| `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work  |
+| Status enum per agent               | `Task<S>` with user-defined `S`         |
 
 The most interesting question is: **should you throw out your own crate
 and use `crux::`?** The honest answer is that it depends on three things:
@@ -119,7 +119,7 @@ and use `crux::`?** The honest answer is that it depends on three things:
    pattern — wrapping LLM providers with crux-recording middleware — is
    something you probably want to keep. `crux::` doesn't replace it; it
    gives you a place to put it. A `CruxdProvider` becomes something you
-   call *from inside* a `t.step` closure.
+   call _from inside_ a `t.step` closure.
 
 2. **How much replay do you need?** If you've been getting by with
    "run it again from the start", you don't need `crux::`'s replay. If
@@ -148,13 +148,13 @@ model is "define nodes and edges, run the graph, inspect the state."
 
 **Where they diverge:**
 
-| LangGraph | `crux::` |
-|-----------|-----------|
-| Graph is data, defined before execution | Crux is code, built during execution |
-| State is a shared mutable object | Crux is a value that flows through `?` |
-| Edges are conditions in Python | Branches are Rust types with compile-time exhaustiveness |
-| Node = function in a registry | Step = closure inside a function |
-| Checkpoint = full state serialization | Checkpoint = crux snapshot + input hashes |
+| LangGraph                               | `crux::`                                                 |
+| --------------------------------------- | -------------------------------------------------------- |
+| Graph is data, defined before execution | Crux is code, built during execution                     |
+| State is a shared mutable object        | Crux is a value that flows through `?`                   |
+| Edges are conditions in Python          | Branches are Rust types with compile-time exhaustiveness |
+| Node = function in a registry           | Step = closure inside a function                         |
+| Checkpoint = full state serialization   | Checkpoint = crux snapshot + input hashes                |
 
 The philosophical difference: **LangGraph models an agent as a graph
 whose nodes you write; `crux::` models an agent as a function whose
@@ -188,17 +188,17 @@ Goal, the Backstory) is the primary abstraction.
 
 **Where they diverge:**
 
-| CrewAI / AutoGen | `crux::` |
-|-------------------|-----------|
-| Agent = role + prompt template | Agent = `impl Agent` trait |
-| Communication = messages | Communication = `delegate` return values |
-| No first-class crux | Crux is the return value |
-| State in the conversation | State in `Task<S>` + `Crux<T>` |
-| Python, dynamic | Rust, typed |
+| CrewAI / AutoGen               | `crux::`                                 |
+| ------------------------------ | ---------------------------------------- |
+| Agent = role + prompt template | Agent = `impl Agent` trait               |
+| Communication = messages       | Communication = `delegate` return values |
+| No first-class crux            | Crux is the return value                 |
+| State in the conversation      | State in `Task<S>` + `Crux<T>`           |
+| Python, dynamic                | Rust, typed                              |
 
 The honest comparison is that `crux::` and CrewAI are solving adjacent
-problems. CrewAI is about *how agents talk to each other*. `crux::` is
-about *how one agent's execution is recorded and recovered*. You could
+problems. CrewAI is about _how agents talk to each other_. `crux::` is
+about _how one agent's execution is recorded and recovered_. You could
 build a CrewAI-like framework on top of `crux::` — it would be a crate
 that provides opinionated `Agent` impls and a delegation pattern. And
 you could implement `crux::`'s recording and replay inside CrewAI — it
@@ -228,16 +228,16 @@ used Temporal, a lot of `crux::` will feel familiar.
 
 **Where they diverge:**
 
-| Temporal | `crux::` |
-|----------|-----------|
-| Separate workflow service | Lives in your process |
-| Activities are RPC calls | Steps are closures in your function |
-| Determinism is enforced by API restrictions | Determinism is enforced by input hashes |
-| Multi-language via SDKs | Rust only |
-| Scales to millions of workflows | Scales to hundreds of thousands, locally |
+| Temporal                                    | `crux::`                                 |
+| ------------------------------------------- | ---------------------------------------- |
+| Separate workflow service                   | Lives in your process                    |
+| Activities are RPC calls                    | Steps are closures in your function      |
+| Determinism is enforced by API restrictions | Determinism is enforced by input hashes  |
+| Multi-language via SDKs                     | Rust only                                |
+| Scales to millions of workflows             | Scales to hundreds of thousands, locally |
 
-The one-liner: **Temporal is a durable execution *service*; `crux::`
-is a durable execution *library*.**
+The one-liner: **Temporal is a durable execution _service_; `crux::`
+is a durable execution _library_.**
 
 If you have many workflows, many hosts, and strict SLAs, Temporal is
 the right answer and `crux::` is not competing with it. If you have a
@@ -252,14 +252,14 @@ what you look at to debug the LLM behavior.
 
 ## Summary table
 
-| Tool | Best at | Weakness | `crux::` relationship |
-|------|---------|----------|-----------------------|
-| `tokio::spawn` + channels | Raw flexibility | No structure, no replay | `crux::` structures this for agents |
-| `tracing` crate | Observability for services | No replay, no confidence | Use alongside; `crux::` can emit `tracing` events |
-| Your own `agent_crux` | Domain-specific providers | Reinventing wheel | `crux::` is the shell; keep your providers |
-| LangGraph | Visual graph authoring | Python, stateful | Different paradigm; pick one |
-| CrewAI / AutoGen | Multi-agent personas | No first-class crux | Adjacent problems; composable |
-| Temporal | Durable workflows at scale | Requires a service | `crux::` is the library version |
+| Tool                      | Best at                    | Weakness                 | `crux::` relationship                             |
+| ------------------------- | -------------------------- | ------------------------ | ------------------------------------------------- |
+| `tokio::spawn` + channels | Raw flexibility            | No structure, no replay  | `crux::` structures this for agents               |
+| `tracing` crate           | Observability for services | No replay, no confidence | Use alongside; `crux::` can emit `tracing` events |
+| Your own `agent_crux`     | Domain-specific providers  | Reinventing wheel        | `crux::` is the shell; keep your providers        |
+| LangGraph                 | Visual graph authoring     | Python, stateful         | Different paradigm; pick one                      |
+| CrewAI / AutoGen          | Multi-agent personas       | No first-class crux      | Adjacent problems; composable                     |
+| Temporal                  | Durable workflows at scale | Requires a service       | `crux::` is the library version                   |
 
 ## The design philosophy
 
@@ -271,7 +271,7 @@ Every one of those tools got something right that `crux::` borrows:
 - From CrewAI: agents as a composition primitive
 - From Temporal: input-hash-based determinism
 
-And one thing `crux::` deliberately does *not* borrow: **the assumption
+And one thing `crux::` deliberately does _not_ borrow: **the assumption
 that your agent code is special**. There's no special `WorkflowContext`,
 no DSL-inside-a-DSL, no "you can't use `if` here". It's just Rust, with a
 macro that rewrites your function to record what it does. Everything

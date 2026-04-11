@@ -32,16 +32,16 @@ The chapters build on each other, but each one is self-contained if you know
 the previous chapter's types. If you're skimming, read **01** and **05**,
 then jump to **06** for the hands-on project.
 
-| # | Chapter | What you'll learn |
-|---|---------|------------------|
-| 01 | [Setup & Rust toolchain](./01-setup.md) | Install, scaffold a project, write your first `Crux` |
-| 02 | [Core types](./02-core-types.md) | `Crux<T>`, `CruxErr`, `Step`, `Agent` trait |
-| 03 | [Branching & delegation](./03-branching-delegation.md) | `match`, confidence routes, `speculate`, `delegate` |
-| 04 | [Serializable task management](./04-task-registry.md) | `TaskRegistry`, `Task<S>`, crash-safe replay |
-| 05 | [Lifecycle hooks](./05-lifecycle-hooks.md) | `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` |
-| 06 | [Project: Decomposer + Executor](./06-project-planner-executor.md) | Build a task planning + execution system end-to-end |
-| 07 | [vs existing agentic patterns](./07-vs-existing-patterns.md) | How `crux::` compares to LangGraph, CrewAI, `tracing`, hand-rolled loops |
-| R  | [Syntax reference card](./reference.md) | Every macro, trait, and type in one page |
+| #   | Chapter                                                            | What you'll learn                                                        |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 01  | [Setup & Rust toolchain](./01-setup.md)                            | Install, scaffold a project, write your first `Crux`                     |
+| 02  | [Core types](./02-core-types.md)                                   | `Crux<T>`, `CruxErr`, `Step`, `Agent` trait                              |
+| 03  | [Branching & delegation](./03-branching-delegation.md)             | `match`, confidence routes, `speculate`, `delegate`                      |
+| 04  | [Serializable task management](./04-task-registry.md)              | `TaskRegistry`, `Task<S>`, crash-safe replay                             |
+| 05  | [Lifecycle hooks](./05-lifecycle-hooks.md)                         | `on_low_confidence`, `on_step_failure`, `on_budget_exceeded`             |
+| 06  | [Project: Decomposer + Executor](./06-project-planner-executor.md) | Build a task planning + execution system end-to-end                      |
+| 07  | [vs existing agentic patterns](./07-vs-existing-patterns.md)       | How `crux::` compares to LangGraph, CrewAI, `tracing`, hand-rolled loops |
+| R   | [Syntax reference card](./reference.md)                            | Every macro, trait, and type in one page                                 |
 
 ## The 30-second pitch
 
