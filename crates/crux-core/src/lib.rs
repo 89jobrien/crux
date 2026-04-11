@@ -1,11 +1,16 @@
 /// crux-core: domain types, traits, and runtime for the crux agentic DSL.
 pub mod agent;
+pub mod context;
 pub mod ctx;
+pub mod hooks;
+pub mod recorder;
 pub mod registry;
+pub mod replay;
 pub mod types;
 
 pub mod prelude {
     pub use crate::agent::Agent;
+    pub use crate::context::Context;
     pub use crate::ctx::CruxCtx;
     pub use crate::types::budget::Budget;
     pub use crate::types::crux_value::Crux;
