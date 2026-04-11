@@ -1,4 +1,5 @@
 project: crux
+id: crux
 updated: 2026-04-11
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
@@ -13,7 +14,8 @@ items:
       Recovery dispatch inside step(), replay engine with input hash matching,
       strict/lenient modes.
     priority: P0
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - crates/crux-core/src/ctx.rs
       - crates/crux-core/src/types/recovery.rs
@@ -25,7 +27,8 @@ items:
       wrapper function and Agent struct compile and run correctly.
       Add trybuild tests for error cases.
     priority: P0
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - crates/crux-macros/src/agent.rs
       - tests/
@@ -37,7 +40,8 @@ items:
       scoping. Speculation builder with pick_best_by, first_ok, pick_best_by_racing.
       route_on_confidence with runtime range validation. Pipe operator. join_all.
     priority: P1
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - crates/crux-core/src/delegation.rs
       - crates/crux-core/src/speculation.rs
@@ -71,12 +75,70 @@ items:
       Add project CLAUDE.md with architecture, build commands, conventions.
       Add Justfile for dev automation (check, test, fmt, clippy).
     priority: P2
-    status: open
+    status: done
+    completed: 2026-04-11
     files:
       - CLAUDE.md
       - justfile
 
+  - id: crux-7
+    name: solid-refactor
+    title: "SOLID refactoring: decompose CruxCtx into collaborators"
+    description: >
+      Extracted HookRegistry, StepRecorder, ReplayCache, and Context trait from
+      monolithic CruxCtx. Each module independently testable. Context trait provides
+      DIP port for agent runtime.
+    priority: P1
+    status: done
+    completed: 2026-04-11
+    files:
+      - crates/crux-core/src/hooks.rs
+      - crates/crux-core/src/recorder.rs
+      - crates/crux-core/src/replay.rs
+      - crates/crux-core/src/context.rs
+      - crates/crux-core/src/ctx.rs
+
+  - id: crux-8
+    name: ci-and-hooks
+    title: "GitHub Actions CI, git hooks, and justfile"
+    description: >
+      CI workflow (fmt, clippy, nextest, build). Pre-commit hook (fmt + clippy),
+      pre-push hook (nextest). Justfile with check/test/lint/ci/fix/hooks commands.
+    priority: P1
+    status: done
+    completed: 2026-04-11
+    files:
+      - .github/workflows/ci.yml
+      - .githooks/pre-commit
+      - .githooks/pre-push
+      - justfile
+
+  - id: crux-9
+    name: route-on-confidence
+    title: "route_on_confidence, pipe operator, join_all"
+    description: >
+      Remaining crux-3 scope: route_on_confidence with runtime range validation,
+      pipe operator for sequential composition, Crux::join_all for parallel fan-out.
+    priority: P2
+    status: open
+    files:
+      - crates/crux-core/src/ctx.rs
+
 log:
+  - date: 2026-04-11
+    summary: >
+      Session 2: Implemented lifecycle hooks (on_low_confidence, on_step_failure,
+      on_budget_exceeded) with full Recovery handling, step_retryable with retry loops,
+      replay from prior traces. 15 macro integration tests. SOLID refactoring: extracted
+      HookRegistry, StepRecorder, ReplayCache, Context trait from CruxCtx. Added CI
+      workflow, git hooks, justfile. Implemented DelegationBuilder (per-call-site budget
+      and hooks, child CruxCtx) and SpeculationBuilder (pick_best_by, first_ok, rejected
+      branch recording). 77 tests total, clippy clean.
+    commits:
+      - b8222ea
+      - 1464fe3
+      - 8571560
+      - 11d558f
   - date: 2026-04-11
     summary: >
       Scaffolded workspace (crux, crux-core, crux-macros). Implemented all core
@@ -84,4 +146,7 @@ log:
       and finalize(), Agent trait, RegistryBackend port, InMemoryBackend adapter,
       #[crux::agent] proc macro with code generation. 24 tests passing.
       Renamed project from trace to crux. Feature flags: tokio-runtime (default),
-      sqlite, tracing. Commits: 500e7cc, bd9a5e1.
+      sqlite, tracing.
+    commits:
+      - 500e7cc
+      - bd9a5e1
