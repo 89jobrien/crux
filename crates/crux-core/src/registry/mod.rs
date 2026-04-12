@@ -4,13 +4,13 @@ pub mod error;
 pub mod in_memory;
 pub mod task;
 
-#[cfg(feature = "sqlite")]
-pub mod sqlite;
+#[cfg(feature = "redb")]
+pub mod redb;
 
 pub use backend::RegistryBackend;
 pub use error::RegistryErr;
 pub use in_memory::InMemoryBackend;
 pub use task::{Task, TaskRegistry, TaskStatus};
 
-#[cfg(feature = "sqlite")]
-pub use sqlite::SqliteBackend;
+#[cfg(feature = "redb")]
+pub use self::redb::RedbBackend;

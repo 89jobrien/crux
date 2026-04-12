@@ -35,10 +35,13 @@ quote = "1"
 proc-macro2 = "1"
 
 # Storage
-rusqlite = { version = "0.32", features = ["bundled"] }
+redb = "4"
 
 # Observability
 tracing = "0.1"
+
+# Temp files
+tempfile = "3"
 
 # Testing
 tokio-test = "0.4"
