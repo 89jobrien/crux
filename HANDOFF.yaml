@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: 2026-04-12
+updated: "2026-04-12"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -181,7 +181,87 @@ items:
       - crates/crux-core/src/ctx.rs
       - crates/crux-core/src/types/step.rs
 
+  - id: crux-13
+    name: macro-wiring
+    title: "Wire proc macro attributes: replay and registry"
+    description: >
+      Wired replay="lenient" attribute to call set_replay_mode in generated wrapper.
+      Wired registry="kind" to generate run_registered() method on agent struct
+      with TaskRegistry submit/update_status/checkpoint lifecycle.
+    priority: P1
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-macros/src/agent.rs
+      - crates/crux/tests/agent_macro.rs
+
+  - id: crux-14
+    name: tracing
+    title: "Wire tracing feature flag with conditional instrumentation"
+    description: >
+      Added trace.rs with conditional macros (no-ops without tracing feature).
+      Events for step execution, delegation, speculation, join_all, pipe,
+      replay cache hits/misses, hook dispatch, and confidence routing.
+    priority: P2
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-core/src/trace.rs
+      - crates/crux-core/src/ctx.rs
+      - crates/crux-core/src/delegation.rs
+      - crates/crux-core/src/speculation.rs
+
+  - id: crux-15
+    name: streaming
+    title: "Streaming steps with incremental events"
+    description: >
+      Added step_stream() to Context trait and CruxCtx. Collects Stream items
+      as events on Step. New events field on Step (serde-skipped when empty).
+      4 integration tests.
+    priority: P1
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-core/src/context.rs
+      - crates/crux-core/src/ctx.rs
+      - crates/crux-core/src/types/step.rs
+      - crates/crux/tests/streaming.rs
+
+  - id: crux-16
+    name: checkpoint-resume
+    title: "Mid-run checkpoint and resume from TaskRegistry"
+    description: >
+      Added CruxCtx::snapshot(), checkpoint_to(), and resume_from().
+      Checkpoint serializes in-progress trace to TaskRegistry.
+      Resume loads checkpoint and seeds replay cache. 3 integration tests.
+    priority: P1
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-core/src/ctx.rs
+      - crates/crux/tests/checkpoint.rs
+
+  - id: crux-17
+    name: publish-readiness
+    title: "Publish-readiness: docs, examples, CHANGELOG, cargo-deny"
+    description: >
+      Rustdoc on all public items, examples/ directory, README expansion,
+      CHANGELOG.md, cargo-deny/audit clean, crates.io metadata audit.
+    priority: P2
+    status: open
+    files:
+      - README.md
+      - CHANGELOG.md
+      - examples/
+
 log:
+  - date: 2026-04-12
+    summary: >
+      Session 6: Phase 2 items crux-13 through crux-16. Wired replay/registry
+      macro attributes, added tracing instrumentation, step_stream() with events,
+      checkpoint/resume from TaskRegistry. 180 -> 196 tests. All features compile.
+    commits:
+      - 0bfadd0
   - date: 2026-04-12
     summary: >
       Session 5: Tightened lenient replay identity (crux-12). Added content_hash
