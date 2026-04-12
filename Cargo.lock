@@ -87,12 +87,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "crux"
+name = "cruxai"
 version = "0.1.0"
 dependencies = [
- "crux-core",
- "crux-macros",
- "crux-script",
+ "cruxai-core",
+ "cruxai-macros",
+ "cruxai-script",
  "futures",
  "serde",
  "serde_json",
@@ -100,7 +100,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-core"
+name = "cruxai-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -117,7 +117,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-macros"
+name = "cruxai-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -126,10 +126,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-script"
+name = "cruxai-script"
 version = "0.1.0"
 dependencies = [
- "crux-core",
+ "cruxai-core",
  "futures",
  "serde",
  "serde_json",

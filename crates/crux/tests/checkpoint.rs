@@ -1,8 +1,8 @@
 /// Integration tests for checkpoint/resume functionality.
-use crux::prelude::*;
-use crux::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
+use cruxai::prelude::*;
+use cruxai::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
 
-#[crux::agent]
+#[cruxai::agent]
 async fn checkpointable(steps: Vec<String>) -> Crux<String> {
     let mut result = String::new();
     for s in &steps {

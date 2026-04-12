@@ -1,10 +1,10 @@
 /// Integration tests for TaskRegistry + replay lifecycle.
-use crux::prelude::*;
-use crux::registry::InMemoryBackend;
+use cruxai::prelude::*;
+use cruxai::registry::InMemoryBackend;
 
 // -- Simple agent for testing -------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn adder(n: i32) -> Crux<i32> {
     let a: i32 = t
         .step("add_ten", || {

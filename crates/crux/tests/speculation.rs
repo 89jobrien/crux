@@ -1,5 +1,5 @@
 /// Integration tests for t.speculate() and SpeculationBuilder.
-use crux::prelude::*;
+use cruxai::prelude::*;
 
 // -- pick_best_by -----------------------------------------------------------
 
@@ -198,9 +198,9 @@ async fn speculation_steps_have_correct_kind() {
     }
 }
 
-// -- speculation inside #[crux::agent] --------------------------------------
+// -- speculation inside #[cruxai::agent] --------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn speculative_agent(input: i32) -> Crux<i32> {
     let result: i32 = t
         .speculate(

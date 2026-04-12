@@ -1,9 +1,9 @@
 /// Integration tests for t.delegate::<A>() and DelegationBuilder.
-use crux::prelude::*;
+use cruxai::prelude::*;
 
 // -- Define a simple sub-agent for testing ----------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn doubler(n: i32) -> Crux<i32> {
     let result: i32 = t
         .step("double", || {
@@ -16,14 +16,14 @@ async fn doubler(n: i32) -> Crux<i32> {
 
 // -- Define a failing sub-agent ---------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn failer(_input: String) -> Crux<String> {
     Err(CruxErr::step_failed("failer", "always fails"))
 }
 
 // -- Basic delegation -------------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn parent_basic(n: i32) -> Crux<i32> {
     let result = t.delegate::<DoublerAgent>("double_it", n).run().await?;
     Ok(result)
@@ -50,7 +50,7 @@ async fn basic_delegation() {
 
 // -- Delegation failure wraps in CruxErr::Delegation ------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn parent_fail(input: String) -> Crux<String> {
     let result = t.delegate::<FailerAgent>("will_fail", input).run().await?;
     Ok(result)
@@ -70,7 +70,7 @@ async fn delegation_failure() {
 
 // -- Delegation with budget -------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn parent_budgeted(n: i32) -> Crux<i32> {
     let result = t
         .delegate::<DoublerAgent>("budgeted", n)

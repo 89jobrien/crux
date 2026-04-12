@@ -4,7 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crux_core::prelude::{Agent, CruxCtx, CruxErr};
+use cruxai_core::prelude::{Agent, CruxCtx, CruxErr};
 use serde_json::Value;
 
 /// Type-erased async handler: Value in, Value out.

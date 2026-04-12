@@ -7,8 +7,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crux_core::prelude::*;
-use crux_script::{HandlerRegistry, Runner, schema::PipelineDef};
+use cruxai_core::prelude::*;
+use cruxai_script::{HandlerRegistry, Runner, schema::PipelineDef};
 use serde_json::{Value, json};
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
         Value::Null
     };
 
-    let pipeline = crux_script::load_file(pipeline_path).expect("failed to load pipeline");
+    let pipeline = cruxai_script::load_file(pipeline_path).expect("failed to load pipeline");
     let registry = build_stub_registry(&pipeline);
     let runner = Runner::new(Arc::new(registry));
 
@@ -65,7 +65,7 @@ fn build_stub_registry(pipeline: &PipelineDef) -> HandlerRegistry {
 
 /// Collect all handler/arm/stage names referenced in the pipeline.
 fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
-    use crux_script::schema::StepDef;
+    use cruxai_script::schema::StepDef;
     let mut names = Vec::new();
 
     for step in &pipeline.steps {

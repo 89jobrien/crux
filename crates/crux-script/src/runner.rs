@@ -1,7 +1,7 @@
 /// Pipeline runner — interprets a parsed YAML pipeline against CruxCtx + HandlerRegistry.
 use std::sync::Arc;
 
-use crux_core::prelude::*;
+use cruxai_core::prelude::*;
 use serde_json::Value;
 
 use crate::expr::{ExprContext, StepResult};

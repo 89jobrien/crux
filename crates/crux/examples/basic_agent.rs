@@ -1,5 +1,5 @@
 /// A minimal crux agent that demonstrates step recording, delegation, and trace inspection.
-use crux::prelude::*;
+use cruxai::prelude::*;
 
 // -- Agents -------------------------------------------------------------------
 

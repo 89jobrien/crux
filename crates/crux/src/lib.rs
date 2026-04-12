@@ -1,5 +1,5 @@
-/// crux — an agentic DSL for Rust.
+/// cruxai — an agentic DSL for Rust.
 ///
-/// Re-exports crux-core types and crux-macros proc macros.
-pub use crux_core::*;
-pub use crux_macros::agent;
+/// Re-exports cruxai-core types and cruxai-macros proc macros.
+pub use cruxai_core::*;
+pub use cruxai_macros::agent;

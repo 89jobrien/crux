@@ -1,8 +1,8 @@
 /// Integration tests for step_stream (streaming/incremental steps).
-use crux::prelude::*;
+use cruxai::prelude::*;
 use futures::stream;
 
-#[crux::agent]
+#[cruxai::agent]
 async fn streaming_agent(items: Vec<i32>) -> Crux<i32> {
     let sum: i32 = t
         .step_stream("accumulate", || stream::iter(items.into_iter().map(Ok)))
@@ -24,7 +24,7 @@ async fn step_stream_collects_events() {
     assert_eq!(crux.steps[0].events[2], serde_json::json!(3));
 }
 
-#[crux::agent]
+#[cruxai::agent]
 async fn streaming_fails(items: Vec<i32>) -> Crux<i32> {
     let val: i32 = t
         .step_stream("partial", || {
@@ -52,7 +52,7 @@ async fn step_stream_fails_on_error_item() {
     assert_eq!(crux.steps[0].events[1], serde_json::json!(2));
 }
 
-#[crux::agent]
+#[cruxai::agent]
 async fn streaming_empty() -> Crux<i32> {
     let val: i32 = t
         .step_stream("empty", || {

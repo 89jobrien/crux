@@ -1,6 +1,6 @@
 [package]
-name = "crux-core"
-description = "Core types, traits, and runtime for the crux agentic DSL"
+name = "cruxai-core"
+description = "Core types, traits, and runtime for the cruxai agentic DSL"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

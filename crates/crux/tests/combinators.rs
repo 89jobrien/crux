@@ -1,9 +1,9 @@
 /// Integration tests for route_on_confidence, pipe, and join_all.
-use crux::prelude::*;
+use cruxai::prelude::*;
 
 // -- route_on_confidence -------------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn classify_agent(confidence: f32) -> Crux<String> {
     let label: String = t
         .route_on_confidence(
@@ -65,7 +65,7 @@ fn stage(f: impl FnOnce(String) -> BoxFutStr + Send + 'static) -> BoxStage {
     Box::new(f)
 }
 
-#[crux::agent]
+#[cruxai::agent]
 async fn transform_agent(input: String) -> Crux<String> {
     let result: String = t
         .pipe(
@@ -102,7 +102,7 @@ async fn pipe_transforms_sequentially() {
 
 // -- join_all -----------------------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn fan_out_agent(_input: ()) -> Crux<Vec<i32>> {
     let results: Vec<i32> = t
         .join_all(
@@ -128,7 +128,7 @@ async fn join_all_collects_all_arms() {
     assert!(crux.steps.iter().any(|s| s.name == "fetch::third"));
 }
 
-#[crux::agent]
+#[cruxai::agent]
 async fn fan_out_failing(_input: ()) -> Crux<Vec<i32>> {
     let results: Vec<i32> = t
         .join_all(

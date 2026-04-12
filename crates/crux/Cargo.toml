@@ -1,5 +1,5 @@
 [package]
-name = "crux"
+name = "cruxai"
 description = "An agentic DSL for Rust — inspectable, serializable, replayable agent execution"
 version.workspace = true
 edition.workspace = true
@@ -13,9 +13,9 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-crux-core = { path = "../crux-core", version = "0.1.0" }
-crux-macros = { path = "../crux-macros", version = "0.1.0" }
-crux-script = { path = "../crux-script", version = "0.1.0", optional = true }
+cruxai-core = { path = "../crux-core", version = "0.1.0" }
+cruxai-macros = { path = "../crux-macros", version = "0.1.0" }
+cruxai-script = { path = "../crux-script", version = "0.1.0", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
@@ -25,7 +25,7 @@ futures = { workspace = true }
 
 [features]
 default = ["tokio-runtime"]
-tokio-runtime = ["crux-core/tokio-runtime"]
-redb = ["crux-core/redb"]
-tracing = ["crux-core/tracing"]
-script = ["dep:crux-script"]
+tokio-runtime = ["cruxai-core/tokio-runtime"]
+redb = ["cruxai-core/redb"]
+tracing = ["cruxai-core/tracing"]
+script = ["dep:cruxai-script"]

@@ -1,5 +1,5 @@
 /// Integration tests for YAML-driven pipeline execution.
-use crux_script::{HandlerRegistry, Runner, load};
+use cruxai_script::{HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;
 

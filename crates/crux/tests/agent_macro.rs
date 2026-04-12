@@ -1,13 +1,13 @@
-/// End-to-end tests for #[crux::agent] proc macro.
+/// End-to-end tests for #[cruxai::agent] proc macro.
 ///
 /// These tests verify that the macro generates correct Agent impls,
 /// wrapper functions, and integrates with CruxCtx lifecycle hooks.
-use crux::prelude::*;
-use crux::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
+use cruxai::prelude::*;
+use cruxai::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
 
 // -- Basic: zero-param agent ------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn greet() -> Crux<String> {
     Ok("hello".to_string())
 }
@@ -27,7 +27,7 @@ fn zero_param_agent_trait_name() {
 
 // -- Basic: single-param agent ----------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn echo(msg: String) -> Crux<String> {
     Ok(msg)
 }
@@ -46,7 +46,7 @@ fn single_param_agent_trait_name() {
 
 // -- Basic: multi-param agent -----------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn add(a: i32, b: i32) -> Crux<i32> {
     Ok(a + b)
 }
@@ -65,7 +65,7 @@ fn multi_param_agent_trait_name() {
 
 // -- Agent with steps -------------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn two_step(input: String) -> Crux<String> {
     let upper: String = t
         .step("uppercase", || {
@@ -96,7 +96,7 @@ async fn agent_with_steps_records_trace() {
 
 // -- Agent that fails -------------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn fallible(should_fail: bool) -> Crux<String> {
     if should_fail {
         return Err(CruxErr::step_failed("check", "intentional failure"));
@@ -115,7 +115,7 @@ async fn agent_failure_captured_in_crux() {
 
 // -- Agent uses t.step that fails -------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn step_fails() -> Crux<i32> {
     let _: i32 = t.step("ok_step", || async { Ok(1) }).await?;
     let _: i32 = t
@@ -138,7 +138,7 @@ async fn step_failure_propagates_through_macro() {
 
 // -- Agent with confidence --------------------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn uncertain() -> Crux<String> {
     let val: String = t
         .step_with_confidence("guess", 0.4, || async { Ok("maybe".to_string()) })
@@ -155,7 +155,7 @@ async fn step_confidence_recorded() {
 
 // -- Agent with lifecycle hooks via t ---------------------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn hooked() -> Crux<i32> {
     t.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!(42)) });
 
@@ -176,7 +176,7 @@ async fn lifecycle_hooks_work_through_macro() {
 
 // -- Agent struct naming: snake_case -> PascalCase --------------------------
 
-#[crux::agent]
+#[cruxai::agent]
 async fn my_complex_name() -> Crux<bool> {
     Ok(true)
 }
@@ -225,7 +225,7 @@ async fn crux_from_macro_serializes() {
 
 // -- replay attribute: lenient mode -------------------------------------------
 
-#[crux::agent(replay = "lenient")]
+#[cruxai::agent(replay = "lenient")]
 async fn lenient_agent(input: String) -> Crux<String> {
     let val: String = t
         .step("process", || {
@@ -271,7 +271,7 @@ async fn replay_lenient_attribute_uses_lenient_mode() {
 
 // -- registry attribute: run_registered method --------------------------------
 
-#[crux::agent(registry = "process")]
+#[cruxai::agent(registry = "process")]
 async fn registered_agent(input: String) -> Crux<String> {
     let val: String = t
         .step("transform", || {
@@ -296,7 +296,7 @@ async fn registry_attribute_generates_run_registered() {
     assert!(task.checkpoint.is_some());
 }
 
-#[crux::agent(registry = "compute")]
+#[cruxai::agent(registry = "compute")]
 async fn failing_registered(should_fail: bool) -> Crux<String> {
     if should_fail {
         return Err(CruxErr::step_failed("check", "intentional"));

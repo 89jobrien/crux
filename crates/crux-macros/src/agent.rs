@@ -81,7 +81,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let replay_setup = match args.replay {
         crate::parse::ReplayMode::Strict => quote! {},
         crate::parse::ReplayMode::Lenient => quote! {
-            __crux_ctx.set_replay_mode(::crux_core::replay::ReplayMode::Lenient);
+            __crux_ctx.set_replay_mode(::cruxai_core::replay::ReplayMode::Lenient);
         },
     };
 
@@ -98,16 +98,16 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
                 ///
                 /// Submits a task before execution, updates status to Running,
                 /// and marks Done/Failed on completion.
-                pub async fn run_registered<B: ::crux_core::registry::RegistryBackend>(
-                    registry: &::crux_core::registry::TaskRegistry<B>,
-                    input: <Self as ::crux_core::agent::Agent>::Input,
+                pub async fn run_registered<B: ::cruxai_core::registry::RegistryBackend>(
+                    registry: &::cruxai_core::registry::TaskRegistry<B>,
+                    input: <Self as ::cruxai_core::agent::Agent>::Input,
                 ) -> (
-                    ::crux_core::types::crux_value::Crux<<Self as ::crux_core::agent::Agent>::Output>,
-                    ::crux_core::types::id::TaskId,
+                    ::cruxai_core::types::crux_value::Crux<<Self as ::cruxai_core::agent::Agent>::Output>,
+                    ::cruxai_core::types::id::TaskId,
                 )
                 where
-                    <Self as ::crux_core::agent::Agent>::Input: ::serde::Serialize + Clone,
-                    <Self as ::crux_core::agent::Agent>::Output: ::serde::Serialize,
+                    <Self as ::cruxai_core::agent::Agent>::Input: ::serde::Serialize + Clone,
+                    <Self as ::cruxai_core::agent::Agent>::Output: ::serde::Serialize,
                 {
                     // Submit task
                     let task_id = registry
@@ -119,14 +119,14 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
                     let _ = registry
                         .update_status(
                             &task_id,
-                            ::crux_core::registry::TaskStatus::Running,
+                            ::cruxai_core::registry::TaskStatus::Running,
                         )
                         .await;
 
                     // Execute
-                    let mut __crux_ctx = ::crux_core::ctx::CruxCtx::new(stringify!(#fn_name));
+                    let mut __crux_ctx = ::cruxai_core::ctx::CruxCtx::new(stringify!(#fn_name));
                     #replay_setup
-                    let __crux_result = <#agent_struct as ::crux_core::agent::Agent>::run(
+                    let __crux_result = <#agent_struct as ::cruxai_core::agent::Agent>::run(
                         &mut __crux_ctx,
                         input,
                     )
@@ -136,9 +136,9 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
 
                     // Update final status
                     let final_status = if crux.value().is_ok() {
-                        ::crux_core::registry::TaskStatus::Done
+                        ::cruxai_core::registry::TaskStatus::Done
                     } else {
-                        ::crux_core::registry::TaskStatus::Failed
+                        ::cruxai_core::registry::TaskStatus::Failed
                     };
                     let _ = registry.update_status(&task_id, final_status).await;
 
@@ -156,7 +156,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     Ok(quote! {
         #fn_vis struct #agent_struct;
 
-        impl ::crux_core::agent::Agent for #agent_struct {
+        impl ::cruxai_core::agent::Agent for #agent_struct {
             type Input = #input_type;
             type Output = #output_type;
 
@@ -165,9 +165,9 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
             }
 
             async fn run(
-                __crux_ctx: &mut ::crux_core::ctx::CruxCtx,
+                __crux_ctx: &mut ::cruxai_core::ctx::CruxCtx,
                 #input_destructure: Self::Input,
-            ) -> ::core::result::Result<Self::Output, ::crux_core::types::error::CruxErr> {
+            ) -> ::core::result::Result<Self::Output, ::cruxai_core::types::error::CruxErr> {
                 let t = __crux_ctx;
                 #fn_block
             }
@@ -175,10 +175,10 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
 
         #registered_impl
 
-        #fn_vis async fn #fn_name(#fn_inputs) -> ::crux_core::types::crux_value::Crux<#output_type> {
-            let mut __crux_ctx = ::crux_core::ctx::CruxCtx::new(stringify!(#fn_name));
+        #fn_vis async fn #fn_name(#fn_inputs) -> ::cruxai_core::types::crux_value::Crux<#output_type> {
+            let mut __crux_ctx = ::cruxai_core::ctx::CruxCtx::new(stringify!(#fn_name));
             #replay_setup
-            let __crux_result = <#agent_struct as ::crux_core::agent::Agent>::run(
+            let __crux_result = <#agent_struct as ::cruxai_core::agent::Agent>::run(
                 &mut __crux_ctx,
                 #input_forward,
             ).await;
