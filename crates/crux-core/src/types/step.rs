@@ -11,6 +11,7 @@ pub struct Step {
     pub started_at: DateTime<Utc>,
     pub duration_ms: u64,
     pub input_hash: u64,
+    pub content_hash: Option<u64>,
     pub output: Option<serde_json::Value>,
     pub error: Option<String>,
     pub attempt: u32,

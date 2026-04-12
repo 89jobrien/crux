@@ -166,15 +166,28 @@ items:
     name: lenient-replay-identity
     title: "Tighten ReplayMode::Lenient identity checks in forward scans"
     description: >
-      Lenient replay forward scan currently matches by step name only.
-      Add additional identity checks (e.g. input hash comparison) to reduce
-      false-positive cache hits when step names collide across different inputs.
+      Added content_hash (optional, ordinal-independent) to Step and ReplayEntry.
+      Forward scan uses content_hash when both sides provide one, filtering out
+      false-positive hits from name collisions. New step_keyed() method on Context
+      trait lets callers opt in by providing a serializable key. hash_content()
+      utility exported in prelude.
     priority: P1
-    status: open
+    status: done
+    completed: 2026-04-12
     files:
       - crates/crux-core/src/replay.rs
+      - crates/crux-core/src/recorder.rs
+      - crates/crux-core/src/context.rs
+      - crates/crux-core/src/ctx.rs
+      - crates/crux-core/src/types/step.rs
 
 log:
+  - date: 2026-04-12
+    summary: >
+      Session 5: Tightened lenient replay identity (crux-12). Added content_hash
+      field to Step/ReplayEntry, forward scan filters by content_hash when present.
+      New step_keyed() on Context trait, hash_content() utility. 7 new tests
+      (5 replay + 2 ctx). 173 base + 7 redb = 180 total. All items closed.
   - date: 2026-04-12
     summary: >
       Session 4: Replaced rusqlite/sqlite feature with redb (pure-Rust KV store,

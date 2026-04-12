@@ -21,6 +21,22 @@ pub trait Context: Send {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send;
 
+    /// Execute a named step with a content key for replay identity.
+    ///
+    /// The key is hashed and stored alongside the step, allowing lenient replay
+    /// to distinguish steps that share a name but differ in actual input.
+    fn step_keyed<F, Fut, T, K>(
+        &mut self,
+        name: &str,
+        key: &K,
+        f: F,
+    ) -> impl Future<Output = Result<T, CruxErr>> + Send
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+        K: serde::Serialize + Sync;
+
     /// Execute a named step with an explicit confidence score.
     fn step_with_confidence<F, Fut, T>(
         &mut self,

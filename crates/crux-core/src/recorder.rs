@@ -10,6 +10,7 @@ use crate::types::step::{Step, StepKind, StepStatus};
 pub struct StepRecord<'a> {
     pub name: &'a str,
     pub input_hash: u64,
+    pub content_hash: Option<u64>,
     pub confidence: f32,
     pub started_at: DateTime<Utc>,
     pub duration_ms: u64,
@@ -49,6 +50,7 @@ impl StepRecorder {
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
             input_hash: rec.input_hash,
+            content_hash: rec.content_hash,
             output,
             error: None,
             attempt: rec.attempt,
@@ -65,6 +67,7 @@ impl StepRecorder {
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
             input_hash: rec.input_hash,
+            content_hash: rec.content_hash,
             output: None,
             error: Some(error.to_string()),
             attempt: rec.attempt,
@@ -81,6 +84,7 @@ impl StepRecorder {
             started_at: Utc::now(),
             duration_ms: 0,
             input_hash,
+            content_hash: None,
             output: None,
             error: None,
             attempt: 0,
@@ -92,6 +96,7 @@ impl StepRecorder {
         &mut self,
         name: &str,
         input_hash: u64,
+        content_hash: Option<u64>,
         confidence: f32,
         output: serde_json::Value,
     ) {
@@ -103,6 +108,7 @@ impl StepRecorder {
             started_at: Utc::now(),
             duration_ms: 0,
             input_hash,
+            content_hash,
             output: Some(output),
             error: None,
             attempt: 0,
@@ -135,6 +141,19 @@ impl StepRecorder {
     }
 }
 
+/// Hash arbitrary serializable content for replay identity.
+///
+/// This produces an ordinal-independent hash suitable for the `content_hash`
+/// field, allowing lenient replay to distinguish steps that share a name but
+/// differ in actual input.
+pub fn hash_content(value: &impl serde::Serialize) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let bytes = serde_json::to_vec(value).unwrap_or_default();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
 pub fn hash_step_identity(name: &str, ordinal: u32) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -161,6 +180,7 @@ mod tests {
         StepRecord {
             name,
             input_hash: hash,
+            content_hash: None,
             confidence: 1.0,
             started_at: Utc::now(),
             duration_ms: 5,

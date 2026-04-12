@@ -25,6 +25,7 @@ pub enum ReplayMode {
 struct ReplayEntry {
     name: String,
     input_hash: u64,
+    content_hash: Option<u64>,
     output: Option<serde_json::Value>,
 }
 
@@ -75,6 +76,7 @@ impl ReplayCache {
             .map(|s| ReplayEntry {
                 name: s.name.clone(),
                 input_hash: s.input_hash,
+                content_hash: s.content_hash,
                 output: s.output.clone(),
             })
             .collect();
@@ -107,7 +109,16 @@ impl ReplayCache {
     ///
     /// In strict mode, delegates to ordinal-based `check`.
     /// In lenient mode, first tries ordinal match, then scans for a matching name.
-    pub fn check_by_name(&self, name: &str, ordinal: u32, input_hash: u64) -> ReplayResult {
+    /// When `content_hash` is provided, the forward scan requires it to match,
+    /// reducing false-positive cache hits for steps that share a name but differ
+    /// in actual input.
+    pub fn check_by_name(
+        &self,
+        name: &str,
+        ordinal: u32,
+        input_hash: u64,
+        content_hash: Option<u64>,
+    ) -> ReplayResult {
         if !self.enabled {
             return ReplayResult::Miss;
         }
@@ -141,13 +152,19 @@ impl ReplayCache {
         }
 
         // Lenient mode: scan forward from ordinal for a matching name.
-        // Note: input_hash encodes both step name and ordinal (via hash_step_identity),
-        // so a step that shifted ordinals will always have a different hash. We therefore
-        // match by name only in the forward scan — this is the intended behavior for the
-        // "skipped step" scenario where a step moves to a lower ordinal.
+        // input_hash encodes name + ordinal (via hash_step_identity), so shifted steps
+        // always differ. We match by name, then use content_hash (when both sides
+        // provide one) to filter out false positives from name collisions.
         let start = (ordinal as usize).saturating_add(1);
         for entry in self.entries.iter().skip(start) {
             if entry.name == name {
+                // If both sides have a content hash and they differ, skip this entry
+                // and keep scanning — the name matches but the input is different.
+                if let (Some(lookup), Some(cached)) = (content_hash, entry.content_hash) {
+                    if lookup != cached {
+                        continue;
+                    }
+                }
                 return match &entry.output {
                     Some(output) => ReplayResult::Hit(output.clone()),
                     None => ReplayResult::Miss,
@@ -213,6 +230,7 @@ mod tests {
             started_at: Utc::now(),
             duration_ms: 0,
             input_hash,
+            content_hash: None,
             output,
             error: None,
             attempt: 1,
@@ -293,7 +311,7 @@ mod tests {
         ]);
         cache.seed_from(&snapshot);
 
-        match cache.check_by_name("fetch", 0, 10) {
+        match cache.check_by_name("fetch", 0, 10, None) {
             ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit, got {other:?}"),
         }
@@ -314,7 +332,7 @@ mod tests {
         // Asking for "parse" at ordinal 1 (where "transform" is cached).
         // Lenient mode scans forward by name and finds "parse" at index 2.
         // The hash differs (input_hash encodes ordinal), but lenient matches by name.
-        match cache.check_by_name("parse", 1, 999) {
+        match cache.check_by_name("parse", 1, 999, None) {
             ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("parsed")),
             other => panic!("expected Hit from forward scan, got {other:?}"),
         }
@@ -332,7 +350,7 @@ mod tests {
 
         // Name "parse" at ordinal 0 where "fetch" is cached — strict rejects.
         assert!(matches!(
-            cache.check_by_name("parse", 0, 10),
+            cache.check_by_name("parse", 0, 10, None),
             ReplayResult::Mismatch { .. }
         ));
     }
@@ -349,7 +367,7 @@ mod tests {
 
         // Name "unknown" doesn't exist anywhere — Miss.
         assert!(matches!(
-            cache.check_by_name("unknown", 0, 99),
+            cache.check_by_name("unknown", 0, 99, None),
             ReplayResult::Miss
         ));
     }
@@ -366,7 +384,117 @@ mod tests {
 
         // Right name, wrong hash — lenient returns Miss (re-execute).
         assert!(matches!(
-            cache.check_by_name("fetch", 0, 99),
+            cache.check_by_name("fetch", 0, 99, None),
+            ReplayResult::Miss
+        ));
+    }
+
+    // -- content_hash identity tests --
+
+    fn make_step_with_content(
+        name: &str,
+        input_hash: u64,
+        content_hash: Option<u64>,
+        output: Option<serde_json::Value>,
+    ) -> Step {
+        Step {
+            name: name.into(),
+            kind: StepKind::Plain,
+            status: StepStatus::Ok,
+            confidence: 1.0,
+            started_at: Utc::now(),
+            duration_ms: 0,
+            input_hash,
+            content_hash,
+            output,
+            error: None,
+            attempt: 1,
+        }
+    }
+
+    #[test]
+    fn forward_scan_skips_content_hash_mismatch() {
+        let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+        // Two steps named "fetch" with different content hashes.
+        let snapshot = make_snapshot(vec![
+            make_step("other", 1, Some(serde_json::json!("x"))),
+            make_step_with_content("fetch", 10, Some(100), Some(serde_json::json!("old_input"))),
+            make_step_with_content("fetch", 20, Some(200), Some(serde_json::json!("new_input"))),
+        ]);
+        cache.seed_from(&snapshot);
+
+        // Looking for "fetch" at ordinal 0 with content_hash 200 — should skip the
+        // entry at index 1 (content_hash 100) and hit index 2 (content_hash 200).
+        match cache.check_by_name("fetch", 0, 999, Some(200)) {
+            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("new_input")),
+            other => panic!("expected Hit with matching content_hash, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forward_scan_hits_matching_content_hash() {
+        let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+        let snapshot = make_snapshot(vec![
+            make_step("other", 1, Some(serde_json::json!("x"))),
+            make_step_with_content("fetch", 10, Some(100), Some(serde_json::json!("data"))),
+        ]);
+        cache.seed_from(&snapshot);
+
+        // content_hash matches — should hit.
+        match cache.check_by_name("fetch", 0, 999, Some(100)) {
+            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            other => panic!("expected Hit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forward_scan_falls_back_to_name_when_no_content_hash() {
+        let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+        // Cached entry has content_hash but lookup does not — should still hit by name.
+        let snapshot = make_snapshot(vec![
+            make_step("other", 1, Some(serde_json::json!("x"))),
+            make_step_with_content("fetch", 10, Some(100), Some(serde_json::json!("data"))),
+        ]);
+        cache.seed_from(&snapshot);
+
+        match cache.check_by_name("fetch", 0, 999, None) {
+            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            other => panic!("expected Hit (no content_hash filter), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forward_scan_falls_back_when_cached_has_no_content_hash() {
+        let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+        // Cached entry has no content_hash, lookup does — should still hit by name.
+        let snapshot = make_snapshot(vec![
+            make_step("other", 1, Some(serde_json::json!("x"))),
+            make_step("fetch", 10, Some(serde_json::json!("data"))),
+        ]);
+        cache.seed_from(&snapshot);
+
+        match cache.check_by_name("fetch", 0, 999, Some(100)) {
+            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            other => panic!("expected Hit (cached has no content_hash), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forward_scan_miss_when_all_content_hashes_differ() {
+        let mut cache = ReplayCache::with_mode(ReplayMode::Lenient);
+        let snapshot = make_snapshot(vec![
+            make_step("other", 1, Some(serde_json::json!("x"))),
+            make_step_with_content("fetch", 10, Some(100), Some(serde_json::json!("a"))),
+            make_step_with_content("fetch", 20, Some(200), Some(serde_json::json!("b"))),
+        ]);
+        cache.seed_from(&snapshot);
+
+        // Looking for "fetch" at ordinal 0 (where "other" is cached). input_hash
+        // differs, so falls through to forward scan. Scan finds "fetch" at index 1
+        // (content_hash 100 != 999) — skip. Index 2 (content_hash 200 != 999) — skip.
+        // No more entries — Miss.
+        assert!(matches!(
+            cache.check_by_name("fetch", 0, 999, Some(999)),
             ReplayResult::Miss
         ));
     }
@@ -396,6 +524,7 @@ mod proptest_replay {
             started_at: Utc::now(),
             duration_ms: 0,
             input_hash: hash,
+            content_hash: None,
             output,
             error: None,
             attempt: 1,

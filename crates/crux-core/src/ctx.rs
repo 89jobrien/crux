@@ -230,6 +230,7 @@ impl CruxCtx {
             started_at: child_crux.started_at,
             duration_ms: child_crux.duration_ms().unwrap_or(0),
             input_hash,
+            content_hash: None,
             output,
             error,
             attempt: 1,
@@ -392,11 +393,14 @@ impl CruxCtx {
             let step_name = format!("{name}::{arm_name}");
             let (ordinal, input_hash) = self.recorder.next_ordinal(&step_name);
 
-            let hit = match self.replay.check_by_name(&step_name, ordinal, input_hash) {
+            let hit = match self
+                .replay
+                .check_by_name(&step_name, ordinal, input_hash, None)
+            {
                 ReplayResult::Hit(cached) => {
                     let value: T = deserialize_replay(&step_name, cached.clone())?;
                     self.recorder
-                        .record_replay(&step_name, input_hash, 1.0, cached);
+                        .record_replay(&step_name, input_hash, None, 1.0, cached);
                     Some(value)
                 }
                 ReplayResult::Mismatch { expected, actual } => {
@@ -472,6 +476,7 @@ impl CruxCtx {
                     let rec = crate::recorder::StepRecord {
                         name: step_name,
                         input_hash,
+                        content_hash: None,
                         confidence: 1.0,
                         started_at,
                         duration_ms,
@@ -485,6 +490,7 @@ impl CruxCtx {
                     let rec = crate::recorder::StepRecord {
                         name: step_name,
                         input_hash,
+                        content_hash: None,
                         confidence: 1.0,
                         started_at,
                         duration_ms,
@@ -546,6 +552,7 @@ impl CruxCtx {
         let zero_rec = StepRecord {
             name,
             input_hash,
+            content_hash: None,
             confidence,
             started_at: Utc::now(),
             duration_ms: 0,
@@ -582,6 +589,7 @@ impl CruxCtx {
                     let esc_rec = StepRecord {
                         name: &esc_name,
                         input_hash,
+                        content_hash: None,
                         confidence: 1.0,
                         started_at: Utc::now(),
                         duration_ms: 0,
@@ -616,6 +624,7 @@ impl CruxCtx {
         name: &str,
         confidence: f32,
         input_hash: u64,
+        content_hash: Option<u64>,
         f: F,
     ) -> Result<T, CruxErr>
     where
@@ -630,6 +639,7 @@ impl CruxCtx {
         let rec = StepRecord {
             name,
             input_hash,
+            content_hash,
             confidence,
             started_at: step_start,
             duration_ms,
@@ -665,20 +675,12 @@ impl CruxCtx {
     }
 }
 
-impl Context for CruxCtx {
-    async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
-    where
-        F: FnOnce() -> Fut + Send,
-        Fut: Future<Output = Result<T, CruxErr>> + Send,
-        T: serde::Serialize + serde::de::DeserializeOwned + Send,
-    {
-        self.step_with_confidence(name, 1.0, f).await
-    }
-
-    async fn step_with_confidence<F, Fut, T>(
+impl CruxCtx {
+    async fn step_inner<F, Fut, T>(
         &mut self,
         name: &str,
         confidence: f32,
+        content_hash: Option<u64>,
         f: F,
     ) -> Result<T, CruxErr>
     where
@@ -689,11 +691,14 @@ impl Context for CruxCtx {
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check (by-name for better matching in both modes).
-        match self.replay.check_by_name(name, ordinal, input_hash) {
+        match self
+            .replay
+            .check_by_name(name, ordinal, input_hash, content_hash)
+        {
             ReplayResult::Hit(cached) => {
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
-                    .record_replay(name, input_hash, confidence, cached);
+                    .record_replay(name, input_hash, content_hash, confidence, cached);
                 return Ok(value);
             }
             ReplayResult::Mismatch { expected, actual } => {
@@ -724,7 +729,44 @@ impl Context for CruxCtx {
             });
         }
 
-        self.execute_single(name, confidence, input_hash, f).await
+        self.execute_single(name, confidence, input_hash, content_hash, f)
+            .await
+    }
+}
+
+impl Context for CruxCtx {
+    async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        self.step_with_confidence(name, 1.0, f).await
+    }
+
+    async fn step_keyed<F, Fut, T, K>(&mut self, name: &str, key: &K, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+        K: serde::Serialize + Sync,
+    {
+        let content_hash = Some(crate::recorder::hash_content(key));
+        self.step_inner(name, 1.0, content_hash, f).await
+    }
+
+    async fn step_with_confidence<F, Fut, T>(
+        &mut self,
+        name: &str,
+        confidence: f32,
+        f: F,
+    ) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        self.step_inner(name, confidence, None, f).await
     }
 
     async fn step_retryable<F, Fut, T>(
@@ -757,6 +799,7 @@ impl Context for CruxCtx {
             let rec = StepRecord {
                 name,
                 input_hash,
+                content_hash: None,
                 confidence,
                 started_at: step_start,
                 duration_ms,
@@ -799,6 +842,7 @@ impl Context for CruxCtx {
                                         let retry_rec = StepRecord {
                                             name: &retry_name,
                                             input_hash,
+                                            content_hash: None,
                                             confidence: 1.0,
                                             started_at: retry_start,
                                             duration_ms: retry_dur,
@@ -1633,6 +1677,42 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn step_keyed_records_content_hash() {
+        let mut ctx = CruxCtx::new("test_agent");
+        let val: i32 = ctx
+            .step_keyed("fetch", &"url_a", || async { Ok(42) })
+            .await
+            .unwrap();
+        assert_eq!(val, 42);
+        assert_eq!(ctx.snapshot_steps().len(), 1);
+        assert!(ctx.snapshot_steps()[0].content_hash.is_some());
+    }
+
+    #[tokio::test]
+    async fn step_keyed_replays_with_content_hash() {
+        // Run once to get a trace.
+        let mut ctx1 = CruxCtx::new("test_agent");
+        let _: String = ctx1
+            .step_keyed("fetch", &"input_a", || async { Ok("result_a".to_string()) })
+            .await
+            .unwrap();
+        let trace = ctx1.finalize::<serde_json::Value>(Ok(serde_json::json!(null)));
+
+        // Replay with the same content key — should hit.
+        let mut ctx2 = CruxCtx::new("test_agent");
+        ctx2.replay.set_mode(crate::replay::ReplayMode::Lenient);
+        ctx2.replay.seed_from(&trace);
+        let val: String = ctx2
+            .step_keyed("fetch", &"input_a", || async {
+                panic!("should not execute — replayed");
+            })
+            .await
+            .unwrap();
+        assert_eq!(val, "result_a");
+        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0); // replayed
     }
 }
 

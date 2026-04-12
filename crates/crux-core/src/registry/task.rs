@@ -229,6 +229,7 @@ mod tests {
                 started_at: Utc::now(),
                 duration_ms: 5,
                 input_hash: 42,
+                content_hash: None,
                 output: Some(serde_json::json!("data")),
                 error: None,
                 attempt: 1,

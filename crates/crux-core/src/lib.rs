@@ -14,6 +14,7 @@ pub mod prelude {
     pub use crate::agent::Agent;
     pub use crate::context::Context;
     pub use crate::ctx::{BoxFut, ConfidenceRange, ConfidenceRoute, CruxCtx, JoinArm, PipeStage};
+    pub use crate::recorder::hash_content;
     pub use crate::registry::{Task, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
     pub use crate::types::budget::Budget;
