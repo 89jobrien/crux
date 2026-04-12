@@ -15,6 +15,9 @@ pub struct Step {
     pub output: Option<serde_json::Value>,
     pub error: Option<String>,
     pub attempt: u32,
+    /// Intermediate events emitted during streaming steps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -234,6 +234,7 @@ mod tests {
             output,
             error: None,
             attempt: 1,
+            events: vec![],
         }
     }
 
@@ -409,6 +410,7 @@ mod tests {
             output,
             error: None,
             attempt: 1,
+            events: vec![],
         }
     }
 
@@ -528,6 +530,7 @@ mod proptest_replay {
             output,
             error: None,
             attempt: 1,
+            events: vec![],
         }
     }
 

@@ -77,7 +77,81 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
         }
     };
 
-    let _ = &args; // reserved for registry/checkpoint/replay in later phases
+    // Generate replay mode setup if specified
+    let replay_setup = match args.replay {
+        crate::parse::ReplayMode::Strict => quote! {},
+        crate::parse::ReplayMode::Lenient => quote! {
+            __crux_ctx.set_replay_mode(::crux_core::replay::ReplayMode::Lenient);
+        },
+    };
+
+    // Generate registry kind string if specified
+    let registry_kind = args.registry.as_deref().unwrap_or("");
+    let has_registry = args.registry.is_some();
+    let _checkpoint_every = args.checkpoint_every_step;
+
+    // Generate run_registered method if registry attribute is present
+    let registered_impl = if has_registry {
+        quote! {
+            impl #agent_struct {
+                /// Run this agent with task registry integration.
+                ///
+                /// Submits a task before execution, updates status to Running,
+                /// and marks Done/Failed on completion.
+                pub async fn run_registered<B: ::crux_core::registry::RegistryBackend>(
+                    registry: &::crux_core::registry::TaskRegistry<B>,
+                    input: <Self as ::crux_core::agent::Agent>::Input,
+                ) -> (
+                    ::crux_core::types::crux_value::Crux<<Self as ::crux_core::agent::Agent>::Output>,
+                    ::crux_core::types::id::TaskId,
+                )
+                where
+                    <Self as ::crux_core::agent::Agent>::Input: ::serde::Serialize + Clone,
+                    <Self as ::crux_core::agent::Agent>::Output: ::serde::Serialize,
+                {
+                    // Submit task
+                    let task_id = registry
+                        .submit(#registry_kind, input.clone())
+                        .await
+                        .expect("failed to submit task to registry");
+
+                    // Mark running
+                    let _ = registry
+                        .update_status(
+                            &task_id,
+                            ::crux_core::registry::TaskStatus::Running,
+                        )
+                        .await;
+
+                    // Execute
+                    let mut __crux_ctx = ::crux_core::ctx::CruxCtx::new(stringify!(#fn_name));
+                    #replay_setup
+                    let __crux_result = <#agent_struct as ::crux_core::agent::Agent>::run(
+                        &mut __crux_ctx,
+                        input,
+                    )
+                    .await;
+
+                    let crux = __crux_ctx.finalize(__crux_result);
+
+                    // Update final status
+                    let final_status = if crux.value().is_ok() {
+                        ::crux_core::registry::TaskStatus::Done
+                    } else {
+                        ::crux_core::registry::TaskStatus::Failed
+                    };
+                    let _ = registry.update_status(&task_id, final_status).await;
+
+                    // Checkpoint final trace
+                    let _ = registry.checkpoint(&task_id, &crux).await;
+
+                    (crux, task_id)
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
         #fn_vis struct #agent_struct;
@@ -99,8 +173,11 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
             }
         }
 
+        #registered_impl
+
         #fn_vis async fn #fn_name(#fn_inputs) -> ::crux_core::types::crux_value::Crux<#output_type> {
             let mut __crux_ctx = ::crux_core::ctx::CruxCtx::new(stringify!(#fn_name));
+            #replay_setup
             let __crux_result = <#agent_struct as ::crux_core::agent::Agent>::run(
                 &mut __crux_ctx,
                 #input_forward,

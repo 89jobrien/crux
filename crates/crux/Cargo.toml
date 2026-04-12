@@ -15,14 +15,17 @@ categories.workspace = true
 [dependencies]
 crux-core = { path = "../crux-core" }
 crux-macros = { path = "../crux-macros" }
+crux-script = { path = "../crux-script", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+futures = { workspace = true }
 
 [features]
 default = ["tokio-runtime"]
 tokio-runtime = ["crux-core/tokio-runtime"]
 redb = ["crux-core/redb"]
 tracing = ["crux-core/tracing"]
+script = ["dep:crux-script"]

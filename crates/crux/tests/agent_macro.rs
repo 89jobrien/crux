@@ -3,6 +3,7 @@
 /// These tests verify that the macro generates correct Agent impls,
 /// wrapper functions, and integrates with CruxCtx lifecycle hooks.
 use crux::prelude::*;
+use crux::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
 
 // -- Basic: zero-param agent ------------------------------------------------
 
@@ -220,4 +221,103 @@ async fn crux_from_macro_serializes() {
     let back: Crux<String> = serde_json::from_str(&json).unwrap();
     assert_eq!(back.value().unwrap(), "TEST!");
     assert_eq!(back.steps.len(), 2);
+}
+
+// -- replay attribute: lenient mode -------------------------------------------
+
+#[crux::agent(replay = "lenient")]
+async fn lenient_agent(input: String) -> Crux<String> {
+    let val: String = t
+        .step("process", || {
+            let i = input.clone();
+            async move { Ok(i.to_uppercase()) }
+        })
+        .await?;
+    Ok(val)
+}
+
+#[tokio::test]
+async fn replay_lenient_attribute_compiles_and_runs() {
+    let crux = lenient_agent("hello".to_string()).await;
+    assert_eq!(crux.value().unwrap(), "HELLO");
+    assert_eq!(crux.steps.len(), 1);
+    assert_eq!(crux.steps[0].name, "process");
+}
+
+#[test]
+fn lenient_agent_struct_exists() {
+    assert_eq!(LenientAgentAgent::name(), "lenient_agent");
+}
+
+// -- replay attribute: lenient enables replay from prior trace ----------------
+
+#[tokio::test]
+async fn replay_lenient_attribute_uses_lenient_mode() {
+    // First run: produce a trace
+    let first = lenient_agent("world".to_string()).await;
+    assert!(first.value().is_ok());
+
+    // Snapshot to Value for replay
+    let snapshot = first.to_snapshot().unwrap();
+
+    // Second run: replay from prior trace — lenient mode should match by name
+    // even if ordinals shift. We just verify replay doesn't error.
+    let mut ctx = CruxCtx::new("lenient_agent");
+    ctx.set_replay_mode(ReplayMode::Lenient);
+    ctx.replay_from(&snapshot);
+    let result = <LenientAgentAgent as Agent>::run(&mut ctx, "world".to_string()).await;
+    assert_eq!(result.unwrap(), "WORLD");
+}
+
+// -- registry attribute: run_registered method --------------------------------
+
+#[crux::agent(registry = "process")]
+async fn registered_agent(input: String) -> Crux<String> {
+    let val: String = t
+        .step("transform", || {
+            let i = input.clone();
+            async move { Ok(i.to_uppercase()) }
+        })
+        .await?;
+    Ok(val)
+}
+
+#[tokio::test]
+async fn registry_attribute_generates_run_registered() {
+    let registry = TaskRegistry::new(InMemoryBackend::new());
+    let (crux, task_id) = RegisteredAgentAgent::run_registered(&registry, "test".to_string()).await;
+
+    assert_eq!(crux.value().unwrap(), "TEST");
+
+    // Task was created and marked done
+    let task = registry.get(&task_id).await.unwrap();
+    assert_eq!(task.kind, "process");
+    assert_eq!(task.status, TaskStatus::Done);
+    assert!(task.checkpoint.is_some());
+}
+
+#[crux::agent(registry = "compute")]
+async fn failing_registered(should_fail: bool) -> Crux<String> {
+    if should_fail {
+        return Err(CruxErr::step_failed("check", "intentional"));
+    }
+    Ok("ok".to_string())
+}
+
+#[tokio::test]
+async fn registry_attribute_marks_failed_on_error() {
+    let registry = TaskRegistry::new(InMemoryBackend::new());
+    let (crux, task_id) = FailingRegisteredAgent::run_registered(&registry, true).await;
+
+    assert!(crux.value().is_err());
+
+    let task = registry.get(&task_id).await.unwrap();
+    assert_eq!(task.status, TaskStatus::Failed);
+}
+
+#[tokio::test]
+async fn registry_attribute_wrapper_still_works_standalone() {
+    // The normal wrapper function should still work without a registry
+    let crux = registered_agent("hello".to_string()).await;
+    assert_eq!(crux.value().unwrap(), "HELLO");
 }

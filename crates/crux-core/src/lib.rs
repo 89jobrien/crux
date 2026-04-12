@@ -1,4 +1,7 @@
 /// crux-core: domain types, traits, and runtime for the crux agentic DSL.
+#[macro_use]
+mod trace;
+
 pub mod agent;
 pub mod context;
 pub mod ctx;

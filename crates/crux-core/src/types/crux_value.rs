@@ -130,6 +130,7 @@ mod tests {
                     output: Some(serde_json::json!("hello")),
                     error: None,
                     attempt: 1,
+                    events: vec![],
                 },
                 Step {
                     name: "rejected_branch".into(),
@@ -143,6 +144,7 @@ mod tests {
                     output: None,
                     error: None,
                     attempt: 1,
+                    events: vec![],
                 },
             ],
             children: vec![],

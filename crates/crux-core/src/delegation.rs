@@ -72,6 +72,7 @@ where
 
     /// Execute the delegation.
     pub async fn run(self) -> Result<A::Output, CruxErr> {
+        trace_delegate!(&self.name, A::name());
         let input_hash = self.ctx.next_delegation_hash(&self.name);
 
         // Create child context

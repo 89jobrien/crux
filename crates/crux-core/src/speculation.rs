@@ -42,6 +42,7 @@ where
     where
         F: Fn(&T) -> f32,
     {
+        trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         // Run all arms, collect results
@@ -83,6 +84,7 @@ where
                     output: None,
                     error: Some(error),
                     attempt: 1,
+                    events: vec![],
                 });
             }
             return Err(CruxErr::step_failed(
@@ -109,6 +111,7 @@ where
                     output: serde_json::to_value(&val).ok(),
                     error: None,
                     attempt: 1,
+                    events: vec![],
                 });
                 winner_val = Some(val);
             } else {
@@ -128,6 +131,7 @@ where
                     output,
                     error,
                     attempt: 1,
+                    events: vec![],
                 });
             }
         }
@@ -137,6 +141,7 @@ where
 
     /// Return the first arm that succeeds. Failed arms recorded as Rejected.
     pub async fn first_ok(self) -> Result<T, CruxErr> {
+        trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
@@ -155,6 +160,7 @@ where
                         output: serde_json::to_value(&val).ok(),
                         error: None,
                         attempt: 1,
+                        events: vec![],
                     });
                     return Ok(val);
                 }
@@ -171,6 +177,7 @@ where
                         output: None,
                         error: Some(e.to_string()),
                         attempt: 1,
+                        events: vec![],
                     });
                     last_err = Some(e);
                 }

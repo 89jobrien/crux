@@ -54,6 +54,7 @@ impl StepRecorder {
             output,
             error: None,
             attempt: rec.attempt,
+            events: vec![],
         });
     }
 
@@ -71,6 +72,7 @@ impl StepRecorder {
             output: None,
             error: Some(error.to_string()),
             attempt: rec.attempt,
+            events: vec![],
         });
     }
 
@@ -88,6 +90,7 @@ impl StepRecorder {
             output: None,
             error: None,
             attempt: 0,
+            events: vec![],
         });
     }
 
@@ -112,6 +115,7 @@ impl StepRecorder {
             output: Some(output),
             error: None,
             attempt: 0,
+            events: vec![],
         });
     }
 
@@ -133,6 +137,11 @@ impl StepRecorder {
     /// View all recorded steps.
     pub fn steps(&self) -> &[Step] {
         &self.steps
+    }
+
+    /// Mutable access to steps (for patching events on streaming steps).
+    pub(crate) fn steps_mut(&mut self) -> &mut Vec<Step> {
+        &mut self.steps
     }
 
     /// Consume the recorder and return its steps.

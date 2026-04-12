@@ -99,4 +99,19 @@ pub trait Context: Send {
 
     /// View recorded steps.
     fn snapshot_steps(&self) -> &[Step];
+
+    /// Execute a streaming step that collects intermediate events.
+    ///
+    /// The closure returns a `Stream` of `Result<T, CruxErr>`. Each yielded `Ok(T)` is
+    /// recorded as an event on the step. The final item becomes the step output.
+    /// All items must succeed; the first `Err` short-circuits and fails the step.
+    fn step_stream<F, S, T>(
+        &mut self,
+        name: &str,
+        f: F,
+    ) -> impl Future<Output = Result<T, CruxErr>> + Send
+    where
+        F: FnOnce() -> S + Send,
+        S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send;
 }

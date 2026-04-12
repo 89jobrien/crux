@@ -233,6 +233,7 @@ mod tests {
                 output: Some(serde_json::json!("data")),
                 error: None,
                 attempt: 1,
+                events: vec![],
             }],
             children: vec![],
             started_at: Utc::now(),

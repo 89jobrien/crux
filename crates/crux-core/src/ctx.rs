@@ -159,6 +159,54 @@ impl CruxCtx {
         self.replay.set_mode(mode);
     }
 
+    /// Take a mid-run checkpoint: snapshot the current trace into a `Crux<Value>`.
+    ///
+    /// The snapshot can be persisted to a `TaskRegistry` and later used to
+    /// resume execution via `replay_from`.
+    pub fn snapshot(&self) -> Crux<serde_json::Value> {
+        Crux {
+            id: self.id.clone(),
+            agent: self.agent_name.clone(),
+            value: Ok(serde_json::Value::Null),
+            steps: self.recorder.steps().to_vec(),
+            children: self.children.clone(),
+            started_at: self.started_at,
+            finished_at: None,
+        }
+    }
+
+    /// Checkpoint current trace to a TaskRegistry.
+    ///
+    /// Serializes the in-progress trace and stores it as the task's checkpoint.
+    /// On resume, call `replay_from` with the loaded checkpoint.
+    pub async fn checkpoint_to<B: crate::registry::RegistryBackend>(
+        &self,
+        registry: &crate::registry::TaskRegistry<B>,
+        task_id: &crate::types::id::TaskId,
+    ) -> Result<(), crate::registry::RegistryErr> {
+        let snapshot = self.snapshot();
+        registry.checkpoint(task_id, &snapshot).await
+    }
+
+    /// Resume from a previously checkpointed task.
+    ///
+    /// Loads the checkpoint from the registry and seeds the replay cache.
+    /// Steps that were already completed will be replayed from cache.
+    pub async fn resume_from<B: crate::registry::RegistryBackend>(
+        &mut self,
+        registry: &crate::registry::TaskRegistry<B>,
+        task_id: &crate::types::id::TaskId,
+    ) -> Result<(), CruxErr> {
+        let checkpoint = registry
+            .load_checkpoint(task_id)
+            .await
+            .map_err(|e| CruxErr::step_failed("resume", e.to_string()))?;
+        if let Some(cp) = checkpoint {
+            self.replay_from(&cp);
+        }
+        Ok(())
+    }
+
     /// Finalize the context into a `Crux<T>`.
     pub fn finalize<T>(self, result: Result<T, CruxErr>) -> Crux<T> {
         Crux {
@@ -234,6 +282,7 @@ impl CruxCtx {
             output,
             error,
             attempt: 1,
+            events: vec![],
         });
 
         if let Ok(snapshot) = child_crux.to_snapshot() {
@@ -319,6 +368,7 @@ impl CruxCtx {
         // Find and run the matching route
         for (range, label, fut) in routes {
             if range.contains(confidence) {
+                trace_route!(name, confidence, label);
                 let step_name = format!("{name}::{label}");
                 return self.step(&step_name, move || fut).await;
             }
@@ -342,6 +392,7 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
+        trace_pipe!(name, stages.len());
         let mut current = input;
         for (stage_name, f) in stages {
             let step_name = format!("{name}::{stage_name}");
@@ -378,6 +429,8 @@ impl CruxCtx {
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
         use chrono::Utc;
+
+        trace_join_all!(name, arms.len());
 
         // Phase 1: allocate ordinals and check replay cache for each arm before
         // dispatching any future. This mirrors step()/pipe() ordinal-first semantics.
@@ -649,6 +702,7 @@ impl CruxCtx {
         match result {
             Ok(val) => {
                 if let Some(recovery) = self.hooks.check_confidence(confidence).await {
+                    trace_hook!("on_low_confidence", name);
                     self.recorder
                         .record_ok(&rec, serde_json::to_value(&val).ok());
                     return self
@@ -663,6 +717,7 @@ impl CruxCtx {
                 self.recorder.record_err(&rec, &e.to_string());
 
                 if self.hooks.has_failure_handler() {
+                    trace_hook!("on_step_failure", name);
                     let recovery = self.hooks.check_failure(e.clone()).await.unwrap();
                     return self
                         .apply_recovery(name, input_hash, confidence, recovery)
@@ -688,6 +743,7 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
+        trace_step!(name, confidence);
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check (by-name for better matching in both modes).
@@ -696,6 +752,7 @@ impl CruxCtx {
             .check_by_name(name, ordinal, input_hash, content_hash)
         {
             ReplayResult::Hit(cached) => {
+                trace_replay_hit!(name);
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
                     .record_replay(name, input_hash, content_hash, confidence, cached);
@@ -708,7 +765,9 @@ impl CruxCtx {
                     actual,
                 });
             }
-            ReplayResult::Miss => {}
+            ReplayResult::Miss => {
+                trace_replay_miss!(name);
+            }
         }
 
         // Budget check
@@ -923,6 +982,109 @@ impl Context for CruxCtx {
 
     fn snapshot_steps(&self) -> &[crate::types::step::Step] {
         self.recorder.steps()
+    }
+
+    async fn step_stream<F, S, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> S + Send,
+        S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        use futures::StreamExt;
+
+        trace_step!(name, 1.0_f32);
+        let (ordinal, input_hash) = self.recorder.next_ordinal(name);
+
+        // Replay check
+        match self.replay.check_by_name(name, ordinal, input_hash, None) {
+            ReplayResult::Hit(cached) => {
+                trace_replay_hit!(name);
+                let value: T = deserialize_replay(name, cached.clone())?;
+                self.recorder
+                    .record_replay(name, input_hash, None, 1.0, cached);
+                return Ok(value);
+            }
+            ReplayResult::Mismatch { expected, actual } => {
+                return Err(CruxErr::ReplayMismatch {
+                    step: name.to_string(),
+                    expected,
+                    actual,
+                });
+            }
+            ReplayResult::Miss => {
+                trace_replay_miss!(name);
+            }
+        }
+
+        let step_start = Utc::now();
+        let mut stream = f();
+        let mut events: Vec<serde_json::Value> = Vec::new();
+        let mut last_value: Option<T> = None;
+
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(val) => {
+                    if let Ok(json_val) = serde_json::to_value(&val) {
+                        events.push(json_val);
+                    }
+                    last_value = Some(val);
+                }
+                Err(e) => {
+                    let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
+                    let rec = StepRecord {
+                        name,
+                        input_hash,
+                        content_hash: None,
+                        confidence: 1.0,
+                        started_at: step_start,
+                        duration_ms,
+                        attempt: 1,
+                    };
+                    self.recorder.record_err(&rec, &e.to_string());
+                    // Patch in events on the last step
+                    if let Some(step) = self.recorder.steps_mut().last_mut() {
+                        step.events = events;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+
+        let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
+
+        match last_value {
+            Some(val) => {
+                let rec = StepRecord {
+                    name,
+                    input_hash,
+                    content_hash: None,
+                    confidence: 1.0,
+                    started_at: step_start,
+                    duration_ms,
+                    attempt: 1,
+                };
+                self.recorder
+                    .record_ok(&rec, serde_json::to_value(&val).ok());
+                // Patch in events on the last step
+                if let Some(step) = self.recorder.steps_mut().last_mut() {
+                    step.events = events;
+                }
+                Ok(val)
+            }
+            None => {
+                let rec = StepRecord {
+                    name,
+                    input_hash,
+                    content_hash: None,
+                    confidence: 1.0,
+                    started_at: step_start,
+                    duration_ms,
+                    attempt: 1,
+                };
+                self.recorder.record_err(&rec, "stream yielded no items");
+                Err(CruxErr::step_failed(name, "stream yielded no items"))
+            }
+        }
     }
 }
 
