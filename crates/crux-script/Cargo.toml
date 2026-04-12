@@ -1,0 +1,28 @@
+[package]
+name = "crux-script"
+description = "YAML-driven pipeline scripting for the crux agentic DSL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+crux-core = { path = "../crux-core", version = "0.1.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+
+[[bin]]
+name = "crux-run"
+path = "src/bin/run.rs"
+
+[dev-dependencies]
+tokio = { workspace = true }
