@@ -52,8 +52,8 @@ Enable via `crux`:
 | Feature | Default | Description |
 |---------|---------|-------------|
 | `tokio-runtime` | yes | Async runtime support via tokio + futures |
-| `sqlite` | no | Persistent `TaskRegistry` backend via rusqlite |
-| `tracing` | no | Integration with the `tracing` ecosystem |
+| `redb` | no | Persistent `TaskRegistry` backend via redb (pure-Rust) |
+| `tracing` | no | Instrument with `tracing` spans |
 
 ## Core concepts
 
@@ -67,7 +67,7 @@ first-class value you can inspect, serialize, and replay.
 generates this for you.
 
 **`TaskRegistry<B>`** -- typed task management with submit, checkpoint, replay, and status
-transitions. Pluggable backend (`InMemoryBackend`, `SqliteBackend`).
+transitions. Pluggable backend (`InMemoryBackend`, `RedbBackend`).
 
 **Lifecycle hooks** -- `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` with recovery
 actions (skip, retry, escalate, substitute).
@@ -81,11 +81,19 @@ and returns cache misses for changed ones.
 [dependencies]
 crux = "0.1"
 
-# With SQLite persistence:
-# crux = { version = "0.1", features = ["sqlite"] }
+# With persistent storage (redb, pure-Rust):
+# crux = { version = "0.1", features = ["redb"] }
 ```
 
 Requires Rust 1.85+ (edition 2024).
+
+## Examples
+
+```bash
+cargo run --example basic_agent
+```
+
+See [`examples/`](examples/) for more.
 
 ## Documentation
 
