@@ -417,6 +417,26 @@ impl CruxCtx {
             replay_hits.push(hit);
         }
 
+        // Budget check — mirrors step_with_confidence.
+        if self.budget_tracker.is_exceeded() {
+            if let Some(recovery) = self
+                .hooks
+                .check_budget(self.budget_tracker.budget().clone())
+                .await
+            {
+                // Use the first arm's metadata for recovery recording.
+                let meta = &metas[0];
+                return self
+                    .apply_recovery::<Vec<T>>(name, meta.input_hash, 1.0, recovery)
+                    .await;
+            }
+            return Err(CruxErr::BudgetExceeded {
+                budget_kind: self.budget_tracker.budget().kind(),
+                limit: self.budget_tracker.budget().limit(),
+                actual: self.budget_tracker.budget().limit() + 1,
+            });
+        }
+
         // Phase 2: dispatch only the futures whose arms missed the replay cache.
         // Futures for cache-hit arms are dropped here (never polled).
         let live_futs: Vec<(usize, _)> = arms
@@ -471,6 +491,15 @@ impl CruxCtx {
                         attempt: 1,
                     };
                     self.recorder.record_err(&rec, &e.to_string());
+
+                    // Consult on_step_failure hook (mirrors execute_single).
+                    if self.hooks.has_failure_handler() {
+                        let recovery = self.hooks.check_failure(e.clone()).await.unwrap();
+                        return self
+                            .apply_recovery(step_name, input_hash, 1.0, recovery)
+                            .await;
+                    }
+
                     return Err(e);
                 }
             }
@@ -1528,6 +1557,79 @@ mod tests {
                         Box::pin(async { Err(CruxErr::step_failed("bad", "oops")) }),
                     ),
                 ],
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn join_all_checks_budget_before_dispatch() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::tokens(10));
+        ctx.consume_budget(100);
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { panic!("should not run") })),
+                    ("b", Box::pin(async { panic!("should not run") })),
+                ],
+            )
+            .await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("budget exceeded"));
+    }
+
+    #[tokio::test]
+    async fn join_all_budget_hook_fires_substitute() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::tokens(10));
+        ctx.consume_budget(100);
+        ctx.on_budget_exceeded(|_budget| async {
+            Recovery::Substitute(serde_json::json!([10, 20]))
+        });
+        let result: Vec<i32> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { panic!("should not run") })),
+                    ("b", Box::pin(async { panic!("should not run") })),
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, vec![10, 20]);
+    }
+
+    #[tokio::test]
+    async fn join_all_failure_hook_substitute() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!([99])) });
+        let result: Vec<i32> = ctx
+            .join_all(
+                "fetch",
+                vec![(
+                    "bad",
+                    Box::pin(async { Err(CruxErr::step_failed("bad", "oops")) }),
+                )],
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, vec![99]);
+    }
+
+    #[tokio::test]
+    async fn join_all_failure_hook_propagate() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.on_step_failure(|_err| async { Recovery::Propagate });
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![(
+                    "bad",
+                    Box::pin(async { Err(CruxErr::step_failed("bad", "oops")) }),
+                )],
             )
             .await;
         assert!(result.is_err());
