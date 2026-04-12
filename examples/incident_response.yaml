@@ -1,0 +1,32 @@
+pipeline: incident_triage
+budget: { calls: 20 }
+
+steps:
+  - step: ingest_alert
+    handler: alert_parser
+
+  - join_all: context_gather
+    arms:
+      - recent_deploys
+      - metric_snapshot
+      - log_tail
+      - dependent_services
+
+  - step: correlate
+    handler: signal_correlator
+
+  - route_on_confidence: severity
+    value: "{{ steps.correlate.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: noise
+        handler: auto_resolve
+      - range: "[0.4, 0.7)"
+        label: degraded
+        handler: page_secondary
+      - range: "[0.7, 1.0]"
+        label: outage
+        handler: page_primary
+
+  - step: draft_runbook
+    handler: runbook_generator

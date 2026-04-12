@@ -1,0 +1,26 @@
+pipeline: content_moderation
+budget: { tokens: 3000 }
+
+steps:
+  - join_all: classify
+    arms:
+      - toxicity_detector
+      - spam_classifier
+      - pii_scanner
+      - copyright_checker
+
+  - step: aggregate_signals
+    handler: signal_aggregator
+
+  - route_on_confidence: action
+    value: "{{ steps.aggregate_signals.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: safe
+        handler: publish_immediately
+      - range: "[0.3, 0.7)"
+        label: borderline
+        handler: queue_for_human
+      - range: "[0.7, 1.0]"
+        label: violation
+        handler: reject_with_reason
