@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: 2026-04-11
+updated: 2026-04-12
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -64,16 +64,15 @@ items:
       - crates/crux-core/src/registry/mod.rs
 
   - id: crux-5
-    title: "Phase 7: SQLite adapter"
+    title: "Phase 7: Persistent storage adapter"
     description: >
-      SqliteBackend behind cfg(feature = "sqlite"). Single tasks(id, data) table,
-      Arc<Mutex<Connection>> for Send+Sync, upsert semantics, LIKE-escaped prefix
-      list, Mutex-guarded CAS. In-memory convenience constructor for tests.
+      Persistent RegistryBackend behind a feature flag. Single tasks table,
+      Arc-wrapped for Send+Sync, upsert semantics, prefix list, guarded CAS.
     priority: P2
     status: done
-    completed: 2026-04-11
+    completed: 2026-04-12
     files:
-      - crates/crux-core/src/registry/sqlite.rs
+      - crates/crux-core/src/registry/redb.rs
 
   - id: crux-6
     title: "CLAUDE.md and Justfile"
@@ -133,7 +132,55 @@ items:
     files:
       - crates/crux-core/src/ctx.rs
 
+  - id: crux-10
+    name: redb-migration
+    title: "Replace rusqlite with redb (pure-Rust embedded KV)"
+    description: >
+      Swap sqlite feature (rusqlite, C deps) for redb feature (pure-Rust).
+      RedbBackend with typed TableDefinition<&str, &[u8]>, ACID transactions,
+      CAS via read-modify-write in single write txn.
+    priority: P1
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-core/src/registry/redb.rs
+      - crates/crux-core/src/registry/mod.rs
+      - crates/crux-core/Cargo.toml
+      - crates/crux/Cargo.toml
+      - Cargo.toml
+
+  - id: crux-11
+    name: join-all-hooks
+    title: "Normalize join_all budget check and failure hooks"
+    description: >
+      Add budget check before dispatching arms (mirrors step_with_confidence).
+      Consult on_step_failure hook for failed arms post-collection (mirrors
+      execute_single). Hooks run post-collection due to borrow checker constraint.
+    priority: P1
+    status: done
+    completed: 2026-04-12
+    files:
+      - crates/crux-core/src/ctx.rs
+
+  - id: crux-12
+    name: lenient-replay-identity
+    title: "Tighten ReplayMode::Lenient identity checks in forward scans"
+    description: >
+      Lenient replay forward scan currently matches by step name only.
+      Add additional identity checks (e.g. input hash comparison) to reduce
+      false-positive cache hits when step names collide across different inputs.
+    priority: P1
+    status: open
+    files:
+      - crates/crux-core/src/replay.rs
+
 log:
+  - date: 2026-04-12
+    summary: >
+      Session 4: Replaced rusqlite/sqlite feature with redb (pure-Rust KV store,
+      zero C deps). Normalized join_all to check budget before dispatch and consult
+      on_step_failure hooks on arm errors. Added CLAUDE.md. Cleaned 9 stale doob
+      todos. 173 tests passing (166 base + 7 redb). Clippy clean.
   - date: 2026-04-11
     summary: >
       Session 3: Closed crux-4 (ReplayMode strict/lenient, by-name step matching,
