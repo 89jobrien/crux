@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "2026-04-12"
+updated: "2026-04-13"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -248,13 +248,45 @@ items:
       Rustdoc on all public items, examples/ directory, README expansion,
       CHANGELOG.md, cargo-deny/audit clean, crates.io metadata audit.
     priority: P2
-    status: open
+    status: done
+    completed: 2026-04-13
     files:
       - README.md
       - CHANGELOG.md
       - examples/
 
+  - id: crux-18
+    name: crates-io-rename
+    title: "Rename crates crux-* -> cruxai-* for crates.io publish"
+    description: >
+      crux, crux-core, crux-macros were already claimed on crates.io.
+      Renamed all four crates to cruxai, cruxai-core, cruxai-macros, cruxai-script.
+      Updated all Cargo.toml name/dependency fields, use statements, and hardcoded
+      ::crux_core:: paths in proc macro expansion. Published all four to crates.io.
+    priority: P1
+    status: done
+    completed: 2026-04-13
+    files:
+      - crates/crux-core/Cargo.toml
+      - crates/crux-macros/Cargo.toml
+      - crates/crux-script/Cargo.toml
+      - crates/crux/Cargo.toml
+      - crates/crux-macros/src/agent.rs
+      - crates/crux/src/lib.rs
+
 log:
+  - date: 2026-04-13
+    summary: >
+      Session 7: Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml,
+      examples). Added crux-script crate and 7 YAML pipeline examples. Discovered
+      crux/crux-core/crux-macros names taken on crates.io; renamed all four crates to
+      cruxai-* (crux-18). Published cruxai-core, cruxai-macros, cruxai-script, cruxai
+      v0.1.0 to crates.io. 196/196 tests passing.
+    commits:
+      - 1dd57d1
+      - c50a74a
+      - c888375
+      - 21914aa
   - date: 2026-04-12
     summary: >
       Session 6: Phase 2 items crux-13 through crux-16. Wired replay/registry
