@@ -3,6 +3,7 @@ name = "cruxai-script"
 description = "YAML-driven pipeline scripting for the cruxai agentic DSL"
 version.workspace = true
 edition.workspace = true
+readme = "../../README.md"
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true

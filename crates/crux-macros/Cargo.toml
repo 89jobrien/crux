@@ -3,6 +3,7 @@ name = "cruxai-macros"
 description = "Proc macros for the cruxai agentic DSL"
 version.workspace = true
 edition.workspace = true
+readme = "../../README.md"
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true

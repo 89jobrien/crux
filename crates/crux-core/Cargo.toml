@@ -3,6 +3,7 @@ name = "cruxai-core"
 description = "Core types, traits, and runtime for the cruxai agentic DSL"
 version.workspace = true
 edition.workspace = true
+readme = "../../README.md"
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true

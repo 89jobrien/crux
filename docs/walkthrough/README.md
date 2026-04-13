@@ -41,7 +41,7 @@ then jump to **06** for the hands-on project.
 | 05  | [Lifecycle hooks](./05-lifecycle-hooks.md)                         | `on_low_confidence`, `on_step_failure`, `on_budget_exceeded`             |
 | 06  | [Project: Decomposer + Executor](./06-project-planner-executor.md) | Build a task planning + execution system end-to-end                      |
 | 07  | [vs existing agentic patterns](./07-vs-existing-patterns.md)       | How `cruxai::` compares to LangGraph, CrewAI, `tracing`, hand-rolled loops |
-| R   | [Syntax reference card](./reference.md)                            | Every macro, trait, and type in one page                                 |
+| R   | [Syntax reference card](../crux-syntax-reference.md)                            | Every macro, trait, and type in one page                                 |
 
 ## The 30-second pitch
 
