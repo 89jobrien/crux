@@ -98,7 +98,7 @@ See [`examples/`](examples/) for more.
 
 ## Documentation
 
-See the [tutorial](docs/README.md) for a chapter-by-chapter walkthrough.
+See the [tutorial](docs/walkthrough/README.md) for a chapter-by-chapter walkthrough.
 
 ## License
 

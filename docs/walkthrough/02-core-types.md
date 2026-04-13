@@ -11,7 +11,7 @@
 | `Step`    | A span event or log line               | First-class, typed, serializable        |
 | `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope         |
 | `Agent`   | A struct with an `async fn run`        | Declarative lifecycle hooks             |
-| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[crux::agent]` function |
+| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxai::agent]` function |
 
 The rest of this chapter walks through each one.
 
@@ -57,7 +57,7 @@ match t.value() {
 }
 ```
 
-The `?` operator works _inside_ an `#[crux::agent]` function because the
+The `?` operator works _inside_ an `#[cruxai::agent]` function because the
 macro rewrites it to propagate through `t`. Outside an agent, you call
 `.value()` to extract the inner `Result`.
 
@@ -106,7 +106,7 @@ The important fields for day-to-day work are **`kind`**, **`status`**, and
 
 This is the biggest single departure from `tracing` / OpenTelemetry. Those
 libraries treat a span as a timing primitive — it happened, here's how long.
-`crux::` treats a step as an _epistemic_ primitive: it happened, here's how
+`cruxai::` treats a step as an _epistemic_ primitive: it happened, here's how
 sure we are the output is right.
 
 That score is what powers:
@@ -139,7 +139,7 @@ Three things to notice:
    `Delegation { to: "drafter", source: Box::new(StepFailed { ... }) }`. You
    can unwrap as deep as you need to know where the real fault was.
 3. **`ReplayMismatch` is a real variant.** Replay isn't a library concern in
-   `crux::` — it's a language feature, and it can fail loudly if your code
+   `cruxai::` — it's a language feature, and it can fail loudly if your code
    changed in a way that invalidates a saved crux.
 
 ## `Agent` trait
@@ -162,7 +162,7 @@ pub trait Agent: Send + Sync + 'static {
 }
 ```
 
-You almost never implement this by hand. The `#[crux::agent]` attribute
+You almost never implement this by hand. The `#[cruxai::agent]` attribute
 generates an impl from a free function. You implement it directly only when
 you need to override the lifecycle hooks at the _type_ level — usually for an
 agent that's going to be delegated to from many places and needs consistent
@@ -178,7 +178,7 @@ recovery behavior.
 
 ## `CruxCtx`
 
-The `t` binding you see inside `#[crux::agent]` functions is of type
+The `t` binding you see inside `#[cruxai::agent]` functions is of type
 `&mut CruxCtx`. You don't construct it yourself — the macro does.
 
 ```rust
@@ -220,4 +220,4 @@ Before moving on, make sure you can answer these:
   type-level lifecycle hooks across many callers._
 
 Chapter **03** puts these types to work on branching and delegation — where
-`crux::` diverges most from regular Rust.
+`cruxai::` diverges most from regular Rust.

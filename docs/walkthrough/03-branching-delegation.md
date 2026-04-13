@@ -4,7 +4,7 @@
 > `delegate`, and why each one is a separate language construct instead of
 > just an `if`.
 
-Regular Rust gives you `if`, `match`, and `tokio::spawn`. `crux::` gives
+Regular Rust gives you `if`, `match`, and `tokio::spawn`. `cruxai::` gives
 you four additional primitives that each correspond to a different _kind_ of
 decision an agent makes. The four exist because they have different replay,
 budget, and recovery semantics — not because any one of them is "better".
@@ -32,7 +32,7 @@ Each one leaves a different shape of record in the crux.
 No macro needed. Just `match`:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn classify(doc: Document) -> Crux<Category> {
     let embedding = t.step("embed", || embed(&doc)).await?;
 
@@ -59,11 +59,11 @@ If any arm involves calling out to another model, reach for
 
 ## Confidence branching with `route_on_confidence`
 
-This is the primitive that makes `crux::` feel agentic rather than
+This is the primitive that makes `cruxai::` feel agentic rather than
 procedural. You hand it a score and a set of arms keyed by threshold:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn answer(question: String) -> Crux<Answer> {
     let draft = t.step("draft", || quick_draft(&question)).await?;
 
@@ -100,7 +100,7 @@ eval harness for.
 Run several approaches concurrently, let them race, pick the best:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn finalize(draft: Draft) -> Crux<Itinerary> {
     t.speculate("finalize", [
         ("cheap", || async { finalize_cheap(&draft).await }),
@@ -137,7 +137,7 @@ did the model consider?", this is that.
 
 `with_budget` applies to the _whole speculation_, not per arm. Arms share a
 single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
-2000 between them. This is the one place in `crux::` where arms are _not_
+2000 between them. This is the one place in `cruxai::` where arms are _not_
 independent — speculation is explicitly cooperative.
 
 ## Delegation with `t.delegate::<A>`
@@ -146,7 +146,7 @@ Delegation is a handoff to another `Agent`. It's the only primitive that
 crosses the "who owns this decision" boundary:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = t.step("research", || search_web(&goal)).await?;
 
@@ -183,7 +183,7 @@ Three things that are painful to get right by hand:
    Inside the child, speculation gets 3k. The runtime tracks all three
    and fails with a specific `BudgetExceeded` if any is exceeded.
 
-### Delegation vs. calling another `#[crux::agent]` function directly
+### Delegation vs. calling another `#[cruxai::agent]` function directly
 
 You _can_ just call another agent function:
 

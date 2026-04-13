@@ -1,11 +1,11 @@
-# 07 — `crux::` vs existing agentic patterns
+# 07 — `cruxai::` vs existing agentic patterns
 
-> Goal: place `crux::` on the map. If you've built agentic systems before,
-> this chapter tells you which patterns `crux::` borrows, which it
+> Goal: place `cruxai::` on the map. If you've built agentic systems before,
+> this chapter tells you which patterns `cruxai::` borrows, which it
 > replaces, and which it deliberately leaves alone.
 
 This is the chapter you asked for originally. Each comparison is side-by-
-side: the pattern you'd already know, and what changes under `crux::`.
+side: the pattern you'd already know, and what changes under `cruxai::`.
 
 ## vs. hand-rolled `tokio::spawn` + channels
 
@@ -34,7 +34,7 @@ You end up with:
 - Tracing via `tracing::info!` scattered through the code
 - No record of what the agent _considered_ — only what it did
 
-**Under `crux::`:**
+**Under `cruxai::`:**
 
 ```rust
 let crux = plan(goal).await;
@@ -45,16 +45,16 @@ if let Err(e) = crux.value() {
 
 What moved:
 
-| Hand-rolled                   | `crux::`                                   |
+| Hand-rolled                   | `cruxai::`                                   |
 | ----------------------------- | ------------------------------------------ |
 | Event enum per agent          | `Crux<T>` is the universal event type      |
 | Retry logic at receiver       | `on_step_failure` hook at the agent        |
 | Tracing via `info!`           | Every `t.step` is already a recorded event |
 | No record of rejected options | `speculate` + `rejected_branches()`        |
 
-The tradeoff is that `crux::` enforces its shape — you _must_ structure
+The tradeoff is that `cruxai::` enforces its shape — you _must_ structure
 work as steps, delegations, and speculations. If your agent looks like
-"one big LLM call and then save the result", `crux::` is overkill and
+"one big LLM call and then save the result", `cruxai::` is overkill and
 you should just use `tokio::spawn`.
 
 ## vs. the `tracing` / `tracing-opentelemetry` crate
@@ -71,7 +71,7 @@ observability.
 
 **Where they diverge:**
 
-| `tracing`                       | `crux::`                                 |
+| `tracing`                       | `cruxai::`                                 |
 | ------------------------------- | ---------------------------------------- |
 | Spans are observability         | Steps are program state                  |
 | `Span` is a side effect         | `Crux<T>` is the return value            |
@@ -80,59 +80,59 @@ observability.
 | No concept of rejected branches | `speculate` records losers               |
 | Replay is not a goal            | Replay is a language feature             |
 
-The one-sentence version: **`tracing` tells you what happened; `crux::`
+The one-sentence version: **`tracing` tells you what happened; `cruxai::`
 tells you what happened _and_ lets you re-run it.**
 
 Concretely, you can't replay a `tracing` span back through your code
 because the span doesn't contain the inputs to the functions that ran
-under it. `crux::` stores the input hash of each step, so replay is
+under it. `cruxai::` stores the input hash of each step, so replay is
 correct-by-construction.
 
 **When to use which:**
 
 - Stick with `tracing` for RPC services, web servers, CI systems — places
   where you want observability but not replay.
-- Use `crux::` for agents — places where the _decision process_ is
+- Use `cruxai::` for agents — places where the _decision process_ is
   itself the interesting artifact.
-- You can use both in the same process. `crux::` emits `tracing` events
+- You can use both in the same process. `cruxai::` emits `tracing` events
   under the hood if the `tracing` feature flag is on, so your existing
   APM dashboards keep working.
 
 ## vs. your own `agent_crux` crate
 
 If you've built something like `agent_crux` yourself, you've probably
-reinvented most of `crux::`. The patterns converge because the problems
+reinvented most of `cruxai::`. The patterns converge because the problems
 are the same. The differences tend to be:
 
-| Your hand-rolled version            | `crux::`                                |
+| Your hand-rolled version            | `cruxai::`                                |
 | ----------------------------------- | --------------------------------------- |
 | `AgentRun` struct in your code      | `Crux<T>` as a generic type             |
 | Manual `run.record_step(...)` calls | `t.step(...)` via macro                 |
-| Checkpointing bolted on later       | `#[crux::agent(checkpoint_every_step)]` |
+| Checkpointing bolted on later       | `#[cruxai::agent(checkpoint_every_step)]` |
 | `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work  |
 | Status enum per agent               | `Task<S>` with user-defined `S`         |
 
 The most interesting question is: **should you throw out your own crate
-and use `crux::`?** The honest answer is that it depends on three things:
+and use `cruxai::`?** The honest answer is that it depends on three things:
 
 1. **How much of your own crate is domain-specific?** The `CruxdProvider`
    pattern — wrapping LLM providers with crux-recording middleware — is
-   something you probably want to keep. `crux::` doesn't replace it; it
+   something you probably want to keep. `cruxai::` doesn't replace it; it
    gives you a place to put it. A `CruxdProvider` becomes something you
    call _from inside_ a `t.step` closure.
 
 2. **How much replay do you need?** If you've been getting by with
-   "run it again from the start", you don't need `crux::`'s replay. If
+   "run it again from the start", you don't need `cruxai::`'s replay. If
    you've been building ad-hoc checkpoint files, you probably do.
 
-3. **How many agents do you have?** `crux::` has a fixed cost — you have
+3. **How many agents do you have?** `cruxai::` has a fixed cost — you have
    to learn the vocabulary and structure your code around it. That cost
    amortizes over many agents. For a single agent, your own crate is
    probably fine.
 
 The realistic migration path is: **keep your `CruxdProvider`, use
-`crux::` for the agent shell around it.** Your provider knows about
-tokens and rate limits and prompt formatting. `crux::` knows about
+`cruxai::` for the agent shell around it.** Your provider knows about
+tokens and rate limits and prompt formatting. `cruxai::` knows about
 steps and delegations and replay. They compose.
 
 ## vs. LangGraph
@@ -148,7 +148,7 @@ model is "define nodes and edges, run the graph, inspect the state."
 
 **Where they diverge:**
 
-| LangGraph                               | `crux::`                                                 |
+| LangGraph                               | `cruxai::`                                                 |
 | --------------------------------------- | -------------------------------------------------------- |
 | Graph is data, defined before execution | Crux is code, built during execution                     |
 | State is a shared mutable object        | Crux is a value that flows through `?`                   |
@@ -157,11 +157,11 @@ model is "define nodes and edges, run the graph, inspect the state."
 | Checkpoint = full state serialization   | Checkpoint = crux snapshot + input hashes                |
 
 The philosophical difference: **LangGraph models an agent as a graph
-whose nodes you write; `crux::` models an agent as a function whose
+whose nodes you write; `cruxai::` models an agent as a function whose
 control flow you write.**
 
 LangGraph's approach is more declarative and easier to visualize up
-front. You draw the graph, you know what's going to happen. `crux::`'s
+front. You draw the graph, you know what's going to happen. `cruxai::`'s
 approach is more dynamic — the actual shape of the crux depends on
 which branches fire at runtime. It's harder to reason about a priori,
 but you get to use `if`, `match`, and early return like normal code.
@@ -170,13 +170,13 @@ but you get to use `if`, `match`, and early return like normal code.
 
 - LangGraph if you want a visual graph editor or non-engineers authoring
   flows, or if you're already on Python.
-- `crux::` if you're in Rust, you want compile-time exhaustiveness on
+- `cruxai::` if you're in Rust, you want compile-time exhaustiveness on
   your branches, and you like reasoning about agents as functions rather
   than graphs.
 
 ## vs. CrewAI / AutoGen
 
-These are higher-level than `crux::`. They model the world as "a crew of
+These are higher-level than `cruxai::`. They model the world as "a crew of
 agents with roles, passing messages." The agent identity (the Role, the
 Goal, the Backstory) is the primary abstraction.
 
@@ -188,7 +188,7 @@ Goal, the Backstory) is the primary abstraction.
 
 **Where they diverge:**
 
-| CrewAI / AutoGen               | `crux::`                                 |
+| CrewAI / AutoGen               | `cruxai::`                                 |
 | ------------------------------ | ---------------------------------------- |
 | Agent = role + prompt template | Agent = `impl Agent` trait               |
 | Communication = messages       | Communication = `delegate` return values |
@@ -196,28 +196,28 @@ Goal, the Backstory) is the primary abstraction.
 | State in the conversation      | State in `Task<S>` + `Crux<T>`           |
 | Python, dynamic                | Rust, typed                              |
 
-The honest comparison is that `crux::` and CrewAI are solving adjacent
-problems. CrewAI is about _how agents talk to each other_. `crux::` is
+The honest comparison is that `cruxai::` and CrewAI are solving adjacent
+problems. CrewAI is about _how agents talk to each other_. `cruxai::` is
 about _how one agent's execution is recorded and recovered_. You could
-build a CrewAI-like framework on top of `crux::` — it would be a crate
+build a CrewAI-like framework on top of `cruxai::` — it would be a crate
 that provides opinionated `Agent` impls and a delegation pattern. And
-you could implement `crux::`'s recording and replay inside CrewAI — it
+you could implement `cruxai::`'s recording and replay inside CrewAI — it
 would be a plugin that intercepts every tool call.
 
 **When to use which:**
 
 - CrewAI/AutoGen if your problem is "orchestrate many agents with
   different personas and have them collaborate."
-- `crux::` if your problem is "run one agent reliably, with recovery
+- `cruxai::` if your problem is "run one agent reliably, with recovery
   and replay."
 - Both if you want the CrewAI-style orchestration layer on top of
-  `crux::`-style reliability.
+  `cruxai::`-style reliability.
 
 ## vs. Temporal / Durable Execution frameworks
 
 Temporal (and its cousins — Restate, Durable Functions) are the gold
 standard for "long-running workflows that survive crashes". If you've
-used Temporal, a lot of `crux::` will feel familiar.
+used Temporal, a lot of `cruxai::` will feel familiar.
 
 **Where they overlap:**
 
@@ -228,7 +228,7 @@ used Temporal, a lot of `crux::` will feel familiar.
 
 **Where they diverge:**
 
-| Temporal                                    | `crux::`                                 |
+| Temporal                                    | `cruxai::`                                 |
 | ------------------------------------------- | ---------------------------------------- |
 | Separate workflow service                   | Lives in your process                    |
 | Activities are RPC calls                    | Steps are closures in your function      |
@@ -236,34 +236,34 @@ used Temporal, a lot of `crux::` will feel familiar.
 | Multi-language via SDKs                     | Rust only                                |
 | Scales to millions of workflows             | Scales to hundreds of thousands, locally |
 
-The one-liner: **Temporal is a durable execution _service_; `crux::`
+The one-liner: **Temporal is a durable execution _service_; `cruxai::`
 is a durable execution _library_.**
 
 If you have many workflows, many hosts, and strict SLAs, Temporal is
-the right answer and `crux::` is not competing with it. If you have a
+the right answer and `cruxai::` is not competing with it. If you have a
 handful of agents on a single host and you want durable execution
-without running an extra service, `crux::` is the more pragmatic
+without running an extra service, `cruxai::` is the more pragmatic
 choice.
 
 You can use both: run Temporal as the top-level orchestrator, and use
-`crux::` inside a Temporal activity to record the LLM call graph. The
+`cruxai::` inside a Temporal activity to record the LLM call graph. The
 activity's inputs and outputs are what Temporal sees; the `Crux<T>` is
 what you look at to debug the LLM behavior.
 
 ## Summary table
 
-| Tool                      | Best at                    | Weakness                 | `crux::` relationship                             |
+| Tool                      | Best at                    | Weakness                 | `cruxai::` relationship                             |
 | ------------------------- | -------------------------- | ------------------------ | ------------------------------------------------- |
-| `tokio::spawn` + channels | Raw flexibility            | No structure, no replay  | `crux::` structures this for agents               |
-| `tracing` crate           | Observability for services | No replay, no confidence | Use alongside; `crux::` can emit `tracing` events |
-| Your own `agent_crux`     | Domain-specific providers  | Reinventing wheel        | `crux::` is the shell; keep your providers        |
+| `tokio::spawn` + channels | Raw flexibility            | No structure, no replay  | `cruxai::` structures this for agents               |
+| `tracing` crate           | Observability for services | No replay, no confidence | Use alongside; `cruxai::` can emit `tracing` events |
+| Your own `agent_crux`     | Domain-specific providers  | Reinventing wheel        | `cruxai::` is the shell; keep your providers        |
 | LangGraph                 | Visual graph authoring     | Python, stateful         | Different paradigm; pick one                      |
 | CrewAI / AutoGen          | Multi-agent personas       | No first-class crux      | Adjacent problems; composable                     |
-| Temporal                  | Durable workflows at scale | Requires a service       | `crux::` is the library version                   |
+| Temporal                  | Durable workflows at scale | Requires a service       | `cruxai::` is the library version                   |
 
 ## The design philosophy
 
-Every one of those tools got something right that `crux::` borrows:
+Every one of those tools got something right that `cruxai::` borrows:
 
 - From `tracing`: structured records with automatic propagation
 - From `agent_crux`: cruxs-as-values, not side effects
@@ -271,7 +271,7 @@ Every one of those tools got something right that `crux::` borrows:
 - From CrewAI: agents as a composition primitive
 - From Temporal: input-hash-based determinism
 
-And one thing `crux::` deliberately does _not_ borrow: **the assumption
+And one thing `cruxai::` deliberately does _not_ borrow: **the assumption
 that your agent code is special**. There's no special `WorkflowContext`,
 no DSL-inside-a-DSL, no "you can't use `if` here". It's just Rust, with a
 macro that rewrites your function to record what it does. Everything

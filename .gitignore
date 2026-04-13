@@ -2,4 +2,3 @@ target/
 .ctx/
 *.local.md
 .DS_Store
-docs/

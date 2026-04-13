@@ -1,16 +1,14 @@
-# `crux::` syntax reference card
-
-> Every macro, trait, type, and method in one place. Use as a cheat sheet.
+# `cruxai::` syntax reference card
 
 ## Attribute macros
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn name(args) -> Crux<T> { ... }
 
-#[crux::agent(registry = "reg", checkpoint_every_step)]
-#[crux::agent(replay = "strict")]   // default
-#[crux::agent(replay = "lenient")]  // re-run mismatches instead of failing
+#[cruxai::agent(registry = "reg", checkpoint_every_step)]
+#[cruxai::agent(replay = "strict")]   // default
+#[cruxai::agent(replay = "lenient")]  // re-run mismatches instead of failing
 ```
 
 Injects a `&mut CruxCtx` binding called `t` into the function body. Wraps
@@ -204,7 +202,7 @@ pub struct Task<S> {
 ## Feature flags
 
 ```toml
-crux = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
+cruxai = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
 ```
 
 | Flag       | Turns on                                                     |
@@ -212,13 +210,13 @@ crux = { version = "0.1", features = ["serde", "tokio", "sqlite", "tracing"] }
 | `serde`    | Serde impls for `Crux`, `Step`, `Task`, `CruxErr`            |
 | `tokio`    | `tokio::spawn` for `delegate`, `tokio::join!` for `join_all` |
 | `sqlite`   | `TaskRegistry::sqlite`                                       |
-| `tracing`  | Emit `tracing` events alongside `crux::` steps               |
+| `tracing`  | Emit `tracing` events alongside `cruxai::` steps               |
 | `postgres` | `TaskRegistry::postgres` (requires `sqlx`)                   |
 
 ## Prelude
 
 ```rust
-use crux::prelude::*;
+use cruxai::prelude::*;
 // brings in: Crux, CruxErr, CruxCtx, Agent, Budget, Recovery,
 //            Step, StepKind, StepStatus, TaskId
 ```

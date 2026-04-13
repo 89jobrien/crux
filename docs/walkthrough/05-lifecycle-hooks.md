@@ -5,7 +5,7 @@
 > gracefully" — without scattering the recovery logic across your business
 > code.
 
-Lifecycle hooks are the reason `crux::` treats recovery as a language
+Lifecycle hooks are the reason `cruxai::` treats recovery as a language
 feature instead of a pattern. In a regular Rust agent, you'd write:
 
 ```rust
@@ -92,7 +92,7 @@ behavior. Call-site hooks override the per-agent ones if both are set.
 ### 3. Scoped with `t.on_low_confidence`
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn session(input: Input) -> Crux<Output> {
     t.on_low_confidence(0.8, escalate_handler);
     t.on_step_failure(retry_handler);
@@ -116,7 +116,7 @@ Here's the classic three-tier escalation (cheap model → expensive model →
 human) expressed with hooks instead of nested `if`s:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn answer(question: String) -> Crux<Answer> {
     let draft = t.delegate::<CheapModel>("draft", question.clone())
         .on_low_confidence(0.7, |score, ctx| async move {
@@ -154,7 +154,7 @@ answer came from a human instead of the cheap model.
 writing a retry loop:
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn fetch_data(url: String) -> Crux<Vec<Record>> {
     t.on_step_failure(|err, ctx| async move {
         if ctx.attempt() >= 3 {
@@ -185,7 +185,7 @@ Three things to notice:
 ## Worked example: budget-aware degradation
 
 ```rust
-#[crux::agent]
+#[cruxai::agent]
 async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
     t.on_budget_exceeded(|budget, ctx| async move {
         // Out of tokens? Fall back to a cheaper path.
@@ -243,7 +243,7 @@ debugging harder if you overuse them. Two anti-patterns:
 
 - **Where do you attach a hook that applies to all steps in one function?**
   *Call `t.on_low_confidence(...)` / `t.on_step_failure(...)` inside the
-  `#[crux::agent]` function.*
+  `#[cruxai::agent]` function.*
 - **Which `Recovery` variant replays the same step?** *`Retry`.*
 - **Which one replaces the output without retrying?** *`Substitute(T)`.*
 - **What happens if you don't attach any hook?** *Errors propagate to the

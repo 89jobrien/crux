@@ -1,13 +1,13 @@
 # 01 — Setup & Rust toolchain
 
-> Goal: get a `crux::` project building, run the smallest possible cruxd
+> Goal: get a `cruxai::` project building, run the smallest possible cruxd
 > agent, and understand the shape of what comes out.
 
 ## Rust toolchain
 
-`crux::` is a Rust DSL, so the toolchain is just Rust. You need:
+`cruxai::` is a Rust DSL, so the toolchain is just Rust. You need:
 
-- `rustc` 1.75+ (for native `async fn` in traits — `crux::` leans on this)
+- `rustc` 1.75+ (for native `async fn` in traits — `cruxai::` leans on this)
 - `cargo`
 - A stable runtime — we'll use `tokio` in every example
 
@@ -17,7 +17,7 @@ rustup default stable
 rustc --version   # 1.75 or newer
 ```
 
-No separate compiler, no custom build tool. If Rust builds, `crux::` builds.
+No separate compiler, no custom build tool. If Rust builds, `cruxai::` builds.
 
 ## Scaffolding a project
 
@@ -35,13 +35,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crux = { version = "0.1", features = ["serde", "tokio"] }
+cruxai = { version = "0.1", features = ["serde", "tokio"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-Three feature flags matter on `crux`:
+Three feature flags matter on `cruxai`:
 
 | Feature  | What it turns on                                                       |
 | -------- | ---------------------------------------------------------------------- |
@@ -49,7 +49,7 @@ Three feature flags matter on `crux`:
 | `tokio`  | `t.delegate` uses `tokio::spawn`, `Crux::join_all` uses `tokio::join!` |
 | `sqlite` | `TaskRegistry` can persist to SQLite (chapter 04)                      |
 
-If you omit `tokio`, `crux::` falls back to a synchronous executor — useful
+If you omit `tokio`, `cruxai::` falls back to a synchronous executor — useful
 for tests but not for real agents.
 
 ## Your first cruxd function
@@ -57,9 +57,9 @@ for tests but not for real agents.
 Create `src/main.rs`:
 
 ```rust
-use crux::prelude::*;
+use cruxai::prelude::*;
 
-#[crux::agent]
+#[cruxai::agent]
 async fn hello(name: String) -> Crux<String> {
     let greeting = t.step("greet", || async {
         Ok(format!("hello, {}", name))
@@ -109,7 +109,7 @@ json: {
 
 Three things, and each one is new vs. a hand-rolled agent:
 
-### 1. `#[crux::agent]` injects `t`
+### 1. `#[cruxai::agent]` injects `t`
 
 The macro rewrites your function so that a `CruxCtx` binding called `t` is
 available in scope. Every call to `t.step`, `t.delegate`, `t.speculate` is
@@ -118,7 +118,7 @@ recorded on that context. When the function returns, `t` is rolled up into a
 
 This is the same idea as Python's `contextvars` or Go's `context.Context`, but
 with one important difference: **you don't have to thread it through every
-function call**. The macro wires it up. If you want to call another `#[crux::agent]`
+function call**. The macro wires it up. If you want to call another `#[cruxai::agent]`
 function from this one, the child's `t` automatically becomes a sub-crux of
 the parent's `t`.
 
@@ -167,7 +167,7 @@ impl AgentRun {
 }
 ```
 
-`crux::` is that pattern, but:
+`cruxai::` is that pattern, but:
 
 - the `AgentRun` struct is `Crux<T>`, and it's generic over your value
 - the `record_step` call is `t.step`, and it runs the closure for you

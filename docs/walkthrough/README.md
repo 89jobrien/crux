@@ -1,13 +1,13 @@
-# `crux::` — an agentic DSL for Rust
+# `cruxai::` — an agentic DSL for Rust
 
 > A small, Rust-embedded DSL for writing agentic programs where every step,
 > branch, delegation, and failure is a first-class value you can inspect,
 > replay, and serialize.
 
-`crux::` is not a standalone language — it's a Rust DSL (a set of macros,
+`cruxai::` is not a standalone language — it's a Rust DSL (a set of macros,
 traits, and types) that makes agentic control flow explicit in the type
 system. If you've written Rust agents with `tokio` + `tracing` + a hand-rolled
-task queue, `crux::` is what happens when you bake those patterns into the
+task queue, `cruxai::` is what happens when you bake those patterns into the
 language itself.
 
 ## Who this tutorial is for
@@ -20,7 +20,7 @@ You already know:
 
 You want to see:
 
-- What `crux::` gives you that a hand-rolled `tokio::spawn` + channels setup
+- What `cruxai::` gives you that a hand-rolled `tokio::spawn` + channels setup
   doesn't
 - How `Crux<T>` differs from `tracing::Span` / OpenTelemetry
 - How to build a task planning + execution system with serializable state
@@ -40,15 +40,15 @@ then jump to **06** for the hands-on project.
 | 04  | [Serializable task management](./04-task-registry.md)              | `TaskRegistry`, `Task<S>`, crash-safe replay                             |
 | 05  | [Lifecycle hooks](./05-lifecycle-hooks.md)                         | `on_low_confidence`, `on_step_failure`, `on_budget_exceeded`             |
 | 06  | [Project: Decomposer + Executor](./06-project-planner-executor.md) | Build a task planning + execution system end-to-end                      |
-| 07  | [vs existing agentic patterns](./07-vs-existing-patterns.md)       | How `crux::` compares to LangGraph, CrewAI, `tracing`, hand-rolled loops |
+| 07  | [vs existing agentic patterns](./07-vs-existing-patterns.md)       | How `cruxai::` compares to LangGraph, CrewAI, `tracing`, hand-rolled loops |
 | R   | [Syntax reference card](./reference.md)                            | Every macro, trait, and type in one page                                 |
 
 ## The 30-second pitch
 
 ```rust
-use crux::prelude::*;
+use cruxai::prelude::*;
 
-#[crux::agent]
+#[cruxai::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = t.step("research", || search_web(&goal)).await?;
 

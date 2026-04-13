@@ -51,7 +51,7 @@ trip-planner/
 
 ```toml
 [dependencies]
-crux = { version = "0.1", features = ["serde", "tokio", "sqlite"] }
+cruxai = { version = "0.1", features = ["serde", "tokio", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -119,13 +119,13 @@ what the variants are. The `#[default]` attribute is used by
 `src/decomposer.rs`:
 
 ```rust
-use crux::prelude::*;
+use cruxai::prelude::*;
 use crate::types::{Plan, Subtask};
 use anyhow::Result;
 use chrono::Utc;
 use uuid::Uuid;
 
-#[crux::agent]
+#[cruxai::agent]
 pub async fn decompose(goal: String) -> Crux<Plan> {
     // 1. Draft a plan with a cheap model.
     let draft = t.step("draft_plan", || async {
@@ -185,14 +185,14 @@ concurrently, and updates the registry as tasks move through states.
 `src/executor.rs`:
 
 ```rust
-use crux::prelude::*;
-use crux::registry::{TaskRegistry, TaskId};
+use cruxai::prelude::*;
+use cruxai::registry::{TaskRegistry, TaskId};
 use crate::types::{Plan, Subtask, SubtaskId, ExecStatus, Report};
 use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use anyhow::Result;
 
-#[crux::agent(registry = "reg", checkpoint_every_step)]
+#[cruxai::agent(registry = "reg", checkpoint_every_step)]
 pub async fn execute(
     reg: &TaskRegistry,
     plan_task_id: TaskId,
@@ -333,10 +333,10 @@ always enough, and they're easier to reason about.
 ### `futures::future::join_all` instead of `Crux::join_all`
 
 This is a subtle one. We're using raw `join_all` here because the
-per-subtask futures are *not* `#[crux::agent]` functions — they're helper
+per-subtask futures are *not* `#[cruxai::agent]` functions — they're helper
 functions that return `Result<_, CruxErr>`. If we wanted each subtask to
 get its own sub-crux attached to the parent, we'd convert `run_one_subtask`
-into a `#[crux::agent]` and use `Crux::join_all(...)` instead. Both work;
+into a `#[cruxai::agent]` and use `Crux::join_all(...)` instead. Both work;
 the agent version gives richer cruxs at the cost of slightly more
 ceremony.
 
@@ -365,7 +365,7 @@ code" payoff.
 
 ```rust
 use clap::{Parser, Subcommand};
-use crux::registry::TaskRegistry;
+use cruxai::registry::TaskRegistry;
 use std::path::PathBuf;
 
 mod types;
@@ -429,7 +429,7 @@ async fn main() -> anyhow::Result<()> {
 ## Exercises
 
 If you want to push the tutorial further, try one of these. Each uses a
-different set of `crux::` features.
+different set of `cruxai::` features.
 
 | # | Exercise | Which features |
 |---|----------|----------------|
@@ -462,7 +462,7 @@ goal.
 - **How does the Decomposer use three different branching primitives?**
   *`t.step` for the draft, `delegate` + hook for the critic,
   `route_on_confidence` for revise-or-keep.*
-- **Why isn't `run_one_subtask` a `#[crux::agent]`?** *It's a helper, and
+- **Why isn't `run_one_subtask` a `#[cruxai::agent]`?** *It's a helper, and
   we wanted raw `join_all`. You could absolutely convert it and use
   `Crux::join_all` for richer sub-cruxs.*
 

@@ -3,7 +3,7 @@
 > Goal: understand `TaskRegistry` and `Task<S>`, use them to make an agent
 > crash-safe, and know exactly where the state lives at every step.
 
-This is the chapter that makes `crux::` more than a logging library. Every
+This is the chapter that makes `cruxai::` more than a logging library. Every
 step, every delegation, every rejected branch in a `Crux<T>` is
 serializable — so you can persist the crux, crash the process, and resume
 from exactly where you left off.
@@ -24,7 +24,7 @@ When you restart, you have three bad options:
    this step" code in every agent, and it's always slightly wrong.
 3. **Ship it and pray** — the industry standard.
 
-`crux::` gives you a fourth option: the runtime persists every step as it
+`cruxai::` gives you a fourth option: the runtime persists every step as it
 happens, and replay is a language feature.
 
 ## The two types
@@ -61,7 +61,7 @@ pub struct Task<S> {
 The key fields:
 
 - **`status: S`** — your own type. The runtime doesn't care what the states
-  are; it just persists the enum. This is where `crux::` leans on Rust's
+  are; it just persists the enum. This is where `cruxai::` leans on Rust's
   type system instead of inventing its own status primitives.
 - **`crux: Option<Crux<...>>`** — the crux so far. On restart, this is
   the seed for replay.
@@ -107,8 +107,8 @@ never need to write one yourself.
 Here's a real example — the scaffolding for a build-and-deploy agent:
 
 ```rust
-use crux::prelude::*;
-use crux::registry::{TaskRegistry, Task, TaskId};
+use cruxai::prelude::*;
+use cruxai::registry::{TaskRegistry, Task, TaskId};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -129,7 +129,7 @@ struct DeployInput {
     env: String,
 }
 
-#[crux::agent(registry = "reg", checkpoint_every_step)]
+#[cruxai::agent(registry = "reg", checkpoint_every_step)]
 async fn deploy(reg: &TaskRegistry, task_id: TaskId, input: DeployInput)
     -> Crux<String>
 {
@@ -209,7 +209,7 @@ cases:
 | A step's input hash changed | Would return stale output |
 | A delegation target changed | Old sub-crux can't be replayed against new agent |
 
-You can loosen this with `#[crux::agent(replay = "lenient")]` which will
+You can loosen this with `#[cruxai::agent(replay = "lenient")]` which will
 re-run mismatched steps instead of failing — but default-strict is the right
 default. An agent that silently replays the wrong crux is worse than one
 that refuses to replay at all.
