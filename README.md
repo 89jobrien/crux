@@ -1,18 +1,18 @@
-# crux
+# cruxai
 
 An agentic DSL for Rust -- inspectable, serializable, replayable agent execution.
 
-`crux` is not a standalone language. It's a set of macros, traits, and types that make agentic
+`cruxai` is not a standalone language. It's a set of macros, traits, and types that make agentic
 control flow explicit in the Rust type system. If you've written agents with `tokio` + `tracing`
-\+ a hand-rolled task queue, `crux` is what happens when you bake those patterns into the language
+\+ a hand-rolled task queue, `cruxai` is what happens when you bake those patterns into the language
 itself.
 
 ## Quick example
 
 ```rust
-use crux::prelude::*;
+use cruxai::prelude::*;
 
-#[crux::agent]
+#[cruxai::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = t.step("research", || search_web(&goal)).await?;
 
@@ -41,13 +41,14 @@ the function returns. That value is:
 
 | Crate | Description |
 |-------|-------------|
-| [`crux`](crates/crux) | Facade crate -- re-exports `crux-core` + `crux-macros` |
-| [`crux-core`](crates/crux-core) | Core types, traits, and runtime |
-| [`crux-macros`](crates/crux-macros) | `#[crux::agent]` proc macro |
+| [`cruxai`](crates/crux) | Facade crate -- re-exports `cruxai-core` + `cruxai-macros` |
+| [`cruxai-core`](crates/crux-core) | Core types, traits, and runtime |
+| [`cruxai-macros`](crates/crux-macros) | `#[cruxai::agent]` proc macro |
+| [`cruxai-script`](crates/crux-script) | YAML-driven pipeline scripting |
 
 ## Features
 
-Enable via `crux`:
+Enable via `cruxai`:
 
 | Feature | Default | Description |
 |---------|---------|-------------|
@@ -63,7 +64,7 @@ first-class value you can inspect, serialize, and replay.
 **`CruxCtx`** -- the runtime context threaded through agent execution. Provides `step()`,
 `delegate()`, `speculate()`, `pipe()`, `join_all()`, `route_on_confidence()`.
 
-**`Agent` trait** -- the single-method interface all agents implement. The `#[crux::agent]` macro
+**`Agent` trait** -- the single-method interface all agents implement. The `#[cruxai::agent]` macro
 generates this for you.
 
 **`TaskRegistry<B>`** -- typed task management with submit, checkpoint, replay, and status
@@ -79,10 +80,10 @@ and returns cache misses for changed ones.
 
 ```toml
 [dependencies]
-crux = "0.1"
+cruxai = "0.1"
 
 # With persistent storage (redb, pure-Rust):
-# crux = { version = "0.1", features = ["redb"] }
+# cruxai = { version = "0.1", features = ["redb"] }
 ```
 
 Requires Rust 1.85+ (edition 2024).
