@@ -3,3 +3,4 @@ target/
 !.ctx/HANDOFF.*.yaml
 *.local.md
 .DS_Store
+.ctx/HANDOFF.state.yaml
