@@ -1,4 +1,5 @@
 target/
-.ctx/
+.ctx/*
+!.ctx/HANDOFF.*.yaml
 *.local.md
 .DS_Store
