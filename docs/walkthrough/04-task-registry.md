@@ -93,11 +93,11 @@ impl TaskRegistry {
 
 Three backends ship in-tree:
 
-| Backend | When to use |
-|---------|-------------|
-| `in_memory` | Tests, single-process agents, experiments |
-| `sqlite` | Single host, crash-safe, embeddable (enable the `sqlite` feature) |
-| `custom` | You bring Postgres, Redis, DynamoDB — implement `RegistryBackend` |
+| Backend     | When to use                                                       |
+| ----------- | ----------------------------------------------------------------- |
+| `in_memory` | Tests, single-process agents, experiments                         |
+| `sqlite`    | Single host, crash-safe, embeddable (enable the `sqlite` feature) |
+| `custom`    | You bring Postgres, Redis, DynamoDB — implement `RegistryBackend` |
 
 `RegistryBackend` is a small trait (`get`, `put`, `list`, `cas`). You almost
 never need to write one yourself.
@@ -158,7 +158,7 @@ The macro takes two optional arguments:
   step (when `checkpoint_every_step` is set).
 - `checkpoint_every_step` — the default is "checkpoint at delegation
   boundaries only." That's fast and usually enough. Turn on per-step
-  checkpointing when the steps are expensive and you *really* want crash
+  checkpointing when the steps are expensive and you _really_ want crash
   safety between them.
 
 If you need something custom, omit both and call `reg.checkpoint(task_id,
@@ -174,7 +174,7 @@ Two different things, easy to confuse:
 - **`checkpoint`** persists the `Crux<T>` — the execution history.
 
 Typically you call `update_status` when your business logic advances (about
-to start building), and `checkpoint` when the *runtime* wants to save
+to start building), and `checkpoint` when the _runtime_ wants to save
 progress. With `checkpoint_every_step`, the macro handles the second one.
 
 ## How replay actually works
@@ -192,7 +192,7 @@ what the runtime does:
    - Otherwise, run the closure fresh and record a new step.
 5. Return a `Crux<T>` with the reconstructed history plus any new work.
 
-The skip-if-input-matches step is what makes replay *correct* — not just
+The skip-if-input-matches step is what makes replay _correct_ — not just
 fast. If you changed the code between crash and restart in a way that makes
 step 2's input different, the input hashes won't match, the closure re-runs,
 and the crux records a new step. Correctness first, speed second.
@@ -202,11 +202,11 @@ and the crux records a new step. Correctness first, speed second.
 Replay is strict by default. You'll get a `CruxErr::ReplayMismatch` in these
 cases:
 
-| Situation | Why it fails |
-|-----------|--------------|
-| You renamed a step | Can't correlate old step to new step |
-| You reordered steps | Causal chain no longer matches |
-| A step's input hash changed | Would return stale output |
+| Situation                   | Why it fails                                     |
+| --------------------------- | ------------------------------------------------ |
+| You renamed a step          | Can't correlate old step to new step             |
+| You reordered steps         | Causal chain no longer matches                   |
+| A step's input hash changed | Would return stale output                        |
 | A delegation target changed | Old sub-crux can't be replayed against new agent |
 
 You can loosen this with `#[cruxai::agent(replay = "lenient")]` which will
@@ -239,7 +239,7 @@ let reg = TaskRegistry::in_memory();
 let reg = TaskRegistry::sqlite(Path::new("./tasks.db"))?;
 ```
 
-The in-memory registry is *not* just for tests — it's genuinely useful when
+The in-memory registry is _not_ just for tests — it's genuinely useful when
 you want crux/replay semantics inside a single process without persistence.
 Example: a long-running CLI that wants to retry failed steps but doesn't
 need to survive a restart.
@@ -251,14 +251,14 @@ changes.
 
 ## Check your understanding
 
-- **Where does the `S` in `Task<S>` come from?** *You define it. The runtime
-  just persists it.*
+- **Where does the `S` in `Task<S>` come from?** _You define it. The runtime
+  just persists it._
 - **What's the difference between `update_status` and `checkpoint`?**
-  *Status is business-level; checkpoint is execution history.*
-- **What does `checkpoint_every_step` do?** *Tells the macro to persist the
-  crux after every `t.step` call, not just at delegation boundaries.*
-- **What makes replay correct rather than just fast?** *Input hashes — a
-  step only gets skipped if its input matches the recorded one.*
+  _Status is business-level; checkpoint is execution history._
+- **What does `checkpoint_every_step` do?** _Tells the macro to persist the
+  crux after every `t.step` call, not just at delegation boundaries._
+- **What makes replay correct rather than just fast?** _Input hashes — a
+  step only gets skipped if its input matches the recorded one._
 
 Chapter **05** covers the lifecycle hooks (`on_low_confidence`,
 `on_step_failure`, `on_budget_exceeded`) that let you recover gracefully

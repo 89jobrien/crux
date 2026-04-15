@@ -32,11 +32,11 @@ Hooks solve all three.
 
 ## The three hooks
 
-| Hook | Fires when | Signature |
-|------|------------|-----------|
-| `on_low_confidence(threshold, handler)` | A step finishes with `confidence < threshold` | `async fn(score, ctx) -> Recovery<T>` |
-| `on_step_failure(handler)` | A step returns `Err(CruxErr)` | `async fn(err, ctx) -> Recovery<T>` |
-| `on_budget_exceeded(handler)` | A step or delegation would push us over budget | `async fn(budget, ctx) -> Recovery<T>` |
+| Hook                                    | Fires when                                     | Signature                              |
+| --------------------------------------- | ---------------------------------------------- | -------------------------------------- |
+| `on_low_confidence(threshold, handler)` | A step finishes with `confidence < threshold`  | `async fn(score, ctx) -> Recovery<T>`  |
+| `on_step_failure(handler)`              | A step returns `Err(CruxErr)`                  | `async fn(err, ctx) -> Recovery<T>`    |
+| `on_budget_exceeded(handler)`           | A step or delegation would push us over budget | `async fn(budget, ctx) -> Recovery<T>` |
 
 All three return a `Recovery<T>`:
 
@@ -69,7 +69,7 @@ let draft = t.delegate::<Drafter>("draft", input)
     .await?;
 ```
 
-Use this when the recovery behavior is specific to *this* call, not the
+Use this when the recovery behavior is specific to _this_ call, not the
 agent's general behavior.
 
 ### 2. Per agent (on the `Agent` impl)
@@ -86,7 +86,7 @@ impl Agent for Drafter {
 }
 ```
 
-Use this when *every* caller of the agent should get the same recovery
+Use this when _every_ caller of the agent should get the same recovery
 behavior. Call-site hooks override the per-agent ones if both are set.
 
 ### 3. Scoped with `t.on_low_confidence`
@@ -106,7 +106,7 @@ async fn session(input: Input) -> Crux<Output> {
 ```
 
 The hooks you register on `t` apply to every subsequent step and every
-delegation *inside this agent function*. They don't cross delegation
+delegation _inside this agent function_. They don't cross delegation
 boundaries — a sub-agent has its own hook stack. This is usually what you
 want: the hook is scoped to the function that attached it.
 
@@ -136,8 +136,8 @@ async fn answer(question: String) -> Crux<Answer> {
 }
 ```
 
-Read that as: *try cheap; if confidence < 0.7, try expensive; if that's still
-< 0.9, get a human.*
+Read that as: _try cheap; if confidence < 0.7, try expensive; if that's still
+< 0.9, get a human._
 
 The crux records:
 
@@ -145,7 +145,7 @@ The crux records:
 - Which confidence scores triggered each escalation
 - The final answer and which tier produced it
 
-When you look at this crux two weeks later, you know *exactly* why the
+When you look at this crux two weeks later, you know _exactly_ why the
 answer came from a human instead of the cheap model.
 
 ## Worked example: retry with backoff
@@ -178,8 +178,8 @@ Three things to notice:
 2. **Backoff is your code.** The hook runs arbitrary async; `tokio::time`
    works fine.
 3. **The crux records every attempt.** Failed attempts become `Step {
-   status: Err, attempt: 1 }`, the successful one becomes `Step { status:
-   Ok, attempt: 3 }`. When you look at the crux later, the full retry
+status: Err, attempt: 1 }`, the successful one becomes `Step { status:
+Ok, attempt: 3 }`. When you look at the crux later, the full retry
    history is there.
 
 ## Worked example: budget-aware degradation
@@ -205,7 +205,7 @@ async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
 ```
 
 When the polish step would exceed budget, the hook swaps in a template-based
-report instead. The crux records the budget-exceeded event *and* the
+report instead. The crux records the budget-exceeded event _and_ the
 substitution. You can tell, per request, whether it got the polished output
 or the template fallback.
 
@@ -226,13 +226,13 @@ This is where it clicks: hooks aren't just control flow, they're the
 mechanism by which a long-running agent transitions between states in the
 registry without you writing that glue code.
 
-## When *not* to use hooks
+## When _not_ to use hooks
 
 Hooks are powerful, which means they can hide logic in ways that make
 debugging harder if you overuse them. Two anti-patterns:
 
 1. **Hooks that mutate global state.** A hook should be about recovery for
-   *this* step, not about bumping a global counter or sending a webhook.
+   _this_ step, not about bumping a global counter or sending a webhook.
    Put those in `t.step` so they appear in the crux as ordinary steps.
 2. **Hooks that silently succeed.** `Recovery::Substitute(default_value)`
    makes every failure look like success in your business code. The crux
@@ -242,13 +242,13 @@ debugging harder if you overuse them. Two anti-patterns:
 ## Check your understanding
 
 - **Where do you attach a hook that applies to all steps in one function?**
-  *Call `t.on_low_confidence(...)` / `t.on_step_failure(...)` inside the
-  `#[cruxai::agent]` function.*
-- **Which `Recovery` variant replays the same step?** *`Retry`.*
-- **Which one replaces the output without retrying?** *`Substitute(T)`.*
-- **What happens if you don't attach any hook?** *Errors propagate to the
+  _Call `t.on_low_confidence(...)` / `t.on_step_failure(...)` inside the
+  `#[cruxai::agent]` function._
+- **Which `Recovery` variant replays the same step?** _`Retry`._
+- **Which one replaces the output without retrying?** _`Substitute(T)`._
+- **What happens if you don't attach any hook?** _Errors propagate to the
   caller via `?`. Low-confidence steps still return their value — the
-  threshold only matters if there's a hook.*
+  threshold only matters if there's a hook._
 
 Chapter **06** puts all five chapters together into the hands-on project:
 a decomposer + executor for task planning.
