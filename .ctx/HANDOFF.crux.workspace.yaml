@@ -274,7 +274,27 @@ items:
       - crates/crux-macros/src/agent.rs
       - crates/crux/src/lib.rs
 
+  - id: crux-19
+    name: slashcrux-integration
+    title: "Import StepStatus from slashcrux; wire shared vocabulary"
+    description: >
+      crux-core Cargo.toml updated to depend on slashcrux (path = ../../../slashcrux).
+      Next: replace local StepStatus definition in types/step.rs with
+      slashcrux::StepStatus import. Verify all existing tests still pass.
+      slashcrux lives at ~/dev/slashcrux — not yet a published crate.
+    priority: P1
+    status: open
+    files:
+      - crates/crux-core/Cargo.toml
+      - crates/crux-core/src/types/step.rs
+      - crates/crux-core/src/types/mod.rs
+
 log:
+  - date: 2026-04-16
+    summary: >
+      Session 8: Architecture design — introduced slashcrux shared vocabulary crate
+      (Priority, Urgency, StepStatus, ExecutionContext). crux-core Cargo.toml wired to
+      depend on slashcrux. crux-19 opened to complete StepStatus migration in types/step.rs.
   - date: 2026-04-13
     summary: >
       Session 7: Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml,
