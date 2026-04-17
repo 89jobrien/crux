@@ -13,7 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-cruxai-core = { path = "../crux-core", version = "0.2.0" }
+cruxai-core = { path = "../crux-core", version = "0.2.1" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde-saphyr = { workspace = true }
