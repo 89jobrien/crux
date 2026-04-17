@@ -135,22 +135,21 @@ impl Runner {
                 )> = node
                     .stages
                     .iter()
-                    .map(|stage_name| {
-                        let handler = registry.get_handler(stage_name).cloned();
-                        let name_owned = stage_name.clone();
+                    .map(|arm| {
+                        let handler = registry.get_handler(arm.handler_name()).cloned();
+                        let name_owned = arm.handler_name().to_string();
+                        let static_args = arm.args().cloned();
                         let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
                             Box::new(move |v: Value| {
                                 Box::pin(async move {
                                     let h = handler.ok_or_else(|| {
                                         CruxErr::step_failed(&name_owned, "handler not found")
                                     })?;
-                                    h(v).await
+                                    let input = merge_args(v, static_args);
+                                    h(input).await
                                 }) as BoxFut<Value>
                             });
-                        // SAFETY: stage_name is borrowed from node.stages which lives for the
-                        // duration of this function call. We need to leak a &str for the pipe API.
-                        // Instead, we'll collect into owned and use a different approach.
-                        (stage_name.as_str(), stage_fn)
+                        (arm.label(), stage_fn)
                     })
                     .collect();
 
@@ -171,17 +170,17 @@ impl Runner {
                 let arms: Vec<(&str, BoxFut<Value>)> = node
                     .arms
                     .iter()
-                    .map(|arm_name| {
-                        let handler = self.registry.get_handler(arm_name).cloned();
-                        let input = current_input.clone();
-                        let name_owned = arm_name.clone();
+                    .map(|arm| {
+                        let handler = self.registry.get_handler(arm.handler_name()).cloned();
+                        let input = merge_args(current_input.clone(), arm.args().cloned());
+                        let name_owned = arm.handler_name().to_string();
                         let fut: BoxFut<Value> = Box::pin(async move {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
                             h(input).await
                         });
-                        (arm_name.as_str(), fut)
+                        (arm.label(), fut)
                     })
                     .collect();
 
@@ -209,7 +208,7 @@ impl Runner {
                     .map(|branch| {
                         let range = parse_range(&branch.range);
                         let handler = self.registry.get_handler(&branch.handler).cloned();
-                        let input = current_input.clone();
+                        let input = merge_args(current_input.clone(), branch.args.clone());
                         let handler_name = branch.handler.clone();
                         let fut: BoxFut<Value> = Box::pin(async move {
                             let h = handler.ok_or_else(|| {
@@ -239,17 +238,17 @@ impl Runner {
                 let arms: Vec<(&str, BoxFut<Value>)> = node
                     .arms
                     .iter()
-                    .map(|arm_name| {
-                        let handler = self.registry.get_handler(arm_name).cloned();
-                        let input = current_input.clone();
-                        let name_owned = arm_name.clone();
+                    .map(|arm| {
+                        let handler = self.registry.get_handler(arm.handler_name()).cloned();
+                        let input = merge_args(current_input.clone(), arm.args().cloned());
+                        let name_owned = arm.handler_name().to_string();
                         let fut: BoxFut<Value> = Box::pin(async move {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
                             h(input).await
                         });
-                        (arm_name.as_str(), fut)
+                        (arm.label(), fut)
                     })
                     .collect();
 
@@ -276,6 +275,18 @@ impl Runner {
             }
         }
     }
+}
+
+/// Merge static step args into handler input under the "args" key.
+fn merge_args(mut input: Value, args: Option<Value>) -> Value {
+    if let Some(a) = args {
+        if let Value::Object(ref mut map) = input {
+            map.insert("args".to_string(), a);
+        } else {
+            input = serde_json::json!({ "args": a, "input": input });
+        }
+    }
+    input
 }
 
 fn budget_from_def(def: &BudgetDef) -> Budget {

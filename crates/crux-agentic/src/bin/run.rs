@@ -84,10 +84,10 @@ fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
                 names.push(node.delegate.clone());
             }
             StepDef::Pipe(node) => {
-                names.extend(node.stages.clone());
+                names.extend(node.stages.iter().map(|a| a.handler_name().to_string()));
             }
             StepDef::JoinAll(node) => {
-                names.extend(node.arms.clone());
+                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
             }
             StepDef::RouteOnConfidence(node) => {
                 for route in &node.routes {
@@ -95,7 +95,7 @@ fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
                 }
             }
             StepDef::Speculate(node) => {
-                names.extend(node.arms.clone());
+                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
             }
         }
     }
