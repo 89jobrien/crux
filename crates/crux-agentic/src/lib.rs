@@ -11,6 +11,16 @@ pub mod json;
 pub mod llm;
 pub mod shell;
 
+#[cfg(feature = "baml")]
+#[allow(
+    clippy::derivable_impls,
+    clippy::empty_line_after_doc_comments,
+    clippy::map_clone,
+    clippy::new_without_default,
+    clippy::unwrap_or_default
+)]
+pub(crate) mod baml_client;
+
 use cruxai_script::HandlerRegistry;
 
 /// Register all built-in handlers into the given registry.
@@ -23,4 +33,6 @@ pub fn register_all(registry: &mut HandlerRegistry) {
     json::register(registry);
     ctrl::register(registry);
     llm::register(registry);
+    #[cfg(feature = "baml")]
+    llm::register_extract(registry);
 }

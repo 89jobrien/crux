@@ -15,8 +15,9 @@ async fn mock_openai_server() -> (String, tokio::task::JoinHandle<()>) {
 
     let handle = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
+        // Drain the incoming request; exact byte count doesn't matter for mock purposes.
         let mut buf = vec![0u8; 4096];
-        stream.read(&mut buf).await.unwrap();
+        let _n = stream.read(&mut buf).await.unwrap();
 
         let body = r#"{"id":"test","choices":[{"message":{"content":"4","role":"assistant"}}],"model":"test-model","usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}"#;
         let response = format!(
@@ -36,8 +37,9 @@ async fn mock_anthropic_server() -> (String, tokio::task::JoinHandle<()>) {
 
     let handle = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
+        // Drain the incoming request; exact byte count doesn't matter for mock purposes.
         let mut buf = vec![0u8; 4096];
-        stream.read(&mut buf).await.unwrap();
+        let _n = stream.read(&mut buf).await.unwrap();
 
         let body = r#"{"id":"msg_test","content":[{"type":"text","text":"4"}],"model":"claude-test","usage":{"input_tokens":5,"output_tokens":1}}"#;
         let response = format!(

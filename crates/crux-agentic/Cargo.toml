@@ -12,6 +12,9 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+baml = ["dep:baml"]
+
 [dependencies]
 cruxai-core = { path = "../crux-core", version = "0.2.1" }
 cruxai-script = { path = "../crux-script", version = "0.2.1" }
@@ -21,6 +24,7 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }
 glob = "0.3"
+baml = { version = "0.218.0", optional = true }
 
 [[bin]]
 name = "crux-run"
