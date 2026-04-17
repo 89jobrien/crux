@@ -34,6 +34,8 @@ pub struct StepNode {
     pub step: String,
     #[serde(default)]
     pub handler: Option<String>,
+    #[serde(default)]
+    pub args: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
