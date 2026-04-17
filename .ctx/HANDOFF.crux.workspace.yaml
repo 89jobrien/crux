@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "2026-04-13"
+updated: "2026-04-17"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -291,6 +291,18 @@ items:
       - crates/crux-core/src/types/mod.rs
 
 log:
+  - date: 2026-04-17
+    summary: >
+      Session 10: Crux-agentic crate completed with full handler suite (ctrl, shell, fs, git, json,
+      llm modules, 17 handlers total), smoke tests, register_all inventory. ArmDef schema upgraded:
+      join_all and pipe stages, speculate arms accept full step objects with embedded args. Static
+      args injection on StepNode and RouteBranch. crux-run binary migrated from crux-script to
+      crux-agentic (avoids circular dep). joe/ YAML examples rewritten to canonical handler names.
+      crux-19 closed: slashcrux dep wired, Priority/Urgency/ExecutionContext/StepState re-exported
+      from prelude. Workspace bumped to v0.2.1, serde_yaml swapped for serde-saphyr. All 226 tests
+      passing, cargo check clean.
+    commits:
+      - 0fc2808
   - date: 2026-04-17
     summary: >
       Session 9: Published slashcrux v0.1.0 then v0.1.1 (renamed StepStatus -> StepState,

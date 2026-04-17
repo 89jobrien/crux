@@ -1,7 +1,8 @@
 target/
 .ctx/*
 !.ctx/HANDOFF.*.yaml
+!.ctx/HANDOFF.md
+!.ctx/HANDOFF.state.yaml
 *.local.md
 .DS_Store
-.ctx/HANDOFF.state.yaml
 .claude/worktrees/
