@@ -10,14 +10,14 @@ pub mod schema;
 use schema::PipelineDef;
 
 /// Load a pipeline definition from a YAML string.
-pub fn load(yaml: &str) -> Result<PipelineDef, serde_yaml::Error> {
-    serde_yaml::from_str(yaml)
+pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
+    serde_saphyr::from_str(yaml)
 }
 
 /// Load a pipeline definition from a file path.
 pub fn load_file(path: impl AsRef<std::path::Path>) -> Result<PipelineDef, LoadError> {
     let contents = std::fs::read_to_string(path)?;
-    Ok(serde_yaml::from_str(&contents)?)
+    Ok(serde_saphyr::from_str(&contents)?)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +25,7 @@ pub enum LoadError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("YAML parse error: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_saphyr::Error),
 }
 
 pub use registry::HandlerRegistry;

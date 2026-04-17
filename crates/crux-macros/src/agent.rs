@@ -58,7 +58,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
         })
         .collect();
 
-    // For single param, Input = that type. For multiple, use a tuple.
+    // For single param, input = that type. For multiple, use a tuple.
     let (input_type, input_destructure, input_forward) = match param_types.len() {
         0 => (quote! { () }, quote! { () }, quote! { () }),
         1 => {
