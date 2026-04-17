@@ -21,9 +21,5 @@ tokio = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 
-[[bin]]
-name = "crux-run"
-path = "src/bin/run.rs"
-
 [dev-dependencies]
 tokio = { workspace = true }

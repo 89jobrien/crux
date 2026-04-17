@@ -1,9 +1,10 @@
-/// crux-run: execute a YAML pipeline with stub handlers for demonstration.
+/// crux-run: execute a YAML pipeline using crux-agentic built-in handlers.
 ///
 /// Usage: crux-run <pipeline.yaml> [input.json]
 ///
 /// Without input.json, passes `null` as the pipeline input.
-/// Handlers are auto-generated stubs that echo their name and pass data through.
+/// Known handlers come from `crux_agentic::register_all`; unknown names degrade
+/// to stubs that emit a warning and return a minimal JSON object.
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -27,7 +28,7 @@ fn main() {
     };
 
     let pipeline = cruxai_script::load_file(pipeline_path).expect("failed to load pipeline");
-    let registry = build_stub_registry(&pipeline);
+    let registry = build_registry(&pipeline);
     let runner = Runner::new(Arc::new(registry));
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -38,26 +39,32 @@ fn main() {
     print_trace(&crux, elapsed);
 }
 
-/// Build a registry with stub handlers for every name referenced in the pipeline.
-fn build_stub_registry(pipeline: &PipelineDef) -> HandlerRegistry {
+/// Build a registry seeded with all crux-agentic built-in handlers.
+///
+/// Any handler name referenced in the pipeline that has no built-in implementation
+/// degrades to a stub that emits a warning and returns a minimal JSON object.
+fn build_registry(pipeline: &PipelineDef) -> HandlerRegistry {
     let mut reg = HandlerRegistry::new();
-    let names = collect_handler_names(pipeline);
+    crux_agentic::register_all(&mut reg);
 
-    for name in names {
-        let n = name.clone();
-        reg.handler(name, move |input: Value| {
-            let handler_name = n.clone();
-            async move {
-                // Stub: return a JSON object identifying what ran
-                Ok(json!({
-                    "_handler": handler_name,
-                    "_input_type": type_label(&input),
-                    "confidence": 0.75,
-                    "score": 0.75,
-                    "result": "ok"
-                }))
-            }
-        });
+    // Degrade unknown names to stubs with a warning.
+    for name in collect_handler_names(pipeline) {
+        if reg.get_handler(&name).is_none() {
+            let n = name.clone();
+            reg.handler(name, move |_input: Value| {
+                let handler_name = n.clone();
+                async move {
+                    eprintln!(
+                        "[crux-run] warning: no builtin for '{handler_name}', using stub"
+                    );
+                    Ok(json!({
+                        "_stub": handler_name,
+                        "confidence": 0.5,
+                        "score": 0.5,
+                    }))
+                }
+            });
+        }
     }
 
     reg
@@ -96,17 +103,6 @@ fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
     names.sort();
     names.dedup();
     names
-}
-
-fn type_label(v: &Value) -> &'static str {
-    match v {
-        Value::Null => "null",
-        Value::Bool(_) => "bool",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
 }
 
 fn print_trace(crux: &Crux<Value>, elapsed: std::time::Duration) {
