@@ -1,0 +1,61 @@
+pipeline: ci_triage
+# Triage a failed CI run across a Rust workspace. Fan out to all failure
+# categories in parallel, rank by severity, then route to the right action.
+budget: { calls: 12 }
+
+steps:
+  - step: fetch_run
+    handler: shell::capture
+    args:
+      cmd: "gh run view --log-failed"
+    # Pulls the failed workflow run logs via `gh run view --log-failed`
+
+  - join_all: diagnose
+    arms:
+      - step: compile_errors
+        handler: ctrl::noop
+        # rustc E-codes, missing impls, type mismatches
+      - step: clippy_violations
+        handler: ctrl::noop
+        # `-D warnings` hits — lint category + file:line
+      - step: nextest_failures
+        handler: ctrl::noop
+        # cargo nextest JSON output — test name + panic msg
+      - step: deny_violations
+        handler: ctrl::noop
+        # cargo-deny: banned crates, license conflicts, advisories
+
+  - pipe: rank
+    stages:
+      - step: deduplicate_spans
+        handler: ctrl::noop
+        # collapse rustc errors sharing the same root cause
+      - step: classify_severity
+        handler: ctrl::noop
+        # compile > deny > test > clippy
+      - step: attach_owners
+        handler: ctrl::noop
+        # map file paths to crate names in workspace
+      - step: score_fixability
+        handler: ctrl::noop
+        # heuristic: is there an obvious one-line fix?
+
+  - route_on_confidence: action
+    value: "{{ steps.rank.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: unclear
+        handler: ctrl::log
+        # confidence too low — open a doob task with raw diagnostics attached
+      - range: "[0.4, 0.75)"
+        label: actionable
+        handler: shell::capture
+        args:
+          cmd: "doob todo add --priority high"
+        # `doob todo add --priority high --repo <crate> "<ranked summary>"`
+      - range: "[0.75, 1.0]"
+        label: auto_fixable
+        handler: shell::capture
+        args:
+          cmd: "cargo fix --allow-dirty && cargo nextest run"
+        # fmt fix or trivial clippy allow — commit, re-trigger CI

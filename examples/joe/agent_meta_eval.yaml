@@ -1,0 +1,68 @@
+pipeline: agent_meta_eval
+# Evaluate a completed braid/agentbox agent run from its persisted Crux trace.
+# Fan out to all analysis dimensions, speculate on the best optimization patch,
+# then pipe the patch through validation. Recovery::Skip keeps the pipeline
+# moving if a single analysis arm finds nothing actionable.
+budget: { tokens: 16000, calls: 30 }
+
+steps:
+  - step: load_trace
+    handler: fs::read
+    # Read trace from ~/.mbx/<run-id>.jsonl (JSONL format written by RedbBackend
+    # or InMemoryBackend on flush). Validates schema version before proceeding.
+
+  - join_all: analyze
+    arms:
+      - step: latency_profile
+        handler: ctrl::noop
+        # Per-step wall-clock time from Step.started_at / completed_at.
+        # Flags steps exceeding 2x median. Recovery::Skip if no timing data.
+      - step: token_spend_breakdown
+        handler: ctrl::noop
+        # Accumulate token counts from Step.output metadata per agent/step.
+        # Identifies top-3 token consumers. Recovery::Skip if counts absent.
+      - step: step_failure_clustering
+        handler: ctrl::noop
+        # Group CruxErr variants by kind. Repeated StepFailed("same_name")
+        # suggests a flaky handler or bad retry policy.
+      - step: replay_cache_analysis
+        handler: ctrl::noop
+        # ReplayCache hit/miss ratio per step name.
+        # Low hit rate on deterministic steps = missing cache key stability.
+
+  - speculate: optimization
+    mode: first_ok
+    arms:
+      - step: tighten_budget
+        handler: ctrl::noop
+        # If token_spend > 80% of budget.tokens: emit a tighter Budget suggestion.
+        # first_ok: this arm is cheapest to evaluate — try it first.
+      - step: compress_prompt_stages
+        handler: ctrl::noop
+        # If a pipe stage is consuming >40% of tokens: suggest collapsing stages
+        # or switching to a cheaper model for that step.
+      - step: tune_retry_policy
+        handler: ctrl::noop
+        # If step_failure_clustering shows >2 retries on one step name:
+        # suggest Recovery::Retry with exponential backoff config.
+    # first_ok stops at the first arm that produces a non-empty patch.
+
+  - pipe: validate_patch
+    stages:
+      - step: patch_schema_check
+        handler: ctrl::noop
+        # confirm the emitted patch is valid Crux YAML
+      - step: replay_dry_run
+        handler: ctrl::noop
+        # re-run trace in lenient replay mode against the patch
+      - step: regression_check
+        handler: ctrl::assert
+        # assert final Crux<T> value unchanged after patch
+
+  - step: emit_report
+    handler: fs::write
+    # Writes structured report to .ctx/meta-eval-<run-id>.md:
+    # - trace summary (step count, total tokens, wall time)
+    # - analysis findings per arm
+    # - chosen optimization patch (or "no patch needed")
+    # - replay dry-run result

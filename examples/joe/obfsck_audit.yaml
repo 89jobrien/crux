@@ -1,0 +1,57 @@
+pipeline: obfsck_audit
+# Secret-scan all staged files with obfsck, then speculate on the best
+# remediation for each finding. Partial failures (one file errors out)
+# are recovered with Recovery::Substitute so the audit continues.
+budget: { tokens: 4000 }
+
+steps:
+  - step: list_staged
+    handler: git::staged_files
+    # `git diff --cached --name-only` filtered to non-binary paths
+
+  - join_all: scan
+    arms:
+      - step: obfsck_high_entropy
+        handler: shell::capture
+        args:
+          cmd: "obfsck --detector entropy"
+        # obfsck --detector entropy per file
+      - step: obfsck_pattern_match
+        handler: shell::capture
+        args:
+          cmd: "obfsck --detector pattern"
+        # obfsck --detector pattern (API keys, tokens)
+      - step: obfsck_url_credentials
+        handler: shell::capture
+        args:
+          cmd: "obfsck --detector url-credentials"
+        # obfsck --detector url-credentials
+      - step: git_history_scan
+        handler: shell::capture
+        args:
+          cmd: "obfsck --history HEAD~5..HEAD"
+        # obfsck --history HEAD~5..HEAD for recent leaks
+    # Each arm returns Recovery::Substitute([]) on tool error so the
+    # pipeline never stalls on a single unreadable file.
+
+  - speculate: remediate
+    mode: first_ok
+    arms:
+      - step: add_to_allowlist
+        handler: shell::capture
+        args:
+          cmd: "obfsck allowlist add"
+        # obfsck allowlist add <path>:<line> when finding is a test fixture,
+        # localhost addr, or known-safe variable name (e.g. `password = "test"`)
+      - step: extract_to_env_var
+        handler: ctrl::log
+        # Replace literal with `std::env::var("SECRET_NAME")?` + add to .env.example
+      - step: rewrite_with_op_ref
+        handler: ctrl::log
+        # Swap literal for `op read "op://Personal/<vault>/<field>"` invocation
+    # first_ok: tries allowlist first; falls through to env-var or op-ref
+
+  - step: report
+    handler: ctrl::log
+    # Writes findings + chosen remediation to stderr as structured JSONL
+    # (consumed by `mise run redact-audit`)

@@ -1,0 +1,55 @@
+pipeline: doob_triage
+# Process the pending doob backlog: score, deduplicate, and cluster by repo,
+# then replace the delegate with a direct shell step for per-repo prioritization
+# so each repo gets independent reasoning without bleeding token spend.
+budget: { tokens: 8000 }
+
+steps:
+  - step: fetch_pending
+    handler: shell::capture
+    args:
+      cmd: "doob todo list --status pending --format json"
+    # `doob todo list --status pending --json` — full pending list across repos
+
+  - pipe: normalize
+    stages:
+      - step: parse_repo_tags
+        handler: ctrl::noop
+        # extract repo field from each todo's metadata
+      - step: score_urgency
+        handler: ctrl::noop
+        # age * priority weight — older high-pri items score highest
+      - step: deduplicate_intent
+        handler: ctrl::noop
+        # cluster todos whose titles are semantically equivalent
+      - step: group_by_repo
+        handler: ctrl::noop
+        # partition into per-repo buckets for delegation
+
+  # Replaced delegate(DoobRepoAgent) with a direct shell step.
+  # Re-ranks within each repo bucket using doob todo update / git log recency signal.
+  # Original budget was { tokens: 2000, calls: 10 } per repo bucket.
+  - step: per_repo_prioritize
+    handler: shell::capture
+    args:
+      cmd: "doob todo list --status pending --format json"
+
+  - route_on_confidence: schedule
+    value: "{{ steps.per_repo_prioritize.confidence }}"
+    routes:
+      - range: "[0.0, 0.45)"
+        label: ambiguous
+        handler: ctrl::log
+        # Print the ambiguous cluster to stdout for manual triage
+      - range: "[0.45, 0.8)"
+        label: scheduled
+        handler: shell::capture
+        args:
+          cmd: "doob todo add --priority high"
+        # `doob todo update --priority <new> <id>` for each item in ranked order
+      - range: "[0.8, 1.0]"
+        label: confident
+        handler: shell::capture
+        args:
+          cmd: "doob todo list --status pending --format json"
+        # High confidence: also mark stale resolved items as done automatically

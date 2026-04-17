@@ -1,0 +1,74 @@
+pipeline: crate_refactor
+# Assist a Rust workspace refactor. Gather all diagnostic signal in parallel,
+# then speculate on the best structural strategy. The winning strategy is
+# validated before any changes land.
+budget: { tokens: 20000 }
+
+steps:
+  - step: snapshot_workspace
+    handler: shell::capture
+    args:
+      cmd: "cargo metadata --no-deps --format-version 1"
+    # `cargo metadata --no-deps --format-version 1` — crate graph baseline
+
+  - join_all: gather_signal
+    arms:
+      - step: clippy_all_targets
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --all-targets -- -D warnings"
+        # `cargo clippy --all-targets -- -D warnings` — lint violations with spans
+      - step: nextest_failures
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run --no-fail-fast"
+        # `cargo nextest run --no-fail-fast` — failing test names + spans
+      - step: dep_graph_analysis
+        handler: ctrl::noop
+        # gkg query: find cycles, over-coupled crates, missing hexagonal boundaries
+      - step: arch_boundary_check
+        handler: ctrl::noop
+        # scan for domain crates importing adapter crates (hexagonal violation)
+
+  - speculate: strategy
+    mode: pick_best
+    arms:
+      - step: extract_trait_port
+        handler: ctrl::noop
+        # Define a new trait in the domain crate, move impl to an adapter crate.
+        # Best when: clippy flags concrete type leakage across crate boundary.
+      - step: split_crate
+        handler: ctrl::noop
+        # Carve out a sub-crate from an over-coupled crate.
+        # Best when: dep graph shows a crate with >8 dependents and mixed concerns.
+      - step: add_adapter_layer
+        handler: ctrl::noop
+        # Insert a thin adapter crate between two directly-coupled crates.
+        # Best when: arch_boundary_check found domain->infra imports.
+    # pick_best: score each strategy against signal weights from gather_signal
+
+  - pipe: validate_winner
+    stages:
+      - step: generate_patch
+        handler: ctrl::noop
+        # produce the minimal diff for the chosen strategy
+      - step: cargo_check_patch
+        handler: shell::capture
+        args:
+          cmd: "cargo check --workspace"
+        # `cargo check --workspace` against the patch
+      - step: clippy_check_patch
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy -- -D warnings"
+        # confirm no new clippy violations introduced
+      - step: run_affected_tests
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run"
+        # `cargo nextest run -p <affected_crate>`
+
+  - step: emit_plan
+    handler: fs::write
+    # Write structured plan to .ctx/refactor-<date>.md for human review
+    # before any files are modified in the actual codebase.

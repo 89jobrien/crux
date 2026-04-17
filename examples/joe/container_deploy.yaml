@@ -1,0 +1,67 @@
+pipeline: container_deploy
+# minibox deployment pipeline: cross-compile for x86_64-unknown-linux-musl,
+# rsync to the VPS, then replace the delegate health check with a direct
+# shell step that polls service endpoints.
+budget: { duration_ms: 120000 }
+
+steps:
+  - pipe: build_and_ship
+    stages:
+      - step: cargo_fmt_check
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check"
+        # `cargo fmt --all -- --check` — hard gate, no deploy if fmt fails
+      - step: cargo_clippy_release
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --release -- -D warnings"
+        # `cargo clippy --release -- -D warnings` on minibox workspace
+      - step: cross_compile
+        handler: shell::capture
+        args:
+          cmd: "cross build --release --target x86_64-unknown-linux-musl -p miniboxd"
+        # `cross build --release --target x86_64-unknown-linux-musl -p miniboxd`
+      - step: verify_target_triple
+        handler: shell::capture
+        args:
+          cmd: "file target/x86_64-unknown-linux-musl/release/miniboxd"
+        # `file target/x86_64-unknown-linux-musl/release/miniboxd` — assert ELF x86-64
+      - step: rsync_binary
+        handler: shell::capture
+        args:
+          cmd: "rsync -az --checksum target/x86_64-unknown-linux-musl/release/miniboxd minibox:/usr/local/bin/miniboxd"
+        # `rsync -az --checksum <binary> minibox:/usr/local/bin/miniboxd`
+      - step: systemd_restart
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'sudo systemctl restart miniboxd'"
+        # `ssh minibox 'sudo systemctl restart miniboxd'`
+
+  # Replaced delegate(MbxHealthAgent) with a direct shell step.
+  # Polls `minibox-cli status --json` — checks: process running, socket accepting,
+  # no OOM in journald tail. Budget was { duration_ms: 30000, calls: 15 }.
+  - step: health_check
+    handler: shell::capture
+    args:
+      cmd: "ssh minibox 'minibox-cli status --json'"
+
+  - route_on_confidence: outcome
+    value: "{{ steps.health_check.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: unhealthy
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'sudo systemctl stop miniboxd'"
+        # rsync previous binary back, restart, open doob incident task
+      - range: "[0.5, 0.85)"
+        label: degraded
+        handler: ctrl::log
+        # Service is up but confidence is partial — keep watching, annotate trace
+      - range: "[0.85, 1.0]"
+        label: healthy
+        handler: shell::capture
+        args:
+          cmd: "gh release create --generate-notes"
+        # `gh release create v<version> --generate-notes`

@@ -1,0 +1,81 @@
+pipeline: pr_review
+# Full PR review pipeline (sentinel-style). Fan out to all signal sources in
+# parallel, weight the signals, then speculate on the verdict before routing
+# to the appropriate GitHub action.
+budget: { tokens: 12000 }
+
+steps:
+  - step: fetch_diff
+    handler: shell::capture
+    args:
+      cmd: "gh pr diff"
+    # `gh pr diff <number>` — raw unified diff for changed files
+
+  - join_all: analyze
+    arms:
+      - step: parse_changed_files
+        handler: shell::capture
+        args:
+          cmd: "git diff --name-only HEAD~1"
+        # file list, line counts, language breakdown
+      - step: clippy_on_diff
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy -- -D warnings"
+        # `cargo clippy` restricted to changed crate paths
+      - step: arch_boundary_check
+        handler: ctrl::noop
+        # domain crates: do changed files cross hexagonal boundaries?
+      - step: test_coverage_delta
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run"
+        # nextest: are new code paths covered by tests?
+      - step: devkit_review
+        handler: ctrl::log
+        # `devkit review` — AI diff review pass (sentinel role)
+
+  - pipe: weight_signals
+    stages:
+      - step: normalize_findings
+        handler: ctrl::noop
+        # unify clippy, arch, and coverage findings into Finding[]
+      - step: apply_severity_matrix
+        handler: ctrl::noop
+        # blocking / suggestion / observation tiers
+      - step: compute_review_score
+        handler: ctrl::noop
+        # 0.0–1.0: fraction of changed lines with no blocking finding
+
+  - speculate: verdict
+    mode: pick_best
+    arms:
+      - step: approve
+        handler: ctrl::noop
+        # All changed paths covered, no clippy violations, no arch leaks.
+      - step: request_changes
+        handler: ctrl::log
+        # Blocking findings exist; comment with structured sentinel-format output.
+      - step: comment_only
+        handler: ctrl::log
+        # Suggestions only; approve with inline annotations but do not block merge.
+
+  - route_on_confidence: post
+    value: "{{ steps.verdict.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: uncertain
+        handler: ctrl::log
+        # Confidence too low to act — post a neutral comment summarizing uncertainty
+      - range: "[0.5, 0.8)"
+        label: post_review
+        handler: shell::capture
+        args:
+          cmd: "gh pr review --approve"
+        # Submit the verdict (approve / request-changes / comment) via `gh pr review`
+      - range: "[0.8, 1.0]"
+        label: auto_merge_eligible
+        handler: shell::capture
+        args:
+          cmd: "gh pr merge --auto"
+        # High confidence clean — add to merge queue if CI is green
