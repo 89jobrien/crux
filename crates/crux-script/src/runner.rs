@@ -68,7 +68,18 @@ impl Runner {
                         )
                     })?
                     .clone();
-                let input = current_input.clone();
+                // Merge static step args into the current input under the "args" key.
+                let input = if let Some(step_args) = &node.args {
+                    let mut merged = current_input.clone();
+                    if let Value::Object(ref mut map) = merged {
+                        map.insert("args".to_string(), step_args.clone());
+                    } else {
+                        merged = serde_json::json!({ "args": step_args, "input": current_input });
+                    }
+                    merged
+                } else {
+                    current_input.clone()
+                };
                 let result = ctx
                     .step(&node.step, || {
                         let h = handler.clone();
