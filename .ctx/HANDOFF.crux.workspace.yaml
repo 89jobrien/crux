@@ -283,13 +283,23 @@ items:
       slashcrux::StepStatus import. Verify all existing tests still pass.
       slashcrux lives at ~/dev/slashcrux — not yet a published crate.
     priority: P1
-    status: open
+    status: done
+    completed: 2026-04-17
     files:
       - crates/crux-core/Cargo.toml
       - crates/crux-core/src/types/step.rs
       - crates/crux-core/src/types/mod.rs
 
 log:
+  - date: 2026-04-17
+    summary: >
+      Session 9: Published slashcrux v0.1.0 then v0.1.1 (renamed StepStatus -> StepState,
+      lifecycle vs outcome distinction). Wired cruxai-core to depend on slashcrux v0.1.1;
+      re-exported Priority, Urgency, ExecutionContext, StepState from cruxai prelude.
+      Bumped workspace to v0.2.1, published all 5 cruxai crates. crux-19 closed.
+    commits:
+      - 778389f
+      - 8d37ce3
   - date: 2026-04-16
     summary: >
       Session 8: Architecture design — introduced slashcrux shared vocabulary crate
