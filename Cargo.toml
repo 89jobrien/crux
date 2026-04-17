@@ -47,6 +47,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Temp files
 tempfile = "3"
 
+# Shared vocabulary
+slashcrux = "0.1.1"
+
 # Testing
 tokio-test = "0.4"
 proptest = "1.11.0"

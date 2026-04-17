@@ -19,6 +19,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }
 ulid = { workspace = true }
+slashcrux = { workspace = true }
 
 # Optional
 tokio = { workspace = true, optional = true }
