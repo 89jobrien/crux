@@ -4,3 +4,4 @@ target/
 *.local.md
 .DS_Store
 .ctx/HANDOFF.state.yaml
+.claude/worktrees/
