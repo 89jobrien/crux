@@ -49,4 +49,11 @@ check-baml:
     if $gen_ver != $cargo_ver {
         error make { msg: $"BAML version mismatch: generators.baml=($gen_ver) Cargo.toml=($cargo_ver)" }
     }
+    let lib = $"($env.HOME)/Library/Caches/baml/libs/($gen_ver)/libbaml_cffi-aarch64-apple-darwin.dylib"
+    if not ($lib | path exists) {
+        print $"BAML native lib not cached for ($gen_ver) — downloading..."
+        mkdir ($lib | path dirname)
+        let url = $"https://github.com/boundaryml/baml/releases/download/($gen_ver)/libbaml_cffi-aarch64-apple-darwin.dylib"
+        http get $url | save --force $lib
+    }
     print $"BAML versions match: ($gen_ver)"
