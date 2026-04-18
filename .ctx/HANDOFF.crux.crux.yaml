@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260417::230000"
+updated: "20260418::000000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -89,6 +89,22 @@ items:
           integration with crux-script, and 4-phase implementation roadmap.
 
 log:
+  - date: "20260418::000000"
+    session: 15
+    summary: >
+      Gitignored baml_client/ (per upstream convention), git rm --cached 18 files. Added BAML
+      section to CLAUDE.md (version parity, gitignore, test injection). Timestamp format
+      updated to YYYYMMDD::HHMMSS throughout.
+    commits:
+      - sha: 4cc0c50
+        branch: main
+        note: "timestamp format YYYYMMDD::HHMMSS"
+      - sha: b9bc089
+        branch: main
+        note: "gitignore baml_client/"
+      - sha: 7f07616
+        branch: main
+        note: "CLAUDE.md BAML section"
   - date: "20260417::230000"
     session: 14
     summary: >
