@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260417:220000"
+updated: "20260417:230000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -89,6 +89,19 @@ items:
           integration with crux-script, and 4-phase implementation roadmap.
 
 log:
+  - date: "20260417:230000"
+    session: 14
+    summary: >
+      Fixed BAML version mismatch (0.218.0 → 0.221.0 in Cargo.toml). Added just check-baml
+      recipe: validates generators.baml/Cargo.toml version parity and auto-downloads native
+      lib if missing. Wired into just ci. All 33 baml integration tests passing.
+    commits:
+      - sha: 2ce0e0f
+        branch: main
+        note: "baml dep bump + check-baml recipe"
+      - sha: c618719
+        branch: main
+        note: "check-baml: auto-download native lib if not cached"
   - date: "20260417:220000"
     session: 13
     summary: >
