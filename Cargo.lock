@@ -88,9 +88,9 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "baml"
-version = "0.218.0"
+version = "0.221.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ff893d77d574072813bbb2f1d5538d44e89bc9ab7d5fcfc3d953ddfffa39e9f"
+checksum = "14825bd18e6f3df8579cc08e10fa7837bac5f5c4df9fccdc00b7f261db60ae69"
 dependencies = [
  "async-channel",
  "baml-macros",
@@ -107,9 +107,9 @@ dependencies = [
 
 [[package]]
 name = "baml-macros"
-version = "0.218.0"
+version = "0.221.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a8052f0738ec7dce8cfd4db91445cf3779b9c64027107781310b3c910a4ac58"
+checksum = "9ab4b44de0b099d467758dee9698ef459c1a790f42045f3e8b3ab61850d90780"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -118,9 +118,9 @@ dependencies = [
 
 [[package]]
 name = "baml-sys"
-version = "0.218.0"
+version = "0.221.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81f39b7171a822703839b29003c6207ac2f30c3894e12bc762e1ee6242bee3d5"
+checksum = "7798e6e2f839e5f3510830ce6bf61a7e2ae6aa42c7fdeb5ac4d552ef7711538c"
 dependencies = [
  "hex",
  "libc",
@@ -248,7 +248,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crux-agentic"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "baml",
  "cruxai-core",

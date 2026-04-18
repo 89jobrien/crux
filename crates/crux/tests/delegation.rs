@@ -1,25 +1,8 @@
 /// Integration tests for t.delegate::<A>() and DelegationBuilder.
+mod common;
+
+use common::{DoublerAgent, FailerAgent};
 use cruxai::prelude::*;
-
-// -- Define a simple sub-agent for testing ----------------------------------
-
-#[cruxai::agent]
-async fn doubler(n: i32) -> Crux<i32> {
-    let result: i32 = t
-        .step("double", || {
-            let v = n;
-            async move { Ok(v * 2) }
-        })
-        .await?;
-    Ok(result)
-}
-
-// -- Define a failing sub-agent ---------------------------------------------
-
-#[cruxai::agent]
-async fn failer(_input: String) -> Crux<String> {
-    Err(CruxErr::step_failed("failer", "always fails"))
-}
 
 // -- Basic delegation -------------------------------------------------------
 
@@ -34,7 +17,6 @@ async fn basic_delegation() {
     let crux = parent_basic(21).await;
     assert_eq!(crux.value().unwrap(), &42);
 
-    // Should have a delegation step
     let delegation_steps: Vec<_> = crux
         .steps
         .iter()
@@ -43,7 +25,6 @@ async fn basic_delegation() {
     assert_eq!(delegation_steps.len(), 1);
     assert_eq!(delegation_steps[0].name, "double_it");
 
-    // Should have a child crux
     assert_eq!(crux.children.len(), 1);
     assert_eq!(crux.children[0].agent, "doubler");
 }
