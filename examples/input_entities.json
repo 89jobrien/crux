@@ -1,0 +1,6 @@
+{
+  "function": "ExtractEntities",
+  "input": {
+    "text": "Crux is an agentic DSL for Rust developed by Joe. The CruxCtx runtime integrates with tokio and supports BAML for structured LLM output. The RedbBackend adapter uses the redb embedded key-value store for persistent TaskRegistry checkpoints."
+  }
+}

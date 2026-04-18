@@ -1,5 +1,13 @@
 branch: main
 build: ok
 tests: 226 passed, 0 skipped
-touched_files: []
+touched_files:
+  - crates/crux-agentic/Cargo.toml
+  - crates/crux-agentic/baml_src/clients.baml
+  - crates/crux-agentic/baml_src/extract.baml
+  - crates/crux-agentic/baml_src/generators.baml
+  - crates/crux-agentic/src/baml_client/mod.rs
+  - crates/crux-agentic/src/lib.rs
+  - crates/crux-agentic/src/llm.rs
+  - crates/crux-agentic/tests/llm_extract.rs
 generated: "2026-04-17"

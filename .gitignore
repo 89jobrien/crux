@@ -6,3 +6,11 @@ target/
 *.local.md
 .DS_Store
 .claude/worktrees/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.yaml
+!.ctx/handoff.*.config.toml.example
+.ctx/.initialized
+# handoff-end

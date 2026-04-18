@@ -90,11 +90,29 @@ Requires Rust 1.85+ (edition 2024).
 
 ## Examples
 
+### Rust Agents
+
 ```bash
 cargo run --example basic_agent
 ```
 
-See [`examples/`](examples/) for more.
+### YAML Pipelines (crux-agentic)
+
+Crux includes a built-in handler registry for scripting pipelines via YAML:
+
+**Summarize text with BAML:**
+```bash
+ANTHROPIC_API_KEY=$YOUR_KEY crux-run examples/extract_summary.yaml \
+  examples/input_summary.json
+```
+
+**Extract entities with BAML:**
+```bash
+ANTHROPIC_API_KEY=$YOUR_KEY crux-run examples/extract_entities.yaml \
+  examples/input_entities.json
+```
+
+See [`examples/`](examples/) for pipeline definitions and input fixtures.
 
 ## Documentation
 
