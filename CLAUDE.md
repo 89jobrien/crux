@@ -86,6 +86,17 @@ recovery path, not a fallback.
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
 
+## BAML (crux-agentic)
+
+- `just check-baml` — validates `generators.baml` version matches `Cargo.toml` baml dep;
+  auto-downloads native lib if missing. Run after any baml version bump.
+- `baml_client/` is gitignored (generated). Run `baml-cli generate` after cloning or bumping
+  the baml version. The `baml` crate version in `Cargo.toml` must match `version` in
+  `generators.baml` exactly.
+- BAML integration tests require `OPENAI_API_KEY`. Inject via:
+  `DOTENV_PRIVATE_KEY=$(op read "op://Personal/nihl7o2bojy53zy4aqtr7txyqi/password") \`
+  `dotenvx run --env-file=$HOME/dev/.env -- cargo nextest run --features baml -p crux-agentic`
+
 ### Combinators on CruxCtx
 
 - `pipe()` -- chains sequential closures, records per-stage steps
