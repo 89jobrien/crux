@@ -7,290 +7,86 @@ description: >
   step, branch, delegation, and failure is a first-class value.
 
 items:
-  - id: crux-1
-    title: "Phase 2: Lifecycle hooks and replay in CruxCtx"
+  - id: crux-20
+    name: baml-llm-extract
+    title: "Wire BAML structured output into llm::extract handler"
     description: >
-      Add hook stack (on_low_confidence, on_step_failure, on_budget_exceeded),
-      Recovery dispatch inside step(), replay engine with input hash matching,
-      strict/lenient modes.
-    priority: P0
-    status: done
-    completed: 2026-04-11
-    files:
-      - crates/crux-core/src/ctx.rs
-      - crates/crux-core/src/types/recovery.rs
-
-  - id: crux-2
-    title: "Phase 3: End-to-end proc macro testing"
-    description: >
-      Write integration tests that use #[crux::agent] macro, verify generated
-      wrapper function and Agent struct compile and run correctly.
-      Add trybuild tests for error cases.
-    priority: P0
-    status: done
-    completed: 2026-04-11
-    files:
-      - crates/crux-macros/src/agent.rs
-      - tests/
-
-  - id: crux-3
-    title: "Phase 4: DelegationBuilder and Speculation"
-    description: >
-      Implement DelegationBuilder with IntoFuture, per-call-site hooks, budget
-      scoping. Speculation builder with pick_best_by, first_ok, pick_best_by_racing.
-      route_on_confidence with runtime range validation. Pipe operator. join_all.
+      Add optional baml feature flag to crux-agentic. Implement llm::extract handler
+      backed by BAML for schema-validated structured LLM output (ExtractEntities,
+      Summarize, Classify). llm::complete stays unchanged. Integration tests cfg-gated
+      on OPENAI_API_KEY / ANTHROPIC_API_KEY.
     priority: P1
-    status: done
-    completed: 2026-04-11
+    status: open
     files:
-      - crates/crux-core/src/delegation.rs
-      - crates/crux-core/src/speculation.rs
-      - crates/crux-core/src/confidence.rs
-      - crates/crux-core/src/compose.rs
+      - crates/crux-agentic/Cargo.toml
+      - crates/crux-agentic/baml_src/
+      - crates/crux-agentic/src/llm.rs
+      - crates/crux-agentic/src/lib.rs
+      - crates/crux-agentic/tests/llm_extract.rs
+    extra:
+      - type: note
+        note: >
+          Committed d9cbaa0. BAML schemas + generated client checked in.
+          Remaining: validate with a real API key end-to-end.
 
-  - id: crux-4
-    title: "Phase 5-6: Replay engine and TaskRegistry"
+  - id: crux-21
+    name: demo-pipeline
+    title: "End-to-end demo pipeline: file → BAML extract → structured output"
     description: >
-      ReplayMode (Strict/Lenient) with by-name step matching. TaskRegistry<B>
-      typed API: submit/get/update_status/checkpoint/load_checkpoint/pending.
-      Task struct with status, input, checkpoint, attempts. ConfidenceRange for
-      route validation.
+      Write YAML pipelines exercising the full crux-agentic stack. At minimum:
+      examples/extract_summary.yaml (fs::read → llm::extract Summarize → json::write)
+      and examples/extract_entities.yaml. Update README with run instructions,
+      sample output, and API key note.
     priority: P1
-    status: done
-    completed: 2026-04-11
+    status: open
     files:
-      - crates/crux-core/src/replay.rs
-      - crates/crux-core/src/registry/task.rs
-      - crates/crux-core/src/registry/mod.rs
-
-  - id: crux-5
-    title: "Phase 7: Persistent storage adapter"
-    description: >
-      Persistent RegistryBackend behind a feature flag. Single tasks table,
-      Arc-wrapped for Send+Sync, upsert semantics, prefix list, guarded CAS.
-    priority: P2
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/registry/redb.rs
-
-  - id: crux-6
-    title: "CLAUDE.md and Justfile"
-    description: >
-      Add project CLAUDE.md with architecture, build commands, conventions.
-      Add Justfile for dev automation (check, test, fmt, clippy).
-    priority: P2
-    status: done
-    completed: 2026-04-11
-    files:
-      - CLAUDE.md
-      - justfile
-
-  - id: crux-7
-    name: solid-refactor
-    title: "SOLID refactoring: decompose CruxCtx into collaborators"
-    description: >
-      Extracted HookRegistry, StepRecorder, ReplayCache, and Context trait from
-      monolithic CruxCtx. Each module independently testable. Context trait provides
-      DIP port for agent runtime.
-    priority: P1
-    status: done
-    completed: 2026-04-11
-    files:
-      - crates/crux-core/src/hooks.rs
-      - crates/crux-core/src/recorder.rs
-      - crates/crux-core/src/replay.rs
-      - crates/crux-core/src/context.rs
-      - crates/crux-core/src/ctx.rs
-
-  - id: crux-8
-    name: ci-and-hooks
-    title: "GitHub Actions CI, git hooks, and justfile"
-    description: >
-      CI workflow (fmt, clippy, nextest, build). Pre-commit hook (fmt + clippy),
-      pre-push hook (nextest). Justfile with check/test/lint/ci/fix/hooks commands.
-    priority: P1
-    status: done
-    completed: 2026-04-11
-    files:
-      - .github/workflows/ci.yml
-      - .githooks/pre-commit
-      - .githooks/pre-push
-      - justfile
-
-  - id: crux-9
-    name: route-on-confidence
-    title: "route_on_confidence, pipe operator, join_all"
-    description: >
-      ConfidenceRange with exclusive/inclusive constructors. route_on_confidence
-      validates non-overlapping, gap-free, [0.0,1.0]-covering ranges. pipe chains
-      sequential closures with per-stage step recording. join_all fans out via
-      futures::join_all with per-arm step recording.
-    priority: P2
-    status: done
-    completed: 2026-04-11
-    files:
-      - crates/crux-core/src/ctx.rs
-
-  - id: crux-10
-    name: redb-migration
-    title: "Replace rusqlite with redb (pure-Rust embedded KV)"
-    description: >
-      Swap sqlite feature (rusqlite, C deps) for redb feature (pure-Rust).
-      RedbBackend with typed TableDefinition<&str, &[u8]>, ACID transactions,
-      CAS via read-modify-write in single write txn.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/registry/redb.rs
-      - crates/crux-core/src/registry/mod.rs
-      - crates/crux-core/Cargo.toml
-      - crates/crux/Cargo.toml
-      - Cargo.toml
-
-  - id: crux-11
-    name: join-all-hooks
-    title: "Normalize join_all budget check and failure hooks"
-    description: >
-      Add budget check before dispatching arms (mirrors step_with_confidence).
-      Consult on_step_failure hook for failed arms post-collection (mirrors
-      execute_single). Hooks run post-collection due to borrow checker constraint.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/ctx.rs
-
-  - id: crux-12
-    name: lenient-replay-identity
-    title: "Tighten ReplayMode::Lenient identity checks in forward scans"
-    description: >
-      Added content_hash (optional, ordinal-independent) to Step and ReplayEntry.
-      Forward scan uses content_hash when both sides provide one, filtering out
-      false-positive hits from name collisions. New step_keyed() method on Context
-      trait lets callers opt in by providing a serializable key. hash_content()
-      utility exported in prelude.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/replay.rs
-      - crates/crux-core/src/recorder.rs
-      - crates/crux-core/src/context.rs
-      - crates/crux-core/src/ctx.rs
-      - crates/crux-core/src/types/step.rs
-
-  - id: crux-13
-    name: macro-wiring
-    title: "Wire proc macro attributes: replay and registry"
-    description: >
-      Wired replay="lenient" attribute to call set_replay_mode in generated wrapper.
-      Wired registry="kind" to generate run_registered() method on agent struct
-      with TaskRegistry submit/update_status/checkpoint lifecycle.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-macros/src/agent.rs
-      - crates/crux/tests/agent_macro.rs
-
-  - id: crux-14
-    name: tracing
-    title: "Wire tracing feature flag with conditional instrumentation"
-    description: >
-      Added trace.rs with conditional macros (no-ops without tracing feature).
-      Events for step execution, delegation, speculation, join_all, pipe,
-      replay cache hits/misses, hook dispatch, and confidence routing.
-    priority: P2
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/trace.rs
-      - crates/crux-core/src/ctx.rs
-      - crates/crux-core/src/delegation.rs
-      - crates/crux-core/src/speculation.rs
-
-  - id: crux-15
-    name: streaming
-    title: "Streaming steps with incremental events"
-    description: >
-      Added step_stream() to Context trait and CruxCtx. Collects Stream items
-      as events on Step. New events field on Step (serde-skipped when empty).
-      4 integration tests.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/context.rs
-      - crates/crux-core/src/ctx.rs
-      - crates/crux-core/src/types/step.rs
-      - crates/crux/tests/streaming.rs
-
-  - id: crux-16
-    name: checkpoint-resume
-    title: "Mid-run checkpoint and resume from TaskRegistry"
-    description: >
-      Added CruxCtx::snapshot(), checkpoint_to(), and resume_from().
-      Checkpoint serializes in-progress trace to TaskRegistry.
-      Resume loads checkpoint and seeds replay cache. 3 integration tests.
-    priority: P1
-    status: done
-    completed: 2026-04-12
-    files:
-      - crates/crux-core/src/ctx.rs
-      - crates/crux/tests/checkpoint.rs
-
-  - id: crux-17
-    name: publish-readiness
-    title: "Publish-readiness: docs, examples, CHANGELOG, cargo-deny"
-    description: >
-      Rustdoc on all public items, examples/ directory, README expansion,
-      CHANGELOG.md, cargo-deny/audit clean, crates.io metadata audit.
-    priority: P2
-    status: done
-    completed: 2026-04-13
-    files:
+      - examples/extract_summary.yaml
+      - examples/extract_entities.yaml
       - README.md
-      - CHANGELOG.md
-      - examples/
+    extra:
+      - type: note
+        note: >
+          Depends on crux-20 (landed). Forge agent was dispatched but interrupted —
+          not yet committed. Needs to be re-run or completed manually.
 
-  - id: crux-18
-    name: crates-io-rename
-    title: "Rename crates crux-* -> cruxai-* for crates.io publish"
+  - id: crux-22
+    name: publish-crux-agentic
+    title: "Publish crux-agentic v0.2.1 to crates.io"
     description: >
-      crux, crux-core, crux-macros were already claimed on crates.io.
-      Renamed all four crates to cruxai, cruxai-core, cruxai-macros, cruxai-script.
-      Updated all Cargo.toml name/dependency fields, use statements, and hardcoded
-      ::crux_core:: paths in proc macro expansion. Published all four to crates.io.
-    priority: P1
-    status: done
-    completed: 2026-04-13
+      Audit Cargo.toml metadata, add lib-level rustdoc, ensure baml feature is
+      optional and documented, cargo publish --dry-run, then publish.
+      Blocked on crux-21 (README example).
+    priority: P2
+    status: blocked
     files:
-      - crates/crux-core/Cargo.toml
-      - crates/crux-macros/Cargo.toml
-      - crates/crux-script/Cargo.toml
-      - crates/crux/Cargo.toml
-      - crates/crux-macros/src/agent.rs
-      - crates/crux/src/lib.rs
+      - crates/crux-agentic/Cargo.toml
+      - crates/crux-agentic/src/lib.rs
+    extra:
+      - type: blocker
+        note: "Blocked on crux-21 (demo pipeline + README) and crux-20 API key validation"
 
-  - id: crux-19
-    name: slashcrux-integration
-    title: "Import StepStatus from slashcrux; wire shared vocabulary"
+  - id: crux-23
+    name: planner-design
+    title: "Design crux-planner: goal-to-pipeline generation"
     description: >
-      crux-core Cargo.toml updated to depend on slashcrux (path = ../../../slashcrux).
-      Next: replace local StepStatus definition in types/step.rs with
-      slashcrux::StepStatus import. Verify all existing tests still pass.
-      slashcrux lives at ~/dev/slashcrux — not yet a published crate.
-    priority: P1
-    status: done
-    completed: 2026-04-17
+      Write docs/planner-design.md covering: new crate vs YAML spec + BAML function,
+      input schema (NL goal vs structured intent), static vs dynamic pipeline output,
+      interaction with crux-script ArmDef/StepNode schema. Design only, no implementation.
+    priority: P2
+    status: open
     files:
-      - crates/crux-core/Cargo.toml
-      - crates/crux-core/src/types/step.rs
-      - crates/crux-core/src/types/mod.rs
+      - docs/planner-design.md
 
 log:
+  - date: 2026-04-17
+    summary: >
+      Session 11: Added llm::extract handler to crux-agentic behind optional baml feature flag.
+      BAML schemas (ExtractEntities, Summarize, Classify) + generated client checked in.
+      4 integration tests (3 API-gated). 226/226 tests passing. Linear issues JOB-246 through
+      JOB-249 created; mirrored to GitHub as crux#1-4. Demo pipeline (crux-21) forge agent
+      interrupted before commit.
+    commits:
+      - d9cbaa0
   - date: 2026-04-17
     summary: >
       Session 10: Crux-agentic crate completed with full handler suite (ctrl, shell, fs, git, json,
@@ -320,63 +116,11 @@ log:
   - date: 2026-04-13
     summary: >
       Session 7: Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml,
-      examples). Added crux-script crate and 7 YAML pipeline examples. Discovered
-      crux/crux-core/crux-macros names taken on crates.io; renamed all four crates to
-      cruxai-* (crux-18). Published cruxai-core, cruxai-macros, cruxai-script, cruxai
-      v0.1.0 to crates.io. 196/196 tests passing.
+      examples). Added crux-script crate and 7 YAML pipeline examples. Renamed all four
+      crates to cruxai-* (crux-18). Published cruxai-core, cruxai-macros, cruxai-script,
+      cruxai v0.1.0 to crates.io. 196/196 tests passing.
     commits:
       - 1dd57d1
       - c50a74a
       - c888375
       - 21914aa
-  - date: 2026-04-12
-    summary: >
-      Session 6: Phase 2 items crux-13 through crux-16. Wired replay/registry
-      macro attributes, added tracing instrumentation, step_stream() with events,
-      checkpoint/resume from TaskRegistry. 180 -> 196 tests. All features compile.
-    commits:
-      - 0bfadd0
-  - date: 2026-04-12
-    summary: >
-      Session 5: Tightened lenient replay identity (crux-12). Added content_hash
-      field to Step/ReplayEntry, forward scan filters by content_hash when present.
-      New step_keyed() on Context trait, hash_content() utility. 7 new tests
-      (5 replay + 2 ctx). 173 base + 7 redb = 180 total. All items closed.
-  - date: 2026-04-12
-    summary: >
-      Session 4: Replaced rusqlite/sqlite feature with redb (pure-Rust KV store,
-      zero C deps). Normalized join_all to check budget before dispatch and consult
-      on_step_failure hooks on arm errors. Added CLAUDE.md. Cleaned 9 stale doob
-      todos. 173 tests passing (166 base + 7 redb). Clippy clean.
-  - date: 2026-04-11
-    summary: >
-      Session 3: Closed crux-4 (ReplayMode strict/lenient, by-name step matching,
-      TaskRegistry with submit/get/update_status/checkpoint/pending), crux-5
-      (SqliteBackend behind sqlite feature flag), crux-9 (route_on_confidence,
-      pipe, join_all combinators on CruxCtx). 77 -> 113 tests (120 with sqlite).
-      All open items closed.
-  - date: 2026-04-11
-    summary: >
-      Session 2: Implemented lifecycle hooks (on_low_confidence, on_step_failure,
-      on_budget_exceeded) with full Recovery handling, step_retryable with retry loops,
-      replay from prior traces. 15 macro integration tests. SOLID refactoring: extracted
-      HookRegistry, StepRecorder, ReplayCache, Context trait from CruxCtx. Added CI
-      workflow, git hooks, justfile. Implemented DelegationBuilder (per-call-site budget
-      and hooks, child CruxCtx) and SpeculationBuilder (pick_best_by, first_ok, rejected
-      branch recording). 77 tests total, clippy clean.
-    commits:
-      - b8222ea
-      - 1464fe3
-      - 8571560
-      - 11d558f
-  - date: 2026-04-11
-    summary: >
-      Scaffolded workspace (crux, crux-core, crux-macros). Implemented all core
-      types (Crux<T>, Step, CruxErr, Budget, Recovery, IDs), CruxCtx with step()
-      and finalize(), Agent trait, RegistryBackend port, InMemoryBackend adapter,
-      #[crux::agent] proc macro with code generation. 24 tests passing.
-      Renamed project from trace to crux. Feature flags: tokio-runtime (default),
-      sqlite, tracing.
-    commits:
-      - 500e7cc
-      - bd9a5e1
