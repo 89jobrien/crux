@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260417:204500"
+updated: "20260417:220000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -10,13 +10,8 @@ items:
   - id: crux-20
     name: baml-llm-extract
     title: "Wire BAML structured output into llm::extract handler"
-    description: >
-      Add optional baml feature flag to crux-agentic. Implement llm::extract handler
-      backed by BAML for schema-validated structured LLM output (ExtractEntities,
-      Summarize, Classify). llm::complete stays unchanged. Integration tests cfg-gated
-      on OPENAI_API_KEY / ANTHROPIC_API_KEY.
     priority: P1
-    status: open
+    status: closed
     files:
       - crates/crux-agentic/Cargo.toml
       - crates/crux-agentic/baml_src/
@@ -26,8 +21,8 @@ items:
     extra:
       - type: note
         note: >
-          Committed d9cbaa0 (branch: main). BAML schemas + generated client checked in.
-          Remaining: validate with a real API key end-to-end.
+          Validated end-to-end with real OPENAI_API_KEY. All 33 tests pass including
+          classify, summarize, extract_entities integration tests. Closed session 13.
 
   - id: crux-21
     name: demo-pipeline
@@ -52,18 +47,17 @@ items:
 
   - id: crux-22
     name: publish-crux-agentic
-    title: "Publish crux-agentic v0.2.1 to crates.io"
-    description: >
-      Audit Cargo.toml metadata, add lib-level rustdoc, ensure baml feature is
-      optional and documented, cargo publish --dry-run, then publish.
+    title: "Publish crux-agentic v0.2.2 to crates.io"
     priority: P2
-    status: pending-validation
+    status: closed
     files:
       - crates/crux-agentic/Cargo.toml
       - crates/crux-agentic/src/lib.rs
     extra:
-      - type: blocker
-        note: "Awaiting crux-20 end-to-end API key validation before publish."
+      - type: note
+        note: >
+          Published crux-agentic v0.2.2 (bumped from 0.2.1 to include baml feature).
+          Commit dca076f. Live on crates.io. Session 13.
 
   - id: crux-23
     name: planner-design
@@ -84,6 +78,15 @@ items:
           integration with crux-script, and 4-phase implementation roadmap.
 
 log:
+  - date: "20260417:220000"
+    session: 13
+    summary: >
+      Closed crux-20: validated llm::extract end-to-end with real OPENAI_API_KEY (33/33
+      tests pass). Closed crux-22: bumped crux-agentic to v0.2.2 and published to
+      crates.io with baml feature included.
+    commits:
+      - sha: dca076f
+        branch: main
   - date: "20260417:204500"
     session: 12
     summary: >
