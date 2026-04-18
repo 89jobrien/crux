@@ -26,7 +26,7 @@ items:
     extra:
       - type: note
         note: >
-          Committed d9cbaa0. BAML schemas + generated client checked in.
+          Committed d9cbaa0 (branch: main). BAML schemas + generated client checked in.
           Remaining: validate with a real API key end-to-end.
 
   - id: crux-21
@@ -46,8 +46,9 @@ items:
     extra:
       - type: note
         note: >
-          Committed df3ae65. Both example YAML pipelines completed with input fixtures.
-          README updated with pipeline examples section and API key setup instructions.
+          Committed df3ae65 (branch: main). Both example YAML pipelines completed with
+          input fixtures. README updated with pipeline examples section and API key
+          setup instructions.
 
   - id: crux-22
     name: publish-crux-agentic
@@ -56,13 +57,13 @@ items:
       Audit Cargo.toml metadata, add lib-level rustdoc, ensure baml feature is
       optional and documented, cargo publish --dry-run, then publish.
     priority: P2
-    status: open
+    status: pending-validation
     files:
       - crates/crux-agentic/Cargo.toml
       - crates/crux-agentic/src/lib.rs
     extra:
-      - type: note
-        note: "crux-21 done (df3ae65). Unblocked. Awaiting crux-20 end-to-end API validation."
+      - type: blocker
+        note: "Awaiting crux-20 end-to-end API key validation before publish."
 
   - id: crux-23
     name: planner-design
@@ -78,66 +79,83 @@ items:
     extra:
       - type: note
         note: >
-          Committed 962c377. Comprehensive 400-line design doc covering both BAML-based and
-          Rust-crate paths, input/output schemas, composition rules, integration with
-          crux-script, and 4-phase implementation roadmap.
+          Committed 962c377 (branch: main). Comprehensive design doc covering both
+          BAML-based and Rust-crate paths, input/output schemas, composition rules,
+          integration with crux-script, and 4-phase implementation roadmap.
 
 log:
-  - date: 2026-04-17
+  - date: "2026-04-17T20:45:00Z"
+    session: 12
     summary: >
-      Session 12: Completed crux-21 (demo pipeline examples + README). Committed both
+      Completed crux-21 (demo pipeline examples + README). Committed both
       extract_summary.yaml and extract_entities.yaml with input fixtures. Updated README
       with pipeline examples section and API key setup instructions. Completed crux-23
-      (planner design): 400-line comprehensive spec covering BAML-based and Rust-crate
-      paths, input/output schemas, composition rules engine, integration with crux-script
-      ArmDef/StepNode, and 4-phase implementation roadmap. crux-22 unblocked.
-      226/226 tests passing.
+      (planner design): comprehensive spec covering BAML-based and Rust-crate paths,
+      input/output schemas, composition rules engine, integration with crux-script
+      ArmDef/StepNode, and 4-phase implementation roadmap. crux-22 moved to
+      pending-validation (awaits crux-20 API key validation).
     commits:
-      - df3ae65
-      - 962c377
-  - date: 2026-04-17
+      - sha: df3ae65
+        branch: main
+      - sha: 962c377
+        branch: main
+  - date: "2026-04-17T18:56:00Z"
+    session: 11
     summary: >
-      Session 11: Added llm::extract handler to crux-agentic behind optional baml feature flag.
+      Added llm::extract handler to crux-agentic behind optional baml feature flag.
       BAML schemas (ExtractEntities, Summarize, Classify) + generated client checked in.
-      4 integration tests (3 API-gated). 226/226 tests passing. Linear issues JOB-246 through
-      JOB-249 created; mirrored to GitHub as crux#1-4. Demo pipeline (crux-21) forge agent
-      interrupted before commit.
+      4 integration tests (3 API-gated). Linear issues JOB-246 through JOB-249 created;
+      mirrored to GitHub as crux#1-4. Demo pipeline (crux-21) forge agent interrupted
+      before commit.
     commits:
-      - d9cbaa0
-  - date: 2026-04-17
+      - sha: d9cbaa0
+        branch: main
+  - date: "2026-04-17T14:27:00Z"
+    session: 10
     summary: >
-      Session 10: Crux-agentic crate completed with full handler suite (ctrl, shell, fs, git, json,
-      llm modules, 17 handlers total), smoke tests, register_all inventory. ArmDef schema upgraded:
-      join_all and pipe stages, speculate arms accept full step objects with embedded args. Static
-      args injection on StepNode and RouteBranch. crux-run binary migrated from crux-script to
-      crux-agentic (avoids circular dep). joe/ YAML examples rewritten to canonical handler names.
-      crux-19 closed: slashcrux dep wired, Priority/Urgency/ExecutionContext/StepState re-exported
-      from prelude. Workspace bumped to v0.2.1, serde_yaml swapped for serde-saphyr. All 226 tests
-      passing, cargo check clean.
+      Crux-agentic crate completed with full handler suite (ctrl, shell, fs, git, json,
+      llm modules, 17 handlers total), smoke tests, register_all inventory. ArmDef schema
+      upgraded: join_all and pipe stages, speculate arms accept full step objects with
+      embedded args. Static args injection on StepNode and RouteBranch. crux-run binary
+      migrated from crux-script to crux-agentic (avoids circular dep). joe/ YAML examples
+      rewritten to canonical handler names. crux-19 closed: slashcrux dep wired,
+      Priority/Urgency/ExecutionContext/StepState re-exported from prelude. Workspace
+      bumped to v0.2.1, serde_yaml swapped for serde-saphyr. All 226 tests passing,
+      cargo check clean.
     commits:
-      - 0fc2808
-  - date: 2026-04-17
+      - sha: 0fc2808
+        branch: main
+  - date: "2026-04-17T08:00:00Z"
+    session: 9
     summary: >
-      Session 9: Published slashcrux v0.1.0 then v0.1.1 (renamed StepStatus -> StepState,
+      Published slashcrux v0.1.0 then v0.1.1 (renamed StepStatus -> StepState,
       lifecycle vs outcome distinction). Wired cruxai-core to depend on slashcrux v0.1.1;
       re-exported Priority, Urgency, ExecutionContext, StepState from cruxai prelude.
       Bumped workspace to v0.2.1, published all 5 cruxai crates. crux-19 closed.
     commits:
-      - 778389f
-      - 8d37ce3
-  - date: 2026-04-16
+      - sha: 778389f
+        branch: main
+      - sha: 8d37ce3
+        branch: main
+  - date: "2026-04-16T00:00:00Z"
+    session: 8
     summary: >
-      Session 8: Architecture design — introduced slashcrux shared vocabulary crate
+      Architecture design — introduced slashcrux shared vocabulary crate
       (Priority, Urgency, StepStatus, ExecutionContext). crux-core Cargo.toml wired to
       depend on slashcrux. crux-19 opened to complete StepStatus migration in types/step.rs.
-  - date: 2026-04-13
+  - date: "2026-04-13T00:00:00Z"
+    session: 7
     summary: >
-      Session 7: Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml,
-      examples). Added crux-script crate and 7 YAML pipeline examples. Renamed all four
-      crates to cruxai-* (crux-18). Published cruxai-core, cruxai-macros, cruxai-script,
-      cruxai v0.1.0 to crates.io. 196/196 tests passing.
+      Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml, examples).
+      Added crux-script crate and 7 YAML pipeline examples. Renamed all four crates to
+      cruxai-* (crux-18). Published cruxai-core, cruxai-macros, cruxai-script, cruxai
+      v0.1.0 to crates.io. 196/196 tests passing.
     commits:
-      - 1dd57d1
-      - c50a74a
-      - c888375
-      - 21914aa
+      - sha: 1dd57d1
+        branch: main
+      - sha: c50a74a
+        branch: main
+      - sha: c888375
+        branch: main
+      - sha: 21914aa
+        branch: main
