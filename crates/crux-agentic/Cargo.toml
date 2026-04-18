@@ -24,7 +24,7 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }
 glob = "0.3"
-baml = { version = "0.218.0", optional = true }
+baml = { version = "0.221.0", optional = true }
 
 [[bin]]
 name = "crux-run"

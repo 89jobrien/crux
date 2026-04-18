@@ -13,8 +13,8 @@ lint:
 test:
     cargo nextest run
 
-# Run full CI suite locally (fmt + clippy + test)
-ci: fmt lint test
+# Run full CI suite locally (fmt + clippy + test + baml check)
+ci: fmt lint test check-baml
 
 # Build all targets
 build:
@@ -28,3 +28,25 @@ hooks:
 # Format code in place
 fix:
     cargo fmt --all
+
+# Check BAML generator version matches baml crate version in Cargo.toml
+check-baml:
+    #!/usr/bin/env nu
+    let gen_ver = (open crates/crux-agentic/baml_src/generators.baml
+        | lines
+        | where { |l| $l =~ 'version' }
+        | first
+        | parse --regex '"([0-9]+\.[0-9]+\.[0-9]+)"'
+        | get capture0
+        | first)
+    let cargo_ver = (open --raw crates/crux-agentic/Cargo.toml
+        | lines
+        | where { |l| $l =~ 'version = "[0-9]' and ($l =~ '^baml') }
+        | first
+        | parse --regex 'version = "([0-9]+\.[0-9]+\.[0-9]+)"'
+        | get capture0
+        | first)
+    if $gen_ver != $cargo_ver {
+        error make { msg: $"BAML version mismatch: generators.baml=($gen_ver) Cargo.toml=($cargo_ver)" }
+    }
+    print $"BAML versions match: ($gen_ver)"
