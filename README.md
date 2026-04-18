@@ -88,31 +88,101 @@ cruxai = "0.1"
 
 Requires Rust 1.85+ (edition 2024).
 
+## Running pipelines
+
+`crux-run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
+feature to enable LLM extraction:
+
+```bash
+cargo build -p crux-agentic --features baml --bin crux-run
+```
+
+Set your API key — BAML picks it up automatically:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # Claude (default BAML client)
+# or
+export OPENAI_API_KEY=sk-...          # OpenAI
+```
+
+**Summarize text:**
+
+```bash
+crux-run examples/extract_summary.yaml examples/input_summary.json
+```
+
+```
+Pipeline: extract_summary
+Status:   OK
+Duration: 1823.4ms
+Steps:    2
+
+Trace:
+   1. [  OK] summarize (1821ms)
+   2. [  OK] log_output (1ms)
+
+Output:
+{
+  "summary": "Crux is an agentic DSL for Rust that makes control flow explicit in the type
+system via Crux<T> values.",
+  "key_points": [
+    "Every execution unit is a first-class Crux<T> value",
+    "CruxCtx provides step(), delegate(), speculate(), pipe(), join_all()",
+    "TaskRegistry supports InMemoryBackend and RedbBackend"
+  ],
+  "word_count": 89
+}
+```
+
+**Extract named entities:**
+
+```bash
+crux-run examples/extract_entities.yaml examples/input_entities.json
+```
+
+```
+Pipeline: extract_entities
+Status:   OK
+Duration: 1540.2ms
+Steps:    2
+
+Trace:
+   1. [  OK] extract (1538ms)
+   2. [  OK] log_output (1ms)
+
+Output:
+{
+  "entities": [
+    { "name": "Crux",        "entity_type": "Software",   "description": "Agentic DSL for Rust" },
+    { "name": "CruxCtx",     "entity_type": "Component",  "description": "Runtime context" },
+    { "name": "RedbBackend", "entity_type": "Component",  "description": "Persistent KV adapter" }
+  ]
+}
+```
+
+### Available handlers
+
+| Handler | Key args | Description |
+|---------|----------|-------------|
+| `llm::extract` | `function`, `input` | BAML-backed extraction (`baml` feature required) |
+| `llm::complete` | `prompt`, `provider`, `model` | Raw LLM completion via OpenAI or Anthropic |
+| `fs::read` | `path` | Read a file; output: `{ content, path }` |
+| `fs::write` | `path`, `content` | Write a string to a file |
+| `shell::capture` | `cmd` | Run a shell command; output: `{ stdout, stderr, exit_code }` |
+| `ctrl::log` | — | Log input to stderr and pass through |
+| `ctrl::noop` | — | Pass input through unchanged |
+| `json::pick` | `fields` | Extract named fields from the input object |
+| `json::jq` | `expr` | Minimal dot-path traversal (e.g. `".foo.bar"`) |
+
 ## Examples
 
-### Rust Agents
+### Rust agents
 
 ```bash
 cargo run --example basic_agent
 ```
 
-### YAML Pipelines (crux-agentic)
-
-Crux includes a built-in handler registry for scripting pipelines via YAML:
-
-**Summarize text with BAML:**
-```bash
-ANTHROPIC_API_KEY=$YOUR_KEY crux-run examples/extract_summary.yaml \
-  examples/input_summary.json
-```
-
-**Extract entities with BAML:**
-```bash
-ANTHROPIC_API_KEY=$YOUR_KEY crux-run examples/extract_entities.yaml \
-  examples/input_entities.json
-```
-
-See [`examples/`](examples/) for pipeline definitions and input fixtures.
+See [`examples/`](examples/) for pipeline YAML and input fixtures.
 
 ## Documentation
 
