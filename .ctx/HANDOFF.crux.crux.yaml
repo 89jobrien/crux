@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "2026-04-17T20:45:00Z"
+updated: "20260417:204500Z"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -84,7 +84,7 @@ items:
           integration with crux-script, and 4-phase implementation roadmap.
 
 log:
-  - date: "2026-04-17T20:45:00Z"
+  - date: "20260417:204500Z"
     session: 12
     summary: >
       Completed crux-21 (demo pipeline examples + README). Committed both
@@ -99,7 +99,7 @@ log:
         branch: main
       - sha: 962c377
         branch: main
-  - date: "2026-04-17T18:56:00Z"
+  - date: "20260417:185600Z"
     session: 11
     summary: >
       Added llm::extract handler to crux-agentic behind optional baml feature flag.
@@ -110,7 +110,7 @@ log:
     commits:
       - sha: d9cbaa0
         branch: main
-  - date: "2026-04-17T14:27:00Z"
+  - date: "20260417:142700Z"
     session: 10
     summary: >
       Crux-agentic crate completed with full handler suite (ctrl, shell, fs, git, json,
@@ -125,7 +125,7 @@ log:
     commits:
       - sha: 0fc2808
         branch: main
-  - date: "2026-04-17T08:00:00Z"
+  - date: "20260417:080000Z"
     session: 9
     summary: >
       Published slashcrux v0.1.0 then v0.1.1 (renamed StepStatus -> StepState,
@@ -137,13 +137,13 @@ log:
         branch: main
       - sha: 8d37ce3
         branch: main
-  - date: "2026-04-16T00:00:00Z"
+  - date: "20260416:000000Z"
     session: 8
     summary: >
       Architecture design — introduced slashcrux shared vocabulary crate
       (Priority, Urgency, StepStatus, ExecutionContext). crux-core Cargo.toml wired to
       depend on slashcrux. crux-19 opened to complete StepStatus migration in types/step.rs.
-  - date: "2026-04-13T00:00:00Z"
+  - date: "20260413:000000Z"
     session: 7
     summary: >
       Completed crux-17 publish-readiness (README, CHANGELOG, deny.toml, examples).
