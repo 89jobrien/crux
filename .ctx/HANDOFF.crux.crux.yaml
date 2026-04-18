@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "2026-04-17"
+updated: "2026-04-17T20:45:00Z"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -38,7 +38,7 @@ items:
       and examples/extract_entities.yaml. Update README with run instructions,
       sample output, and API key note.
     priority: P1
-    status: open
+    status: closed
     files:
       - examples/extract_summary.yaml
       - examples/extract_entities.yaml
@@ -46,8 +46,8 @@ items:
     extra:
       - type: note
         note: >
-          Depends on crux-20 (landed). Forge agent was dispatched but interrupted —
-          not yet committed. Needs to be re-run or completed manually.
+          Committed df3ae65. Both example YAML pipelines completed with input fixtures.
+          README updated with pipeline examples section and API key setup instructions.
 
   - id: crux-22
     name: publish-crux-agentic
@@ -55,15 +55,14 @@ items:
     description: >
       Audit Cargo.toml metadata, add lib-level rustdoc, ensure baml feature is
       optional and documented, cargo publish --dry-run, then publish.
-      Blocked on crux-21 (README example).
     priority: P2
-    status: blocked
+    status: open
     files:
       - crates/crux-agentic/Cargo.toml
       - crates/crux-agentic/src/lib.rs
     extra:
-      - type: blocker
-        note: "Blocked on crux-21 (demo pipeline + README) and crux-20 API key validation"
+      - type: note
+        note: "crux-21 done (df3ae65). Unblocked. Awaiting crux-20 end-to-end API validation."
 
   - id: crux-23
     name: planner-design
@@ -73,11 +72,29 @@ items:
       input schema (NL goal vs structured intent), static vs dynamic pipeline output,
       interaction with crux-script ArmDef/StepNode schema. Design only, no implementation.
     priority: P2
-    status: open
+    status: closed
     files:
       - docs/planner-design.md
+    extra:
+      - type: note
+        note: >
+          Committed 962c377. Comprehensive 400-line design doc covering both BAML-based and
+          Rust-crate paths, input/output schemas, composition rules, integration with
+          crux-script, and 4-phase implementation roadmap.
 
 log:
+  - date: 2026-04-17
+    summary: >
+      Session 12: Completed crux-21 (demo pipeline examples + README). Committed both
+      extract_summary.yaml and extract_entities.yaml with input fixtures. Updated README
+      with pipeline examples section and API key setup instructions. Completed crux-23
+      (planner design): 400-line comprehensive spec covering BAML-based and Rust-crate
+      paths, input/output schemas, composition rules engine, integration with crux-script
+      ArmDef/StepNode, and 4-phase implementation roadmap. crux-22 unblocked.
+      226/226 tests passing.
+    commits:
+      - df3ae65
+      - 962c377
   - date: 2026-04-17
     summary: >
       Session 11: Added llm::extract handler to crux-agentic behind optional baml feature flag.
