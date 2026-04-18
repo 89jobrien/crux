@@ -1,4 +1,6 @@
 target/
+# BAML generated client — regenerate with `baml-cli generate`
+**/baml_client/
 .ctx/*
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.md
