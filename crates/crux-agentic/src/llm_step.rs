@@ -83,10 +83,7 @@ mod tests {
 
         struct FailingProvider;
         impl LlmProvider for FailingProvider {
-            async fn complete(
-                &self,
-                _req: LlmRequest,
-            ) -> Result<LlmResponse, CruxErr> {
+            async fn complete(&self, _req: LlmRequest) -> Result<LlmResponse, CruxErr> {
                 Err(CruxErr::step_failed("mock", "intentional failure"))
             }
         }

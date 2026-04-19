@@ -32,9 +32,7 @@ pub struct PluginEntry {
 
 /// Load a manifest from a TOML file path, returning `Default`
 /// (empty) if the file doesn't exist.
-pub fn load_manifest(
-    path: impl AsRef<std::path::Path>,
-) -> Result<PluginManifest, ManifestError> {
+pub fn load_manifest(path: impl AsRef<std::path::Path>) -> Result<PluginManifest, ManifestError> {
     let path = path.as_ref();
     if !path.exists() {
         return Ok(PluginManifest::default());

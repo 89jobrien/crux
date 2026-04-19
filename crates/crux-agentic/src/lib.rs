@@ -41,10 +41,7 @@ pub fn register_all(registry: &mut HandlerRegistry) {
 
 /// Register all built-in handlers, including plugin handler descriptions
 /// for the planner.
-pub fn register_all_with_plugins(
-    registry: &mut HandlerRegistry,
-    plugin_handlers: Vec<String>,
-) {
+pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers: Vec<String>) {
     shell::register(registry);
     fs::register(registry);
     git::register(registry);

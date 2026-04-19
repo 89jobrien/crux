@@ -199,10 +199,7 @@ fn format_plan_output(yaml: &str, goal: &str, output_type: &OutputType) -> Strin
             out.push_str(&format!("# Generated pipeline: {}\n", pipeline.pipeline));
             out.push_str(&format!("# Goal: {goal}\n"));
             out.push_str(&format!("# Steps: {}\n", pipeline.steps.len()));
-            out.push_str(&format!(
-                "# Handlers: {}\n",
-                handlers.join(", ")
-            ));
+            out.push_str(&format!("# Handlers: {}\n", handlers.join(", ")));
             out.push_str("#\n\n");
             out.push_str(yaml);
             out
@@ -246,17 +243,11 @@ fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
 
     for (i, step) in pipeline.steps.iter().enumerate() {
         let (id, name, handler) = match step {
-            StepDef::Step(n) => (
-                &n.step,
-                &n.step,
-                n.handler.as_deref().unwrap_or(&n.step),
-            ),
+            StepDef::Step(n) => (&n.step, &n.step, n.handler.as_deref().unwrap_or(&n.step)),
             StepDef::Pipe(n) => (&n.pipe, &n.pipe, n.pipe.as_str()),
             StepDef::JoinAll(n) => (&n.join_all, &n.join_all, n.join_all.as_str()),
             StepDef::Delegate(n) => (&n.delegate, &n.delegate, n.delegate.as_str()),
-            StepDef::Speculate(n) => {
-                (&n.speculate, &n.speculate, n.speculate.as_str())
-            }
+            StepDef::Speculate(n) => (&n.speculate, &n.speculate, n.speculate.as_str()),
             StepDef::RouteOnConfidence(n) => (
                 &n.route_on_confidence,
                 &n.route_on_confidence,
@@ -266,9 +257,7 @@ fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
 
         out.push_str(&format!("  - id: step-{}\n", i + 1));
         out.push_str(&format!("    name: {name}\n"));
-        out.push_str(&format!(
-            "    title: \"Execute {id} via {handler}\"\n"
-        ));
+        out.push_str(&format!("    title: \"Execute {id} via {handler}\"\n"));
         out.push_str(&format!(
             "    description: >\n      Pipeline step {}: {handler}\n",
             i + 1
@@ -279,7 +268,6 @@ fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
 
     out
 }
-
 
 /// Warn if the pipeline uses LLM handlers but no API keys are set.
 fn warn_missing_env(pipeline: &PipelineDef) {
@@ -316,10 +304,7 @@ fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
 }
 
 /// Build a registry seeded with all crux-agentic built-in handlers.
-async fn build_registry(
-    pipeline: &PipelineDef,
-    plugins_path: Option<&str>,
-) -> HandlerRegistry {
+async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> HandlerRegistry {
     let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
 
     let plugin_handler_descs: Vec<String> = manifest

@@ -1,9 +1,9 @@
+use crux_agentic::provider::{LlmProvider, LlmRequest, LlmResponse};
 /// Conformance tests: LlmProvider port — stub adapter satisfies the trait contract.
 ///
 /// Verifies: a user-defined type can implement LlmProvider, the port types are
 /// Serialize+DeserializeOwned, and serde semantics match the spec.
 use cruxai::prelude::CruxErr;
-use crux_agentic::provider::{LlmProvider, LlmRequest, LlmResponse};
 
 // ── stub adapter ──────────────────────────────────────────────────────────────
 

@@ -103,9 +103,10 @@ impl PluginHost {
             .ok_or_else(|| PluginError::HandlerNotFound(handler.into()))?
             .clone();
 
-        let proc = self.plugins.get_mut(&plugin_name).ok_or_else(|| {
-            PluginError::Protocol(format!("plugin '{plugin_name}' not running"))
-        })?;
+        let proc = self
+            .plugins
+            .get_mut(&plugin_name)
+            .ok_or_else(|| PluginError::Protocol(format!("plugin '{plugin_name}' not running")))?;
 
         let req = Request::Invoke {
             handler: handler.into(),
@@ -147,8 +148,7 @@ impl Default for PluginHost {
 
 /// Send a request and read one response line.
 async fn send_recv(proc: &mut PluginProcess, req: &Request) -> Result<Response, PluginError> {
-    let mut line =
-        serde_json::to_string(req).map_err(|e| PluginError::Protocol(e.to_string()))?;
+    let mut line = serde_json::to_string(req).map_err(|e| PluginError::Protocol(e.to_string()))?;
     line.push('\n');
 
     proc.stdin
@@ -175,7 +175,10 @@ async fn send_recv(proc: &mut PluginProcess, req: &Request) -> Result<Response, 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
     #[error("failed to spawn plugin '{plugin}': {source}")]
-    Spawn { plugin: String, source: std::io::Error },
+    Spawn {
+        plugin: String,
+        source: std::io::Error,
+    },
     #[error("plugin IO error: {0}")]
     Io(std::io::Error),
     #[error("plugin protocol error: {0}")]

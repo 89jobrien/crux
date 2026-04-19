@@ -65,8 +65,11 @@ impl Agent for DoubleAgent {
     }
 
     async fn run(ctx: &mut cruxai::ctx::CruxCtx, input: u32) -> Result<u32, CruxErr> {
-        ctx.step("double_inner", || async move { Ok::<u32, CruxErr>(input * 2) })
-            .await
+        ctx.step(
+            "double_inner",
+            || async move { Ok::<u32, CruxErr>(input * 2) },
+        )
+        .await
     }
 }
 

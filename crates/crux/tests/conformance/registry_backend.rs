@@ -1,9 +1,9 @@
+use cruxai::prelude::TaskId;
 /// Conformance tests: RegistryBackend port — InMemoryBackend adapter.
 ///
 /// Verifies InMemoryBackend satisfies every clause of the RegistryBackend port
 /// contract as a downstream consumer of the public API.
 use cruxai::registry::{InMemoryBackend, RegistryBackend, TaskRegistry, TaskStatus};
-use cruxai::prelude::TaskId;
 
 // ── get/put round-trip ──────────────────────────────────────────────────────
 
@@ -113,7 +113,10 @@ async fn conformance_registry_cas_rejects_on_missing_key() {
 #[tokio::test]
 async fn conformance_registry_submit_creates_pending_task() {
     let reg = TaskRegistry::new(InMemoryBackend::new());
-    let id = reg.submit("my_kind", serde_json::json!({"x": 1})).await.unwrap();
+    let id = reg
+        .submit("my_kind", serde_json::json!({"x": 1}))
+        .await
+        .unwrap();
     let task = reg.get(&id).await.unwrap();
     assert_eq!(task.status, TaskStatus::Pending);
     assert_eq!(task.kind, "my_kind");

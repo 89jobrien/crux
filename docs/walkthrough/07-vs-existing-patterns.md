@@ -9,7 +9,7 @@ side: the pattern you'd already know, and what changes under `cruxai::`.
 
 ## vs. hand-rolled `tokio::spawn` + channels
 
-**The hand-rolled version** — every Rust agent author has written this:
+**The hand-rolled version** — every agentic engineer has written some variation of:
 
 ```rust
 let (tx, mut rx) = mpsc::channel(32);
@@ -32,7 +32,7 @@ You end up with:
 - A bespoke `PlanEvent` enum per agent
 - Retry logic at the `rx.recv()` site
 - Tracing via `tracing::info!` scattered through the code
-- No record of what the agent _considered_ — only what it did
+- No record of what the agent considered, only what it did
 
 **Under `cruxai::`:**
 
@@ -45,7 +45,7 @@ if let Err(e) = crux.value() {
 
 What moved:
 
-| Hand-rolled                   | `cruxai::`                                   |
+| Hand-rolled                   | `cruxai::`                                 |
 | ----------------------------- | ------------------------------------------ |
 | Event enum per agent          | `Crux<T>` is the universal event type      |
 | Retry logic at receiver       | `on_step_failure` hook at the agent        |
@@ -71,7 +71,7 @@ observability.
 
 **Where they diverge:**
 
-| `tracing`                       | `cruxai::`                                 |
+| `tracing`                       | `cruxai::`                               |
 | ------------------------------- | ---------------------------------------- |
 | Spans are observability         | Steps are program state                  |
 | `Span` is a side effect         | `Crux<T>` is the return value            |
@@ -105,12 +105,12 @@ reinvented most of `cruxai::`. The patterns converge because the problems
 are the same. The differences tend to be:
 
 | Your hand-rolled version            | `cruxai::`                                |
-| ----------------------------------- | --------------------------------------- |
-| `AgentRun` struct in your code      | `Crux<T>` as a generic type             |
-| Manual `run.record_step(...)` calls | `x.step(...)` via macro                 |
+| ----------------------------------- | ----------------------------------------- |
+| `AgentRun` struct in your code      | `Crux<T>` as a generic type               |
+| Manual `run.record_step(...)` calls | `x.step(...)` via macro                   |
 | Checkpointing bolted on later       | `#[cruxai::agent(checkpoint_every_step)]` |
-| `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work  |
-| Status enum per agent               | `Task<S>` with user-defined `S`         |
+| `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work    |
+| Status enum per agent               | `Task<S>` with user-defined `S`           |
 
 The most interesting question is: **should you throw out your own crate
 and use `cruxai::`?** The honest answer is that it depends on three things:
@@ -148,7 +148,7 @@ model is "define nodes and edges, run the graph, inspect the state."
 
 **Where they diverge:**
 
-| LangGraph                               | `cruxai::`                                                 |
+| LangGraph                               | `cruxai::`                                               |
 | --------------------------------------- | -------------------------------------------------------- |
 | Graph is data, defined before execution | Crux is code, built during execution                     |
 | State is a shared mutable object        | Crux is a value that flows through `?`                   |
@@ -188,7 +188,7 @@ Goal, the Backstory) is the primary abstraction.
 
 **Where they diverge:**
 
-| CrewAI / AutoGen               | `cruxai::`                                 |
+| CrewAI / AutoGen               | `cruxai::`                               |
 | ------------------------------ | ---------------------------------------- |
 | Agent = role + prompt template | Agent = `impl Agent` trait               |
 | Communication = messages       | Communication = `delegate` return values |
@@ -228,7 +228,7 @@ used Temporal, a lot of `cruxai::` will feel familiar.
 
 **Where they diverge:**
 
-| Temporal                                    | `cruxai::`                                 |
+| Temporal                                    | `cruxai::`                               |
 | ------------------------------------------- | ---------------------------------------- |
 | Separate workflow service                   | Lives in your process                    |
 | Activities are RPC calls                    | Steps are closures in your function      |
@@ -253,12 +253,12 @@ what you look at to debug the LLM behavior.
 ## Summary table
 
 | Tool                      | Best at                    | Weakness                 | `cruxai::` relationship                             |
-| ------------------------- | -------------------------- | ------------------------ | ------------------------------------------------- |
+| ------------------------- | -------------------------- | ------------------------ | --------------------------------------------------- |
 | `tokio::spawn` + channels | Raw flexibility            | No structure, no replay  | `cruxai::` structures this for agents               |
 | `tracing` crate           | Observability for services | No replay, no confidence | Use alongside; `cruxai::` can emit `tracing` events |
 | Your own `agent_crux`     | Domain-specific providers  | Reinventing wheel        | `cruxai::` is the shell; keep your providers        |
-| LangGraph                 | Visual graph authoring     | Python, stateful         | Different paradigm; pick one                      |
-| CrewAI / AutoGen          | Multi-agent personas       | No first-class crux      | Adjacent problems; composable                     |
+| LangGraph                 | Visual graph authoring     | Python, stateful         | Different paradigm; pick one                        |
+| CrewAI / AutoGen          | Multi-agent personas       | No first-class crux      | Adjacent problems; composable                       |
 | Temporal                  | Durable workflows at scale | Requires a service       | `cruxai::` is the library version                   |
 
 ## The design philosophy

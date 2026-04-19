@@ -11,7 +11,8 @@ use cruxai::prelude::*;
 async fn conformance_context_step_appends_to_trace() {
     #[cruxai::agent]
     async fn single_step_agent() -> Crux<u32> {
-        x.step("compute", || async { Ok::<u32, CruxErr>(42) }).await?;
+        x.step("compute", || async { Ok::<u32, CruxErr>(42) })
+            .await?;
         Ok(0)
     }
 
@@ -43,7 +44,9 @@ async fn conformance_context_step_result_returned_to_caller() {
     #[cruxai::agent]
     async fn value_agent() -> Crux<String> {
         let v = x
-            .step("produce", || async { Ok::<String, CruxErr>("hello".into()) })
+            .step("produce", || async {
+                Ok::<String, CruxErr>("hello".into())
+            })
             .await?;
         Ok(v)
     }
@@ -66,7 +69,10 @@ async fn conformance_context_step_error_propagates_as_crux_err() {
     }
 
     let crux = failing_agent().await;
-    assert!(crux.value().is_err(), "step error must propagate via Crux<T>");
+    assert!(
+        crux.value().is_err(),
+        "step error must propagate via Crux<T>"
+    );
 }
 
 // ── default budget is effectively unlimited ───────────────────────────────────
@@ -120,5 +126,8 @@ async fn conformance_context_finished_at_set_on_completion() {
     }
 
     let crux = done_agent().await;
-    assert!(crux.finished_at.is_some(), "finished_at must be set after run");
+    assert!(
+        crux.finished_at.is_some(),
+        "finished_at must be set after run"
+    );
 }

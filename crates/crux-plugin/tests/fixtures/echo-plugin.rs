@@ -19,10 +19,7 @@ fn main() {
 
         let req: serde_json::Value = serde_json::from_str(&line).expect("invalid JSON");
 
-        let method = req
-            .get("method")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("");
 
         let resp = match method {
             "Declare" => serde_json::json!({

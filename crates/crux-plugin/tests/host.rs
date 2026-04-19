@@ -45,8 +45,6 @@ async fn host_shutdown() {
     host.load_plugin(&echo_entry()).await.unwrap();
     host.shutdown_all().await;
     // After shutdown, invoke should error
-    let result = host
-        .invoke("echo::reflect", serde_json::json!({}))
-        .await;
+    let result = host.invoke("echo::reflect", serde_json::json!({})).await;
     assert!(result.is_err());
 }

@@ -39,6 +39,9 @@ fn register_all_installs_baml_handlers() {
     let baml_expected = ["llm::extract", "llm::decompose", "llm::plan"];
 
     for name in &baml_expected {
-        assert!(reg.get_handler(name).is_some(), "missing BAML handler: {name}");
+        assert!(
+            reg.get_handler(name).is_some(),
+            "missing BAML handler: {name}"
+        );
     }
 }

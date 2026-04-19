@@ -27,7 +27,11 @@ steps:
     let runner = Runner::new(Arc::new(registry));
     // Pass a scalar string as input — not a JSON object
     let crux = runner.run(&pipeline, json!("raw-scalar")).await;
-    assert!(crux.value().is_ok(), "run should succeed: {:?}", crux.value());
+    assert!(
+        crux.value().is_ok(),
+        "run should succeed: {:?}",
+        crux.value()
+    );
     let out = crux.value().unwrap();
     assert_eq!(out["cmd"].as_str().unwrap(), "ls");
     assert_eq!(out["original"].as_str().unwrap(), "raw-scalar");

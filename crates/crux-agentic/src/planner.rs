@@ -75,11 +75,7 @@ pub async fn generate_pipeline(
     handlers.extend_from_slice(extra_handlers);
     let result = B
         .GeneratePipeline
-        .call(
-            goal.to_string(),
-            &handlers,
-            constraints.map(str::to_string),
-        )
+        .call(goal.to_string(), &handlers, constraints.map(str::to_string))
         .await
         .map_err(|e| CruxErr::step_failed("llm::plan", format!("BAML: {e}")))?;
     Ok(result.yaml)
