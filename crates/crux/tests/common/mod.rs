@@ -18,7 +18,7 @@ pub async fn echo(msg: String) -> Crux<String> {
 /// Doubles its i32 input via a single recorded step.
 #[cruxai::agent]
 pub async fn doubler(n: i32) -> Crux<i32> {
-    let result: i32 = t
+    let result: i32 = x
         .step("double", || {
             let v = n;
             async move { Ok(v * 2) }
@@ -41,14 +41,14 @@ pub async fn failer(_input: String) -> Crux<String> {
 /// Useful for tests that need a multi-step agent with inspectable trace shape.
 #[cruxai::agent]
 pub async fn counter(text: String) -> Crux<usize> {
-    let words: Vec<String> = t
+    let words: Vec<String> = x
         .step("tokenize", || {
             let t = text.clone();
             async move { Ok(t.split_whitespace().map(str::to_string).collect::<Vec<_>>()) }
         })
         .await?;
 
-    let count: usize = t
+    let count: usize = x
         .step("count", || {
             let n = words.len();
             async move { Ok(n) }

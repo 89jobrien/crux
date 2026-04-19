@@ -86,7 +86,8 @@ mod tests {
             fn complete(
                 &self,
                 _req: LlmRequest,
-            ) -> impl std::future::Future<Output = Result<LlmResponse, CruxErr>> + Send {
+            ) -> impl std::future::Future<Output = Result<LlmResponse, CruxErr>> + Send
+            {
                 async { Err(CruxErr::step_failed("mock", "intentional failure")) }
             }
         }

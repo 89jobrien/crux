@@ -1,10 +1,10 @@
 use crate::adapters::{AnthropicAdapter, OpenAiAdapter};
 use crate::error::opt_str;
-use crate::provider::LlmRequest;
 use crate::provider::LlmProvider;
+use crate::provider::LlmRequest;
 use cruxai_core::prelude::CruxErr;
 use cruxai_script::HandlerRegistry;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Register the `llm::extract` handler.  Only compiled when the `baml` feature is enabled.
 #[cfg(feature = "baml")]
@@ -15,9 +15,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
         let function = input
             .get("function")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CruxErr::step_failed("llm::extract", "missing 'function' field")
-            })?
+            .ok_or_else(|| CruxErr::step_failed("llm::extract", "missing 'function' field"))?
             .to_string();
 
         let input_map = input
@@ -53,13 +51,9 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     })?
                     .to_string();
 
-                let result = b
-                    .ExtractEntities
-                    .call(text)
-                    .await
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
+                let result = b.ExtractEntities.call(text).await.map_err(|e| {
+                    CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                })?;
 
                 let entities: Vec<Value> = result
                     .entities
@@ -88,13 +82,9 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     .and_then(|v| v.as_i64())
                     .unwrap_or(3);
 
-                let result = b
-                    .Summarize
-                    .call(text, max_sentences)
-                    .await
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
+                let result = b.Summarize.call(text, max_sentences).await.map_err(|e| {
+                    CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                })?;
 
                 Ok(json!({
                     "summary": result.summary,
@@ -121,13 +111,9 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     .filter_map(|v| v.as_str().map(str::to_string))
                     .collect();
 
-                let result = b
-                    .Classify
-                    .call(text, &labels)
-                    .await
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
+                let result = b.Classify.call(text, &labels).await.map_err(|e| {
+                    CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                })?;
 
                 Ok(json!({
                     "label": result.label,

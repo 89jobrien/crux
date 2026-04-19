@@ -6,13 +6,13 @@ use cruxai::registry::InMemoryBackend;
 
 #[cruxai::agent]
 async fn adder(n: i32) -> Crux<i32> {
-    let a: i32 = t
+    let a: i32 = x
         .step("add_ten", || {
             let v = n;
             async move { Ok(v + 10) }
         })
         .await?;
-    let b: i32 = t
+    let b: i32 = x
         .step("add_five", || {
             let v = a;
             async move { Ok(v + 5) }

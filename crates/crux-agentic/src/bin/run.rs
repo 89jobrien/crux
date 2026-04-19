@@ -54,9 +54,7 @@ fn build_registry(pipeline: &PipelineDef) -> HandlerRegistry {
             reg.handler(name, move |_input: Value| {
                 let handler_name = n.clone();
                 async move {
-                    eprintln!(
-                        "[crux-run] warning: no builtin for '{handler_name}', using stub"
-                    );
+                    eprintln!("[crux-run] warning: no builtin for '{handler_name}', using stub");
                     Ok(json!({
                         "_stub": handler_name,
                         "confidence": 0.5,

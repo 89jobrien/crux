@@ -9,13 +9,13 @@ mod parse;
 
 /// Marks an async function as a crux agent.
 ///
-/// Injects a `CruxCtx` binding called `t`, wraps the return type from
+/// Injects a `CruxCtx` binding called `x`, wraps the return type from
 /// `Result<T, CruxErr>` into `Crux<T>`, and generates an `Agent` trait impl.
 ///
 /// # Options
 ///
 /// - `registry = "name"` — bind to a TaskRegistry for checkpointing
-/// - `checkpoint_every_step` — checkpoint after every `t.step()` call
+/// - `checkpoint_every_step` — checkpoint after every `x.step()` call
 /// - `replay = "strict"|"lenient"` — replay mode (default: strict)
 #[proc_macro_attribute]
 pub fn agent(attr: TokenStream, item: TokenStream) -> TokenStream {

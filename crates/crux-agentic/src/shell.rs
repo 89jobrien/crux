@@ -1,6 +1,6 @@
 use cruxai_core::prelude::CruxErr;
 use cruxai_script::HandlerRegistry;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::process::Command;
 
 use crate::error::{opt_str, require_str};
@@ -25,9 +25,10 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
         command.current_dir(dir);
     }
 
-    let output = command.output().await.map_err(|e| {
-        CruxErr::step_failed("shell", format!("failed to spawn process: {e}"))
-    })?;
+    let output = command
+        .output()
+        .await
+        .map_err(|e| CruxErr::step_failed("shell", format!("failed to spawn process: {e}")))?;
 
     let exit_code = output.status.code().unwrap_or(-1);
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();

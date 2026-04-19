@@ -8,18 +8,18 @@ use crate::error::require_str;
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler("fs::read", |input: Value| async move {
         let path = require_str(&input, "path")?.to_string();
-        let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
-            CruxErr::step_failed("fs::read", format!("cannot read {path}: {e}"))
-        })?;
+        let content = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| CruxErr::step_failed("fs::read", format!("cannot read {path}: {e}")))?;
         Ok(json!({ "content": content, "path": path }))
     });
 
     registry.handler("fs::write", |input: Value| async move {
         let path = require_str(&input, "path")?.to_string();
         let content = require_str(&input, "content")?.to_string();
-        tokio::fs::write(&path, &content).await.map_err(|e| {
-            CruxErr::step_failed("fs::write", format!("cannot write {path}: {e}"))
-        })?;
+        tokio::fs::write(&path, &content)
+            .await
+            .map_err(|e| CruxErr::step_failed("fs::write", format!("cannot write {path}: {e}")))?;
         Ok(json!({ "written": true, "path": path }))
     });
 

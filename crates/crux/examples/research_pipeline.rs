@@ -59,9 +59,7 @@ async fn pipeline(ctx: &mut CruxCtx, query: String) -> Result<String, CruxErr> {
                     "web",
                     Box::pin({
                         let q = query.clone();
-                        async move {
-                            Ok(format!("  Web: highly relevant content about {q}.  "))
-                        }
+                        async move { Ok(format!("  Web: highly relevant content about {q}.  ")) }
                     }),
                 ),
                 (
@@ -75,9 +73,7 @@ async fn pipeline(ctx: &mut CruxCtx, query: String) -> Result<String, CruxErr> {
                     "code",
                     Box::pin({
                         let q = query.clone();
-                        async move {
-                            Ok(format!("  Code: exact implementation match for {q}.  "))
-                        }
+                        async move { Ok(format!("  Code: exact implementation match for {q}.  ")) }
                     }),
                 ),
             ],
@@ -110,7 +106,11 @@ async fn pipeline(ctx: &mut CruxCtx, query: String) -> Result<String, CruxErr> {
             )
             .await?;
         let score = (cleaned.len() as f32 / 80.0).min(1.0);
-        scored.push(SearchResult { source: source.to_string(), text: cleaned, score });
+        scored.push(SearchResult {
+            source: source.to_string(),
+            text: cleaned,
+            score,
+        });
     }
 
     // 3. Speculate: pick the highest-scoring result.
@@ -183,7 +183,11 @@ async fn main() {
     println!("Query:  {query}");
     println!("Output: {}", crux.value().unwrap());
     println!();
-    println!("Trace ({} steps, {} children):", crux.steps.len(), crux.children.len());
+    println!(
+        "Trace ({} steps, {} children):",
+        crux.steps.len(),
+        crux.children.len()
+    );
     for step in crux.causal_chain() {
         println!("  [{:?}] {} — {:?}", step.kind, step.name, step.status);
     }

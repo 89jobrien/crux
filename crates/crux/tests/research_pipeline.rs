@@ -25,7 +25,7 @@ struct SearchResult {
 #[cruxai::agent]
 async fn research_pipeline(query: String) -> Crux<String> {
     // 1. Fan out: query three sources in parallel.
-    let raw: Vec<String> = t
+    let raw: Vec<String> = x
         .join_all(
             "fetch",
             vec![
@@ -59,7 +59,7 @@ async fn research_pipeline(query: String) -> Crux<String> {
     let mut scored: Vec<SearchResult> = Vec::new();
     let sources = ["web", "docs", "code"];
     for (source, text) in sources.iter().zip(raw.into_iter()) {
-        let cleaned: String = t
+        let cleaned: String = x
             .pipe(
                 &format!("clean_{source}"),
                 text,
@@ -80,11 +80,15 @@ async fn research_pipeline(query: String) -> Crux<String> {
             )
             .await?;
         let score = (cleaned.len() as f32 / 100.0).min(1.0);
-        scored.push(SearchResult { source: source.to_string(), text: cleaned, score });
+        scored.push(SearchResult {
+            source: source.to_string(),
+            text: cleaned,
+            score,
+        });
     }
 
     // 3. Speculate: pick the highest-scoring result.
-    let best: SearchResult = t
+    let best: SearchResult = x
         .speculate(
             "pick_best",
             scored
@@ -104,13 +108,13 @@ async fn research_pipeline(query: String) -> Crux<String> {
     let winning_score = best.score;
 
     // 4. Delegate: count words in the winner via the shared CounterAgent.
-    let word_count = t
+    let word_count = x
         .delegate::<CounterAgent>("summarize", winning_text.clone())
         .run()
         .await?;
 
     // 5. Route on confidence: publish or escalate.
-    let action: String = t
+    let action: String = x
         .route_on_confidence(
             "decide",
             winning_score,
@@ -119,7 +123,9 @@ async fn research_pipeline(query: String) -> Crux<String> {
                     ConfidenceRange::exclusive(0.0, 0.5),
                     "escalate",
                     Box::pin(async move {
-                        Ok(format!("Escalated for review: {winning_text} ({word_count} words)"))
+                        Ok(format!(
+                            "Escalated for review: {winning_text} ({word_count} words)"
+                        ))
                     }),
                 ),
                 (
@@ -202,10 +208,7 @@ async fn pipeline_has_delegation_child() {
 #[tokio::test]
 async fn pipeline_decide_step_recorded() {
     let crux = research_pipeline("test query".to_string()).await;
-    let decide = crux
-        .steps
-        .iter()
-        .find(|s| s.name.starts_with("decide::"));
+    let decide = crux.steps.iter().find(|s| s.name.starts_with("decide::"));
     assert!(decide.is_some());
     assert!(decide.unwrap().is_ok());
 }

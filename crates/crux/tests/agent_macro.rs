@@ -67,14 +67,14 @@ fn multi_param_agent_trait_name() {
 
 #[cruxai::agent]
 async fn two_step(input: String) -> Crux<String> {
-    let upper: String = t
+    let upper: String = x
         .step("uppercase", || {
             let inp = input.clone();
             async move { Ok(inp.to_uppercase()) }
         })
         .await?;
 
-    let result: String = t
+    let result: String = x
         .step("append", || {
             let u = upper.clone();
             async move { Ok(format!("{u}!")) }
@@ -113,12 +113,12 @@ async fn agent_failure_captured_in_crux() {
     assert_eq!(crux_ok.value().unwrap(), "success");
 }
 
-// -- Agent uses t.step that fails -------------------------------------------
+// -- Agent uses x.step that fails -------------------------------------------
 
 #[cruxai::agent]
 async fn step_fails() -> Crux<i32> {
-    let _: i32 = t.step("ok_step", || async { Ok(1) }).await?;
-    let _: i32 = t
+    let _: i32 = x.step("ok_step", || async { Ok(1) }).await?;
+    let _: i32 = x
         .step("bad_step", || async {
             Err(CruxErr::step_failed("bad_step", "oops"))
         })
@@ -140,7 +140,7 @@ async fn step_failure_propagates_through_macro() {
 
 #[cruxai::agent]
 async fn uncertain() -> Crux<String> {
-    let val: String = t
+    let val: String = x
         .step_with_confidence("guess", 0.4, || async { Ok("maybe".to_string()) })
         .await?;
     Ok(val)
@@ -153,13 +153,13 @@ async fn step_confidence_recorded() {
     assert_eq!(crux.steps[0].confidence, 0.4);
 }
 
-// -- Agent with lifecycle hooks via t ---------------------------------------
+// -- Agent with lifecycle hooks via x ---------------------------------------
 
 #[cruxai::agent]
 async fn hooked() -> Crux<i32> {
-    t.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!(42)) });
+    x.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!(42)) });
 
-    let val: i32 = t
+    let val: i32 = x
         .step("will_fail", || async {
             Err(CruxErr::step_failed("will_fail", "expected"))
         })
@@ -227,7 +227,7 @@ async fn crux_from_macro_serializes() {
 
 #[cruxai::agent(replay = "lenient")]
 async fn lenient_agent(input: String) -> Crux<String> {
-    let val: String = t
+    let val: String = x
         .step("process", || {
             let i = input.clone();
             async move { Ok(i.to_uppercase()) }
@@ -273,7 +273,7 @@ async fn replay_lenient_attribute_uses_lenient_mode() {
 
 #[cruxai::agent(registry = "process")]
 async fn registered_agent(input: String) -> Crux<String> {
-    let val: String = t
+    let val: String = x
         .step("transform", || {
             let i = input.clone();
             async move { Ok(i.to_uppercase()) }

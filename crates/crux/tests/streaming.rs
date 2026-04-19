@@ -4,7 +4,7 @@ use futures::stream;
 
 #[cruxai::agent]
 async fn streaming_agent(items: Vec<i32>) -> Crux<i32> {
-    let sum: i32 = t
+    let sum: i32 = x
         .step_stream("accumulate", || stream::iter(items.into_iter().map(Ok)))
         .await?;
     Ok(sum)
@@ -26,7 +26,7 @@ async fn step_stream_collects_events() {
 
 #[cruxai::agent]
 async fn streaming_fails(items: Vec<i32>) -> Crux<i32> {
-    let val: i32 = t
+    let val: i32 = x
         .step_stream("partial", || {
             stream::iter(items.into_iter().map(|i| {
                 if i < 0 {
@@ -54,7 +54,7 @@ async fn step_stream_fails_on_error_item() {
 
 #[cruxai::agent]
 async fn streaming_empty() -> Crux<i32> {
-    let val: i32 = t
+    let val: i32 = x
         .step_stream("empty", || {
             stream::iter(std::iter::empty::<Result<i32, CruxErr>>())
         })

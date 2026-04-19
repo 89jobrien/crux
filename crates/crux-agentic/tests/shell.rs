@@ -12,7 +12,9 @@ fn registry() -> HandlerRegistry {
 async fn exec_runs_echo() {
     let reg = registry();
     let handler = reg.get_handler("shell::exec").unwrap();
-    let result = handler(json!({"args": {"cmd": "echo hello"}})).await.unwrap();
+    let result = handler(json!({"args": {"cmd": "echo hello"}}))
+        .await
+        .unwrap();
     assert_eq!(result["exit_code"], 0);
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "hello");
 }
@@ -29,7 +31,9 @@ async fn exec_does_not_fail_on_nonzero_exit() {
 async fn capture_succeeds_on_zero_exit() {
     let reg = registry();
     let handler = reg.get_handler("shell::capture").unwrap();
-    let result = handler(json!({"args": {"cmd": "echo captured"}})).await.unwrap();
+    let result = handler(json!({"args": {"cmd": "echo captured"}}))
+        .await
+        .unwrap();
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "captured");
 }
 

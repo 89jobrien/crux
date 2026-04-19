@@ -1,4 +1,4 @@
-/// Integration tests for t.delegate::<A>() and DelegationBuilder.
+/// Integration tests for x.delegate::<A>() and DelegationBuilder.
 mod common;
 
 use common::{DoublerAgent, FailerAgent};
@@ -8,7 +8,7 @@ use cruxai::prelude::*;
 
 #[cruxai::agent]
 async fn parent_basic(n: i32) -> Crux<i32> {
-    let result = t.delegate::<DoublerAgent>("double_it", n).run().await?;
+    let result = x.delegate::<DoublerAgent>("double_it", n).run().await?;
     Ok(result)
 }
 
@@ -33,7 +33,7 @@ async fn basic_delegation() {
 
 #[cruxai::agent]
 async fn parent_fail(input: String) -> Crux<String> {
-    let result = t.delegate::<FailerAgent>("will_fail", input).run().await?;
+    let result = x.delegate::<FailerAgent>("will_fail", input).run().await?;
     Ok(result)
 }
 
@@ -53,7 +53,7 @@ async fn delegation_failure() {
 
 #[cruxai::agent]
 async fn parent_budgeted(n: i32) -> Crux<i32> {
-    let result = t
+    let result = x
         .delegate::<DoublerAgent>("budgeted", n)
         .with_budget(Budget::tokens(1000))
         .run()

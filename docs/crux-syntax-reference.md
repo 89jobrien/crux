@@ -11,30 +11,30 @@ async fn name(args) -> Crux<T> { ... }
 #[cruxai::agent(replay = "lenient")]  // re-run mismatches instead of failing
 ```
 
-Injects a `&mut CruxCtx` binding called `t` into the function body. Wraps
+Injects a `&mut CruxCtx` binding called `x` into the function body. Wraps
 the body so the return type `Crux<T>` is built from the steps recorded on
-`t` plus the final value.
+`x` plus the final value.
 
 ## `CruxCtx` methods
 
 ```rust
-t.step(name, closure).await?;                       // Plain step
-t.step_with_confidence(name, 0.82, closure).await?; // With explicit score
+x.step(name, closure).await?;                       // Plain step
+x.step_with_confidence(name, 0.82, closure).await?; // With explicit score
 
-t.delegate::<Agent>(name, input)                    // Delegation builder
+x.delegate::<Agent>(name, input)                    // Delegation builder
     .with_budget(Budget::tokens(4000))
     .on_low_confidence(0.7, handler)
     .on_step_failure(handler)
     .on_budget_exceeded(handler)
     .await?;
 
-t.route_on_confidence(score, [                      // Confidence branching
+x.route_on_confidence(score, [                      // Confidence branching
     (0.90.., || async { ... }),
     (0.70..0.90, || async { ... }),
     (0.00..0.70, || async { ... }),
 ]).await?;
 
-t.speculate(name, [                                 // Parallel alternatives
+x.speculate(name, [                                 // Parallel alternatives
     ("cheap", || async { ... }),
     ("fast",  || async { ... }),
 ])
@@ -44,14 +44,14 @@ t.speculate(name, [                                 // Parallel alternatives
     // or: .first_ok()
     // or: .pick_best_by_racing(f)
 
-t.on_low_confidence(0.8, handler);                  // Scoped hook
-t.on_step_failure(handler);
-t.on_budget_exceeded(handler);
+x.on_low_confidence(0.8, handler);                  // Scoped hook
+x.on_step_failure(handler);
+x.on_budget_exceeded(handler);
 
-t.budget();                                         // &Budget
-t.remaining_budget();                               // u64
-t.attempt();                                        // current attempt count
-t.snapshot();                                       // Crux<Value> so far
+x.budget();                                         // &Budget
+x.remaining_budget();                               // u64
+x.attempt();                                        // current attempt count
+x.snapshot();                                       // Crux<Value> so far
 ```
 
 ## `Crux<T>`

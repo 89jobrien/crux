@@ -5,7 +5,7 @@
 ///   async fn hello(name: String) -> Crux<String> { ... }
 ///
 /// Into:
-///   - Inner function with CruxCtx as first param, aliased to `t`
+///   - Inner function with CruxCtx as first param, aliased to `x`
 ///   - Public wrapper that creates CruxCtx and calls finalize()
 ///   - HelloAgent struct implementing Agent trait
 use proc_macro2::TokenStream;
@@ -168,7 +168,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
                 __crux_ctx: &mut ::cruxai_core::ctx::CruxCtx,
                 #input_destructure: Self::Input,
             ) -> ::core::result::Result<Self::Output, ::cruxai_core::types::error::CruxErr> {
-                let t = __crux_ctx;
+                let x = __crux_ctx;
                 #fn_block
             }
         }

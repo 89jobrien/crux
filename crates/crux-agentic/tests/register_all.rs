@@ -26,9 +26,6 @@ fn register_all_installs_expected_handlers() {
     ];
 
     for name in &expected {
-        assert!(
-            reg.get_handler(name).is_some(),
-            "missing handler: {name}"
-        );
+        assert!(reg.get_handler(name).is_some(), "missing handler: {name}");
     }
 }

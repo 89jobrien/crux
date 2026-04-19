@@ -1,6 +1,6 @@
 use cruxai_core::prelude::CruxErr;
 use cruxai_script::HandlerRegistry;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::process::Command;
 
 use crate::error::opt_str;
@@ -40,11 +40,7 @@ pub fn register(registry: &mut HandlerRegistry) {
             .and_then(|v| v.as_u64())
             .unwrap_or(10);
         let n_str = format!("-{n}");
-        let out = git_cmd(
-            &["log", &n_str, "--format=%H\t%s"],
-            cwd.as_deref(),
-        )
-        .await?;
+        let out = git_cmd(&["log", &n_str, "--format=%H\t%s"], cwd.as_deref()).await?;
         let commits: Vec<Value> = out
             .lines()
             .filter(|l| !l.is_empty())
@@ -72,9 +68,10 @@ async fn git_cmd(args: &[&str], cwd: Option<&str>) -> Result<String, CruxErr> {
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
-    let out = cmd.output().await.map_err(|e| {
-        CruxErr::step_failed("git", format!("spawn failed: {e}"))
-    })?;
+    let out = cmd
+        .output()
+        .await
+        .map_err(|e| CruxErr::step_failed("git", format!("spawn failed: {e}")))?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         return Err(CruxErr::step_failed(

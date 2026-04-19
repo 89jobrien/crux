@@ -1,5 +1,5 @@
-use cruxai_script::{load, HandlerRegistry, Runner};
-use serde_json::{json, Value};
+use cruxai_script::{HandlerRegistry, Runner, load};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 #[tokio::test]

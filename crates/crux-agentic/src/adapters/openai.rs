@@ -18,7 +18,11 @@ impl OpenAiAdapter {
         }
     }
 
-    pub fn new(api_key: impl Into<String>, model: impl Into<String>, base_url: impl Into<String>) -> Self {
+    pub fn new(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Self {
         Self {
             api_key: api_key.into(),
             model: model.into(),
@@ -38,7 +42,9 @@ impl LlmProvider for OpenAiAdapter {
 
         async move {
             let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
-            let system = req.system.unwrap_or_else(|| "You are a helpful assistant.".into());
+            let system = req
+                .system
+                .unwrap_or_else(|| "You are a helpful assistant.".into());
             let body = json!({
                 "model": model,
                 "max_tokens": req.max_tokens,
@@ -59,10 +65,9 @@ impl LlmProvider for OpenAiAdapter {
                 .await
                 .map_err(|e| CruxErr::step_failed("llm::complete", format!("HTTP error: {e}")))?;
 
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}")))?;
+            let json: serde_json::Value = resp.json().await.map_err(|e| {
+                CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}"))
+            })?;
 
             let text = json["choices"][0]["message"]["content"]
                 .as_str()

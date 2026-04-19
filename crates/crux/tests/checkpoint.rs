@@ -6,7 +6,7 @@ use cruxai::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
 async fn checkpointable(steps: Vec<String>) -> Crux<String> {
     let mut result = String::new();
     for s in &steps {
-        let part: String = t
+        let part: String = x
             .step(s, || {
                 let val = s.clone();
                 async move { Ok(val) }

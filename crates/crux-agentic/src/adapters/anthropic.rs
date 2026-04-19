@@ -18,7 +18,11 @@ impl AnthropicAdapter {
         }
     }
 
-    pub fn new(api_key: impl Into<String>, model: impl Into<String>, base_url: impl Into<String>) -> Self {
+    pub fn new(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Self {
         Self {
             api_key: api_key.into(),
             model: model.into(),
@@ -38,7 +42,9 @@ impl LlmProvider for AnthropicAdapter {
 
         async move {
             let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
-            let system = req.system.unwrap_or_else(|| "You are a helpful assistant.".into());
+            let system = req
+                .system
+                .unwrap_or_else(|| "You are a helpful assistant.".into());
             let body = json!({
                 "model": model,
                 "max_tokens": req.max_tokens,
@@ -58,10 +64,9 @@ impl LlmProvider for AnthropicAdapter {
                 .await
                 .map_err(|e| CruxErr::step_failed("llm::complete", format!("HTTP error: {e}")))?;
 
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}")))?;
+            let json: serde_json::Value = resp.json().await.map_err(|e| {
+                CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}"))
+            })?;
 
             let text = json["content"][0]["text"]
                 .as_str()
@@ -93,7 +98,8 @@ mod tests {
 
     #[test]
     fn new_sets_fields() {
-        let adapter = AnthropicAdapter::new("key", "claude-3-5-sonnet", "https://custom.example.com");
+        let adapter =
+            AnthropicAdapter::new("key", "claude-3-5-sonnet", "https://custom.example.com");
         assert_eq!(adapter.api_key, "key");
         assert_eq!(adapter.model, "claude-3-5-sonnet");
         assert_eq!(adapter.base_url, "https://custom.example.com");

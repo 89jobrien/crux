@@ -47,7 +47,9 @@ async fn extract_entities_returns_structured_output() {
         }
     });
 
-    let result = invoke(&registry, input).await.expect("llm::extract should succeed");
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
 
     let entities = result
         .get("entities")
@@ -58,7 +60,10 @@ async fn extract_entities_returns_structured_output() {
 
     for entity in entities {
         assert!(entity.get("name").is_some(), "entity must have 'name'");
-        assert!(entity.get("entity_type").is_some(), "entity must have 'entity_type'");
+        assert!(
+            entity.get("entity_type").is_some(),
+            "entity must have 'entity_type'"
+        );
     }
 }
 
@@ -83,10 +88,18 @@ async fn summarize_returns_structured_output() {
         }
     });
 
-    let result = invoke(&registry, input).await.expect("llm::extract should succeed");
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
 
-    assert!(result.get("summary").is_some(), "result must contain 'summary'");
-    assert!(result.get("key_points").is_some(), "result must contain 'key_points'");
+    assert!(
+        result.get("summary").is_some(),
+        "result must contain 'summary'"
+    );
+    assert!(
+        result.get("key_points").is_some(),
+        "result must contain 'key_points'"
+    );
 }
 
 #[tokio::test]
@@ -105,7 +118,9 @@ async fn classify_returns_structured_output() {
         }
     });
 
-    let result = invoke(&registry, input).await.expect("llm::extract should succeed");
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
 
     let label = result
         .get("label")

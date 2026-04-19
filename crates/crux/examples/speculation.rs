@@ -51,7 +51,10 @@ async fn main() {
         (
             "primary",
             Box::pin(async {
-                Err(CruxErr::step_failed("primary", "primary source unavailable"))
+                Err(CruxErr::step_failed(
+                    "primary",
+                    "primary source unavailable",
+                ))
             }),
         ),
         (

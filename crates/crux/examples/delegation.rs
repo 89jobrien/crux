@@ -21,7 +21,11 @@ impl Agent for ClassifyAgent {
     async fn run(ctx: &mut CruxCtx, input: Self::Input) -> Result<Self::Output, CruxErr> {
         ctx.step("detect_language", || async move {
             // Simulate classification: count non-ASCII bytes as a rough heuristic.
-            let label = if input.is_ascii() { "english" } else { "non-english" };
+            let label = if input.is_ascii() {
+                "english"
+            } else {
+                "non-english"
+            };
             Ok(label.to_string())
         })
         .await
@@ -48,7 +52,9 @@ impl Agent for RouterAgent {
             .await?;
 
         ctx.step("build_response", || async move {
-            Ok(format!("Detected language: {language}. Input was: \"{input}\""))
+            Ok(format!(
+                "Detected language: {language}. Input was: \"{input}\""
+            ))
         })
         .await
     }
