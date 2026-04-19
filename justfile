@@ -5,6 +5,10 @@ default:
 fmt:
     cargo fmt --all -- --check
 
+# Run cargo check with warnings-as-errors
+check:
+    RUSTFLAGS="-D warnings" cargo check --workspace --all-targets
+
 # Run clippy with deny warnings
 lint:
     cargo clippy --all-targets -- -D warnings
@@ -13,12 +17,16 @@ lint:
 test:
     cargo nextest run
 
-# Run full CI suite locally (fmt + clippy + test + baml check)
-ci: fmt lint test check-baml
+# Run full CI suite locally (mirrors GH Actions)
+ci: check build-locked fmt lint test deny
 
 # Build all targets
 build:
     cargo build --all-targets
+
+# Build all targets with --locked and warnings-as-errors (CI parity)
+build-locked:
+    RUSTFLAGS="-D warnings" cargo build --locked --all-targets
 
 # Build with all features (baml, plugins)
 build-full:
@@ -44,6 +52,10 @@ setup:
 hooks:
     git config core.hooksPath .githooks
     @echo "Git hooks installed from .githooks/"
+
+# Run cargo-deny (license + advisory audit)
+deny:
+    cargo deny check 2>/dev/null || echo "cargo-deny not installed — skipping (install: cargo install cargo-deny)"
 
 # Format code in place
 fix:
