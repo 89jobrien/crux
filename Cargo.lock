@@ -344,6 +344,7 @@ dependencies = [
  "clap",
  "crux-plugin",
  "cruxai-core",
+ "cruxai-model",
  "cruxai-script",
  "glob",
  "reqwest",

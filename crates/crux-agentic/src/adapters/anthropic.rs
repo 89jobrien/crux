@@ -1,11 +1,12 @@
 use cruxai_core::prelude::CruxErr;
+use cruxai_model::{ProviderModelId, ProviderModelRef, Vendor};
 use serde_json::json;
 
 use crate::provider::{LlmProvider, LlmRequest, LlmResponse};
 
 pub struct AnthropicAdapter {
     pub api_key: String,
-    pub model: String,
+    pub model: ProviderModelRef,
     pub base_url: String,
 }
 
@@ -13,19 +14,19 @@ impl AnthropicAdapter {
     pub fn from_env() -> Self {
         Self {
             api_key: std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
-            model: "claude-sonnet-4-6".to_string(),
+            model: ProviderModelId::parse_lenient(Vendor::Anthropic, "claude-sonnet-4-6"),
             base_url: "https://api.anthropic.com".to_string(),
         }
     }
 
     pub fn new(
         api_key: impl Into<String>,
-        model: impl Into<String>,
+        model: ProviderModelRef,
         base_url: impl Into<String>,
     ) -> Self {
         Self {
             api_key: api_key.into(),
-            model: model.into(),
+            model,
             base_url: base_url.into(),
         }
     }
@@ -37,7 +38,7 @@ impl LlmProvider for AnthropicAdapter {
         req: LlmRequest,
     ) -> impl std::future::Future<Output = Result<LlmResponse, CruxErr>> + Send {
         let api_key = self.api_key.clone();
-        let model = self.model.clone();
+        let model = self.model.provider_id.clone();
         let base_url = self.base_url.clone();
 
         async move {
@@ -93,15 +94,15 @@ mod tests {
     fn from_env_uses_defaults() {
         let adapter = AnthropicAdapter::from_env();
         assert_eq!(adapter.base_url, "https://api.anthropic.com");
-        assert_eq!(adapter.model, "claude-sonnet-4-6");
+        assert_eq!(adapter.model.provider_id, "claude-sonnet-4-6");
     }
 
     #[test]
     fn new_sets_fields() {
-        let adapter =
-            AnthropicAdapter::new("key", "claude-3-5-sonnet", "https://custom.example.com");
+        let model = ProviderModelId::parse_lenient(Vendor::Anthropic, "claude-3-5-sonnet");
+        let adapter = AnthropicAdapter::new("key", model, "https://custom.example.com");
         assert_eq!(adapter.api_key, "key");
-        assert_eq!(adapter.model, "claude-3-5-sonnet");
+        assert_eq!(adapter.model.provider_id, "claude-3-5-sonnet");
         assert_eq!(adapter.base_url, "https://custom.example.com");
     }
 }

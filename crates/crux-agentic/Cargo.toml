@@ -17,6 +17,7 @@ baml = ["dep:baml"]
 
 [dependencies]
 cruxai-core = { path = "../crux-core", version = "0.2.4" }
+cruxai-model = { path = "../crux-model", version = "0.2.4" }
 cruxai-script = { path = "../crux-script", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }
