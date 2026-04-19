@@ -266,6 +266,7 @@ dependencies = [
 name = "cruxai"
 version = "0.2.1"
 dependencies = [
+ "crux-agentic",
  "cruxai-core",
  "cruxai-macros",
  "cruxai-script",
