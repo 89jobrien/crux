@@ -1,0 +1,2 @@
+[tools]
+"cargo:baml-cli" = "0.221.0"

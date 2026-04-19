@@ -1,0 +1,29 @@
+pipeline: decompose_spec
+# Decompose a spec or implementation plan into a structured HANDOFF-compatible task list.
+#
+# Pipeline input (pass as input.json to crux-run):
+#   {
+#     "text": "<full spec or plan document text>"
+#   }
+#
+# Output: { tasks: [{ id, name, title, description, priority, status, files }] }
+# Task schema matches HANDOFF.yaml item schema directly.
+#
+# Environment — set one of:
+#   ANTHROPIC_API_KEY   (BAML uses Claude by default via Auto client)
+#   OPENAI_API_KEY      (fallback)
+#
+# Run:
+#   crux-run examples/decompose_spec.yaml examples/input_decompose.json
+budget: { calls: 2 }
+
+steps:
+  - step: decompose
+    handler: llm::decompose
+    # Input shape: { text: "<spec content>" }
+    # Output:      { tasks: [{ id, name, title, description, priority, status, files }] }
+
+  - step: log_output
+    handler: ctrl::log
+    # Logs the task list to stderr and passes it through as pipeline output.
+    # Capture the structured JSON from crux-run's "Output:" section.

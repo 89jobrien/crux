@@ -41,4 +41,6 @@ pub fn register_all(registry: &mut HandlerRegistry) {
     llm::register(registry);
     #[cfg(feature = "baml")]
     llm::register_extract(registry);
+    #[cfg(feature = "baml")]
+    llm::register_decompose(registry);
 }

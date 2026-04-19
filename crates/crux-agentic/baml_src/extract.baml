@@ -223,6 +223,47 @@ function ClassifyCIFailure(failure_output: string, known_patterns: string[]) -> 
 }
 
 // ============================================================================
+// Spec / Plan Decomposition
+// ============================================================================
+
+class Task {
+  id string
+  name string
+  title string
+  description string
+  priority string
+  status string
+  files string[]
+}
+
+class DecomposeSpecOutput {
+  tasks Task[]
+}
+
+function DecomposeSpec(text: string) -> DecomposeSpecOutput {
+  client Auto
+  prompt #"
+    You are a technical project manager. Read the following spec or implementation plan and
+    decompose it into a structured list of discrete tasks.
+
+    Rules:
+    - Each task must be actionable and independently executable
+    - id: short kebab-case identifier, e.g. "add-llm-handler"
+    - name: snake_case version of id, e.g. "add_llm_handler"
+    - title: human-readable title (max 60 chars)
+    - description: 1-3 sentences describing exactly what to implement
+    - priority: one of P0, P1, P2 (P0 = blocking/critical, P1 = core work, P2 = nice-to-have)
+    - status: always "open"
+    - files: list of file paths that will likely need to be created or modified
+
+    Spec / Plan:
+    {{ text }}
+
+    {{ ctx.output_format }}
+  "#
+}
+
+// ============================================================================
 // Classification
 // ============================================================================
 

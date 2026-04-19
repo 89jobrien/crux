@@ -146,6 +146,44 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
     });
 }
 
+/// Register the `llm::decompose` handler. Only compiled when the `baml` feature is enabled.
+#[cfg(feature = "baml")]
+pub fn register_decompose(registry: &mut HandlerRegistry) {
+    use crate::baml_client::async_client::B;
+
+    registry.handler("llm::decompose", |input: Value| async move {
+        let text = input
+            .get("text")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CruxErr::step_failed("llm::decompose", "missing 'text' field"))?
+            .to_string();
+
+        let result = B
+            .DecomposeSpec
+            .call(text)
+            .await
+            .map_err(|e| CruxErr::step_failed("llm::decompose", format!("BAML error: {e}")))?;
+
+        let tasks: Vec<Value> = result
+            .tasks
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "name": t.name,
+                    "title": t.title,
+                    "description": t.description,
+                    "priority": t.priority,
+                    "status": t.status,
+                    "files": t.files,
+                })
+            })
+            .collect();
+
+        Ok(serde_json::json!({ "tasks": tasks }))
+    });
+}
+
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler("llm::complete", |input: Value| async move {
         let prompt = input
