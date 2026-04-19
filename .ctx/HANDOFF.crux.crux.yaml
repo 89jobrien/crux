@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260419::165500"
+updated: "20260419::193106"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -21,7 +21,34 @@ items:
       - docs/planner-design.md
 
 log:
-  - date: "20260419::165500"
+  - date: "20260419::193106"
+    session: 20
+    summary: >
+      Implemented cruxai-model crate (canonical model ID system): Vendor enum, CanonicalModelId,
+      ProviderModelRef, vendor-specific parsers (Anthropic, OpenAI, Google, Mistral, Ollama).
+      Wired into crux-agentic: adapters updated to ProviderModelRef, OllamaAdapter added,
+      llm::complete handler uses typed Vendor dispatch. Council review: fixed dead MissingSegment
+      variant and Mistral tier semantics. 76/76 tests pass.
+    commits:
+      - sha: 8ba0dca
+        branch: main
+      - sha: c8b79bb
+        branch: main
+      - sha: 709be0f
+        branch: main
+      - sha: 5064ced
+        branch: main
+      - sha: 9804778
+        branch: main
+      - sha: 1aa17ff
+        branch: main
+      - sha: 2f33688
+        branch: main
+      - sha: 62ad7c5
+        branch: main
+      - sha: 9814b63
+        branch: main
+  - date: "20260419:165500"
     session: 19
     summary: >
       Verified minibox-agent (crux-25) was fully implemented in minibox repo (session 16).
@@ -32,7 +59,7 @@ log:
         branch: main
         repo: minibox
         note: "feat(minibox-agent): wire into workspace + finalize AgentError + import cleanup"
-  - date: "20260419::154936"
+  - date: "20260419:154936"
     session: 18
     summary: >
       Walkthrough doc audit: fixed CruxCtx binding (t→x), edition 2024, MSRV 1.85,
@@ -63,7 +90,7 @@ log:
       - sha: 5eb1fee
         branch: main
         note: "fix(examples/pr_review): replace hardcoded --approve with ctrl::log + TODO"
-  - date: "20260419::142500"
+  - date: "20260419:142500"
     session: 17
     summary: >
       Added llm::decompose handler (BAML DecomposeSpec function) to crux-agentic.
@@ -76,7 +103,7 @@ log:
       - sha: 397e422
         branch: main
         note: "feat(baml): add project enrichment and CI triage functions"
-  - date: "20260418::180000"
+  - date: "20260418:180000"
     session: 16
     summary: >
       LlmProvider trait + LlmStep<P> + AnthropicAdapter + OpenAiAdapter added to
@@ -91,32 +118,3 @@ log:
       - sha: a4ef7de
         branch: main
         note: "feat(crux-agentic): LlmProvider trait, LlmStep, typed adapters (v0.2.3)"
-  - date: "20260418::000000"
-    session: 15
-    summary: >
-      Gitignored baml_client/ (per upstream convention), git rm --cached 18 files. Added BAML
-      section to CLAUDE.md (version parity, gitignore, test injection). Timestamp format
-      updated to YYYYMMDD::HHMMSS throughout.
-    commits:
-      - sha: 4cc0c50
-        branch: main
-        note: "timestamp format YYYYMMDD::HHMMSS"
-      - sha: b9bc089
-        branch: main
-        note: "gitignore baml_client/"
-      - sha: 7f07616
-        branch: main
-        note: "CLAUDE.md BAML section"
-  - date: "20260417::230000"
-    session: 14
-    summary: >
-      Fixed BAML version mismatch (0.218.0 → 0.221.0 in Cargo.toml). Added just check-baml
-      recipe: validates generators.baml/Cargo.toml version parity and auto-downloads native
-      lib if missing. Wired into just ci. All 33 baml integration tests passing.
-    commits:
-      - sha: 2ce0e0f
-        branch: main
-        note: "baml dep bump + check-baml recipe"
-      - sha: c618719
-        branch: main
-        note: "check-baml: auto-download native lib if not cached"
