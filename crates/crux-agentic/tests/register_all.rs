@@ -29,3 +29,16 @@ fn register_all_installs_expected_handlers() {
         assert!(reg.get_handler(name).is_some(), "missing handler: {name}");
     }
 }
+
+#[cfg(feature = "baml")]
+#[test]
+fn register_all_installs_baml_handlers() {
+    let mut reg = HandlerRegistry::new();
+    crux_agentic::register_all(&mut reg);
+
+    let baml_expected = ["llm::extract", "llm::decompose", "llm::plan"];
+
+    for name in &baml_expected {
+        assert!(reg.get_handler(name).is_some(), "missing BAML handler: {name}");
+    }
+}

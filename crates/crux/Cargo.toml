@@ -13,16 +13,16 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-cruxai-core = { path = "../crux-core", version = "0.2.1" }
-cruxai-macros = { path = "../crux-macros", version = "0.2.1" }
-cruxai-script = { path = "../crux-script", version = "0.2.1", optional = true }
+cruxai-core = { path = "../crux-core", version = "0.2.4" }
+cruxai-macros = { path = "../crux-macros", version = "0.2.4" }
+cruxai-script = { path = "../crux-script", version = "0.2.4", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 futures = { workspace = true }
-crux-agentic = { path = "../crux-agentic", version = "0.2.3" }
+crux-agentic = { path = "../crux-agentic", version = "0.2.4" }
 
 [features]
 default = ["tokio-runtime"]

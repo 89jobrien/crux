@@ -14,6 +14,9 @@ pub mod llm_step;
 pub mod provider;
 pub mod shell;
 
+#[cfg(feature = "baml")]
+pub mod planner;
+
 pub use llm_step::LlmStep;
 pub use provider::{LlmProvider, LlmRequest, LlmResponse};
 
@@ -43,4 +46,6 @@ pub fn register_all(registry: &mut HandlerRegistry) {
     llm::register_extract(registry);
     #[cfg(feature = "baml")]
     llm::register_decompose(registry);
+    #[cfg(feature = "baml")]
+    planner::register_plan(registry);
 }
