@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260419::142500"
+updated: "20260419::154936"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -35,6 +35,37 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260419::154936"
+    session: 18
+    summary: >
+      Walkthrough doc audit: fixed CruxCtx binding (t→x), edition 2024, MSRV 1.85,
+      feature flags (tokio→tokio-runtime, sqlite→redb) across all 8 walkthrough files and
+      README. Reviewed and merged 8 orphaned subagent worktrees (crux-agentic modules:
+      json, fs, shell, llm, git, ctrl + crux-script static args + example pipelines) with
+      sentinel review and forge sequential merge. Fixed blocking issues: error.rs design
+      consistency, json::pick payload fix, json::merge args-stripping doc, api_key lookup
+      consistency, git ref→revision rename, pr_review hardcoded approve. 242/242 tests pass.
+      Added orphaned worktree detection to workspace-health skill and subagent guardrails to
+      CLAUDE.md and subagent-setup skill.
+    commits:
+      - sha: 2fd62a5
+        branch: main
+        note: "docs(walkthrough): fix CruxCtx binding x, edition 2024, MSRV 1.85, feature flags"
+      - sha: 883790a
+        branch: main
+        note: "fix(crux-agentic/json): pick from payload not raw input; document args stripping in merge"
+      - sha: 4f73aa3
+        branch: main
+        note: "merge(crux-agentic): integrate json module skeleton"
+      - sha: ff25b6e
+        branch: main
+        note: "docs(crux-agentic/shell): add doc comment noting static args injection requirement"
+      - sha: 466aa08
+        branch: main
+        note: "fix(crux-agentic/git): rename ref arg to revision"
+      - sha: 5eb1fee
+        branch: main
+        note: "fix(examples/pr_review): replace hardcoded --approve with ctrl::log + TODO"
   - date: "20260419::142500"
     session: 17
     summary: >
@@ -92,17 +123,3 @@ log:
       - sha: c618719
         branch: main
         note: "check-baml: auto-download native lib if not cached"
-  - date: "20260417::204500"
-    session: 12
-    summary: >
-      Completed crux-21 (demo pipeline examples + README). Committed both
-      extract_summary.yaml and extract_entities.yaml with input fixtures. Updated README
-      with pipeline examples section and API key setup instructions. Completed crux-23
-      (planner design): comprehensive spec covering BAML-based and Rust-crate paths,
-      input/output schemas, composition rules engine, integration with crux-script
-      ArmDef/StepNode, and 4-phase implementation roadmap.
-    commits:
-      - sha: df3ae65
-        branch: main
-      - sha: 962c377
-        branch: main
