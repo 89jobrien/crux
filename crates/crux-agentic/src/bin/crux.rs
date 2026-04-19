@@ -127,7 +127,7 @@ fn cmd_plan(
 ) {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let manifest = load_manifest(&resolve_plugins_path(plugins_path)).unwrap_or_default();
+    let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
     let extra: Vec<String> = manifest
         .plugin
         .iter()
@@ -274,7 +274,7 @@ async fn build_registry(
     pipeline: &PipelineDef,
     plugins_path: Option<&str>,
 ) -> HandlerRegistry {
-    let manifest = load_manifest(&resolve_plugins_path(plugins_path)).unwrap_or_default();
+    let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
 
     let plugin_handler_descs: Vec<String> = manifest
         .plugin
