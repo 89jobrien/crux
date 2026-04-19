@@ -120,7 +120,25 @@ if (".env" | path exists) {
     warn ".env.example not found — skipping"
 }
 
-# --- 7. Build ---
+# --- 7. LLM API keys ---
+header "LLM API keys"
+let has_openai = ($env | get -i OPENAI_API_KEY | default "" | str length) > 0
+let has_anthropic = ($env | get -i ANTHROPIC_API_KEY | default "" | str length) > 0
+if $has_openai and $has_anthropic {
+    ok "OPENAI_API_KEY and ANTHROPIC_API_KEY are set"
+} else if $has_openai {
+    ok "OPENAI_API_KEY is set"
+    warn "ANTHROPIC_API_KEY is not set"
+} else if $has_anthropic {
+    ok "ANTHROPIC_API_KEY is set"
+    warn "OPENAI_API_KEY is not set"
+} else {
+    warn "neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set"
+    warn "LLM features \(llm::*, plan\) will not work without at least one"
+    warn "configure in .env or inject via dotenvx/direnv"
+}
+
+# --- 8. Build ---
 header "Build"
 let build_result = (do { cargo build --all-targets } | complete)
 if $build_result.exit_code == 0 {

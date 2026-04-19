@@ -101,7 +101,27 @@ else
     warn ".env.example not found — skipping"
 fi
 
-# --- 7. Build ---
+# --- 7. LLM API keys ---
+header "LLM API keys"
+has_openai=false
+has_anthropic=false
+if [ -n "${OPENAI_API_KEY:-}" ]; then has_openai=true; fi
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then has_anthropic=true; fi
+if [ "$has_openai" = true ] && [ "$has_anthropic" = true ]; then
+    ok "OPENAI_API_KEY and ANTHROPIC_API_KEY are set"
+elif [ "$has_openai" = true ]; then
+    ok "OPENAI_API_KEY is set"
+    warn "ANTHROPIC_API_KEY is not set"
+elif [ "$has_anthropic" = true ]; then
+    ok "ANTHROPIC_API_KEY is set"
+    warn "OPENAI_API_KEY is not set"
+else
+    warn "neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set"
+    warn "LLM features (llm::*, plan) will not work without at least one"
+    warn "configure in .env or inject via dotenvx/direnv"
+fi
+
+# --- 8. Build ---
 header "Build"
 if cargo build --all-targets 2>&1; then
     ok "cargo build --all-targets succeeded"
