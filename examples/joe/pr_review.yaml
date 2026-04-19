@@ -69,10 +69,11 @@ steps:
         # Confidence too low to act — post a neutral comment summarizing uncertainty
       - range: "[0.5, 0.8)"
         label: post_review
-        handler: shell::capture
-        args:
-          cmd: "gh pr review --approve"
-        # Submit the verdict (approve / request-changes / comment) via `gh pr review`
+        handler: ctrl::log
+        # TODO: thread the speculate::verdict arm output here to drive the correct
+        # `gh pr review` flag (--approve / --request-changes / --comment).
+        # Until pipeline templating supports dynamic arg injection from speculation
+        # output, this step logs the verdict for manual follow-up.
       - range: "[0.8, 1.0]"
         label: auto_merge_eligible
         handler: shell::capture
