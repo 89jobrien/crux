@@ -15,3 +15,10 @@ client<llm> Anthropic {
     api_key env.ANTHROPIC_API_KEY
   }
 }
+
+client<llm> Auto {
+  provider round-robin
+  options {
+    strategy [Anthropic, OpenAI]
+  }
+}
