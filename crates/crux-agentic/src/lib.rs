@@ -28,6 +28,7 @@ pub use provider::{LlmProvider, LlmRequest, LlmResponse};
     clippy::new_without_default,
     clippy::unwrap_or_default
 )]
+#[cfg(feature = "baml")]
 pub(crate) mod baml_client;
 
 use cruxai_script::HandlerRegistry;
