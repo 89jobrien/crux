@@ -1,26 +1,12 @@
 project: crux
 id: crux
-updated: "20260419::154936"
+updated: "20260419::165500"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
   step, branch, delegation, and failure is a first-class value.
 
 items:
-  - id: crux-25
-    name: minibox-agent-adapter
-    title: "minibox-agent: FallbackChainAdapter implementing crux LlmProvider"
-    description: >
-      Wire minibox-llm's FallbackChain into crux-agentic's LlmProvider port.
-      FallbackChainAdapter newtype, CruxLlmStep newtype over LlmStep<FallbackChainAdapter>,
-      re-export crux-agentic surface from minibox-agent.
-    priority: P1
-    status: open
-    files:
-      - crates/minibox-agent/src/provider.rs
-      - crates/minibox-agent/src/step.rs
-      - crates/minibox-agent/src/lib.rs
-      - crates/minibox-agent/Cargo.toml
 
   - id: crux-26
     name: planner-implementation
@@ -35,6 +21,17 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260419::165500"
+    session: 19
+    summary: >
+      Verified minibox-agent (crux-25) was fully implemented in minibox repo (session 16).
+      Committed remaining unstaged files: error.rs, provider.rs/step.rs import cleanup,
+      Cargo.toml workspace member addition. Pre-commit passed. crux-25 closed.
+    commits:
+      - sha: 08ba4c4
+        branch: main
+        repo: minibox
+        note: "feat(minibox-agent): wire into workspace + finalize AgentError + import cleanup"
   - date: "20260419::154936"
     session: 18
     summary: >
