@@ -19,9 +19,10 @@ pub fn register(registry: &mut HandlerRegistry) {
 
     registry.handler("git::diff", |input: Value| async move {
         let cwd = opt_str(&input, "cwd").map(str::to_string);
+        // Use `revision` rather than `ref` to avoid the Rust keyword at the YAML schema level.
         let git_ref = input
             .get("args")
-            .and_then(|a| a.get("ref"))
+            .and_then(|a| a.get("revision"))
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let args: Vec<&str> = match git_ref.as_deref() {
