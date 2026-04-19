@@ -6,6 +6,4 @@ pub enum ModelParseError {
     UnknownVendor(String),
     #[error("invalid canonical model ID format: '{0}' (expected vendor:family:generation:variant)")]
     InvalidFormat(String),
-    #[error("missing segment at position {position}")]
-    MissingSegment { position: usize },
 }

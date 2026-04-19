@@ -1,15 +1,17 @@
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
+/// Mistral naming: `{family}-{tier}[-{version}]`.
+/// "large", "small", "latest" are tiers/tags, not numeric generations.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
-    let parts: Vec<&str> = raw.splitn(3, '-').collect();
-    let family = parts[0].to_string();
-    let generation = parts.get(1).copied().unwrap_or("").to_string();
-    let variant = parts.get(2).copied().unwrap_or("").to_string();
+    let (family, variant) = match raw.split_once('-') {
+        Some((f, rest)) => (f.to_string(), rest.to_string()),
+        None => (raw.to_string(), String::new()),
+    };
 
     Ok(CanonicalModelId {
         vendor: Vendor::Mistral,
         family,
-        generation,
+        generation: String::new(),
         variant,
     })
 }
@@ -22,16 +24,16 @@ mod tests {
     fn mistral_large_latest() {
         let id = parse("mistral-large-latest").unwrap();
         assert_eq!(id.family, "mistral");
-        assert_eq!(id.generation, "large");
-        assert_eq!(id.variant, "latest");
+        assert_eq!(id.generation, "");
+        assert_eq!(id.variant, "large-latest");
     }
 
     #[test]
     fn codestral_latest() {
         let id = parse("codestral-latest").unwrap();
         assert_eq!(id.family, "codestral");
-        assert_eq!(id.generation, "latest");
-        assert_eq!(id.variant, "");
+        assert_eq!(id.generation, "");
+        assert_eq!(id.variant, "latest");
     }
 
     #[test]
