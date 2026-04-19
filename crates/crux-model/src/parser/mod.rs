@@ -23,8 +23,13 @@ impl ProviderModelId {
     }
 
     pub fn parse_lenient(vendor: Vendor, raw: &str) -> ProviderModelRef {
-        let canonical = fallback::parse(vendor, raw);
-        ProviderModelRef::new(vendor, raw, canonical)
+        match Self::parse(vendor, raw) {
+            Ok(r) => r,
+            Err(_) => {
+                let canonical = fallback::parse(vendor, raw);
+                ProviderModelRef::new(vendor, raw, canonical)
+            }
+        }
     }
 }
 
