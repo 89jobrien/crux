@@ -1,25 +1,11 @@
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ModelParseError {
+    #[error("unknown vendor: '{0}'")]
     UnknownVendor(String),
+    #[error("invalid canonical model ID format: '{0}' (expected vendor:family:generation:variant)")]
     InvalidFormat(String),
+    #[error("missing segment at position {position}")]
     MissingSegment { position: usize },
 }
-
-impl fmt::Display for ModelParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnknownVendor(v) => write!(f, "unknown vendor: '{v}'"),
-            Self::InvalidFormat(s) => write!(
-                f,
-                "invalid canonical model ID format: '{s}' (expected vendor:family:generation:variant)"
-            ),
-            Self::MissingSegment { position } => {
-                write!(f, "missing segment at position {position}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ModelParseError {}
