@@ -90,9 +90,14 @@ recovery path, not a fallback.
 
 - `just check-baml` — validates `generators.baml` version matches `Cargo.toml` baml dep;
   auto-downloads native lib if missing. Run after any baml version bump.
-- `baml_client/` is gitignored (generated). Run `baml-cli generate` after cloning or bumping
-  the baml version. The `baml` crate version in `Cargo.toml` must match `version` in
-  `generators.baml` exactly.
+- `baml_client/` is gitignored (generated). Run `mise exec -- baml-cli generate` after cloning
+  or bumping the baml version. The `baml` crate version in `Cargo.toml` must match `version` in
+  `generators.baml` exactly. When bumping baml, update both files together.
+- `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
+  `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
+- Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
+- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
+  examples/<pipeline>.yaml examples/input_<name>.json`
 - BAML integration tests require `OPENAI_API_KEY`. Inject via:
   `DOTENV_PRIVATE_KEY=$(op read "op://Personal/nihl7o2bojy53zy4aqtr7txyqi/password") \`
   `dotenvx run --env-file=$HOME/dev/.env -- cargo nextest run --features baml -p crux-agentic`
