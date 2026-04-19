@@ -50,14 +50,14 @@ use cruxai::prelude::*;
 
 #[cruxai::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
-    let research = t.step("research", || search_web(&goal)).await?;
+    let research = x.step("research", || search_web(&goal)).await?;
 
-    let draft = t.delegate::<DraftAgent>("draft", &research)
+    let draft = x.delegate::<DraftAgent>("draft", &research)
         .with_budget(Budget::tokens(4000))
         .on_low_confidence(0.7, escalate_to_human)
         .await?;
 
-    t.speculate("finalize", [
+    x.speculate("finalize", [
         ("cheap", || finalize_cheap(&draft)),
         ("fast",  || finalize_fast(&draft)),
         ("safe",  || finalize_safe(&draft)),
@@ -65,7 +65,7 @@ async fn plan_trip(goal: String) -> Crux<Itinerary> {
 }
 ```
 
-Every `t.step`, `t.delegate`, `t.speculate` call is recorded in the `Crux<T>`
+Every `x.step`, `x.delegate`, `x.speculate` call is recorded in the `Crux<T>`
 value the function returns. That value is:
 
 - **Inspectable** — `crux.causal_chain()`, `crux.delegations()`, `crux.rejected_branches()`

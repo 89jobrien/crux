@@ -134,13 +134,13 @@ async fn deploy(reg: &TaskRegistry, task_id: TaskId, input: DeployInput)
     -> Crux<String>
 {
     reg.update_status::<DeployStatus>(task_id, DeployStatus::Building).await?;
-    let artifact = t.step("build", || build(&input.repo, &input.ref_)).await?;
+    let artifact = x.step("build", || build(&input.repo, &input.ref_)).await?;
 
     reg.update_status(task_id, DeployStatus::Testing).await?;
-    t.step("test", || run_tests(&artifact)).await?;
+    x.step("test", || run_tests(&artifact)).await?;
 
     reg.update_status(task_id, DeployStatus::Deploying).await?;
-    let url = t.step("deploy", || deploy_to(&input.env, &artifact)).await?;
+    let url = x.step("deploy", || deploy_to(&input.env, &artifact)).await?;
 
     reg.update_status(task_id, DeployStatus::Succeeded { url: url.clone() }).await?;
     Ok(url)
@@ -154,7 +154,7 @@ A few things to notice:
 The macro takes two optional arguments:
 
 - `registry = "reg"` — points at the `TaskRegistry` binding in scope. The
-  macro injects `reg.checkpoint(task_id, &t.snapshot()).await?` after every
+  macro injects `reg.checkpoint(task_id, &x.snapshot()).await?` after every
   step (when `checkpoint_every_step` is set).
 - `checkpoint_every_step` — the default is "checkpoint at delegation
   boundaries only." That's fast and usually enough. Turn on per-step
@@ -162,7 +162,7 @@ The macro takes two optional arguments:
   safety between them.
 
 If you need something custom, omit both and call `reg.checkpoint(task_id,
-&t.snapshot()).await?` explicitly at the points you care about. `t.snapshot()`
+&x.snapshot()).await?` explicitly at the points you care about. `x.snapshot()`
 returns a `Crux<serde_json::Value>` that's a live view of the crux so far.
 
 ### `update_status` is separate from `checkpoint`
@@ -185,7 +185,7 @@ what the runtime does:
 1. Load the `Task<DeployStatus>` from the backend.
 2. Read `task.crux` — the `Crux<Value>` snapshot.
 3. Start a new `CruxCtx` seeded from that snapshot.
-4. Re-run the agent function. For every `t.step("name", ...)`:
+4. Re-run the agent function. For every `x.step("name", ...)`:
    - Compute the input hash.
    - If the snapshot has a step with the same name and matching input hash,
      skip the closure entirely and return the recorded output.
@@ -256,7 +256,7 @@ changes.
 - **What's the difference between `update_status` and `checkpoint`?**
   _Status is business-level; checkpoint is execution history._
 - **What does `checkpoint_every_step` do?** _Tells the macro to persist the
-  crux after every `t.step` call, not just at delegation boundaries._
+  crux after every `x.step` call, not just at delegation boundaries._
 - **What makes replay correct rather than just fast?** _Input hashes — a
   step only gets skipped if its input matches the recorded one._
 

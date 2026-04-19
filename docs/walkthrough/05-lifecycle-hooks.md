@@ -61,7 +61,7 @@ Three attachment points, ordered from specific to broad:
 ### 1. Per call site (on a delegation builder)
 
 ```rust
-let draft = t.delegate::<Drafter>("draft", input)
+let draft = x.delegate::<Drafter>("draft", input)
     .on_low_confidence(0.75, |score, ctx| async move {
         // Inline recovery just for this call site.
         Recovery::Escalate(Box::pin(ctx.delegate::<Reviewer>("review", score).await))
@@ -89,17 +89,17 @@ impl Agent for Drafter {
 Use this when _every_ caller of the agent should get the same recovery
 behavior. Call-site hooks override the per-agent ones if both are set.
 
-### 3. Scoped with `t.on_low_confidence`
+### 3. Scoped with `x.on_low_confidence`
 
 ```rust
 #[cruxai::agent]
 async fn session(input: Input) -> Crux<Output> {
-    t.on_low_confidence(0.8, escalate_handler);
-    t.on_step_failure(retry_handler);
+    x.on_low_confidence(0.8, escalate_handler);
+    x.on_step_failure(retry_handler);
 
-    let a = t.step("a", || step_a()).await?;
-    let b = t.step("b", || step_b(&a)).await?;
-    let c = t.delegate::<SubAgent>("sub", b).await?;  // hook applies here too
+    let a = x.step("a", || step_a()).await?;
+    let b = x.step("b", || step_b(&a)).await?;
+    let c = x.delegate::<SubAgent>("sub", b).await?;  // hook applies here too
 
     Ok(c)
 }
@@ -118,7 +118,7 @@ human) expressed with hooks instead of nested `if`s:
 ```rust
 #[cruxai::agent]
 async fn answer(question: String) -> Crux<Answer> {
-    let draft = t.delegate::<CheapModel>("draft", question.clone())
+    let draft = x.delegate::<CheapModel>("draft", question.clone())
         .on_low_confidence(0.7, |score, ctx| async move {
             Recovery::Escalate(Box::pin(
                 ctx.delegate::<ExpensiveModel>("refine", question.clone())
@@ -156,7 +156,7 @@ writing a retry loop:
 ```rust
 #[cruxai::agent]
 async fn fetch_data(url: String) -> Crux<Vec<Record>> {
-    t.on_step_failure(|err, ctx| async move {
+    x.on_step_failure(|err, ctx| async move {
         if ctx.attempt() >= 3 {
             return Recovery::Propagate;
         }
@@ -165,8 +165,8 @@ async fn fetch_data(url: String) -> Crux<Vec<Record>> {
         Recovery::Retry
     });
 
-    let raw = t.step("fetch", || http_get(&url)).await?;
-    let parsed = t.step("parse", || parse_records(&raw)).await?;
+    let raw = x.step("fetch", || http_get(&url)).await?;
+    let parsed = x.step("parse", || parse_records(&raw)).await?;
     Ok(parsed)
 }
 ```
@@ -187,7 +187,7 @@ Ok, attempt: 3 }`. When you look at the crux later, the full retry
 ```rust
 #[cruxai::agent]
 async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
-    t.on_budget_exceeded(|budget, ctx| async move {
+    x.on_budget_exceeded(|budget, ctx| async move {
         // Out of tokens? Fall back to a cheaper path.
         Recovery::Escalate(Box::pin(
             ctx.delegate::<TemplateReport>("template", budget.remaining()).await
@@ -198,7 +198,7 @@ async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
         docs.into_iter().map(|d| summarize(d))
     ).await?;
 
-    t.delegate::<PolishedReport>("polish", summaries)
+    x.delegate::<PolishedReport>("polish", summaries)
         .with_budget(Budget::tokens(10_000))
         .await
 }
@@ -233,7 +233,7 @@ debugging harder if you overuse them. Two anti-patterns:
 
 1. **Hooks that mutate global state.** A hook should be about recovery for
    _this_ step, not about bumping a global counter or sending a webhook.
-   Put those in `t.step` so they appear in the crux as ordinary steps.
+   Put those in `x.step` so they appear in the crux as ordinary steps.
 2. **Hooks that silently succeed.** `Recovery::Substitute(default_value)`
    makes every failure look like success in your business code. The crux
    still records the substitution, but callers 500 feet downstream have no
@@ -242,7 +242,7 @@ debugging harder if you overuse them. Two anti-patterns:
 ## Check your understanding
 
 - **Where do you attach a hook that applies to all steps in one function?**
-  _Call `t.on_low_confidence(...)` / `t.on_step_failure(...)` inside the
+  _Call `x.on_low_confidence(...)` / `x.on_step_failure(...)` inside the
   `#[cruxai::agent]` function._
 - **Which `Recovery` variant replays the same step?** _`Retry`._
 - **Which one replaces the output without retrying?** _`Substitute(T)`._

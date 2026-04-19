@@ -51,7 +51,7 @@ trip-planner/
 
 ```toml
 [dependencies]
-cruxai = { version = "0.1", features = ["serde", "tokio", "sqlite"] }
+cruxai = { version = "0.1", features = ["serde", "tokio-runtime", "redb"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -128,13 +128,13 @@ use uuid::Uuid;
 #[cruxai::agent]
 pub async fn decompose(goal: String) -> Crux<Plan> {
     // 1. Draft a plan with a cheap model.
-    let draft = t.step("draft_plan", || async {
+    let draft = x.step("draft_plan", || async {
         let raw = call_model(&format!("Plan for: {goal}")).await?;
         parse_plan(&raw)
     }).await?;
 
     // 2. Critique it.
-    let critique = t.delegate::<Critic>("critique", draft.clone())
+    let critique = x.delegate::<Critic>("critique", draft.clone())
         .with_budget(Budget::tokens(2000))
         .on_low_confidence(0.7, |score, ctx| async move {
             Recovery::Escalate(Box::pin(
@@ -144,7 +144,7 @@ pub async fn decompose(goal: String) -> Crux<Plan> {
         .await?;
 
     // 3. If the critic found issues, revise. Otherwise keep the draft.
-    let plan = t.route_on_confidence(critique.approval, [
+    let plan = x.route_on_confidence(critique.approval, [
         (0.85.., || async { Ok(draft.clone()) }),
         (0.00..0.85, || async {
             let revised = call_model(&format!(
@@ -156,7 +156,7 @@ pub async fn decompose(goal: String) -> Crux<Plan> {
     ]).await?;
 
     // 4. Validate the DAG is acyclic before returning.
-    t.step("validate_dag", || async {
+    x.step("validate_dag", || async {
         validate_acyclic(&plan.subtasks)?;
         Ok(plan)
     }).await
@@ -167,12 +167,12 @@ pub async fn decompose(goal: String) -> Crux<Plan> {
 
 What's new vs. chapters 01-05:
 
-- **Three different branching primitives in 30 lines.** Plain `t.step` for
+- **Three different branching primitives in 30 lines.** Plain `x.step` for
   the draft, `delegate` with a call-site hook for the critic, and
   `route_on_confidence` for the revise/keep decision. Each one corresponds
   to a different *kind* of choice — and the crux records each one with a
   different `StepKind`.
-- **`validate_dag` is a `t.step`**, not a free function. That's deliberate:
+- **`validate_dag` is a `x.step`**, not a free function. That's deliberate:
   if someone hands us a cyclic plan, we want the crux to record "validation
   ran and failed" as a first-class step, not as a hidden panic deep in a
   helper.
@@ -199,7 +199,7 @@ pub async fn execute(
     plan: Plan,
 ) -> Crux<Report> {
     // 1. Submit every subtask to the registry, hanging them off the parent.
-    let ids = t.step("enqueue_subtasks", || async {
+    let ids = x.step("enqueue_subtasks", || async {
         let mut ids = HashMap::new();
         for st in &plan.subtasks {
             let tid = reg.submit_child::<ExecStatus, _>(
@@ -211,7 +211,7 @@ pub async fn execute(
     }).await?;
 
     // 2. Topologically sort into execution waves.
-    let waves = t.step("plan_waves", || async {
+    let waves = x.step("plan_waves", || async {
         Ok(topological_waves(&plan.subtasks))
     }).await?;
 
@@ -221,7 +221,7 @@ pub async fn execute(
 
     for (i, wave) in waves.into_iter().enumerate() {
         let wave_name = format!("wave_{i}");
-        let wave_results = t.step(&wave_name, || async {
+        let wave_results = x.step(&wave_name, || async {
             let futures = wave.iter().map(|st| {
                 let reg = reg.clone();
                 let task_id = ids[&st.id];
@@ -320,7 +320,7 @@ the full tree.
 We run the DAG in waves — one wave per topological level — rather than
 continuously draining a ready-queue. Three reasons:
 
-1. **The crux stays readable.** Each wave is one `t.step`, so the final
+1. **The crux stays readable.** Each wave is one `x.step`, so the final
    crux has a flat sequence of wave steps instead of an interleaved mess.
 2. **Checkpointing happens at wave boundaries.** If the process crashes
    during wave 3, replay restarts at wave 3 — not at wave 1.
@@ -343,7 +343,7 @@ ceremony.
 ### Where does replay pick up?
 
 Because the macro injects `checkpoint_every_step` and we've broken the
-execution into explicit `t.step` waves, replay after a crash does this:
+execution into explicit `x.step` waves, replay after a crash does this:
 
 1. Load the most recent checkpoint for `execute`.
 2. Re-run `execute` from the top.
@@ -356,7 +356,7 @@ execution into explicit `t.step` waves, replay after a crash does this:
    actually resumes.
 
 You get wave-level replay for free, because you structured the executor
-around `t.step` waves. That's the "crash-safe without writing checkpoint
+around `x.step` waves. That's the "crash-safe without writing checkpoint
 code" payoff.
 
 ## Step 4: the CLI
@@ -460,7 +460,7 @@ goal.
   and `plan_waves` are replayed from cache; previous completed waves are
   replayed from cache; the crashed wave re-runs.*
 - **How does the Decomposer use three different branching primitives?**
-  *`t.step` for the draft, `delegate` + hook for the critic,
+  *`x.step` for the draft, `delegate` + hook for the critic,
   `route_on_confidence` for revise-or-keep.*
 - **Why isn't `run_one_subtask` a `#[cruxai::agent]`?** *It's a helper, and
   we wanted raw `join_all`. You could absolutely convert it and use

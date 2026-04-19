@@ -11,7 +11,7 @@
 | `Step`    | A span event or log line               | First-class, typed, serializable        |
 | `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope         |
 | `Agent`   | A struct with an `async fn run`        | Declarative lifecycle hooks             |
-| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxai::agent]` function |
+| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxai::agent]` function  |
 
 The rest of this chapter walks through each one.
 
@@ -58,7 +58,7 @@ match t.value() {
 ```
 
 The `?` operator works _inside_ an `#[cruxai::agent]` function because the
-macro rewrites it to propagate through `t`. Outside an agent, you call
+macro rewrites it to propagate through `x`. Outside an agent, you call
 `.value()` to extract the inner `Result`.
 
 ### Querying the crux
@@ -116,7 +116,7 @@ That score is what powers:
 - `TaskRegistry`'s "should we retry this?" decisions (chapter 04)
 
 You set it with a closure return type that implements `Confidence`, or
-explicitly via `t.step_with_confidence("name", 0.82, || ...)`.
+explicitly via `x.step_with_confidence("name", 0.82, || ...)`.
 
 ## `CruxErr`
 
@@ -178,7 +178,7 @@ recovery behavior.
 
 ## `CruxCtx`
 
-The `t` binding you see inside `#[cruxai::agent]` functions is of type
+The `x` binding you see inside `#[cruxai::agent]` functions is of type
 `&mut CruxCtx`. You don't construct it yourself — the macro does.
 
 ```rust
@@ -189,8 +189,11 @@ impl CruxCtx {
     pub async fn delegate<A: Agent>(&mut self, name: &str, input: A::Input)
         -> DelegationBuilder<A>;
 
-    pub fn speculate<T>(&mut self, name: &str, arms: impl IntoIterator<Item = (&'static str, impl FnOnce() -> BoxFuture<'static, Result<T, CruxErr>>)>)
-        -> Speculation<T>;
+    pub fn speculate<T>(
+        &mut self,
+        name: &str,
+        arms: impl IntoIterator<Item = (&'static str, impl FnOnce() -> BoxFuture<'static, Result<T, CruxErr>>)>,
+    ) -> Speculation<T>;
 
     pub fn budget(&self) -> &Budget;
     pub fn remaining_budget(&self) -> u64;
@@ -200,10 +203,10 @@ impl CruxCtx {
 
 Three things worth knowing:
 
-1. `t.step` takes a closure and runs it, so you can use any `async` code.
-2. `t.delegate` returns a **builder**, not a future. You chain `.with_budget`,
+1. `x.step` takes a closure and runs it, so you can use any `async` code.
+2. `x.delegate` returns a **builder**, not a future. You chain `.with_budget`,
    `.on_low_confidence`, `.on_step_failure`, and finally `.await`.
-3. `t.speculate` is lazy — the arms don't run until you call a terminator
+3. `x.speculate` is lazy — the arms don't run until you call a terminator
    like `.pick_best_by` or `.first_ok`.
 
 ## Check your understanding

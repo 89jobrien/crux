@@ -49,7 +49,7 @@ What moved:
 | ----------------------------- | ------------------------------------------ |
 | Event enum per agent          | `Crux<T>` is the universal event type      |
 | Retry logic at receiver       | `on_step_failure` hook at the agent        |
-| Tracing via `info!`           | Every `t.step` is already a recorded event |
+| Tracing via `info!`           | Every `x.step` is already a recorded event |
 | No record of rejected options | `speculate` + `rejected_branches()`        |
 
 The tradeoff is that `cruxai::` enforces its shape — you _must_ structure
@@ -107,7 +107,7 @@ are the same. The differences tend to be:
 | Your hand-rolled version            | `cruxai::`                                |
 | ----------------------------------- | --------------------------------------- |
 | `AgentRun` struct in your code      | `Crux<T>` as a generic type             |
-| Manual `run.record_step(...)` calls | `t.step(...)` via macro                 |
+| Manual `run.record_step(...)` calls | `x.step(...)` via macro                 |
 | Checkpointing bolted on later       | `#[cruxai::agent(checkpoint_every_step)]` |
 | `CruxdProvider` trait for LLM calls | `Agent` trait for any delegatable work  |
 | Status enum per agent               | `Task<S>` with user-defined `S`         |
@@ -119,7 +119,7 @@ and use `cruxai::`?** The honest answer is that it depends on three things:
    pattern — wrapping LLM providers with crux-recording middleware — is
    something you probably want to keep. `cruxai::` doesn't replace it; it
    gives you a place to put it. A `CruxdProvider` becomes something you
-   call _from inside_ a `t.step` closure.
+   call _from inside_ an `x.step` closure.
 
 2. **How much replay do you need?** If you've been getting by with
    "run it again from the start", you don't need `cruxai::`'s replay. If

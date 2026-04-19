@@ -14,9 +14,9 @@ budget, and recovery semantics — not because any one of them is "better".
 | Primitive               | When to use                             | Records in crux as                           |
 | ----------------------- | --------------------------------------- | -------------------------------------------- |
 | `match` (plain Rust)    | Pure pattern match on known-shape data  | `Step { kind: Branch, ... }`                 |
-| `t.route_on_confidence` | Dispatch on a model's confidence score  | `Step { kind: Branch, ... }` with the score  |
-| `t.speculate`           | Run several approaches, pick the winner | Winner as `Ok`, losers as `Rejected`         |
-| `t.delegate::<A>`       | Hand off to a separate agent            | `Step { kind: Delegation, children: [...] }` |
+| `x.route_on_confidence` | Dispatch on a model's confidence score  | `Step { kind: Branch, ... }` with the score  |
+| `x.speculate`           | Run several approaches, pick the winner | Winner as `Ok`, losers as `Rejected`         |
+| `x.delegate::<A>`       | Hand off to a separate agent            | `Step { kind: Delegation, children: [...] }` |
 
 Pick the primitive by asking: _what does "failure" mean here?_
 
@@ -34,9 +34,9 @@ No macro needed. Just `match`:
 ```rust
 #[cruxai::agent]
 async fn classify(doc: Document) -> Crux<Category> {
-    let embedding = t.step("embed", || embed(&doc)).await?;
+    let embedding = x.step("embed", || embed(&doc)).await?;
 
-    let category = t.step("match", || async {
+    let category = x.step("match", || async {
         match embedding.topic {
             Topic::Code     => Ok(Category::Technical),
             Topic::News     => Ok(Category::Current),
@@ -49,7 +49,7 @@ async fn classify(doc: Document) -> Crux<Category> {
 }
 ```
 
-The `match` is inside `t.step`, so the step records _which_ arm fired (via
+The `match` is inside `x.step`, so the step records _which_ arm fired (via
 the closure's output). The unknown case fails the step with a `LowConfidence`
 error — which will trip any `on_low_confidence` hook attached upstream.
 
@@ -65,12 +65,12 @@ procedural. You hand it a score and a set of arms keyed by threshold:
 ```rust
 #[cruxai::agent]
 async fn answer(question: String) -> Crux<Answer> {
-    let draft = t.step("draft", || quick_draft(&question)).await?;
+    let draft = x.step("draft", || quick_draft(&question)).await?;
 
-    t.route_on_confidence(draft.confidence, [
+    x.route_on_confidence(draft.confidence, [
         (0.90.., || async { Ok(draft.into_answer()) }),
-        (0.70..0.90, || t.delegate::<Refiner>("refine", &draft).await),
-        (0.00..0.70, || t.delegate::<HumanEscalator>("escalate", &draft).await),
+        (0.70..0.90, || x.delegate::<Refiner>("refine", &draft).await),
+        (0.00..0.70, || x.delegate::<HumanEscalator>("escalate", &draft).await),
     ]).await
 }
 ```
@@ -95,14 +95,14 @@ s.kind == StepKind::Branch)` and see the exact confidence score at each
 decision point. That's the kind of thing you'd normally build an entire
 eval harness for.
 
-## Speculation with `t.speculate`
+## Speculation with `x.speculate`
 
 Run several approaches concurrently, let them race, pick the best:
 
 ```rust
 #[cruxai::agent]
 async fn finalize(draft: Draft) -> Crux<Itinerary> {
-    t.speculate("finalize", [
+    x.speculate("finalize", [
         ("cheap", || async { finalize_cheap(&draft).await }),
         ("fast",  || async { finalize_fast(&draft).await }),
         ("safe",  || async { finalize_safe(&draft).await }),
@@ -140,7 +140,7 @@ single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
 2000 between them. This is the one place in `cruxai::` where arms are _not_
 independent — speculation is explicitly cooperative.
 
-## Delegation with `t.delegate::<A>`
+## Delegation with `x.delegate::<A>`
 
 Delegation is a handoff to another `Agent`. It's the only primitive that
 crosses the "who owns this decision" boundary:
@@ -148,9 +148,9 @@ crosses the "who owns this decision" boundary:
 ```rust
 #[cruxai::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
-    let research = t.step("research", || search_web(&goal)).await?;
+    let research = x.step("research", || search_web(&goal)).await?;
 
-    let draft = t.delegate::<DraftAgent>("draft", research)
+    let draft = x.delegate::<DraftAgent>("draft", research)
         .with_budget(Budget::tokens(4000))
         .on_low_confidence(0.7, |score, ctx| async move {
             ctx.delegate::<HumanReviewer>("human", score).await
