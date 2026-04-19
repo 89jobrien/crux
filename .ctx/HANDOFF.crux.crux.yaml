@@ -1,33 +1,12 @@
 project: crux
 id: crux
-updated: "20260418::180000"
+updated: "20260419::142500"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
   step, branch, delegation, and failure is a first-class value.
 
 items:
-  - id: crux-24
-    name: publish-crux-agentic-0.2.3
-    title: "Publish crux-agentic v0.2.3 to crates.io"
-    description: >
-      Publish crux-agentic 0.2.3 with LlmProvider trait, LlmStep<P>, AnthropicAdapter,
-      OpenAiAdapter. llm::complete handler rewired through typed adapters.
-    priority: P1
-    status: closed
-    files:
-      - crates/crux-agentic/src/provider.rs
-      - crates/crux-agentic/src/llm_step.rs
-      - crates/crux-agentic/src/adapters/
-      - crates/crux-agentic/src/llm.rs
-      - crates/crux-agentic/src/lib.rs
-      - crates/crux-agentic/Cargo.toml
-    extra:
-      - type: note
-        note: >
-          Implemented by Wave 1 TDD agent (38/38 tests, clippy clean). Committed a4ef7de.
-          Published to crates.io session 16. minibox-agent Wave 2 agent wiring in progress.
-
   - id: crux-25
     name: minibox-agent-adapter
     title: "minibox-agent: FallbackChainAdapter implementing crux LlmProvider"
@@ -56,6 +35,19 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260419::142500"
+    session: 17
+    summary: >
+      Added llm::decompose handler (BAML DecomposeSpec function) to crux-agentic.
+      Ran all three pipeline examples end-to-end: extract_entities, extract_summary,
+      decompose_spec. Added .mise.toml pinning baml-cli 0.221.0. 241/241 tests pass.
+    commits:
+      - sha: 87764f3
+        branch: main
+        note: "feat(crux-agentic): llm::decompose handler + decompose_spec pipeline example"
+      - sha: 397e422
+        branch: main
+        note: "feat(baml): add project enrichment and CI triage functions"
   - date: "20260418::180000"
     session: 16
     summary: >
@@ -100,23 +92,6 @@ log:
       - sha: c618719
         branch: main
         note: "check-baml: auto-download native lib if not cached"
-  - date: "20260417::220000"
-    session: 13
-    summary: >
-      Closed crux-20: validated llm::extract end-to-end with real OPENAI_API_KEY (33/33
-      tests pass). Closed crux-22: bumped crux-agentic to v0.2.2 and published to
-      crates.io with baml feature included. Restored description fields and ISO-8601
-      timestamps per council strict-critic findings.
-    commits:
-      - sha: d9cbaa0
-        branch: main
-        note: "crux-20 implementation (llm::extract + BAML schemas)"
-      - sha: dca076f
-        branch: main
-        note: "crux-22 version bump 0.2.1→0.2.2"
-      - sha: c003ff2
-        branch: main
-        note: "session 13 handoff update"
   - date: "20260417::204500"
     session: 12
     summary: >
