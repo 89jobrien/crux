@@ -29,6 +29,17 @@ build-dev:
     cargo build -p crux-agentic --features baml
     cargo install --path crates/crux-agentic --features baml
 
+# Run developer setup (auto-detects shell)
+setup:
+    #!/usr/bin/env bash
+    if command -v nu >/dev/null 2>&1; then
+        nu scripts/setup.nu
+    elif command -v fish >/dev/null 2>&1; then
+        fish scripts/setup.fish
+    else
+        bash scripts/setup.sh
+    fi
+
 # Install git hooks
 hooks:
     git config core.hooksPath .githooks
