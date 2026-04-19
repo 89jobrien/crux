@@ -17,9 +17,14 @@ pub fn register(registry: &mut HandlerRegistry) {
             })
             .unwrap_or_default();
 
+        // Pick from the payload — the handler input object minus the injected `args` key.
+        // This avoids mixing pipeline metadata (`args`) with actual payload fields.
         let mut out = Map::new();
         if let Value::Object(map) = &input {
             for field in &fields {
+                if field == "args" {
+                    continue; // never pick the `args` metadata key
+                }
                 if let Some(v) = map.get(field) {
                     out.insert(field.clone(), v.clone());
                 }
@@ -35,6 +40,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             .cloned()
             .unwrap_or(Value::Null);
 
+        // Use the handler input as the merge base after stripping the injected `args` key.
+        // `args` is pipeline metadata (static step config) and is intentionally excluded from the
+        // merged output so it does not leak into downstream steps as a data field.
         let mut base = match input {
             Value::Object(mut m) => {
                 m.remove("args");
