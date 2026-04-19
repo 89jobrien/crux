@@ -1,23 +1,23 @@
 default:
     @just --list
 
-# Run cargo fmt check
+# Run cargo fmt check (DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 fmt:
     cargo fmt --all -- --check
 
-# Run cargo check with warnings-as-errors
+# Run cargo check with warnings-as-errors (DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 check:
     RUSTFLAGS="-D warnings" cargo check --workspace --all-targets
 
-# Run clippy with deny warnings
+# Run clippy with deny warnings (DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 lint:
     cargo clippy --all-targets -- -D warnings
 
-# Run all tests via nextest
+# Run all tests via nextest (DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 test:
     cargo nextest run
 
-# Run full CI suite locally (mirrors GH Actions)
+# Run full CI suite locally (mirrors GH Actions - DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 ci: check build-locked fmt lint test deny
 
 # Build all targets
