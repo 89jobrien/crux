@@ -106,6 +106,8 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, plugins_path: Option<&
         cruxai_script::load_file(pipeline_path).expect("failed to load pipeline")
     };
 
+    warn_missing_env(&pipeline);
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     let registry = rt.block_on(build_registry(&pipeline, plugins_path));
     let runner = Runner::new(Arc::new(registry));
@@ -125,6 +127,23 @@ fn cmd_plan(
     output_type: &OutputType,
     plugins_path: Option<&str>,
 ) {
+    let has_openai = std::env::var("OPENAI_API_KEY")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    let has_anthropic = std::env::var("ANTHROPIC_API_KEY")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    if !has_openai && !has_anthropic {
+        eprintln!(
+            "[crux] warning: `plan` requires an LLM API key but neither \
+             OPENAI_API_KEY nor ANTHROPIC_API_KEY is set"
+        );
+        eprintln!(
+            "[crux] hint: copy .env.example to .env and configure, \
+             or use `dotenvx run -- crux plan ...`"
+        );
+    }
+
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
@@ -261,6 +280,33 @@ fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
     out
 }
 
+
+/// Warn if the pipeline uses LLM handlers but no API keys are set.
+fn warn_missing_env(pipeline: &PipelineDef) {
+    let handlers = collect_handler_names(pipeline);
+    let needs_llm = handlers.iter().any(|h| h.starts_with("llm::"));
+    if !needs_llm {
+        return;
+    }
+
+    let has_openai = std::env::var("OPENAI_API_KEY")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    let has_anthropic = std::env::var("ANTHROPIC_API_KEY")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+
+    if !has_openai && !has_anthropic {
+        eprintln!(
+            "[crux] warning: pipeline uses llm:: handlers but neither \
+             OPENAI_API_KEY nor ANTHROPIC_API_KEY is set"
+        );
+        eprintln!(
+            "[crux] hint: copy .env.example to .env and configure, \
+             or use `dotenvx run -- crux run ...`"
+        );
+    }
+}
 
 fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
     plugins_path.map(String::from).unwrap_or_else(|| {

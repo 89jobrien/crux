@@ -20,6 +20,15 @@ ci: fmt lint test check-baml
 build:
     cargo build --all-targets
 
+# Build with all features (baml, plugins)
+build-full:
+    cargo build --all-targets -p crux-agentic --features baml
+
+# Build dev binary with all features and install to cargo bin
+build-dev:
+    cargo build -p crux-agentic --features baml
+    cargo install --path crates/crux-agentic --features baml
+
 # Install git hooks
 hooks:
     git config core.hooksPath .githooks

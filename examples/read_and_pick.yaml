@@ -1,0 +1,26 @@
+pipeline: read_and_pick
+# Read a file and extract fields — no API keys required.
+#
+# This pipeline demonstrates basic crux functionality using only
+# built-in handlers (fs::read, shell::capture, ctrl::log).
+#
+# Run:
+#   crux run examples/read_and_pick.yaml examples/input_read_and_pick.json
+budget: { calls: 3 }
+
+steps:
+  - step: read_file
+    handler: shell::capture
+    args:
+      cmd: "cat docs/plugins.md"
+    # Output: { "exit_code": 0, "stdout": "...", "stderr": "" }
+
+  - step: count_lines
+    handler: shell::capture
+    args:
+      cmd: "wc -l < docs/plugins.md"
+    # Output: { "exit_code": 0, "stdout": "N\n", "stderr": "" }
+
+  - step: log_result
+    handler: ctrl::log
+    # Logs the result to stderr and passes it through
