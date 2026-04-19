@@ -36,6 +36,15 @@ use cruxai_script::HandlerRegistry;
 ///
 /// Handler names follow the pattern `module::handler`, e.g. `shell::capture`.
 pub fn register_all(registry: &mut HandlerRegistry) {
+    register_all_with_plugins(registry, Vec::new());
+}
+
+/// Register all built-in handlers, including plugin handler descriptions
+/// for the planner.
+pub fn register_all_with_plugins(
+    registry: &mut HandlerRegistry,
+    plugin_handlers: Vec<String>,
+) {
     shell::register(registry);
     fs::register(registry);
     git::register(registry);
@@ -47,5 +56,7 @@ pub fn register_all(registry: &mut HandlerRegistry) {
     #[cfg(feature = "baml")]
     llm::register_decompose(registry);
     #[cfg(feature = "baml")]
-    planner::register_plan(registry);
+    planner::register_plan(registry, plugin_handlers);
+    #[cfg(not(feature = "baml"))]
+    let _ = plugin_handlers;
 }

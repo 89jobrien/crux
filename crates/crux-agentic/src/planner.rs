@@ -6,33 +6,37 @@ use cruxai_script::HandlerRegistry;
 use serde_json::{Value, json};
 
 /// Register the `llm::plan` handler.
-pub fn register_plan(registry: &mut HandlerRegistry) {
-    registry.handler("llm::plan", |input: Value| async move {
-        let goal = input
-            .get("args")
-            .and_then(|a| a.get("goal"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| CruxErr::step_failed("llm::plan", "missing 'goal' field"))?
-            .to_string();
+pub fn register_plan(registry: &mut HandlerRegistry, extra_handlers: Vec<String>) {
+    registry.handler("llm::plan", move |input: Value| {
+        let extra = extra_handlers.clone();
+        async move {
+            let goal = input
+                .get("args")
+                .and_then(|a| a.get("goal"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| CruxErr::step_failed("llm::plan", "missing 'goal' field"))?
+                .to_string();
 
-        let constraints = input
-            .get("args")
-            .and_then(|a| a.get("constraints"))
-            .and_then(|v| v.as_str())
-            .map(str::to_string);
+            let constraints = input
+                .get("args")
+                .and_then(|a| a.get("constraints"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
 
-        let handlers = handler_manifest();
+            let mut handlers = handler_manifest();
+            handlers.extend(extra);
 
-        let result = B
-            .GeneratePipeline
-            .call(goal, &handlers, constraints)
-            .await
-            .map_err(|e| CruxErr::step_failed("llm::plan", format!("BAML: {e}")))?;
+            let result = B
+                .GeneratePipeline
+                .call(goal, &handlers, constraints)
+                .await
+                .map_err(|e| CruxErr::step_failed("llm::plan", format!("BAML: {e}")))?;
 
-        Ok(json!({
-            "pipeline_name": result.pipeline_name,
-            "yaml": result.yaml,
-        }))
+            Ok(json!({
+                "pipeline_name": result.pipeline_name,
+                "yaml": result.yaml,
+            }))
+        }
     });
 }
 
@@ -65,8 +69,10 @@ fn handler_manifest() -> Vec<String> {
 pub async fn generate_pipeline(
     goal: &str,
     constraints: Option<&str>,
+    extra_handlers: &[String],
 ) -> Result<String, CruxErr> {
-    let handlers = handler_manifest();
+    let mut handlers = handler_manifest();
+    handlers.extend_from_slice(extra_handlers);
     let result = B
         .GeneratePipeline
         .call(

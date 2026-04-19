@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use clap::{Parser, ValueEnum};
+use crux_plugin::bridge::register_plugins;
+use crux_plugin::manifest::load_manifest;
 use cruxai_core::prelude::*;
 use cruxai_script::{HandlerRegistry, Runner, schema::PipelineDef};
 use serde_json::{Value, json};
@@ -35,6 +37,9 @@ enum Cli {
         pipeline: String,
         /// Optional input JSON file
         input: Option<String>,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
     #[cfg(feature = "baml")]
@@ -51,6 +56,9 @@ enum Cli {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputType::Yaml)]
         output_type: OutputType,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
     },
 }
 
@@ -58,18 +66,29 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
-        Cli::Run { pipeline, input } => cmd_run(&pipeline, input.as_deref()),
+        Cli::Run {
+            pipeline,
+            input,
+            plugins,
+        } => cmd_run(&pipeline, input.as_deref(), plugins.as_deref()),
         #[cfg(feature = "baml")]
         Cli::Plan {
             goal,
             output,
             constraints,
             output_type,
-        } => cmd_plan(&goal, output.as_deref(), constraints.as_deref(), &output_type),
+            plugins,
+        } => cmd_plan(
+            &goal,
+            output.as_deref(),
+            constraints.as_deref(),
+            &output_type,
+            plugins.as_deref(),
+        ),
     }
 }
 
-fn cmd_run(pipeline_path: &str, input_path: Option<&str>) {
+fn cmd_run(pipeline_path: &str, input_path: Option<&str>, plugins_path: Option<&str>) {
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")
@@ -87,10 +106,10 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>) {
         cruxai_script::load_file(pipeline_path).expect("failed to load pipeline")
     };
 
-    let registry = build_registry(&pipeline);
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let registry = rt.block_on(build_registry(&pipeline, plugins_path));
     let runner = Runner::new(Arc::new(registry));
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
     let start = Instant::now();
     let crux = rt.block_on(runner.run(&pipeline, input));
     let elapsed = start.elapsed();
@@ -104,10 +123,23 @@ fn cmd_plan(
     output: Option<&str>,
     constraints: Option<&str>,
     output_type: &OutputType,
+    plugins_path: Option<&str>,
 ) {
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let manifest = load_manifest(&resolve_plugins_path(plugins_path)).unwrap_or_default();
+    let extra: Vec<String> = manifest
+        .plugin
+        .iter()
+        .map(|p| format!("{}::* -- plugin (see plugins.toml)", p.name))
+        .collect();
+
     let yaml = rt
-        .block_on(crux_agentic::planner::generate_pipeline(goal, constraints))
+        .block_on(crux_agentic::planner::generate_pipeline(
+            goal,
+            constraints,
+            &extra,
+        ))
         .expect("pipeline generation failed");
 
     let formatted = format_plan_output(&yaml, goal, output_type);
@@ -230,10 +262,34 @@ fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
 }
 
 
+fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
+    plugins_path.map(String::from).unwrap_or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        format!("{home}/.crux/plugins.toml")
+    })
+}
+
 /// Build a registry seeded with all crux-agentic built-in handlers.
-fn build_registry(pipeline: &PipelineDef) -> HandlerRegistry {
+async fn build_registry(
+    pipeline: &PipelineDef,
+    plugins_path: Option<&str>,
+) -> HandlerRegistry {
+    let manifest = load_manifest(&resolve_plugins_path(plugins_path)).unwrap_or_default();
+
+    let plugin_handler_descs: Vec<String> = manifest
+        .plugin
+        .iter()
+        .map(|p| format!("{}::* -- plugin (see plugins.toml)", p.name))
+        .collect();
+
     let mut reg = HandlerRegistry::new();
-    crux_agentic::register_all(&mut reg);
+    crux_agentic::register_all_with_plugins(&mut reg, plugin_handler_descs);
+
+    if !manifest.plugin.is_empty() {
+        if let Err(e) = register_plugins(&mut reg, &manifest.plugin).await {
+            eprintln!("[crux] warning: failed to load plugins: {e}");
+        }
+    }
 
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {
