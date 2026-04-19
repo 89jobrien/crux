@@ -5,6 +5,12 @@ use tokio::process::Command;
 
 use crate::error::{opt_str, require_str};
 
+/// Register shell handlers: `shell::exec` (fire-and-forget) and `shell::capture` (fail on
+/// non-zero exit).
+///
+/// Both handlers require a `cmd` arg to be present in the step's `args` field at runtime.
+/// Use crux-script's static args injection to supply `cmd` at the pipeline-definition level;
+/// without it the handler will return a `MissingArg` error.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler("shell::exec", |input: Value| async move {
         run_shell(input, false).await
