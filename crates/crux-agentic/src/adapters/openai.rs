@@ -1,11 +1,12 @@
 use cruxai_core::prelude::CruxErr;
+use cruxai_model::{ProviderModelId, ProviderModelRef, Vendor};
 use serde_json::json;
 
 use crate::provider::{LlmProvider, LlmRequest, LlmResponse};
 
 pub struct OpenAiAdapter {
     pub api_key: String,
-    pub model: String,
+    pub model: ProviderModelRef,
     pub base_url: String,
 }
 
@@ -13,19 +14,19 @@ impl OpenAiAdapter {
     pub fn from_env() -> Self {
         Self {
             api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
-            model: "gpt-4o-mini".to_string(),
+            model: ProviderModelId::parse_lenient(Vendor::OpenAi, "gpt-4o-mini"),
             base_url: "https://api.openai.com".to_string(),
         }
     }
 
     pub fn new(
         api_key: impl Into<String>,
-        model: impl Into<String>,
+        model: ProviderModelRef,
         base_url: impl Into<String>,
     ) -> Self {
         Self {
             api_key: api_key.into(),
-            model: model.into(),
+            model,
             base_url: base_url.into(),
         }
     }
@@ -37,7 +38,7 @@ impl LlmProvider for OpenAiAdapter {
         req: LlmRequest,
     ) -> impl std::future::Future<Output = Result<LlmResponse, CruxErr>> + Send {
         let api_key = self.api_key.clone();
-        let model = self.model.clone();
+        let model = self.model.provider_id.clone();
         let base_url = self.base_url.clone();
 
         async move {
@@ -94,14 +95,15 @@ mod tests {
     fn from_env_uses_defaults() {
         let adapter = OpenAiAdapter::from_env();
         assert_eq!(adapter.base_url, "https://api.openai.com");
-        assert_eq!(adapter.model, "gpt-4o-mini");
+        assert_eq!(adapter.model.provider_id, "gpt-4o-mini");
     }
 
     #[test]
     fn new_sets_fields() {
-        let adapter = OpenAiAdapter::new("key", "gpt-4o", "https://custom.example.com");
+        let model = ProviderModelId::parse_lenient(Vendor::OpenAi, "gpt-4o");
+        let adapter = OpenAiAdapter::new("key", model, "https://custom.example.com");
         assert_eq!(adapter.api_key, "key");
-        assert_eq!(adapter.model, "gpt-4o");
+        assert_eq!(adapter.model.provider_id, "gpt-4o");
         assert_eq!(adapter.base_url, "https://custom.example.com");
     }
 }

@@ -1,8 +1,9 @@
-use crate::adapters::{AnthropicAdapter, OpenAiAdapter};
+use crate::adapters::{AnthropicAdapter, OllamaAdapter, OpenAiAdapter};
 use crate::error::opt_str;
 use crate::provider::LlmProvider;
 use crate::provider::LlmRequest;
 use cruxai_core::prelude::CruxErr;
+use cruxai_model::{ProviderModelId, Vendor};
 use cruxai_script::HandlerRegistry;
 use serde_json::{Value, json};
 
@@ -178,10 +179,12 @@ pub fn register(registry: &mut HandlerRegistry) {
             .ok_or_else(|| CruxErr::step_failed("llm::complete", "missing 'prompt' field"))?
             .to_string();
 
-        let provider_name = opt_str(&input, "provider").unwrap_or("openai").to_string();
-        let model = opt_str(&input, "model")
-            .unwrap_or("gpt-4o-mini")
-            .to_string();
+        let vendor = opt_str(&input, "provider")
+            .unwrap_or("openai")
+            .parse::<Vendor>()
+            .unwrap_or(Vendor::OpenAi);
+        let model_str = opt_str(&input, "model").unwrap_or("gpt-4o-mini");
+        let model_ref = ProviderModelId::parse_lenient(vendor, model_str);
         let system = opt_str(&input, "system")
             .unwrap_or("You are a helpful assistant.")
             .to_string();
@@ -202,12 +205,20 @@ pub fn register(registry: &mut HandlerRegistry) {
             max_tokens,
         };
 
-        let resp = match provider_name.as_str() {
-            "anthropic" => {
+        let resp = match vendor {
+            Vendor::Anthropic => {
                 let base_url = opt_str(&input, "base_url")
                     .unwrap_or("https://api.anthropic.com")
                     .to_string();
-                AnthropicAdapter::new(api_key, model, base_url)
+                AnthropicAdapter::new(api_key, model_ref, base_url)
+                    .complete(req)
+                    .await?
+            }
+            Vendor::Ollama => {
+                let base_url = opt_str(&input, "base_url")
+                    .unwrap_or("http://localhost:11434")
+                    .to_string();
+                OllamaAdapter::new(model_ref, base_url)
                     .complete(req)
                     .await?
             }
@@ -215,7 +226,7 @@ pub fn register(registry: &mut HandlerRegistry) {
                 let base_url = opt_str(&input, "base_url")
                     .unwrap_or("https://api.openai.com")
                     .to_string();
-                OpenAiAdapter::new(api_key, model, base_url)
+                OpenAiAdapter::new(api_key, model_ref, base_url)
                     .complete(req)
                     .await?
             }
