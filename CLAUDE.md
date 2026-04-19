@@ -98,9 +98,8 @@ recovery path, not a fallback.
 - Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
 - Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
   examples/<pipeline>.yaml examples/input_<name>.json`
-- BAML integration tests require `OPENAI_API_KEY`. Inject via:
-  `DOTENV_PRIVATE_KEY=$(op read "op://Personal/nihl7o2bojy53zy4aqtr7txyqi/password") \`
-  `dotenvx run --env-file=$HOME/dev/.env -- cargo nextest run --features baml -p crux-agentic`
+- BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
+  for the exact injection commands (machine-local, gitignored).
 
 ### Combinators on CruxCtx
 
