@@ -1,5 +1,5 @@
 /// Pipeline runner — interprets a parsed YAML pipeline against CruxCtx + HandlerRegistry.
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cruxx_core::prelude::*;
 use serde_json::Value;
@@ -81,8 +81,10 @@ impl Runner {
                     current_input.clone()
                 };
                 // Invoke the handler once, capturing both value and confidence.
+                // Preserve `None` so that `route_on_confidence` can distinguish "no score"
+                // (handler_value steps) from an explicit 1.0 — see ExprError::NoConfidence.
                 let raw = handler(input.clone()).await?;
-                let confidence = raw.confidence_or_default();
+                let confidence = raw.confidence;
                 let value = raw.value;
 
                 // Record the step in the trace (closure returns the pre-computed value).
@@ -126,7 +128,7 @@ impl Runner {
                     step_name.to_string(),
                     StepResult {
                         output: output.clone(),
-                        confidence: 1.0,
+                        confidence: None,
                     },
                 );
                 Ok(output)
@@ -134,6 +136,14 @@ impl Runner {
 
             StepDef::Pipe(node) => {
                 let registry = self.registry.clone();
+
+                // One confidence cell per stage; the last stage's confidence wins.
+                let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
+                    .stages
+                    .iter()
+                    .map(|_| Arc::new(Mutex::new(None)))
+                    .collect();
+
                 #[allow(clippy::type_complexity)]
                 let stages: Vec<(
                     &str,
@@ -141,10 +151,12 @@ impl Runner {
                 )> = node
                     .stages
                     .iter()
-                    .map(|arm| {
+                    .zip(confidence_cells.iter())
+                    .map(|(arm, cell)| {
                         let handler = registry.get_handler(arm.handler_name()).cloned();
                         let name_owned = arm.handler_name().to_string();
                         let static_args = arm.args().cloned();
+                        let cell = Arc::clone(cell);
                         let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
                             Box::new(move |v: Value| {
                                 Box::pin(async move {
@@ -152,7 +164,9 @@ impl Runner {
                                         CruxErr::step_failed(&name_owned, "handler not found")
                                     })?;
                                     let input = merge_args(v, static_args);
-                                    h(input).await.map(|o| o.value)
+                                    let out = h(input).await?;
+                                    *cell.lock().unwrap() = out.confidence;
+                                    Ok(out.value)
                                 }) as BoxFut<Value>
                             });
                         (arm.label(), stage_fn)
@@ -162,29 +176,42 @@ impl Runner {
                 let input = current_input.clone();
                 let result = ctx.pipe(&node.pipe, input, stages).await?;
 
+                // Use the last stage's confidence (pipeline is sequential); None if unset.
+                let confidence = confidence_cells.last().and_then(|c| *c.lock().unwrap());
+
                 expr_ctx.steps.insert(
                     node.pipe.clone(),
                     StepResult {
                         output: result.clone(),
-                        confidence: 1.0,
+                        confidence,
                     },
                 );
                 Ok(result)
             }
 
             StepDef::JoinAll(node) => {
+                let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
+                    .arms
+                    .iter()
+                    .map(|_| Arc::new(Mutex::new(None)))
+                    .collect();
+
                 let arms: Vec<(&str, BoxFut<Value>)> = node
                     .arms
                     .iter()
-                    .map(|arm| {
+                    .zip(confidence_cells.iter())
+                    .map(|(arm, cell)| {
                         let handler = self.registry.get_handler(arm.handler_name()).cloned();
                         let input = merge_args(current_input.clone(), arm.args().cloned());
                         let name_owned = arm.handler_name().to_string();
+                        let cell = Arc::clone(cell);
                         let fut: BoxFut<Value> = Box::pin(async move {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
-                            h(input).await.map(|o| o.value)
+                            let out = h(input).await?;
+                            *cell.lock().unwrap() = out.confidence;
+                            Ok(out.value)
                         });
                         (arm.label(), fut)
                     })
@@ -193,11 +220,22 @@ impl Runner {
                 let results = ctx.join_all(&node.join_all, arms).await?;
                 let output = Value::Array(results);
 
+                // Average confidence across arms that provided a score; None if none did.
+                let scored: Vec<f32> = confidence_cells
+                    .iter()
+                    .filter_map(|c| *c.lock().unwrap())
+                    .collect();
+                let confidence = if scored.is_empty() {
+                    None
+                } else {
+                    Some(scored.iter().sum::<f32>() / scored.len() as f32)
+                };
+
                 expr_ctx.steps.insert(
                     node.join_all.clone(),
                     StepResult {
                         output: output.clone(),
-                        confidence: 1.0,
+                        confidence,
                     },
                 );
                 Ok(output)
@@ -208,19 +246,30 @@ impl Runner {
                     .eval_f32(&node.value)
                     .map_err(|e| CruxErr::step_failed(&node.route_on_confidence, e.to_string()))?;
 
+                // One cell per route; only the matching branch's handler will write to it.
+                let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
+                    .routes
+                    .iter()
+                    .map(|_| Arc::new(Mutex::new(None)))
+                    .collect();
+
                 let routes: Vec<ConfidenceRoute<'_, Value>> = node
                     .routes
                     .iter()
-                    .map(|branch| {
+                    .zip(confidence_cells.iter())
+                    .map(|(branch, cell)| {
                         let range = parse_range(&branch.range);
                         let handler = self.registry.get_handler(&branch.handler).cloned();
                         let input = merge_args(current_input.clone(), branch.args.clone());
                         let handler_name = branch.handler.clone();
+                        let cell = Arc::clone(cell);
                         let fut: BoxFut<Value> = Box::pin(async move {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&handler_name, "handler not found")
                             })?;
-                            h(input).await.map(|o| o.value)
+                            let out = h(input).await?;
+                            *cell.lock().unwrap() = out.confidence;
+                            Ok(out.value)
                         });
                         (range, branch.label.as_str(), fut)
                     })
@@ -230,11 +279,18 @@ impl Runner {
                     .route_on_confidence(&node.route_on_confidence, confidence, routes)
                     .await?;
 
+                // Use the matched branch's handler confidence; fall back to the routing score.
+                let handler_confidence = confidence_cells
+                    .iter()
+                    .find_map(|c| *c.lock().unwrap())
+                    .map(Some)
+                    .unwrap_or(Some(confidence));
+
                 expr_ctx.steps.insert(
                     node.route_on_confidence.clone(),
                     StepResult {
                         output: result.clone(),
-                        confidence,
+                        confidence: handler_confidence,
                     },
                 );
                 Ok(result)
@@ -274,7 +330,7 @@ impl Runner {
                     node.speculate.clone(),
                     StepResult {
                         output: result.clone(),
-                        confidence: 1.0,
+                        confidence: None,
                     },
                 );
                 Ok(result)

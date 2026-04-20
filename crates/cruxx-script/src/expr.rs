@@ -5,10 +5,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Result of a completed step, used for expression resolution.
+///
+/// `confidence` is `None` for steps that produced no score (e.g. `handler_value` handlers).
+/// Routing steps (`route_on_confidence`) that reference such a step will receive an
+/// [`ExprError::NoConfidence`] rather than a spurious `1.0`.
 #[derive(Debug, Clone)]
 pub struct StepResult {
     pub output: Value,
-    pub confidence: f32,
+    pub confidence: Option<f32>,
 }
 
 /// Evaluation context holding pipeline state.
@@ -62,11 +66,18 @@ impl ExprContext {
                 .get(*name)
                 .map(|r| r.output.clone())
                 .ok_or_else(|| ExprError::UnknownStep((*name).to_string())),
-            ["steps", name, "confidence"] => self
-                .steps
-                .get(*name)
-                .map(|r| Value::Number(serde_json::Number::from_f64(r.confidence as f64).unwrap()))
-                .ok_or_else(|| ExprError::UnknownStep((*name).to_string())),
+            ["steps", name, "confidence"] => {
+                let result = self
+                    .steps
+                    .get(*name)
+                    .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
+                let score = result
+                    .confidence
+                    .ok_or_else(|| ExprError::NoConfidence((*name).to_string()))?;
+                Ok(Value::Number(
+                    serde_json::Number::from_f64(score as f64).unwrap(),
+                ))
+            }
             _ => Err(ExprError::UnknownPath(path.to_string())),
         }
     }
@@ -82,4 +93,8 @@ pub enum ExprError {
     UnknownPath(String),
     #[error("value is not numeric")]
     NotNumeric,
+    /// Step exists but produced no confidence score (e.g. a `handler_value` handler).
+    /// Using such a step as input to `route_on_confidence` is a pipeline authoring error.
+    #[error("step '{0}' produced no confidence score — use a handler that emits confidence")]
+    NoConfidence(String),
 }

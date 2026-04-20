@@ -42,9 +42,15 @@ impl HandlerRegistry {
         }
     }
 
-    /// Register a handler that returns [`HandlerOutput`] (with optional confidence).
+    /// Register a handler that returns [`HandlerOutput`] directly.
     ///
-    /// Use this when the handler has a meaningful confidence score to emit.
+    /// Use this when the handler needs to control confidence. The returned
+    /// [`HandlerOutput`] may carry `confidence: Some(f32)` or `confidence: None`.
+    /// When confidence is `None`, the pipeline treats the step as fully confident
+    /// (`1.0`), so `{{ steps.<name>.confidence }}` in a pipeline template also
+    /// resolves to `1.0`.
+    ///
+    /// Prefer [`handler_value`](Self::handler_value) when confidence is irrelevant.
     pub fn handler<F, Fut>(&mut self, name: impl Into<String>, f: F)
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -55,11 +61,15 @@ impl HandlerRegistry {
             .insert(name, Arc::new(move |v| Box::pin(f(v))));
     }
 
-    /// Register a handler that returns a plain `Value` (auto-wrapped as `HandlerOutput`).
+    /// Register a handler that returns a plain [`Value`], without a confidence score.
     ///
-    /// This is a backward-compatible convenience for handlers that do not emit a
-    /// confidence score. The output is wrapped with `confidence = None` (treated as
-    /// `1.0` by the runner).
+    /// Convenience wrapper over [`handler`](Self::handler). The `Value` is auto-wrapped
+    /// via `HandlerOutput::from(value)`, which sets `confidence = None`. The pipeline
+    /// runner interprets `None` as `1.0`, so `{{ steps.<name>.confidence }}` resolves
+    /// to `1.0` in templates.
+    ///
+    /// Use this for handlers where confidence is not meaningful. Use
+    /// [`handler`](Self::handler) when the handler must emit a real confidence score.
     pub fn handler_value<F, Fut>(&mut self, name: impl Into<String>, f: F)
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,

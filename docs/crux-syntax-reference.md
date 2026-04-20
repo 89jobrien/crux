@@ -278,5 +278,8 @@ use cruxx::prelude::*;
 //            TaskRegistry, Task, TaskStatus, TaskId,
 //            BoxFut, ConfidenceRange, ConfidenceRoute, JoinArm, PipeStage,
 //            ReplayMode, hash_content,
-//            ExecutionContext, Priority, StepState, Urgency (from slashcruxx)
+//            ApprovalGate, ApprovalDecision, ApprovalRequest, RiskLevel,
+//            SafetyPolicy, SafetyViolation,
+//            EvolutionOutcome, HarnessDiff, HarnessProfile, ResourceHints,
+//            ExecutionContext, Priority, StepState, Urgency (from slashcrux)
 ```

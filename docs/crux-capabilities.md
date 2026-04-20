@@ -11,10 +11,17 @@ Native support status for cruxx-script pipeline step types and handlers.
 | Parallel fan-out   | `join_all:` + `arms:`              | Supported                                      |
 | Speculate (race)   | `speculate:` + `mode: first_ok`    | Supported                                      |
 | Speculate (pick)   | `speculate:` + `mode: pick_best`   | Partial -- requires `score` field in output    |
-| Confidence routing | `route_on_confidence:` + `routes:` | Partial -- steps always emit confidence 1.0    |
+| Confidence routing | `route_on_confidence:` + `routes:` | Supported -- handlers must use `HandlerOutput::with_confidence` |
 | Delegation         | `delegate:`                        | Partial -- parses but no agents pre-registered |
 
 Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
+
+### Handler Registration
+
+Two registry methods exist for registering handlers:
+
+- `registry.handler(name, f)` -- handler returns `HandlerOutput` (with optional confidence)
+- `registry.handler_value(name, f)` -- handler returns plain `Value` (auto-wrapped, confidence defaults to 1.0)
 
 ## Handlers (always available)
 
@@ -55,7 +62,7 @@ Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
 | Area                   | Gap                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents |
-| `route_on_confidence`  | Steps always record `confidence: 1.0` -- no handler mechanism to set it      |
+| `route_on_confidence`  | `handler_value` handlers default to 1.0; use `handler` + `HandlerOutput::with_confidence` to emit scores |
 | `speculate: pick_best` | Arms that don't emit `score` all tie at 0.0 (first arm wins)                 |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()`                      |

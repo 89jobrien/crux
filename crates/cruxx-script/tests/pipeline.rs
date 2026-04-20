@@ -1,13 +1,18 @@
 /// Integration tests for YAML-driven pipeline execution.
-use cruxx_script::{HandlerRegistry, Runner, load};
+use cruxx_script::{HandlerOutput, HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
 fn test_registry() -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
 
-    reg.handler_value("analyzer", |_input: Value| async {
-        Ok(json!({ "result": "analyzed", "confidence": 0.85 }))
+    // Uses `handler` (not `handler_value`) so that a real confidence score of 0.85
+    // is emitted, making `{{ steps.analyze.confidence }}` resolvable in routing tests.
+    reg.handler("analyzer", |_input: Value| async {
+        Ok::<HandlerOutput, cruxx_core::prelude::CruxErr>(HandlerOutput::with_confidence(
+            json!({ "result": "analyzed" }),
+            0.85,
+        ))
     });
 
     reg.handler_value("normalize", |v: Value| async move {
@@ -61,7 +66,7 @@ steps:
 
     assert_eq!(
         cruxx.value().unwrap(),
-        &json!({ "result": "analyzed", "confidence": 0.85 })
+        &json!({ "result": "analyzed" })
     );
     assert_eq!(cruxx.steps.len(), 1);
     assert_eq!(cruxx.steps[0].name, "analyze");

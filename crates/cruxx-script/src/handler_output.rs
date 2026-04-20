@@ -19,11 +19,17 @@ impl HandlerOutput {
         }
     }
 
+    /// Constructs a `HandlerOutput` with a validated confidence score.
+    ///
+    /// - NaN is treated as absent confidence (`None`).
+    /// - Values outside `[0.0, 1.0]` are clamped to the nearest bound.
     pub fn with_confidence(value: Value, confidence: f32) -> Self {
-        Self {
-            value,
-            confidence: Some(confidence),
-        }
+        let confidence = if confidence.is_nan() {
+            None
+        } else {
+            Some(confidence.clamp(0.0, 1.0))
+        };
+        Self { value, confidence }
     }
 
     /// Returns the confidence score, defaulting to `1.0` when absent.
@@ -69,6 +75,33 @@ mod tests {
         let out = HandlerOutput::with_confidence(json!("ok"), 0.75);
         assert_eq!(out.confidence, Some(0.75));
         assert_eq!(out.confidence_or_default(), 0.75);
+    }
+
+    #[test]
+    fn nan_confidence_becomes_none() {
+        let out = HandlerOutput::with_confidence(json!("x"), f32::NAN);
+        assert!(out.confidence.is_none());
+        assert_eq!(out.confidence_or_default(), 1.0);
+    }
+
+    #[test]
+    fn negative_confidence_clamped_to_zero() {
+        let out = HandlerOutput::with_confidence(json!("x"), -0.5);
+        assert_eq!(out.confidence, Some(0.0));
+    }
+
+    #[test]
+    fn confidence_above_one_clamped_to_one() {
+        let out = HandlerOutput::with_confidence(json!("x"), 1.5);
+        assert_eq!(out.confidence, Some(1.0));
+    }
+
+    #[test]
+    fn boundary_values_accepted_as_is() {
+        let lo = HandlerOutput::with_confidence(json!("x"), 0.0);
+        let hi = HandlerOutput::with_confidence(json!("x"), 1.0);
+        assert_eq!(lo.confidence, Some(0.0));
+        assert_eq!(hi.confidence, Some(1.0));
     }
 
     #[test]
