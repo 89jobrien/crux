@@ -41,6 +41,10 @@ Crates in `crates/`:
 - **`cruxx-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven harness profile evolution.
   Accepts `RunMetrics`, emits `HarnessDiff`.
 - **`cruxx-script`** -- YAML-driven pipeline scripting.
+- **`cruxx-types`** -- Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxId`, `CruxErr`) with
+  minimal deps (serde, chrono, ulid). `cruxx-core` re-exports everything — no breaking change.
+  External consumers (minibox) depend on this to avoid pulling the full runtime. `RecoveryKind`
+  is the serializable subset of `Recovery<T>` (closure variants stay in core).
 - **`cruxx-model`** -- Canonical model ID types and provider-specific parsers.
 - **`cruxx-plugin`** -- Subprocess plugin host for pipelines.
 

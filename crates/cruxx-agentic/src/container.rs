@@ -12,10 +12,10 @@ use crate::adapters::container_client::MockContainerClient;
 
 /// Register container step handlers.
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("container::run", |input: Value| async move {
+    registry.handler_value("container::run", |input: Value| async move {
         handle_run(input).await
     });
-    registry.handler("container::wait", |input: Value| async move {
+    registry.handler_value("container::wait", |input: Value| async move {
         handle_wait(input).await
     });
 }

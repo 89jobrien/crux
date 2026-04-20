@@ -17,7 +17,7 @@ steps:
 
     let pipeline = load(yaml).unwrap();
     let mut registry = HandlerRegistry::new();
-    registry.handler("echo_both", |input: Value| async move {
+    registry.handler_value("echo_both", |input: Value| async move {
         // Non-object inputs are wrapped: { "args": { "cmd": "ls" }, "input": <original> }
         let cmd = input["args"]["cmd"].as_str().unwrap_or("").to_string();
         let original = input["input"].clone();
@@ -51,7 +51,7 @@ steps:
 
     let pipeline = load(yaml).unwrap();
     let mut registry = HandlerRegistry::new();
-    registry.handler("echo_args", |input: Value| async move {
+    registry.handler_value("echo_args", |input: Value| async move {
         // Should receive { "args": { "cmd": "echo hello", "cwd": "/tmp" } }
         let cmd = input["args"]["cmd"].as_str().unwrap_or("").to_string();
         Ok(json!({ "received_cmd": cmd }))

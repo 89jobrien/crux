@@ -6,10 +6,10 @@ use serde_json::Value;
 
 /// Register harness step handlers.
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("harness::evolve", |input: Value| async move {
+    registry.handler_value("harness::evolve", |input: Value| async move {
         handle_evolve(input).await
     });
-    registry.handler("harness::canary", |input: Value| async move {
+    registry.handler_value("harness::canary", |input: Value| async move {
         handle_canary(input).await
     });
 }

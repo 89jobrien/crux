@@ -14,7 +14,7 @@ async fn noop_passes_input_through() {
     let handler = reg.get_handler("ctrl::noop").expect("handler missing");
     let input = json!({"data": 42});
     let result = handler(input.clone()).await.unwrap();
-    assert_eq!(result, input);
+    assert_eq!(result.value, input);
 }
 
 #[tokio::test]
@@ -23,7 +23,7 @@ async fn log_passes_input_through() {
     let handler = reg.get_handler("ctrl::log").expect("handler missing");
     let input = json!({"msg": "hello"});
     let result = handler(input.clone()).await.unwrap();
-    assert_eq!(result, input);
+    assert_eq!(result.value, input);
 }
 
 #[tokio::test]

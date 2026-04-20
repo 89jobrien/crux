@@ -34,7 +34,7 @@ pub async fn register_plugins(
     for name in handler_names {
         let host = host.clone();
         let handler_name = name.clone();
-        registry.handler(name, move |input: serde_json::Value| {
+        registry.handler_value(name, move |input: serde_json::Value| {
             let host = host.clone();
             let name = handler_name.clone();
             async move {

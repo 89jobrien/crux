@@ -6,7 +6,7 @@ use tokio::process::Command;
 use crate::error::opt_str;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("git::staged_files", |input: Value| async move {
+    registry.handler_value("git::staged_files", |input: Value| async move {
         let cwd = opt_str(&input, "cwd").map(str::to_string);
         let out = git_cmd(&["diff", "--cached", "--name-only"], cwd.as_deref()).await?;
         let files: Vec<Value> = out
@@ -17,7 +17,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({ "files": files }))
     });
 
-    registry.handler("git::diff", |input: Value| async move {
+    registry.handler_value("git::diff", |input: Value| async move {
         let cwd = opt_str(&input, "cwd").map(str::to_string);
         // Use `revision` rather than `ref` to avoid the Rust keyword at the YAML schema level.
         let git_ref = input
@@ -33,7 +33,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({ "diff": out }))
     });
 
-    registry.handler("git::log", |input: Value| async move {
+    registry.handler_value("git::log", |input: Value| async move {
         let cwd = opt_str(&input, "cwd").map(str::to_string);
         let n = input
             .get("args")
@@ -55,7 +55,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({ "commits": commits }))
     });
 
-    registry.handler("git::status", |input: Value| async move {
+    registry.handler_value("git::status", |input: Value| async move {
         let cwd = opt_str(&input, "cwd").map(str::to_string);
         let out = git_cmd(&["status", "--porcelain"], cwd.as_deref()).await?;
         let clean = out.trim().is_empty();

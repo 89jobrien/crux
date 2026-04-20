@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 /// Register the `llm::plan` handler.
 pub fn register_plan(registry: &mut HandlerRegistry, extra_handlers: Vec<String>) {
-    registry.handler("llm::plan", move |input: Value| {
+    registry.handler_value("llm::plan", move |input: Value| {
         let extra = extra_handlers.clone();
         async move {
             let goal = input

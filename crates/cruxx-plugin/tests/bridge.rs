@@ -31,6 +31,6 @@ async fn bridge_handler_invokes_plugin() {
 
     let handler = registry.get_handler("echo::reflect").unwrap().clone();
     let input = serde_json::json!({"data": "test"});
-    let output = handler(input.clone()).await.unwrap();
+    let output = handler(input.clone()).await.unwrap().value;
     assert_eq!(output, input);
 }

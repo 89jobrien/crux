@@ -12,11 +12,11 @@ use crate::error::{opt_str, require_str};
 /// Use cruxx-script's static args injection to supply `cmd` at the pipeline-definition level;
 /// without it the handler will return a `MissingArg` error.
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("shell::exec", |input: Value| async move {
+    registry.handler_value("shell::exec", |input: Value| async move {
         run_shell(input, false).await
     });
 
-    registry.handler("shell::capture", |input: Value| async move {
+    registry.handler_value("shell::capture", |input: Value| async move {
         run_shell(input, true).await
     });
 }

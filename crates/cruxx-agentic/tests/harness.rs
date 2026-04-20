@@ -37,6 +37,6 @@ async fn harness_canary_returns_outcome() {
             "eval_cmd": ["./run-benchmarks"]
         }
     });
-    let result = handler(input).await.unwrap();
+    let result = handler(input).await.unwrap().value;
     assert!(result.get("outcome").is_some());
 }

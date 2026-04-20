@@ -3,6 +3,7 @@
 /// Define agent pipelines declaratively in YAML files, register step handlers
 /// in Rust, and execute without recompilation.
 pub mod expr;
+pub mod handler_output;
 pub mod registry;
 pub mod runner;
 pub mod schema;
@@ -28,5 +29,6 @@ pub enum LoadError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
+pub use handler_output::HandlerOutput;
 pub use registry::HandlerRegistry;
 pub use runner::Runner;

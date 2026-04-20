@@ -4,6 +4,8 @@ use crate::provider::LlmProvider;
 use crate::provider::LlmRequest;
 use cruxx_core::prelude::CruxErr;
 use cruxx_model::{ProviderModelId, Vendor};
+#[cfg(feature = "baml")]
+use cruxx_script::HandlerOutput;
 use cruxx_script::HandlerRegistry;
 use serde_json::{Value, json};
 
@@ -67,7 +69,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         })
                     })
                     .collect();
-                Ok(json!({ "entities": entities }))
+                Ok(HandlerOutput::new(json!({ "entities": entities })))
             }
             "Summarize" => {
                 let text = input_map
@@ -87,11 +89,11 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                 })?;
 
-                Ok(json!({
+                Ok(HandlerOutput::new(json!({
                     "summary": result.summary,
                     "key_points": result.key_points,
                     "word_count": result.word_count,
-                }))
+                })))
             }
             "Classify" => {
                 let text = input_map
@@ -116,11 +118,14 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                 })?;
 
-                Ok(json!({
-                    "label": result.label,
-                    "confidence": result.confidence,
-                    "reasoning": result.reasoning,
-                }))
+                Ok(HandlerOutput::with_confidence(
+                    json!({
+                        "label": result.label,
+                        "confidence": result.confidence,
+                        "reasoning": result.reasoning,
+                    }),
+                    result.confidence as f32,
+                ))
             }
             "DescribeProject" => {
                 let name = input_map
@@ -159,7 +164,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(json!({ "description": result.description }))
+                Ok(HandlerOutput::new(json!({ "description": result.description })))
             }
             "AssessHealth" => {
                 let name = input_map
@@ -198,11 +203,14 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(json!({
-                    "status": result.status,
-                    "confidence": result.confidence,
-                    "reason": result.reason,
-                }))
+                Ok(HandlerOutput::with_confidence(
+                    json!({
+                        "status": result.status,
+                        "confidence": result.confidence,
+                        "reason": result.reason,
+                    }),
+                    result.confidence as f32,
+                ))
             }
             "ClassifyProject" => {
                 let name = input_map
@@ -250,10 +258,13 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(json!({
-                    "category": result.category,
-                    "confidence": result.confidence,
-                }))
+                Ok(HandlerOutput::with_confidence(
+                    json!({
+                        "category": result.category,
+                        "confidence": result.confidence,
+                    }),
+                    result.confidence as f32,
+                ))
             }
             "GenerateChangelog" => {
                 let name = input_map
@@ -284,10 +295,10 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(json!({
+                Ok(HandlerOutput::new(json!({
                     "summary": result.summary,
                     "highlights": result.highlights,
-                }))
+                })))
             }
             "SuggestRelated" => {
                 let name = input_map
@@ -323,7 +334,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(json!({ "related": result.related }))
+                Ok(HandlerOutput::new(json!({ "related": result.related })))
             }
             unknown => Err(CruxErr::step_failed(
                 "llm::extract",
@@ -342,7 +353,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
 pub fn register_decompose(registry: &mut HandlerRegistry) {
     use crate::baml_client::async_client::B;
 
-    registry.handler("llm::decompose", |input: Value| async move {
+    registry.handler_value("llm::decompose", |input: Value| async move {
         let text = input
             .get("text")
             .and_then(|v| v.as_str())
@@ -376,7 +387,7 @@ pub fn register_decompose(registry: &mut HandlerRegistry) {
 }
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("llm::invoke", |input: Value| async move {
+    registry.handler_value("llm::invoke", |input: Value| async move {
         let prompt = input
             .get("prompt")
             .and_then(|v| v.as_str())

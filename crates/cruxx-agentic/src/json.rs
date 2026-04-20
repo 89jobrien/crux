@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use crate::error::require_str;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("json::pick", |input: Value| async move {
+    registry.handler_value("json::pick", |input: Value| async move {
         let fields: Vec<String> = input
             .get("args")
             .and_then(|a| a.get("fields"))
@@ -33,7 +33,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(Value::Object(out))
     });
 
-    registry.handler("json::merge", |input: Value| async move {
+    registry.handler_value("json::merge", |input: Value| async move {
         let overlay = input
             .get("args")
             .and_then(|a| a.get("with"))
@@ -59,7 +59,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(Value::Object(base))
     });
 
-    registry.handler("json::jq", |input: Value| async move {
+    registry.handler_value("json::jq", |input: Value| async move {
         let expr = require_str(&input, "expr")
             .map_err(CruxErr::from)?
             .to_string();

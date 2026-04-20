@@ -6,41 +6,41 @@ use std::sync::Arc;
 fn test_registry() -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
 
-    reg.handler("analyzer", |_input: Value| async {
+    reg.handler_value("analyzer", |_input: Value| async {
         Ok(json!({ "result": "analyzed", "confidence": 0.85 }))
     });
 
-    reg.handler("normalize", |v: Value| async move {
+    reg.handler_value("normalize", |v: Value| async move {
         let s = v.as_str().unwrap_or("unknown");
         Ok(Value::String(s.to_uppercase()))
     });
 
-    reg.handler("enrich", |v: Value| async move {
+    reg.handler_value("enrich", |v: Value| async move {
         let s = v.as_str().unwrap_or("");
         Ok(Value::String(format!("{s}_enriched")))
     });
 
-    reg.handler("validate", |v: Value| async move { Ok(v) });
+    reg.handler_value("validate", |v: Value| async move { Ok(v) });
 
-    reg.handler("web_search", |_v: Value| async { Ok(json!("web_result")) });
+    reg.handler_value("web_search", |_v: Value| async { Ok(json!("web_result")) });
 
-    reg.handler("local_cache", |_v: Value| async {
+    reg.handler_value("local_cache", |_v: Value| async {
         Ok(json!("cache_result"))
     });
 
-    reg.handler("database", |_v: Value| async { Ok(json!("db_result")) });
+    reg.handler_value("database", |_v: Value| async { Ok(json!("db_result")) });
 
-    reg.handler("fallback", |_v: Value| async { Ok(json!("fallback_out")) });
-    reg.handler("standard", |_v: Value| async { Ok(json!("standard_out")) });
-    reg.handler("fast_path", |_v: Value| async { Ok(json!("fast_out")) });
+    reg.handler_value("fallback", |_v: Value| async { Ok(json!("fallback_out")) });
+    reg.handler_value("standard", |_v: Value| async { Ok(json!("standard_out")) });
+    reg.handler_value("fast_path", |_v: Value| async { Ok(json!("fast_out")) });
 
-    reg.handler("conservative", |_v: Value| async {
+    reg.handler_value("conservative", |_v: Value| async {
         Ok(json!({ "strategy": "conservative", "score": 0.6 }))
     });
-    reg.handler("aggressive", |_v: Value| async {
+    reg.handler_value("aggressive", |_v: Value| async {
         Ok(json!({ "strategy": "aggressive", "score": 0.9 }))
     });
-    reg.handler("balanced", |_v: Value| async {
+    reg.handler_value("balanced", |_v: Value| async {
         Ok(json!({ "strategy": "balanced", "score": 0.75 }))
     });
 

@@ -357,7 +357,7 @@ async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> H
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {
             let n = name.clone();
-            reg.handler(name, move |_input: Value| {
+            reg.handler_value(name, move |_input: Value| {
                 let handler_name = n.clone();
                 async move {
                     eprintln!("[cruxx] warning: no builtin for '{handler_name}', using stub");

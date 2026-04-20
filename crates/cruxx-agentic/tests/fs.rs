@@ -19,7 +19,8 @@ async fn read_returns_file_content() {
     let handler = reg.get_handler("fs::read").unwrap();
     let result = handler(json!({"args": {"path": path.to_str().unwrap()}}))
         .await
-        .unwrap();
+        .unwrap()
+        .value;
     assert_eq!(result["content"].as_str().unwrap(), "hello world");
 }
 
@@ -42,7 +43,8 @@ async fn write_creates_file() {
         "args": {"path": path.to_str().unwrap(), "content": "written!"}
     }))
     .await
-    .unwrap();
+    .unwrap()
+    .value;
     assert_eq!(result["written"], true);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "written!");
 }
@@ -59,7 +61,8 @@ async fn glob_finds_files() {
     let handler = reg.get_handler("fs::glob").unwrap();
     let result = handler(json!({"args": {"pattern": pattern}}))
         .await
-        .unwrap();
+        .unwrap()
+        .value;
     let paths = result["paths"].as_array().unwrap();
     assert_eq!(paths.len(), 2);
 }
@@ -74,7 +77,8 @@ async fn exists_true_for_present_file() {
     let handler = reg.get_handler("fs::exists").unwrap();
     let result = handler(json!({"args": {"path": path.to_str().unwrap()}}))
         .await
-        .unwrap();
+        .unwrap()
+        .value;
     assert_eq!(result["exists"], true);
 }
 
@@ -84,6 +88,7 @@ async fn exists_false_for_missing_file() {
     let handler = reg.get_handler("fs::exists").unwrap();
     let result = handler(json!({"args": {"path": "/no/such/file.txt"}}))
         .await
-        .unwrap();
+        .unwrap()
+        .value;
     assert_eq!(result["exists"], false);
 }

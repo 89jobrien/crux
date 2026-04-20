@@ -3,9 +3,9 @@ use cruxx_script::HandlerRegistry;
 use serde_json::Value;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("ctrl::noop", |input: Value| async move { Ok(input) });
+    registry.handler_value("ctrl::noop", |input: Value| async move { Ok(input) });
 
-    registry.handler("ctrl::log", |input: Value| async move {
+    registry.handler_value("ctrl::log", |input: Value| async move {
         eprintln!(
             "[cruxx::ctrl::log] {}",
             serde_json::to_string(&input).unwrap_or_default()
@@ -13,7 +13,7 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(input)
     });
 
-    registry.handler("ctrl::assert", |input: Value| async move {
+    registry.handler_value("ctrl::assert", |input: Value| async move {
         let condition = input
             .get("args")
             .and_then(|a| a.get("condition"))

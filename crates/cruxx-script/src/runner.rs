@@ -80,21 +80,27 @@ impl Runner {
                 } else {
                     current_input.clone()
                 };
-                let result = ctx
+                // Invoke the handler once, capturing both value and confidence.
+                let raw = handler(input.clone()).await?;
+                let confidence = raw.confidence_or_default();
+                let value = raw.value;
+
+                // Record the step in the trace (closure returns the pre-computed value).
+                let handler_out = ctx
                     .step(&node.step, || {
-                        let h = handler.clone();
-                        let i = input.clone();
-                        async move { h(i).await }
+                        let v = value.clone();
+                        async move { Ok::<Value, CruxErr>(v) }
                     })
                     .await?;
+
                 expr_ctx.steps.insert(
                     node.step.clone(),
                     StepResult {
-                        output: result.clone(),
-                        confidence: 1.0,
+                        output: handler_out.clone(),
+                        confidence,
                     },
                 );
-                Ok(result)
+                Ok(handler_out)
             }
 
             StepDef::Delegate(node) => {
@@ -146,7 +152,7 @@ impl Runner {
                                         CruxErr::step_failed(&name_owned, "handler not found")
                                     })?;
                                     let input = merge_args(v, static_args);
-                                    h(input).await
+                                    h(input).await.map(|o| o.value)
                                 }) as BoxFut<Value>
                             });
                         (arm.label(), stage_fn)
@@ -178,7 +184,7 @@ impl Runner {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
-                            h(input).await
+                            h(input).await.map(|o| o.value)
                         });
                         (arm.label(), fut)
                     })
@@ -214,7 +220,7 @@ impl Runner {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&handler_name, "handler not found")
                             })?;
-                            h(input).await
+                            h(input).await.map(|o| o.value)
                         });
                         (range, branch.label.as_str(), fut)
                     })
@@ -246,7 +252,7 @@ impl Runner {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
-                            h(input).await
+                            h(input).await.map(|o| o.value)
                         });
                         (arm.label(), fut)
                     })

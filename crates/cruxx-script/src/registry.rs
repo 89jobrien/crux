@@ -7,9 +7,18 @@ use std::sync::Arc;
 use cruxx_core::prelude::{Agent, CruxCtx, CruxErr};
 use serde_json::Value;
 
-/// Type-erased async handler: Value in, Value out.
+use crate::handler_output::HandlerOutput;
+
+/// Type-erased async handler: Value in, HandlerOutput out.
+///
+/// Handlers that don't carry a confidence score return `HandlerOutput::new(value)`
+/// (equivalent to confidence `1.0`). Use [`HandlerRegistry::handler`] for handlers
+/// that emit confidence, or [`HandlerRegistry::handler_value`] for simple handlers
+/// that return a plain `Value` (auto-wrapped for backward compatibility).
 pub type BoxHandler = Arc<
-    dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>> + Send + Sync,
+    dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
+        + Send
+        + Sync,
 >;
 
 /// Type-erased agent runner: runs a registered agent with Value input, returns Value output.
@@ -33,15 +42,38 @@ impl HandlerRegistry {
         }
     }
 
-    /// Register a plain async handler by name.
+    /// Register a handler that returns [`HandlerOutput`] (with optional confidence).
+    ///
+    /// Use this when the handler has a meaningful confidence score to emit.
     pub fn handler<F, Fut>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
+    {
+        let name = name.into();
+        self.handlers
+            .insert(name, Arc::new(move |v| Box::pin(f(v))));
+    }
+
+    /// Register a handler that returns a plain `Value` (auto-wrapped as `HandlerOutput`).
+    ///
+    /// This is a backward-compatible convenience for handlers that do not emit a
+    /// confidence score. The output is wrapped with `confidence = None` (treated as
+    /// `1.0` by the runner).
+    pub fn handler_value<F, Fut>(&mut self, name: impl Into<String>, f: F)
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers
-            .insert(name, Arc::new(move |v| Box::pin(f(v))));
+        self.handlers.insert(
+            name,
+            Arc::new(move |v| {
+                let fut = f(v);
+                Box::pin(async move { fut.await.map(HandlerOutput::from) })
+                    as Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
+            }),
+        );
     }
 
     /// Register a cruxx Agent by name for delegation.
