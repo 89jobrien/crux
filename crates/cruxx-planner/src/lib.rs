@@ -1,9 +1,13 @@
 //! cruxx-planner — goal-to-pipeline generation for cruxx-script.
 //!
-//! Path B stub: deterministic planner types for future implementation.
-//! The LLM-based planner (Path A) lives in `cruxx-agentic::planner`.
+//! Two paths:
+//! - Path A (LLM): lives in `cruxx-agentic::planner`
+//! - Path B (deterministic): `EvolutionPlanner` for metrics-driven profile changes
 
 use serde::{Deserialize, Serialize};
+
+pub mod evolution;
+pub mod metrics;
 
 /// A user-facing goal to be translated into a pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
