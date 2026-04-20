@@ -70,6 +70,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     json::register(registry);
     ctrl::register(registry);
     llm::register(registry);
+    llm::register_stream(registry);
     #[cfg(feature = "baml")]
     llm::register_extract(registry);
     #[cfg(feature = "baml")]
