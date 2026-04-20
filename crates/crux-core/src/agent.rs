@@ -20,7 +20,7 @@ pub trait Agent: Send + Sync + 'static {
 
     /// Execute the agent's logic.
     ///
-    /// The CruxCtx is injected by the macro as `t`. Manual implementors
+    /// The CruxCtx is injected by the macro as `x`. Manual implementors
     /// receive it as the first argument. The Context trait provides the
     /// abstraction boundary for testing.
     fn run(

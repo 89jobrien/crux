@@ -31,7 +31,13 @@ enum OutputType {
 #[derive(Parser)]
 #[command(name = "crux", about = "crux pipeline runner and planner")]
 enum Cli {
-    /// Execute a YAML pipeline ("-" reads from stdin)
+    /// Validate a .crux pipeline file without executing it
+    Check {
+        /// Pipeline file(s) to validate
+        #[arg(required = true)]
+        pipelines: Vec<String>,
+    },
+    /// Execute a .crux pipeline ("-" reads from stdin)
     Run {
         /// Pipeline file ("-" for stdin)
         pipeline: String,
@@ -66,6 +72,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
+        Cli::Check { pipelines } => cmd_check(&pipelines),
         Cli::Run {
             pipeline,
             input,
@@ -85,6 +92,31 @@ fn main() {
             &output_type,
             plugins.as_deref(),
         ),
+    }
+}
+
+fn cmd_check(paths: &[String]) {
+    let mut failures = 0u32;
+
+    for path in paths {
+        match cruxai_script::load_file(path) {
+            Ok(pipeline) => {
+                let handlers = collect_handler_names(&pipeline);
+                let step_count = pipeline.steps.len();
+                println!(
+                    "{path}: valid ({step_count} steps, handlers: {})",
+                    handlers.join(", ")
+                );
+            }
+            Err(e) => {
+                eprintln!("{path}: {e}");
+                failures += 1;
+            }
+        }
+    }
+
+    if failures > 0 {
+        std::process::exit(1);
     }
 }
 

@@ -4,7 +4,7 @@ Native support status for crux-script pipeline step types and handlers.
 
 ## Pipeline Combinators
 
-| Kind               | YAML key                           | Status                                         |
+| Kind               | Pipeline key                       | Status                                         |
 | ------------------ | ---------------------------------- | ---------------------------------------------- |
 | Single step        | `step:`                            | Supported                                      |
 | Sequential pipe    | `pipe:` + `stages:`                | Supported                                      |

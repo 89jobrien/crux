@@ -102,8 +102,8 @@ A plugin is any binary that:
 2. Writes newline-delimited JSON to stdout
 3. Handles `Declare`, `Invoke`, and `Shutdown` methods
 
-See `crates/crux-plugin/tests/fixtures/echo-plugin.rs` for a
-minimal Rust example.
+See `crates/crux-plugin/tests/host.rs` and `crates/crux-plugin/tests/bridge.rs`
+for working examples.
 
 ## Handler Naming
 

@@ -3,18 +3,18 @@
 ## Overview
 
 `crux-planner` is a goal-to-pipeline generation system that translates natural language goals or
-structured intent specifications into executable YAML pipelines. It sits between human intent and
+structured intent specifications into executable `.crux` pipelines. It sits between human intent and
 `crux-script` execution, automating the composition of steps from the `crux-agentic` handler
 registry.
 
 ### Goals
 
-1. **Natural Language to YAML**: Accept unstructured goals ("Summarize and extract entities from
-   this document") and generate valid `crux-script` YAML pipelines.
+1. **Natural Language to Pipeline**: Accept unstructured goals ("Summarize and extract entities
+   from this document") and generate valid `crux-script` `.crux` pipelines.
 2. **Intent Modeling**: Support structured input (goal object with constraints, preferences, budget
    allocation) for repeatability and testing.
 3. **Static vs Dynamic Output**: Design both modes:
-   - **Static**: Planner generates a fixed YAML file, user executes via `crux-run`.
+   - **Static**: Planner generates a fixed `.crux` file, user executes via `crux-run`.
    - **Dynamic**: Planner generates pipelines at runtime, executed immediately without disk
      artifacts.
 4. **Handler Integration**: Understand the `crux-agentic` handler registry (shell, fs, git, json,
@@ -28,12 +28,12 @@ registry.
 
 ### Two Implementation Paths
 
-#### Path A: YAML Spec + BAML Function (Recommended)
+#### Path A: Spec + BAML Function (Recommended)
 
-Define a YAML schema for planner input and use BAML to generate executable YAML:
+Define a schema for planner input and use BAML to generate executable `.crux` pipelines:
 
 ```yaml
-# planner-input.yaml
+# planner-input.crux
 goal: "Summarize a text file and extract key entities"
 input_path: "document.txt"
 constraints:
@@ -49,25 +49,25 @@ preferences:
 BAML function (e.g., `GeneratePipeline`):
 
 ```baml
-function GeneratePipeline(goal: string, input: PlannerIntent) -> PipelineYaml {
+function GeneratePipeline(goal: string, input: PlannerIntent) -> PipelineCrux {
   client: "openai"
   prompt: #"
-    Given the user goal and constraints, generate a crux-script YAML pipeline.
+    Given the user goal and constraints, generate a crux-script pipeline.
 
     Goal: {{ goal }}
     Constraints: {{ input.constraints }}
     Handler Registry: [fs::read, fs::write, llm::invoke, llm::extract,
                        json::parse, json::write, shell::capture, ...]
 
-    Output: Valid BAML-generated YAML following crux-script schema.
+    Output: Valid BAML-generated pipeline following crux-script schema.
   "#
 }
 ```
 
 **Pros:**
 - Reuses existing BAML infrastructure (crux-agentic already integrated).
-- Familiar to users (YAML in, YAML out).
-- Easy testing: golden YAML snapshots.
+- Familiar to users (YAML-based `.crux` format in, `.crux` out).
+- Easy testing: golden pipeline snapshots.
 
 **Cons:**
 - Requires LLM call for every plan generation (latency, cost).
@@ -79,7 +79,7 @@ Implement a Rust crate with:
 - Goal/Intent AST
 - Handler registry query interface
 - Composition rules engine
-- Code generation to YAML
+- Code generation to `.crux` pipelines
 
 ```rust
 use crux_planner::{Goal, Planner, PlannerConfig};
@@ -88,7 +88,7 @@ let goal = Goal::new("Summarize document and extract entities");
 let planner = Planner::new(PlannerConfig::default());
 let pipeline = planner.plan(&goal)?;
 
-// Write to YAML or execute directly
+// Write to .crux file or execute directly
 crux_script::execute(&pipeline, input).await?
 ```
 
@@ -125,7 +125,7 @@ node). Planner must respect:
 - **Budget Allocation**: Planner must respect user budget and distribute across steps
   (e.g., 3 steps with 1000 tokens each, or 1 step with 2000).
 - **Static Args Injection**: User may provide static args at plan time; planner embeds them in
-  the generated YAML.
+  the generated pipeline.
 - **Replay and Recovery**: Generated pipelines should be replay-safe; planner avoids non-determinism
   (no random handler selection) and includes recovery hooks if user specifies.
 
@@ -184,7 +184,7 @@ hints:
 
 ## Output Schema
 
-Generated YAML follows crux-script structure:
+Generated pipeline follows crux-script structure:
 
 ```yaml
 pipeline: my_pipeline_name
@@ -216,7 +216,7 @@ steps:
 
 ### Static Mode
 
-**Input:** NL goal or structured intent YAML
+**Input:** NL goal or structured intent
 **Output:** `.crux` file on disk
 **Execution:** User runs `crux-run <generated>.crux <input>.json`
 
@@ -229,7 +229,7 @@ crux-run my_pipeline.crux input.json
 
 ### Dynamic Mode
 
-**Input:** Intent object (struct or YAML)
+**Input:** Intent object (struct or `.crux` file)
 **Output:** In-memory `Pipeline` value
 **Execution:** Planner calls `crux_script::execute()` directly, or returns pipeline for caller to
 execute
@@ -302,15 +302,15 @@ steps:
 ## Implementation Roadmap
 
 ### Phase 1: Design & Spec (Now)
-- [ ] Finalize input/output schemas (YAML + Rust enums)
+- [ ] Finalize input/output schemas (`.crux` format + Rust enums)
 - [ ] Model handler registry interface
 - [ ] Define composition rules
-- [ ] Snapshot golden YAML examples (10–15 test cases)
+- [ ] Snapshot golden pipeline examples (10-15 test cases)
 
 ### Phase 2: Path A (BAML-based, Low Effort)
 - [ ] Write BAML function schema for pipeline generation
 - [ ] Wire to `crux-agentic` planner module
-- [ ] Implement `planner::generate(goal) -> String` (returns YAML)
+- [ ] Implement `planner::generate(goal) -> String` (returns `.crux` pipeline)
 - [ ] CLI: `crux-planner plan --goal "..." --output plan.crux`
 - [ ] Integration tests with OPENAI_API_KEY
 
@@ -404,7 +404,7 @@ crux_script::execute_interactive(&pipeline, user_input).await?
 
 ## References
 
-- `crux-script`: YAML schema in `crates/crux-script/src/types.rs`
+- `crux-script`: Pipeline schema in `crates/crux-script/src/schema.rs`
 - `crux-agentic`: Handler registry in `crates/crux-agentic/src/lib.rs`
 - BAML integration: `crates/crux-agentic/baml_src/`
 - ArmDef and StepNode: `crates/crux-core/src/types/step.rs`

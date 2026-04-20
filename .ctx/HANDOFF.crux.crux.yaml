@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260419::210016"
+updated: "20260420::062404"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -8,12 +8,25 @@ description: >
 
 items:
 
+  - id: crux-27
+    name: fix-stale-macro-doc-comments
+    title: "Fix stale doc comments referencing #[crux::agent] in macro crate"
+    description: >
+      Macro crate doc comments still say #[crux::agent] but the actual attribute
+      is #[cruxai::agent] since the crate rename. GH issue #16.
+    priority: P1
+    status: open
+    files:
+      - crates/crux-macros/src/agent.rs
+      - crates/crux-macros/src/parse.rs
+      - crates/crux-macros/src/lib.rs
+
   - id: crux-26
     name: planner-implementation
     title: "Implement crux-planner: goal-to-pipeline generation"
     description: >
       Implement the planner designed in docs/planner-design.md. Start with the
-      BAML-based path: NL goal → BAML function → YAML pipeline emitted to stdout.
+      BAML-based path: NL goal → BAML function → .crux pipeline emitted to stdout.
       New crate crux-planner or extension of crux-agentic.
     priority: P2
     status: open
@@ -21,6 +34,14 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260420::062404"
+    session: 24
+    summary: >
+      Doc audit and corrections: rewrote crux-syntax-reference.md from code (fixed binding
+      x vs t, feature flags, TaskRegistry API, prelude, removed aspirational APIs). Updated
+      planner-design.md and plugins.md for .crux rename and stale paths. Fixed agent.rs doc
+      comment (t->x). Added CLAUDE.md pipeline files section. Added `crux check` subcommand
+      for pipeline validation (GH #15). Filed GH #16 for stale macro doc comments.
   - date: "20260419::210016"
     session: 23
     summary: >

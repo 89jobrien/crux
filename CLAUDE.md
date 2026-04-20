@@ -86,6 +86,10 @@ recovery path, not a fallback.
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
 
+## Pipeline Files
+
+Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.yaml`.
+
 ## BAML (crux-agentic)
 
 - `just check-baml` — validates `generators.baml` version matches `Cargo.toml` baml dep;
