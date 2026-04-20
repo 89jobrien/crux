@@ -1,0 +1,18 @@
+---
+source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+assertion_line: 37
+expression: yaml
+---
+pipeline: extract_entities
+steps:
+  - step: read
+    handler: fs::read
+    path: input.txt
+  - step: extract
+    handler: llm::extract
+    function: ExtractEntities
+    input: "$step:read"
+  - step: write
+    handler: json::write
+    content: "$step:extract"
+    path: output.json

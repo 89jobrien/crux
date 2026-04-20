@@ -1,12 +1,14 @@
 //! cruxx-planner — goal-to-pipeline generation for cruxx-script.
 //!
 //! Two paths:
-//! - Path A (LLM): lives in `cruxx-agentic::planner`
-//! - Path B (deterministic): `EvolutionPlanner` for metrics-driven profile changes
+//! - Path A (LLM): `LlmPlanner` delegates to `cruxx-agentic::planner` (feature `baml`)
+//! - Path B (deterministic): `DeterministicPlanner` — rule-based, zero-latency, zero-cost
 
 use serde::{Deserialize, Serialize};
 
+pub mod deterministic;
 pub mod evolution;
+pub mod generator;
 pub mod metrics;
 
 #[cfg(feature = "baml")]
@@ -14,6 +16,18 @@ pub mod llm;
 
 #[cfg(feature = "baml")]
 pub use llm::LlmPlanner;
+
+pub use deterministic::DeterministicPlanner;
+pub use generator::{InMemoryGenerator, LlmPlannerGeneric, PipelineGenerator};
+
+/// Domain errors for the cruxx-planner crate.
+#[derive(Debug, thiserror::Error)]
+pub enum PlannerError {
+    #[error("no matching rule found for goal: {0}")]
+    NoRuleMatch(String),
+    #[error("pipeline generation failed: {0}")]
+    Generation(String),
+}
 
 /// A user-facing goal to be translated into a pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,9 +47,4 @@ pub struct Intent {
     pub preferences: serde_json::Value,
 }
 
-/// Configuration for deterministic pipeline generation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlannerConfig {
-    pub max_steps: usize,
-    pub allowed_handlers: Vec<String>,
-}
+pub use deterministic::PlannerConfig;

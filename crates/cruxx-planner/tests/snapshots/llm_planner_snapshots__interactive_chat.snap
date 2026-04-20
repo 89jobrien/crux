@@ -1,0 +1,14 @@
+---
+source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+assertion_line: 129
+expression: yaml
+---
+pipeline: interactive_chat
+steps:
+  - step: read
+    handler: fs::read
+    path: document.txt
+  - step: chat
+    handler: llm::invoke
+    function: Chat
+    input: "$step:read"

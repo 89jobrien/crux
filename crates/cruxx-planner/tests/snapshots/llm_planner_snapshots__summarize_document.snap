@@ -1,0 +1,19 @@
+---
+source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+assertion_line: 110
+expression: yaml
+---
+pipeline: summarize_document
+steps:
+  - step: read
+    handler: fs::read
+    path: document.txt
+  - step: summarize
+    handler: llm::extract
+    function: Summarize
+    input: "$step:read"
+    max_sentences: 3
+  - step: output
+    handler: json::write
+    content: "$step:summarize"
+    path: summary.json

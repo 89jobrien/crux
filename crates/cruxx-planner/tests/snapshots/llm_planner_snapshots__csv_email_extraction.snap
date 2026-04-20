@@ -1,0 +1,21 @@
+---
+source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+assertion_line: 86
+expression: yaml
+---
+pipeline: csv_email_extraction
+steps:
+  - step: read
+    handler: fs::read
+    path: input.csv
+  - step: parse
+    handler: json::parse
+    input: "$step:read"
+  - step: extract_emails
+    handler: llm::extract
+    function: ExtractEmails
+    input: "$step:parse"
+  - step: write
+    handler: json::write
+    content: "$step:extract_emails"
+    path: emails.json

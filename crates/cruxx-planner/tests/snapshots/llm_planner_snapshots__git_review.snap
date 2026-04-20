@@ -1,0 +1,18 @@
+---
+source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+assertion_line: 60
+expression: yaml
+---
+pipeline: git_review
+steps:
+  - step: diff
+    handler: git::diff
+    base_ref: origin/main
+  - step: analyze
+    handler: llm::extract
+    function: FindCodeIssues
+    input: "$step:diff"
+  - step: output
+    handler: json::write
+    content: "$step:analyze"
+    path: review.json
