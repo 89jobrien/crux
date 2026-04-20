@@ -46,9 +46,9 @@ impl HandlerRegistry {
     ///
     /// Use this when the handler needs to control confidence. The returned
     /// [`HandlerOutput`] may carry `confidence: Some(f32)` or `confidence: None`.
-    /// When confidence is `None`, the pipeline treats the step as fully confident
-    /// (`1.0`), so `{{ steps.<name>.confidence }}` in a pipeline template also
-    /// resolves to `1.0`.
+    /// When confidence is `None`, `{{ steps.<name>.confidence }}` in templates
+    /// will return an `ExprError::NoConfidence` error — it does NOT silently
+    /// resolve to `1.0`. Only an explicit `Some(score)` is template-accessible.
     ///
     /// Prefer [`handler_value`](Self::handler_value) when confidence is irrelevant.
     pub fn handler<F, Fut>(&mut self, name: impl Into<String>, f: F)
@@ -64,9 +64,10 @@ impl HandlerRegistry {
     /// Register a handler that returns a plain [`Value`], without a confidence score.
     ///
     /// Convenience wrapper over [`handler`](Self::handler). The `Value` is auto-wrapped
-    /// via `HandlerOutput::from(value)`, which sets `confidence = None`. The pipeline
-    /// runner interprets `None` as `1.0`, so `{{ steps.<name>.confidence }}` resolves
-    /// to `1.0` in templates.
+    /// via `HandlerOutput::from(value)`, which sets `confidence = None`. Accessing
+    /// `{{ steps.<name>.confidence }}` in templates will fail with
+    /// `ExprError::NoConfidence` — handler_value steps cannot be used as input to
+    /// `route_on_confidence`.
     ///
     /// Use this for handlers where confidence is not meaningful. Use
     /// [`handler`](Self::handler) when the handler must emit a real confidence score.

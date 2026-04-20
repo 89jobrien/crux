@@ -75,7 +75,9 @@ impl ExprContext {
                     .confidence
                     .ok_or_else(|| ExprError::NoConfidence((*name).to_string()))?;
                 Ok(Value::Number(
-                    serde_json::Number::from_f64(score as f64).unwrap(),
+                    // safe: confidence is always finite (NaN rejected in HandlerOutput::with_confidence)
+                    serde_json::Number::from_f64(score as f64)
+                        .expect("confidence is always finite"),
                 ))
             }
             _ => Err(ExprError::UnknownPath(path.to_string())),

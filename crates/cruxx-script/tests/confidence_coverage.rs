@@ -92,9 +92,7 @@ async fn handler_value_with_route_on_confidence_returns_error() {
         .expect_err("pipeline should fail when handler_value step is used with route_on_confidence");
     let err_msg = format!("{err:?}");
     assert!(
-        err_msg.contains("no confidence")
-            || err_msg.contains("NoConfidence")
-            || err_msg.contains("produced no confidence"),
+        err_msg.contains("produced no confidence score"),
         "expected NoConfidence error, got: {err_msg}"
     );
 }

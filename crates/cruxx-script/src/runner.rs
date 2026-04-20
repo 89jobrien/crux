@@ -176,7 +176,8 @@ impl Runner {
                 let input = current_input.clone();
                 let result = ctx.pipe(&node.pipe, input, stages).await?;
 
-                // Use the last stage's confidence (pipeline is sequential); None if unset.
+                // Use the last stage's confidence (pipeline is sequential).
+                // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
                 let confidence = confidence_cells.last().and_then(|c| *c.lock().unwrap());
 
                 expr_ctx.steps.insert(
