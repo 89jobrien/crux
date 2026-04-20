@@ -108,3 +108,7 @@ recovery path, not a fallback.
 - `route_on_confidence()` -- validates non-overlapping, gap-free, [0.0,1.0]-covering ranges
 - `DelegationBuilder` -- fluent API with per-call-site budget/hooks, child CruxCtx
 - `SpeculationBuilder` -- `pick_best_by`, `first_ok`, racing; losers marked `Rejected`
+
+## Pipeline Capabilities Reference
+
+See `docs/crux-capabilities.md` for the full list of supported step types, handlers, and known gaps.

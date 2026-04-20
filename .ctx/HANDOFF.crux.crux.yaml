@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260420::001527"
+updated: "20260419::210016"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -21,6 +21,17 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260419::210016"
+    session: 23
+    summary: >
+      Audited crux-script pipeline capabilities. Created docs/crux-capabilities.md (handler/combinator
+      support matrix). Filed GH issues #7-#12 for 6 known gaps. Added pipeline capabilities
+      reference to CLAUDE.md. 329/329 tests pass, build clean.
+  - date: "20260419::230000"
+    session: 22
+    summary: >
+      handjobs triage — 1 open HANDOFF item, 7 GH issues synced (6 new gap issues
+      #7-#12 created from docs/crux-capabilities.md audit). No local TODOs found.
   - date: "20260420::001527"
     session: 21
     summary: >
