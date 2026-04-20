@@ -50,7 +50,7 @@ updated last to use the canonical builtin handler names with embedded `args`.
 |------|--------|
 | `Cargo.toml` (workspace root) | Add `reqwest` to `[workspace.dependencies]` |
 | `crates/cruxx-script/src/registry.rs` | No change needed — HandlerRegistry already public |
-| `examples/joe/*.yaml` | Update handler names to canonical `module::handler` form |
+| `examples/joe/*.crux` | Update handler names to canonical `module::handler` form |
 
 ---
 
@@ -1405,13 +1405,13 @@ The joe/ examples currently reference custom handler names like `gh_run_fetch`,
 shell command (e.g. `cargo nextest run`), map it to `shell::capture` with the command in args.
 
 **Files:**
-- Modify: `examples/joe/ci_triage.yaml`
-- Modify: `examples/joe/obfsck_audit.yaml`
-- Modify: `examples/joe/container_deploy.yaml`
-- Modify: `examples/joe/crate_refactor.yaml`
-- Modify: `examples/joe/doob_triage.yaml`
-- Modify: `examples/joe/pr_review.yaml`
-- Modify: `examples/joe/agent_meta_eval.yaml`
+- Modify: `examples/joe/ci_triage.crux`
+- Modify: `examples/joe/obfsck_audit.crux`
+- Modify: `examples/joe/container_deploy.crux`
+- Modify: `examples/joe/crate_refactor.crux`
+- Modify: `examples/joe/doob_triage.crux`
+- Modify: `examples/joe/pr_review.crux`
+- Modify: `examples/joe/agent_meta_eval.crux`
 
 **Handler mapping table:**
 
@@ -1453,13 +1453,13 @@ limitation and note that Task 10 adds static `args` injection to `StepNode`.
 - [ ] **Step 3: Verify all 7 files parse**
 
 ```bash
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/obfsck_audit.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/container_deploy.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/crate_refactor.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/doob_triage.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/pr_review.yaml
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/agent_meta_eval.yaml
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/obfsck_audit.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/container_deploy.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/crate_refactor.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/doob_triage.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/pr_review.crux
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/agent_meta_eval.crux
 ```
 
 Each should parse and run to completion (with stub registry currently; after Task 10, with real handlers).
@@ -1667,7 +1667,7 @@ Expected: compiles cleanly.
 - [ ] **Step 4: Smoke-test with a joe/ example**
 
 ```bash
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.yaml
+cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.crux
 ```
 
 Expected: pipeline runs, trace printed, unknown handlers show stub warnings.

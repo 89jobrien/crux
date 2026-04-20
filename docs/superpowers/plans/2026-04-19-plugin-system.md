@@ -1080,7 +1080,7 @@ Expected: compiles. `cruxx run --help` shows `--plugins` flag.
 
 - [ ] **Step 4: Manual smoke test**
 
-Run: `./target/debug/cruxx run examples/extract_entities.yaml`
+Run: `./target/debug/cruxx run examples/extract_entities.crux`
 Expected: works exactly as before (no plugins loaded, same output).
 
 - [ ] **Step 5: Commit**
@@ -1302,7 +1302,7 @@ protocol over stdin/stdout.
 2. Run a pipeline that uses plugin handlers:
 
    ```bash
-   cruxx run my-pipeline.yaml
+   cruxx run my-pipeline.crux
    ```
 
 3. Or generate a pipeline that uses plugins:
@@ -1428,9 +1428,9 @@ git commit -m "docs: plugin authoring guide and protocol reference"
 3. `cargo nextest run` -- all existing tests pass (no regressions)
 4. `cargo nextest run -p cruxx-plugin --features __test-fixture`
    -- all plugin tests pass (protocol, manifest, host, bridge)
-5. `./target/debug/cruxx run examples/extract_entities.yaml` --
+5. `./target/debug/cruxx run examples/extract_entities.crux` --
    existing pipelines still work
 6. `./target/debug/cruxx run --plugins /dev/null
-   examples/extract_entities.yaml` -- works with empty manifest
+   examples/extract_entities.crux` -- works with empty manifest
 7. Echo plugin end-to-end: register in `plugins.toml`, run a
    pipeline referencing `echo::reflect`, verify output

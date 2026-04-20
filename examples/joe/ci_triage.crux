@@ -1,4 +1,19 @@
 pipeline: ci_triage
+# ASPIRATIONAL TEMPLATE — not all steps are implemented.
+#
+# Steps marked `handler: ctrl::noop` are design placeholders. They pass their
+# input through unchanged so the pipeline runs end-to-end against real data,
+# but they do no domain-specific work yet.
+#
+# How to implement a noop arm:
+#   1. Write a Rust function `fn my_handler(input: Value) -> Result<Value, CruxErr>`
+#      in your crate (e.g. `src/handlers/ci.rs`).
+#   2. Register it: `registry.handler_value("my_module::my_handler", my_handler);`
+#   3. Replace `handler: ctrl::noop` with `handler: my_module::my_handler`.
+#   Alternatively, use `handler: shell::capture` with a shell command (see examples below).
+#
+# See docs/crux-capabilities.md — Known Gaps for current status.
+#
 # Triage a failed CI run across a Rust workspace. Fan out to all failure
 # categories in parallel, rank by severity, then route to the right action.
 budget: { calls: 12 }

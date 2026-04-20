@@ -31,13 +31,13 @@ enum OutputType {
 #[derive(Parser)]
 #[command(name = "cruxx", about = "cruxx pipeline runner and planner")]
 enum Cli {
-    /// Validate a .cruxx pipeline file without executing it
+    /// Validate a .crux pipeline file without executing it
     Check {
         /// Pipeline file(s) to validate
         #[arg(required = true)]
         pipelines: Vec<String>,
     },
-    /// Execute a .cruxx pipeline ("-" reads from stdin)
+    /// Execute a .crux pipeline ("-" reads from stdin)
     Run {
         /// Pipeline file ("-" for stdin)
         pipeline: String,

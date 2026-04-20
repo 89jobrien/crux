@@ -1,4 +1,31 @@
 pipeline: agent_meta_eval
+# ASPIRATIONAL TEMPLATE — not all steps are implemented.
+#
+# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
+# through unchanged so the pipeline traces end-to-end but do no real work yet.
+#
+# Unimplemented arms and what they need:
+#   latency_profile         — read Step.started_at/completed_at from JSONL trace and
+#                             flag steps exceeding 2x median. Implement as a Rust
+#                             handler_value or shell::capture + `jq` expression.
+#   token_spend_breakdown   — accumulate Step.output metadata token counts. Same approach.
+#   step_failure_clustering — group CruxErr variants by kind. Rust handler_value reading
+#                             the trace input array.
+#   replay_cache_analysis   — compute ReplayCache hit/miss ratio per step name. Requires
+#                             access to cache metadata written by RedbBackend.
+#   tighten_budget          — emit a Budget suggestion if token_spend > 80% of budget.tokens.
+#                             Rust handler_value comparing two numeric fields.
+#   compress_prompt_stages  — detect token-heavy pipe stages and suggest collapsing them.
+#                             LLM-assisted via llm::invoke once latency_profile fires.
+#   tune_retry_policy       — suggest Recovery::Retry config for flaky step names.
+#                             Rust handler_value reading step_failure_clustering output.
+#   patch_schema_check      — validate emitted patch is valid Crux YAML. Use
+#                             `cruxx check <patch_file>` via shell::capture.
+#   replay_dry_run          — re-run trace in lenient mode against the patch. Requires
+#                             cruxx-core replay API (not yet exposed to pipelines).
+#
+# See docs/crux-capabilities.md — Known Gaps for current status.
+#
 # Evaluate a completed braid/agentbox agent run from its persisted Crux trace.
 # Fan out to all analysis dimensions, speculate on the best optimization patch,
 # then pipe the patch through validation. Recovery::Skip keeps the pipeline

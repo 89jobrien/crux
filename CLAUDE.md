@@ -112,7 +112,7 @@ an `EvolutionPlanner` (as `planner`) and a `CruxCtx` (as `x`) into the function 
 
 ## Pipeline Files
 
-Pipeline definitions use the `.cruxx` file extension (YAML syntax). Previously `.yaml`.
+Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.yaml` and `.cruxx`.
 
 ## BAML (cruxx-agentic)
 

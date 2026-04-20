@@ -1,4 +1,28 @@
 pipeline: crate_refactor
+# ASPIRATIONAL TEMPLATE — not all steps are implemented.
+#
+# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
+# through unchanged so the pipeline can be traced end-to-end, but they do no
+# real domain work yet.
+#
+# Unimplemented arms and what they need:
+#   dep_graph_analysis    — query gkg (or `cargo metadata`) for dependency cycles
+#                           and over-coupled crates. Implement as shell::capture
+#                           wrapping a `gkg` CLI call, or a custom Rust handler.
+#   arch_boundary_check   — scan Cargo.toml files to detect domain crates that
+#                           import adapter crates (hexagonal violations). Could be
+#                           a `shell::capture` + `rg` one-liner or a dedicated handler.
+#   extract_trait_port    — generate a trait skeleton in the domain crate. Requires
+#                           LLM assistance (llm::invoke) or template expansion.
+#   split_crate           — generate a new Cargo.toml + src/lib.rs scaffold. Can be
+#                           implemented as a series of fs::write steps.
+#   add_adapter_layer     — create an adapter crate between two coupled crates. Same
+#                           approach as split_crate.
+#   generate_patch        — produce a unified diff for the winning strategy. Best
+#                           implemented via llm::invoke with the strategy + signal context.
+#
+# See docs/crux-capabilities.md — Known Gaps for current status.
+#
 # Assist a Rust workspace refactor. Gather all diagnostic signal in parallel,
 # then speculate on the best structural strategy. The winning strategy is
 # validated before any changes land.

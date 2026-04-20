@@ -1,4 +1,26 @@
 pipeline: pr_review
+# ASPIRATIONAL TEMPLATE — not all steps are implemented.
+#
+# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
+# through unchanged so the pipeline traces end-to-end but do no real work yet.
+#
+# Unimplemented arms and what they need:
+#   arch_boundary_check   — same as crate_refactor: detect domain→infra imports in
+#                           changed files. Implement as shell::capture + rg, or a
+#                           dedicated Rust handler using the gix crate.
+#   normalize_findings    — merge clippy JSON, arch findings, and nextest output into
+#                           a unified Finding[] schema. Implement as a Rust handler or
+#                           json::jq chain once jq gains filter support.
+#   apply_severity_matrix — score each Finding as blocking/suggestion/observation.
+#                           Can be implemented as shell::capture or an llm::invoke call.
+#   compute_review_score  — reduce Finding[] to a single 0.0–1.0 confidence score.
+#                           Implement as a Rust handler_value that reads the merged input.
+#   approve               — call `gh pr review --approve`. Currently a noop because the
+#                           speculate arm needs to win before this fires; wire up once
+#                           pipeline templating supports dynamic arg injection.
+#
+# See docs/crux-capabilities.md — Known Gaps for current status.
+#
 # Full PR review pipeline (sentinel-style). Fan out to all signal sources in
 # parallel, weight the signals, then speculate on the verdict before routing
 # to the appropriate GitHub action.
