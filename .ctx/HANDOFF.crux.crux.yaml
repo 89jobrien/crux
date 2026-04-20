@@ -1,53 +1,27 @@
 project: cruxx
 id: cruxx
-updated: "20260420:132031"
+updated: "20260420:173838"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
   step, branch, delegation, and failure is a first-class value.
 
-items:
-
-  - id: cruxx-27
-    name: fix-stale-macro-doc-comments
-    title: "Fix stale doc comments referencing #[cruxx::agent] in macro crate"
-    description: >
-      Macro crate doc comments still say #[cruxx::agent] but the actual attribute
-      is #[cruxx::agent] since the crate rename. GH issue #16.
-    priority: P1
-    status: open
-    files:
-      - crates/cruxx-macros/src/agent.rs
-      - crates/cruxx-macros/src/parse.rs
-      - crates/cruxx-macros/src/lib.rs
-
-  - id: cruxx-26
-    name: planner-implementation
-    title: "Implement cruxx-planner: LLM-based goal-to-pipeline generation (Path A)"
-    description: >
-      Deterministic EvolutionPlanner (Path B) implemented this session. Remaining work:
-      the BAML-based NL path — NL goal → BAML function → .cruxx pipeline emitted to
-      stdout. See docs/planner-design.md.
-    priority: P2
-    status: open
-    files:
-      - docs/planner-design.md
-      - crates/cruxx-planner/src/lib.rs
-
-  - id: cruxx-28
-    name: container-real-adapter
-    title: "Implement real ContainerClient adapter (Docker/OCI)"
-    description: >
-      container::run and container::wait handlers use MockContainerClient. A real adapter
-      backed by Docker API or OCI runtime (e.g. containerd) is needed for production use.
-      ContainerClient trait is the port — add a new adapter under cruxx-agentic/src/adapters/.
-    priority: P2
-    status: open
-    files:
-      - crates/cruxx-agentic/src/adapters/container_client.rs
-      - crates/cruxx-agentic/src/container.rs
+items: []
 
 log:
+  - date: "20260420:173838"
+    session: 27
+    summary: >
+      Closed all 3 remaining HANDOFF items. cruxx-27 (stale macro doc comments) was
+      already fixed in prior commit cae63c9. cruxx-28: added DockerContainerClient
+      adapter behind docker feature (bollard 0.20, resource limits, integration test).
+      cruxx-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated
+      on baml. 360/360 tests pass, CI clean.
+    commits:
+      - sha: bce2cbb
+        branch: main
+      - sha: 68164ee
+        branch: main
   - date: "20260420:132031"
     session: 26
     summary: >
@@ -96,20 +70,3 @@ log:
       Audited cruxx-script pipeline capabilities. Created docs/cruxx-capabilities.md (handler/combinator
       support matrix). Filed GH issues #7-#12 for 6 known gaps. Added pipeline capabilities
       reference to CLAUDE.md. 329/329 tests pass, build clean.
-  - date: "20260420::001527"
-    session: 21
-    summary: >
-      Fixed CI fmt failure caused by missing generated baml_client module on fresh checkout.
-      Added baml_client stub step to ci.yml, release.yml, and pre-commit hook. Reordered
-      CI gates (fmt+clippy before build, removed redundant cargo check). Added nightly
-      release workflow (regression tests → GitHub pre-release on schedule). Updated
-      BAML clients.baml: env-configurable model names (OPENAI_MODEL, ANTHROPIC_MODEL)
-      with fallback to updated defaults; Anthropic default updated to claude-haiku-4-5-20251001.
-      Expanded .env.example with model vars, OLLAMA_BASE_URL, RUST_LOG.
-    commits:
-      - sha: 7d5d47e
-        branch: main
-      - sha: ca00d9b
-        branch: main
-      - sha: 8143fda
-        branch: main
