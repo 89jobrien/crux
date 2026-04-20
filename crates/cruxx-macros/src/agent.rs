@@ -187,7 +187,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     })
 }
 
-fn extract_cruxx_inner_type(output: &syn::ReturnType) -> syn::Result<TokenStream> {
+pub(crate) fn extract_cruxx_inner_type(output: &syn::ReturnType) -> syn::Result<TokenStream> {
     match output {
         syn::ReturnType::Default => Err(syn::Error::new_spanned(
             output,
@@ -221,7 +221,7 @@ fn extract_cruxx_inner_type(output: &syn::ReturnType) -> syn::Result<TokenStream
     }
 }
 
-fn to_pascal_case(s: &str) -> String {
+pub(crate) fn to_pascal_case(s: &str) -> String {
     s.split('_')
         .map(|word| {
             let mut chars = word.chars();
