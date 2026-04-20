@@ -20,8 +20,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-cruxx-core = { path = "../cruxx-core", version = "0.2.4" }
-cruxx-script = { path = "../cruxx-script", version = "0.2.4" }
+cruxx-core = { path = "../cruxx-core", version = "0.2.5" }
+cruxx-script = { path = "../cruxx-script", version = "0.2.5" }
 
 [dev-dependencies]
 tokio = { workspace = true }

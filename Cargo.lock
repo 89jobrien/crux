@@ -352,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "cruxx-agentic"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "baml",
  "clap",
@@ -408,7 +408,7 @@ dependencies = [
 
 [[package]]
 name = "cruxx-planner"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "cruxx-script",
  "serde",
