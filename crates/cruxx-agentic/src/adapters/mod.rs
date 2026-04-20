@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod container_client;
 pub mod ollama;
 pub mod openai;
 

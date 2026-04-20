@@ -4,10 +4,12 @@
 //! module's `register` function individually to pick only what you need.
 
 pub mod adapters;
+pub mod container;
 pub mod ctrl;
 pub mod error;
 pub mod fs;
 pub mod git;
+pub mod harness;
 pub mod json;
 pub mod llm;
 pub mod llm_step;
@@ -43,6 +45,8 @@ pub fn register_all(registry: &mut HandlerRegistry) {
 /// Register all built-in handlers, including plugin handler descriptions
 /// for the planner.
 pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers: Vec<String>) {
+    container::register(registry);
+    harness::register(registry);
     shell::register(registry);
     fs::register(registry);
     git::register(registry);
