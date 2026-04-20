@@ -1,0 +1,12 @@
+//! cruxx-types: Serializable wire-format types for cruxx.
+//!
+//! This crate contains only data types with serde implementations.
+//! It has no runtime, no async, no LLM dependencies. Designed for
+//! cross-workspace consumption (e.g., minibox trace storage).
+
+pub mod budget;
+pub mod crux_value;
+pub mod error;
+pub mod id;
+pub mod recovery;
+pub mod step;

@@ -419,6 +419,7 @@ name = "cruxx-core"
 version = "0.2.5"
 dependencies = [
  "chrono",
+ "cruxx-types",
  "futures",
  "proptest",
  "redb",
@@ -488,6 +489,16 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "cruxx-types"
+version = "0.2.5"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "ulid",
 ]
 
 [[package]]

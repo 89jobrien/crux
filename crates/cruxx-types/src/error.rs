@@ -1,7 +1,7 @@
 /// Domain error types for cruxx execution.
 use serde::{Deserialize, Serialize};
 
-use super::budget::BudgetKind;
+use crate::budget::BudgetKind;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]

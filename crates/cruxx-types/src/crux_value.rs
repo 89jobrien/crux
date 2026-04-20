@@ -2,9 +2,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::error::CruxErr;
-use super::id::CruxId;
-use super::step::{Step, StepKind, StepStatus};
+use crate::error::CruxErr;
+use crate::id::CruxId;
+use crate::step::{Step, StepKind, StepStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Crux<T> {
