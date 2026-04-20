@@ -336,12 +336,53 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
 
                 Ok(HandlerOutput::new(json!({ "related": result.related })))
             }
+            "ClassifyCIFailure" => {
+                let failure_output = input_map
+                    .get("failure_output")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            "llm::extract",
+                            "ClassifyCIFailure requires 'failure_output' field",
+                        )
+                    })?
+                    .to_string();
+                let known_patterns: Vec<String> = input_map
+                    .get("known_patterns")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let result = b
+                    .ClassifyCIFailure
+                    .call(failure_output, &known_patterns)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(HandlerOutput::with_confidence(
+                    json!({
+                        "kind": result.kind,
+                        "fix_type": result.fix_type,
+                        "suggested_fix": result.suggested_fix,
+                        "confidence": result.confidence,
+                        "new_pattern": result.new_pattern,
+                    }),
+                    result.confidence as f32,
+                ))
+            }
             unknown => Err(CruxErr::step_failed(
                 "llm::extract",
                 format!(
                     "unknown BAML function '{unknown}'; expected one of: \
                      ExtractEntities, Summarize, Classify, DescribeProject, \
-                     AssessHealth, ClassifyProject, GenerateChangelog, SuggestRelated"
+                     AssessHealth, ClassifyProject, GenerateChangelog, SuggestRelated, \
+                     ClassifyCIFailure"
                 ),
             )),
         }

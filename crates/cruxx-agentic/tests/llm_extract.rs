@@ -6,7 +6,7 @@
 #![cfg(feature = "baml")]
 
 use cruxx_agentic::llm::register_extract;
-use cruxx_script::HandlerRegistry;
+use cruxx_script::{HandlerRegistry, handler_output::HandlerOutput};
 use serde_json::json;
 
 fn make_registry() -> HandlerRegistry {
@@ -18,7 +18,7 @@ fn make_registry() -> HandlerRegistry {
 async fn invoke(
     registry: &HandlerRegistry,
     input: serde_json::Value,
-) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<HandlerOutput, Box<dyn std::error::Error + Send + Sync>> {
     let handler = registry
         .get_handler("llm::extract")
         .expect("llm::extract handler must be registered");
@@ -138,6 +138,38 @@ async fn classify_returns_structured_output() {
         (0.0..=1.0).contains(&confidence),
         "confidence must be between 0.0 and 1.0"
     );
+}
+
+/// ClassifyCIFailure must be reachable without API keys (error path only).
+#[cfg(feature = "baml")]
+#[tokio::test]
+async fn classify_ci_failure_is_wired() {
+    // We cannot call BAML without API keys, but we can verify the handler
+    // does NOT return "unknown BAML function" for ClassifyCIFailure.
+    // With no API key the error will be a BAML/HTTP error, not an "unknown function" error.
+    let registry = make_registry();
+    let input = json!({
+        "function": "ClassifyCIFailure",
+        "input": {
+            "failure_output": "error[E0502]: borrow checker error",
+            "known_patterns": []
+        }
+    });
+
+    let handler = registry
+        .get_handler("llm::extract")
+        .expect("llm::extract handler must be registered");
+
+    let result = handler(input).await;
+    // Either succeeds (if API key available) OR fails with a BAML/API error.
+    // It must NOT fail with "unknown BAML function 'ClassifyCIFailure'".
+    if let Err(e) = result {
+        let msg = e.to_string();
+        assert!(
+            !msg.contains("unknown BAML function"),
+            "ClassifyCIFailure should be wired, got: {msg}"
+        );
+    }
 }
 
 #[tokio::test]
