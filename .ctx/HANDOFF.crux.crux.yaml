@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260420:131613"
+updated: "20260420:132031"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -48,6 +48,18 @@ items:
       - crates/cruxx-agentic/src/container.rs
 
 log:
+  - date: "20260420:132031"
+    session: 26
+    summary: >
+      Revised walkthrough series (all 8 docs) for clarity and cruxx rename consistency.
+      Updated CLAUDE.md workspace structure with new crates (cruxx-planner, cruxx-model,
+      cruxx-plugin, cruxx-script) and new proc macros (#[cruxx::harness], #[cruxx::evolve]).
+      358/358 tests pass.
+    commits:
+      - sha: 438d7d5
+        branch: main
+      - sha: afc798c
+        branch: main
   - date: "20260420:131613"
     session: 25
     summary: >
@@ -84,11 +96,6 @@ log:
       Audited cruxx-script pipeline capabilities. Created docs/cruxx-capabilities.md (handler/combinator
       support matrix). Filed GH issues #7-#12 for 6 known gaps. Added pipeline capabilities
       reference to CLAUDE.md. 329/329 tests pass, build clean.
-  - date: "20260419::230000"
-    session: 22
-    summary: >
-      handjobs triage — 1 open HANDOFF item, 7 GH issues synced (6 new gap issues
-      #7-#12 created from docs/cruxx-capabilities.md audit). No local TODOs found.
   - date: "20260420::001527"
     session: 21
     summary: >
