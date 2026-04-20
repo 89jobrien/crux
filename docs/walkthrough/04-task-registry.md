@@ -1,14 +1,13 @@
-# 04 — Serializable task management
+# 04 — Task registry: crash-safe agents
 
-> Goal: understand `TaskRegistry` and `Task<S>`, use them to make an agent
-> crash-safe, and know exactly where the state lives at every step.
+> Goal: understand `Task` and `TaskRegistry<B>`, wire them into an agent, and know exactly
+> what happens at replay time — including what fails and why.
 
-This is the chapter that makes `cruxx::` more than a logging library. Every
-step, every delegation, every rejected branch in a `Crux<T>` is
-serializable — so you can persist the cruxx, crash the process, and resume
-from exactly where you left off.
+This is the chapter that makes cruxx more than a logging library. Every step, every delegation,
+every rejected branch in a `Crux<T>` is serializable. Persist the trace, crash the process,
+and resume from exactly where you left off.
 
-## The problem we're solving
+## The problem
 
 A long-running agent does this:
 
@@ -16,250 +15,300 @@ A long-running agent does this:
 plan  ->  step 1  ->  step 2  ->  [crash]
 ```
 
-When you restart, you have three bad options:
+On restart you have three bad options:
 
-1. **Re-run from the start** — wastes tokens, risks drift if upstream state
-   changed.
-2. **Rely on ad-hoc checkpointing** — you end up writing custom "save after
-   this step" code in every agent, and it's always slightly wrong.
-3. **Ship it and pray** — the industry standard.
+1. Re-run from the start — wastes tokens, risks drift if upstream state changed.
+2. Ad-hoc checkpointing — custom "save after this step" code in every agent, always slightly wrong.
+3. Ship it and pray.
 
-`cruxx::` gives you a fourth option: the runtime persists every step as it
-happens, and replay is a language feature.
+Cruxx gives you a fourth: the runtime persists every step as it happens, and replay is a language
+feature, not a library bolted on afterward.
 
 ## The two types
 
-### `Task<S>`
+### `Task`
 
-A `Task<S>` is a serializable handle to a single unit of work. `S` is your
-status enum:
+A `Task` is a serializable handle to a single unit of work.
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum BuildStatus {
-    Queued,
-    Running { started_at: DateTime<Utc> },
-    Succeeded { artifact_url: String },
-    Failed { error: String },
-    AwaitingApproval { human: String },
+pub enum TaskStatus {
+    Pending,
+    Running,
+    Done,
+    Failed,
 }
 
-// The task itself:
-pub struct Task<S> {
+pub struct Task {
     pub id: TaskId,
-    pub parent: Option<TaskId>,
-    pub kind: String,          // "build", "deploy", "research", etc.
-    pub status: S,
+    pub kind: String,
+    pub status: TaskStatus,
     pub input: serde_json::Value,
-    pub cruxx: Option<Crux<serde_json::Value>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub checkpoint: Option<Crux<serde_json::Value>>,
     pub attempts: u32,
 }
 ```
 
-The key fields:
+Key fields:
 
-- **`status: S`** — your own type. The runtime doesn't care what the states
-  are; it just persists the enum. This is where `cruxx::` leans on Rust's
-  type system instead of inventing its own status primitives.
-- **`cruxx: Option<Crux<...>>`** — the cruxx so far. On restart, this is
-  the seed for replay.
-- **`attempts`** — the runtime bumps this every time a `Failed` task gets
-  retried. Your lifecycle hooks can inspect it.
+- **`status`** — a fixed four-variant enum. The runtime advances it; your agent reads it.
+- **`checkpoint`** — the execution trace so far. On restart this is the seed for replay.
+- **`attempts`** — bumped every time a `Failed` task gets retried. Lifecycle hooks can inspect it.
+- **`kind`** — a plain string tag ("build", "research", "deploy"). Used by `pending` for filtering.
 
-### `TaskRegistry`
+Note what `Task` does _not_ have: no parent task, no timestamp fields, no generic status parameter.
+The status type is fixed. If you need richer state, put it in `input` or encode it in `kind`.
+
+### `TaskRegistry<B>`
 
 ```rust
-pub struct TaskRegistry { ... }
+pub struct TaskRegistry<B> { backend: B }
 
-impl TaskRegistry {
-    pub fn in_memory() -> Self;
-    pub fn sqlite(path: &Path) -> Result<Self, RegistryErr>;
-    pub fn custom<B: RegistryBackend>(backend: B) -> Self;
+impl<B: RegistryBackend> TaskRegistry<B> {
+    pub fn new(backend: B) -> Self;
 
-    pub async fn submit<S, I>(&self, kind: &str, input: I) -> Result<TaskId, RegistryErr>
-    where S: Default + Serialize + DeserializeOwned, I: Serialize;
+    pub async fn submit<I: Serialize>(
+        &self,
+        kind: &str,
+        input: I,
+    ) -> Result<TaskId, RegistryErr>;
 
-    pub async fn get<S>(&self, id: TaskId) -> Result<Task<S>, RegistryErr>;
-    pub async fn update_status<S>(&self, id: TaskId, status: S) -> Result<(), RegistryErr>;
+    pub async fn get(&self, id: &TaskId) -> Result<Task, RegistryErr>;
 
-    pub async fn checkpoint<T: Serialize>(&self, id: TaskId, cruxx: &Crux<T>) -> Result<(), RegistryErr>;
+    pub async fn update_status(
+        &self,
+        id: &TaskId,
+        status: TaskStatus,
+    ) -> Result<(), RegistryErr>;
 
-    pub async fn pending<S>(&self) -> Result<Vec<Task<S>>, RegistryErr>;
-    pub async fn resume<S, A: Agent>(&self, id: TaskId) -> Result<Crux<A::Output>, CruxErr>;
+    pub async fn checkpoint<T: Serialize>(
+        &self,
+        id: &TaskId,
+        cruxx: &Crux<T>,
+    ) -> Result<(), RegistryErr>;
+
+    pub async fn pending(&self, kind: &str) -> Result<Vec<Task>, RegistryErr>;
+
+    pub async fn load_checkpoint(
+        &self,
+        id: &TaskId,
+    ) -> Result<Option<Crux<serde_json::Value>>, RegistryErr>;
 }
 ```
 
-Three backends ship in-tree:
+A few things worth calling out:
 
-| Backend     | When to use                                                       |
-| ----------- | ----------------------------------------------------------------- |
-| `in_memory` | Tests, single-process agents, experiments                         |
-| `sqlite`    | Single host, crash-safe, embeddable (enable the `sqlite` feature) |
-| `custom`    | You bring Postgres, Redis, DynamoDB — implement `RegistryBackend` |
+- `update_status` and `checkpoint` both use a bounded compare-and-swap retry (3 attempts) to avoid
+  lost updates under concurrent writes.
+- `pending` takes a `kind` filter. Pass `""` to return all pending tasks regardless of kind.
+- There is no `resume` method on `TaskRegistry`. Resuming is a two-step operation: call
+  `load_checkpoint` to get the trace, then call `ctx.resume_from` or `ctx.replay_from` on the
+  context. This keeps the registry as a pure store and puts replay logic where it belongs — on
+  `CruxCtx`.
 
-`RegistryBackend` is a small trait (`get`, `put`, `list`, `cas`). You almost
-never need to write one yourself.
+## Backends
 
-## Wiring it into an agent
+`RegistryBackend` is a four-method trait (`get`, `put`, `list`, `cas`). Two adapters ship in-tree:
 
-Here's a real example — the scaffolding for a build-and-deploy agent:
+| Backend           | When to use                                                      |
+| ----------------- | ---------------------------------------------------------------- |
+| `InMemoryBackend` | Tests, single-process agents, experiments — always available     |
+| `RedbBackend`     | Single-host crash-safe persistence — enable the `redb` feature  |
+
+There is no SQLite backend. Redb is a pure-Rust embedded key-value store with no C dependency and
+no schema. It is the right default for anything you would actually ship on a single host.
+
+Constructing a registry:
+
+```rust
+use cruxx::registry::{TaskRegistry, InMemoryBackend};
+
+// Tests and in-process use:
+let reg = TaskRegistry::new(InMemoryBackend::new());
+```
+
+```rust
+// With the `redb` feature:
+use cruxx::registry::{TaskRegistry, RedbBackend};
+use std::path::Path;
+
+let reg = TaskRegistry::new(RedbBackend::open(Path::new("./tasks.redb"))?);
+```
+
+If you need Postgres, Redis, or DynamoDB, implement `RegistryBackend` for your client type and
+pass it to `TaskRegistry::new`. You almost never need to do this.
+
+## Wiring a registry into an agent
+
+Here is a build-and-deploy agent that uses the registry for crash safety:
 
 ```rust
 use cruxx::prelude::*;
-use cruxx::registry::{TaskRegistry, Task, TaskId};
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-enum DeployStatus {
-    #[default]
-    Queued,
-    Building,
-    Testing,
-    Deploying,
-    Succeeded { url: String },
-    Failed { error: String, step: String },
-}
+use cruxx::registry::{TaskRegistry, InMemoryBackend, TaskId, TaskStatus};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct DeployInput {
     repo: String,
-    ref_: String,
+    git_ref: String,
     env: String,
 }
 
 #[cruxx::agent(registry = "reg", checkpoint_every_step)]
-async fn deploy(reg: &TaskRegistry, task_id: TaskId, input: DeployInput)
-    -> Crux<String>
-{
-    reg.update_status::<DeployStatus>(task_id, DeployStatus::Building).await?;
-    let artifact = x.step("build", || build(&input.repo, &input.ref_)).await?;
+async fn deploy(
+    reg: &TaskRegistry<InMemoryBackend>,
+    task_id: TaskId,
+    input: DeployInput,
+) -> Crux<String> {
+    reg.update_status(&task_id, TaskStatus::Running).await?;
 
-    reg.update_status(task_id, DeployStatus::Testing).await?;
-    x.step("test", || run_tests(&artifact)).await?;
+    let artifact = x.step("build", || build(&input.repo, &input.git_ref)).await?;
+    let _report  = x.step("test",  || run_tests(&artifact)).await?;
+    let url      = x.step("deploy", || deploy_to(&input.env, &artifact)).await?;
 
-    reg.update_status(task_id, DeployStatus::Deploying).await?;
-    let url = x.step("deploy", || deploy_to(&input.env, &artifact)).await?;
-
-    reg.update_status(task_id, DeployStatus::Succeeded { url: url.clone() }).await?;
+    reg.update_status(&task_id, TaskStatus::Done).await?;
     Ok(url)
 }
 ```
 
-A few things to notice:
-
 ### `registry = "reg"` and `checkpoint_every_step`
 
-The macro takes two optional arguments:
+The macro takes two optional attributes:
 
-- `registry = "reg"` — points at the `TaskRegistry` binding in scope. The
-  macro injects `reg.checkpoint(task_id, &x.snapshot()).await?` after every
-  step (when `checkpoint_every_step` is set).
-- `checkpoint_every_step` — the default is "checkpoint at delegation
-  boundaries only." That's fast and usually enough. Turn on per-step
-  checkpointing when the steps are expensive and you _really_ want crash
-  safety between them.
+- `registry = "reg"` — names the `TaskRegistry` binding in scope. The generated `run_registered`
+  method on `DeployAgent` handles submitting the task and threading the `task_id` through.
+- `checkpoint_every_step` — injects `reg.checkpoint(&task_id, &x.snapshot()).await?` after every
+  `x.step` call. The default (without this attribute) checkpoints only at delegation boundaries.
+  Turn it on when steps are expensive and you need crash safety between them.
 
-If you need something custom, omit both and call `reg.checkpoint(task_id,
-&x.snapshot()).await?` explicitly at the points you care about. `x.snapshot()`
-returns a `Crux<serde_json::Value>` that's a live view of the cruxx so far.
+To checkpoint manually at specific points:
+
+```rust
+// x.snapshot() returns Crux<serde_json::Value> — a live view of the trace
+reg.checkpoint(&task_id, &x.snapshot()).await?;
+```
 
 ### `update_status` is separate from `checkpoint`
 
-Two different things, easy to confuse:
+These do different things:
 
-- **`update_status`** changes your `Task<S>::status` field — the business-
-  level state machine.
-- **`checkpoint`** persists the `Crux<T>` — the execution history.
+- **`update_status`** advances `Task::status` — the coarse business-level state machine (Pending,
+  Running, Done, Failed).
+- **`checkpoint`** persists `Task::checkpoint` — the full execution history as a `Crux<Value>`.
 
-Typically you call `update_status` when your business logic advances (about
-to start building), and `checkpoint` when the _runtime_ wants to save
-progress. With `checkpoint_every_step`, the macro handles the second one.
+Call `update_status` when your business logic transitions. The macro (or explicit calls) handles
+`checkpoint` for the execution history.
 
-## How replay actually works
+## Resuming after a crash
 
-When you call `reg.resume::<DeployStatus, DeployAgent>(task_id)`, here's
-what the runtime does:
+There is no single `resume` call. You load the checkpoint, then seed the context:
 
-1. Load the `Task<DeployStatus>` from the backend.
-2. Read `task.cruxx` — the `Crux<Value>` snapshot.
-3. Start a new `CruxCtx` seeded from that snapshot.
-4. Re-run the agent function. For every `x.step("name", ...)`:
-   - Compute the input hash.
-   - If the snapshot has a step with the same name and matching input hash,
-     skip the closure entirely and return the recorded output.
-   - Otherwise, run the closure fresh and record a new step.
-5. Return a `Crux<T>` with the reconstructed history plus any new work.
+```rust
+// Load the previous trace:
+let previous: Option<Crux<Value>> = reg.load_checkpoint(&task_id).await?;
 
-The skip-if-input-matches step is what makes replay _correct_ — not just
-fast. If you changed the code between crash and restart in a way that makes
-step 2's input different, the input hashes won't match, the closure re-runs,
-and the cruxx records a new step. Correctness first, speed second.
+if let Some(trace) = previous {
+    // Seed replay from the loaded trace:
+    ctx.replay_from(&trace);
+}
+```
+
+Or, if you have a context already associated with a registry:
+
+```rust
+// snapshot + persist in one call:
+x.checkpoint_to(&reg, &task_id).await?;
+
+// load + seed replay in one call:
+x.resume_from(&reg, &task_id).await?;
+```
+
+Once the replay cache is seeded, re-run the agent function normally. Steps whose name and input
+hash match the cache are skipped; the recorded output is returned immediately. Steps that do not
+match run fresh.
+
+## How replay works
+
+Steps are matched by name combined with an ordinal hash (`hash_step_identity`). For each
+`x.step("name", closure)` call during a resumed run:
+
+1. Compute the input hash for this invocation.
+2. Look up a cached step with the same name and ordinal.
+3. If found and the input hash matches, return the cached output immediately — no closure call.
+4. If not found or the input hash does not match, run the closure and record a new step.
+
+The input-hash check is what makes replay _correct_, not just fast. If code changed between crash
+and restart such that a step's input is now different, the closure re-runs and the trace records a
+new step. Correctness is the contract; speed is the consequence.
+
+### Two replay modes
+
+**Strict (default)** — any mismatch raises `CruxErr::ReplayMismatch`. The run stops. You inspect
+the trace, fix the mismatch, and decide explicitly whether to replay or start fresh.
+
+**Lenient** — a mismatch triggers a forward name scan through the cache instead of failing.
+Ordinal shifts are the designed recovery path in this mode, not an error. Enable it per-agent:
+
+```rust
+#[cruxx::agent(replay = "lenient")]
+async fn my_agent(input: Input) -> Crux<Output> { ... }
+```
+
+Or at runtime on the context:
+
+```rust
+ctx.set_replay_mode(ReplayMode::Lenient);
+```
+
+Default-strict is the right default. An agent that silently replays the wrong trace is harder to
+debug than one that refuses to replay at all.
 
 ### What fails at replay time
 
-Replay is strict by default. You'll get a `CruxErr::ReplayMismatch` in these
-cases:
+Under strict mode, `CruxErr::ReplayMismatch` is raised in these cases:
 
-| Situation                   | Why it fails                                     |
-| --------------------------- | ------------------------------------------------ |
-| You renamed a step          | Can't correlate old step to new step             |
-| You reordered steps         | Causal chain no longer matches                   |
-| A step's input hash changed | Would return stale output                        |
-| A delegation target changed | Old sub-cruxx can't be replayed against new agent |
-
-You can loosen this with `#[cruxx::agent(replay = "lenient")]` which will
-re-run mismatched steps instead of failing — but default-strict is the right
-default. An agent that silently replays the wrong cruxx is worse than one
-that refuses to replay at all.
+| Situation                       | Why it fails                                          |
+| ------------------------------- | ----------------------------------------------------- |
+| Step was renamed                | Ordinal + name lookup finds no matching cache entry   |
+| Steps were reordered            | Causal chain no longer aligns with the recorded trace |
+| Step's input changed            | Would return stale output for new input               |
+| Delegation target changed       | Child trace cannot be replayed against a new agent    |
 
 ## The full lifecycle
 
-Put it together and a task goes through six observable states:
-
 ```
-Submitted  ->  Running  ->  Checkpointed  ->  [crash]
-                                                 |
-                                                 v
-                                              Resumed  ->  Checkpointed  ->  Completed
-```
-
-The registry has every one of those transitions persisted. You can build a
-dashboard, a retry policy, an SLO monitor, or a human-in-the-loop queue on
-top of it without any additional plumbing.
-
-## In-memory vs SQLite: when each makes sense
-
-```rust
-// Tests:
-let reg = TaskRegistry::in_memory();
-
-// Single-host service:
-let reg = TaskRegistry::sqlite(Path::new("./tasks.db"))?;
+submit()
+    |
+    v
+ Pending  -->  Running  -->  [checkpoint]  -->  Done
+                  |                 |
+                  |              [crash]
+                  |                 |
+                  v                 v
+               Failed          load_checkpoint()
+                  |                 |
+               update_status        v
+                Running         replay_from()
+                                    |
+                                    v
+                               [resume run]  -->  Done
 ```
 
-The in-memory registry is _not_ just for tests — it's genuinely useful when
-you want cruxx/replay semantics inside a single process without persistence.
-Example: a long-running CLI that wants to retry failed steps but doesn't
-need to survive a restart.
+The registry holds a persistent record of every transition. You can build a dashboard, retry
+policy, SLO monitor, or human-in-the-loop approval queue on top of it with no additional plumbing.
 
-SQLite is the default for anything you'd actually ship. One file, zero
-operational overhead, supports concurrent readers, and `serde_json::Value`
-columns mean you don't need schema migrations when your `Task<S>::S` enum
-changes.
+## Summary
 
-## Check your understanding
+| Operation              | Method                                    | What it touches        |
+| ---------------------- | ----------------------------------------- | ---------------------- |
+| Create a task          | `reg.submit(kind, input)`                 | Persists new Task      |
+| Read a task            | `reg.get(&id)`                            | Returns full Task      |
+| Advance business state | `reg.update_status(&id, status)`          | Task::status field     |
+| Save execution trace   | `reg.checkpoint(&id, &crux)`             | Task::checkpoint field |
+| Load trace for replay  | `reg.load_checkpoint(&id)`               | Returns Crux<Value>    |
+| List pending tasks     | `reg.pending(kind)`                       | Filters by kind        |
+| Snapshot current trace | `ctx.snapshot()`                          | Returns Crux<Value>    |
+| Seed replay            | `ctx.replay_from(&trace)`                | Populates replay cache |
 
-- **Where does the `S` in `Task<S>` come from?** _You define it. The runtime
-  just persists it._
-- **What's the difference between `update_status` and `checkpoint`?**
-  _Status is business-level; checkpoint is execution history._
-- **What does `checkpoint_every_step` do?** _Tells the macro to persist the
-  cruxx after every `x.step` call, not just at delegation boundaries._
-- **What makes replay correct rather than just fast?** _Input hashes — a
-  step only gets skipped if its input matches the recorded one._
-
-Chapter **05** covers the lifecycle hooks (`on_low_confidence`,
-`on_step_failure`, `on_budget_exceeded`) that let you recover gracefully
-instead of just crashing into the registry.
+Chapter **05** covers lifecycle hooks — `on_low_confidence`, `on_step_failure`,
+`on_budget_exceeded` — and how to recover gracefully instead of driving straight into the registry
+with a `Failed` status.

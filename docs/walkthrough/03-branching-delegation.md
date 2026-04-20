@@ -1,256 +1,283 @@
-# 03 — Branching & delegation
+# 03 — Branching and Delegation
 
-> Goal: know when to use `match`, `route_on_confidence`, `speculate`, and
-> `delegate`, and why each one is a separate language construct instead of
-> just an `if`.
+This chapter covers the four primitives for branching control flow in a Crux agent: plain `match`
+inside a step, `route_on_confidence`, `speculate`, and `delegate`. Each serves a distinct purpose;
+choosing the right one is as important as using it correctly.
 
-Regular Rust gives you `if`, `match`, and `tokio::spawn`. `cruxx::` gives
-you four additional primitives that each correspond to a different _kind_ of
-decision an agent makes. The four exist because they have different replay,
-budget, and recovery semantics — not because any one of them is "better".
+---
 
-## The four branching kinds
+## 1. Plain `match` inside a step
 
-| Primitive               | When to use                             | Records in cruxx as                           |
-| ----------------------- | --------------------------------------- | -------------------------------------------- |
-| `match` (plain Rust)    | Pure pattern match on known-shape data  | `Step { kind: Branch, ... }`                 |
-| `x.route_on_confidence` | Dispatch on a model's confidence score  | `Step { kind: Branch, ... }` with the score  |
-| `x.speculate`           | Run several approaches, pick the winner | Winner as `Ok`, losers as `Rejected`         |
-| `x.delegate::<A>`       | Hand off to a separate agent            | `Step { kind: Delegation, children: [...] }` |
-
-Pick the primitive by asking: _what does "failure" mean here?_
-
-- `match` — failure is impossible, or handled by another arm
-- `route_on_confidence` — failure means "we weren't sure enough"
-- `speculate` — failure means "none of the approaches worked"
-- `delegate` — failure means "the sub-agent couldn't handle it"
-
-Each one leaves a different shape of record in the cruxx.
-
-## Value branching with `match`
-
-No macro needed. Just `match`:
+The simplest branching is a Rust `match` (or `if`) inside a `x.step` closure. Use this when the
+branch decision is purely structural — no confidence scores, no sub-agents, no parallel arms.
 
 ```rust
-#[cruxx::agent]
-async fn classify(doc: Document) -> Crux<Category> {
-    let embedding = x.step("embed", || embed(&doc)).await?;
-
-    let category = x.step("match", || async {
-        match embedding.topic {
-            Topic::Code     => Ok(Category::Technical),
-            Topic::News     => Ok(Category::Current),
-            Topic::Story    => Ok(Category::Creative),
-            Topic::Unknown  => Err(CruxErr::low_confidence("match", 0.3, 0.8)),
-        }
-    }).await?;
-
-    Ok(category)
-}
+let answer = x.step("classify", |_| async move {
+    let label = classify_input(&raw)?;
+    match label {
+        Label::Simple  => produce_direct_answer(&raw).await,
+        Label::Complex => produce_detailed_answer(&raw).await,
+    }
+}).await?;
 ```
 
-The `match` is inside `x.step`, so the step records _which_ arm fired (via
-the closure's output). The unknown case fails the step with a `LowConfidence`
-error — which will trip any `on_low_confidence` hook attached upstream.
+The entire branch is a single recorded step. Both arms must return the same type. The trace shows
+one `Step` entry; the path taken is visible in the output value, not as a separate step.
 
-**Rule of thumb:** use plain `match` when the arms are pure data decisions.
-If any arm involves calling out to another model, reach for
-`route_on_confidence` or `delegate` instead.
+**Rule of thumb:** use plain `match` when the arms are pure data decisions with no external calls.
+If any arm involves a model or a sub-agent, reach for `route_on_confidence` or `delegate` instead.
 
-## Confidence branching with `route_on_confidence`
+---
 
-This is the primitive that makes `cruxx::` feel agentic rather than
-procedural. You hand it a score and a set of arms keyed by threshold:
+## 2. `route_on_confidence`
+
+Use `route_on_confidence` when a numeric confidence score governs which branch runs. It validates
+that the routes cover `[0.0, 1.0]` with no gaps and no overlaps; a misconfigured route table
+causes a panic or error at runtime, not a silent wrong-path execution.
+
+### Signature
 
 ```rust
-#[cruxx::agent]
-async fn answer(question: String) -> Crux<Answer> {
-    let draft = x.step("draft", || quick_draft(&question)).await?;
-
-    x.route_on_confidence(draft.confidence, [
-        (0.90.., || async { Ok(draft.into_answer()) }),
-        (0.70..0.90, || x.delegate::<Refiner>("refine", &draft).await),
-        (0.00..0.70, || x.delegate::<HumanEscalator>("escalate", &draft).await),
-    ]).await
-}
+pub async fn route_on_confidence<T>(
+    &mut self,
+    name: &str,
+    confidence: f32,
+    routes: Vec<ConfidenceRoute<'_, T>>,
+) -> Result<T, CruxErr>
 ```
 
-What the compiler checks for you:
+`ConfidenceRoute<'_, T>` is the tuple `(ConfidenceRange, &str, BoxFut<T>)`.
 
-1. **Ranges must cover 0.0..=1.0.** A missing range is a compile error. You
-   cannot accidentally ship an agent that crashes on `confidence = 0.65`.
-2. **Ranges must not overlap.** Overlap is also a compile error — there's no
-   ambiguity about which arm runs.
-3. **Arms must return the same type.** Exactly like `match`.
+### Building ranges
 
-What the cruxx records:
+Ranges are constructed with named constructors. Do not use Rust range syntax (`0.7..0.9`).
 
-- The score (`0.82`)
-- The range that matched (`0.70..0.90`)
-- The step name you gave (`"answer_route"` by default)
-- The sub-cruxx of whatever the arm did (because `delegate` is used inside)
+| Constructor                          | Bounds   |
+|--------------------------------------|----------|
+| `ConfidenceRange::inclusive(lo, hi)` | `[lo, hi]` |
+| `ConfidenceRange::exclusive(lo, hi)` | `(lo, hi)` |
 
-When you're debugging later, you can filter `cruxx.steps.iter().filter(|s|
-s.kind == StepKind::Branch)` and see the exact confidence score at each
-decision point. That's the kind of thing you'd normally build an entire
-eval harness for.
+The ranges must collectively cover `[0.0, 1.0]`. A common layout uses `inclusive` for the top
+bucket (so `1.0` is caught) and `exclusive` for the lower ones.
 
-## Speculation with `x.speculate`
-
-Run several approaches concurrently, let them race, pick the best:
+### Example
 
 ```rust
-#[cruxx::agent]
-async fn finalize(draft: Draft) -> Crux<Itinerary> {
-    x.speculate("finalize", [
-        ("cheap", || async { finalize_cheap(&draft).await }),
-        ("fast",  || async { finalize_fast(&draft).await }),
-        ("safe",  || async { finalize_safe(&draft).await }),
-    ])
-    .with_budget(Budget::tokens(8000))
-    .pick_best_by(|r| r.confidence)
-    .await
-}
+let answer = x.route_on_confidence(
+    "answer_route",
+    draft.confidence,
+    vec![
+        (
+            ConfidenceRange::inclusive(0.9, 1.0),
+            "accept",
+            Box::pin(async { Ok(draft.into_answer()) }),
+        ),
+        (
+            ConfidenceRange::exclusive(0.7, 0.9),
+            "refine",
+            Box::pin(async {
+                let refined = refine_draft(&draft).await?;
+                Ok(refined.into_answer())
+            }),
+        ),
+        (
+            ConfidenceRange::exclusive(0.0, 0.7),
+            "escalate",
+            Box::pin(async {
+                let escalated = escalate_to_human(&draft).await?;
+                Ok(escalated)
+            }),
+        ),
+    ],
+).await?;
 ```
 
-Three terminators, each with different semantics:
+Each route produces a labelled `Step` in the trace. Only the matching route's future is awaited;
+the others are dropped.
 
-| Terminator                | Picks                                       | Cancels losers? |
-| ------------------------- | ------------------------------------------- | --------------- |
-| `.first_ok()`             | First arm to succeed                        | Yes, via drop   |
-| `.pick_best_by(f)`        | Highest `f(result)` after all finish        | No              |
-| `.pick_best_by_racing(f)` | Highest `f` among those that finish in time | Yes             |
+### Validation rules
 
-### What speculation records
+- Ranges must not overlap.
+- There must be no gap between adjacent ranges.
+- The union must equal `[0.0, 1.0]`.
 
-This is the interesting bit. The cruxx records:
+Violating any rule is a programming error, not a recoverable runtime condition.
 
-- The winner as a normal `Ok` step
-- **Every loser as a `Rejected` step**, complete with its own sub-cruxx
+---
 
-That means you can replay `cruxx.rejected_branches()` later, or pipe them
-into an eval dataset. Nothing is thrown away silently. If you've ever
-built an LLM app where you wished you had a record of "what other options
-did the model consider?", this is that.
+## 3. `speculate`
 
-### Budget sharing across arms
+Use `speculate` when you want to run multiple strategies and pick among their results. Arms are
+named futures; the builder terminator determines the selection policy.
 
-`with_budget` applies to the _whole speculation_, not per arm. Arms share a
-single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
-2000 between them. This is the one place in `cruxx::` where arms are _not_
-independent — speculation is explicitly cooperative.
+### Arms
 
-## Delegation with `x.delegate::<A>`
-
-Delegation is a handoff to another `Agent`. It's the only primitive that
-crosses the "who owns this decision" boundary:
+Each arm is a `(&str, Pin<Box<dyn Future<...>>>)` tuple:
 
 ```rust
-#[cruxx::agent]
-async fn plan_trip(goal: String) -> Crux<Itinerary> {
-    let research = x.step("research", || search_web(&goal)).await?;
-
-    let draft = x.delegate::<DraftAgent>("draft", research)
-        .with_budget(Budget::tokens(4000))
-        .on_low_confidence(0.7, |score, ctx| async move {
-            ctx.delegate::<HumanReviewer>("human", score).await
-        })
-        .on_step_failure(|err, ctx| async move {
-            ctx.delegate::<SafeDraftAgent>("safe_draft", err).await
-        })
-        .await?;
-
-    Ok(draft.into_itinerary())
-}
+x.speculate("finalize", vec![
+    ("cheap", Box::pin(async { finalize_cheap(&draft).await })),
+    ("fast",  Box::pin(async { finalize_fast(&draft).await })),
+    ("safe",  Box::pin(async { finalize_safe(&draft).await })),
+])
 ```
 
-### What makes `delegate` a language construct
+Arms currently run sequentially. Concurrent execution is planned but not yet implemented. The
+API surface is identical either way.
 
-Three things that are painful to get right by hand:
+### Terminators
 
-1. **Crux context crosses the boundary.** The child agent runs with its
-   own `CruxCtx`, but that context carries the parent's `CruxId` as
-   `parent`. When the child finishes, its `Crux<_>` is appended to
-   `parent.children`. `cruxx.causal_chain()` walks across the boundary
-   transparently.
+| Terminator              | Behavior                                                              |
+|-------------------------|-----------------------------------------------------------------------|
+| `.pick_best_by(f).await?` | Runs all arms; selects the one with the highest `f(result)` score. |
+| `.first_ok().await?`      | Returns the first arm that succeeds; records failures as Rejected.  |
 
-2. **Lifecycle hooks attach per call site.** Same `DraftAgent`, two
-   different call sites with two different `on_low_confidence` handlers.
-   The hooks live on the _builder_, not the agent type — so the agent
-   stays reusable.
+There is no `pick_best_by_racing` terminator.
 
-3. **Budgets compose.** Parent has 10k tokens. Delegation gets 4k.
-   Inside the child, speculation gets 3k. The runtime tracks all three
-   and fails with a specific `BudgetExceeded` if any is exceeded.
+The winner is recorded with status `Ok`. Each losing arm is recorded as `Rejected` with its
+output preserved in the trace, which is useful for debugging why a strategy lost.
 
-### Delegation vs. calling another `#[cruxx::agent]` function directly
-
-You _can_ just call another agent function:
+### Example — pick_best_by
 
 ```rust
-let sub_cruxx = drafter(input).await;
-let draft = sub_cruxx.value()?;
+let best = x.speculate("finalize", vec![
+    ("cheap", Box::pin(async { finalize_cheap(&draft).await })),
+    ("fast",  Box::pin(async { finalize_fast(&draft).await })),
+    ("safe",  Box::pin(async { finalize_safe(&draft).await })),
+])
+.pick_best_by(|r| r.confidence)
+.await?;
 ```
 
-That works, and the child cruxx rolls up into the parent automatically.
-But you don't get:
-
-- Budget scoping per call site
-- Per-call-site lifecycle hooks
-- The `Delegation` step kind (which eval tooling keys off)
-
-Use a direct call for "this is a helper I wrote five minutes ago". Use
-`delegate` when the sub-agent is a genuine boundary in the design —
-different author, different budget, different failure modes.
-
-## Composition operators
-
-These aren't branching primitives, but they show up often enough in
-branching code that they belong in this chapter.
-
-### Pipe operator `|` (sequential)
+### Example — first_ok
 
 ```rust
-let cruxx = drafter(input) | refiner() | finalizer();
+let result = x.speculate("fetch_data", vec![
+    ("primary",   Box::pin(async { fetch_from_primary().await })),
+    ("secondary", Box::pin(async { fetch_from_secondary().await })),
+    ("fallback",  Box::pin(async { fetch_from_fallback().await })),
+])
+.first_ok()
+.await?;
 ```
 
-Desugars to:
+---
+
+## 4. `delegate`
+
+Use `delegate` to hand work to a named `Agent` implementation. The sub-agent runs in its own
+`CruxCtx`; its resulting `Crux<T>` is appended as a child of the current step in the parent
+trace.
+
+### Builder chain
 
 ```rust
-let t1 = drafter(input).await;
-let t2 = refiner(t1.value()?).await;
-let t3 = finalizer(t2.value()?).await;
-merge_cruxxs(&[t1, t2, t3])
+x.delegate::<AgentType>("step_name", input)
+    .with_budget(Budget::tokens(4000))
+    .on_low_confidence(threshold, handler)
+    .on_step_failure(handler)
+    .run()
+    .await?
 ```
 
-Errors short-circuit. Cruxs concatenate. Useful for linear pipelines.
+The terminal is `.run().await?`. The builder is not a future; calling `.await` directly on it
+does not work.
 
-### `Crux::join_all` (parallel fan-out)
+### `DelegationBuilder` methods
+
+| Method                                   | Effect                                                    |
+|------------------------------------------|-----------------------------------------------------------|
+| `.with_budget(Budget)`                   | Caps token/step/time consumption for the child.           |
+| `.on_low_confidence(threshold, handler)` | Invokes handler when child confidence falls below value.  |
+| `.on_step_failure(handler)`              | Invokes handler on any step error inside the child.       |
+| `.run()`                                 | Consumes the builder and returns the awaitable future.    |
+
+Per-call-site hooks set here override the agent-level hooks defined in the `Agent` trait impl.
+
+### Example
 
 ```rust
-let results: Crux<Vec<Answer>> = Crux::join_all(
-    questions.into_iter().map(|q| answer(q))
-).await;
+let draft = x.delegate::<DraftAgent>("draft", research)
+    .with_budget(Budget::tokens(4000))
+    .on_low_confidence(0.7, |score| async move {
+        Recovery::Propagate
+    })
+    .on_step_failure(|err| async move {
+        Recovery::Propagate
+    })
+    .run()
+    .await?;
 ```
 
-All sub-agents run concurrently. The parent `Crux<Vec<Answer>>` carries
-every sub-cruxx as a child. If any child fails, you can choose:
+The child's full trace (every step it recorded) is nested inside the parent's trace under the
+`"draft"` step. This gives complete replay fidelity without the parent having to know the child's
+internals.
 
-- `.join_all(...)` — propagate the first error
-- `.join_all_best_effort(...)` — collect successes, record failures as
-  `Rejected` children, never fail the parent
+---
 
-## Check your understanding
+## 5. CruxCtx combinators
 
-- **You're writing a function that dispatches to one of three tools based
-  on a model's self-reported confidence.** Which primitive?
-  _`route_on_confidence`._
-- **You want to try three draft styles and keep the best.** Which one?
-  _`speculate` + `pick_best_by`._
-- **You want to call a helper you wrote five minutes ago.** Which one?
-  _Plain function call. The cruxx still rolls up._
-- **You want a sub-agent with its own budget and human-escalation hook.**
-  Which one? _`delegate`._
+Two additional combinators address sequential pipelines and parallel fan-out.
 
-Chapter **04** is where the tutorial gets useful: we wire in the task
-registry so these cruxxs can survive a crash.
+### `pipe`
+
+`pipe` chains a sequence of named closures over a single value. Each closure receives the output
+of the previous one. Each stage is recorded as a child step.
+
+```rust
+// Stage type: (&str, Box<dyn FnOnce(T) -> BoxFut<T>>)
+let result = x.pipe("process", initial_value, vec![
+    ("normalize", Box::new(|v| Box::pin(normalize(v)))),
+    ("enrich",    Box::new(|v| Box::pin(enrich(v)))),
+    ("score",     Box::new(|v| Box::pin(score(v)))),
+]).await?;
+```
+
+`pipe` is a method on `CruxCtx`. There is no `|` pipe operator on `Crux<T>` values.
+
+### `join_all`
+
+`join_all` fans out to multiple named futures of the same type and collects all results into a
+`Vec<T>`. All arms must succeed; the first error propagates.
+
+```rust
+// Arm type: (&str, BoxFut<T>)
+let results: Vec<SectionResult> = x.join_all("gather", vec![
+    ("intro",      Box::pin(fetch_intro())),
+    ("background", Box::pin(fetch_background())),
+    ("analysis",   Box::pin(fetch_analysis())),
+]).await?;
+```
+
+There is no `join_all_best_effort` variant.
+
+---
+
+## Choosing the right primitive
+
+| Situation                                                     | Use                    |
+|---------------------------------------------------------------|------------------------|
+| Simple structural branch, same output type                    | `match` inside `step`  |
+| Confidence score selects exactly one path                     | `route_on_confidence`  |
+| Multiple strategies, pick winner by score or first success    | `speculate`            |
+| Delegate to a full `Agent` implementation                     | `delegate`             |
+| Sequential transformation pipeline                            | `pipe`                 |
+| Parallel independent sub-tasks, collect all results           | `join_all`             |
+
+---
+
+## Summary
+
+- `match` inside a step is invisible to the trace as a branch — only the result is recorded.
+- `route_on_confidence` requires a complete, non-overlapping cover of `[0.0, 1.0]`. Construct
+  ranges with `ConfidenceRange::inclusive` or `ConfidenceRange::exclusive`, never raw range
+  syntax.
+- `speculate` records all arms; losers are `Rejected` with their output intact. Terminate with
+  `.pick_best_by(f).await?` or `.first_ok().await?`. There is no `pick_best_by_racing`.
+- `delegate` runs a sub-agent with its own `CruxCtx`. Per-call hooks override agent-level hooks.
+  Always end the chain with `.run().await?`, not `.await?` directly on the builder.
+- `pipe` and `join_all` are combinators for sequential and parallel composition without
+  introducing a separate agent boundary.
+
+Chapter **04** covers the task registry — how to make these traces survive a crash and resume
+from a checkpoint.
