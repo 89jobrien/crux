@@ -1,7 +1,7 @@
 pipeline: extract_entities
 # Extract named entities from text via BAML and emit structured JSON output.
 #
-# Pipeline input (pass as input.json to crux-run):
+# Pipeline input (pass as input.json to cruxx-run):
 #   {
 #     "function": "ExtractEntities",
 #     "input": { "text": "<text to analyze>" }
@@ -12,7 +12,7 @@ pipeline: extract_entities
 #   OPENAI_API_KEY      (configure client override in BAML client config)
 #
 # Run:
-#   crux-run examples/extract_entities.yaml examples/input_entities.json
+#   cruxx-run examples/extract_entities.yaml examples/input_entities.json
 budget: { calls: 2 }
 
 steps:
@@ -24,7 +24,7 @@ steps:
   - step: log_output
     handler: ctrl::log
     # Logs the entity list to stderr and passes it through as the pipeline
-    # output. Capture the final JSON from crux-run's "Output:" section.
+    # output. Capture the final JSON from cruxx-run's "Output:" section.
     #
     # To write directly to a file, replace ctrl::log with fs::write and
     # supply `content` (a JSON-serialized string) in the pipeline input.

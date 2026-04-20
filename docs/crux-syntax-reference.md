@@ -1,14 +1,14 @@
-# `cruxai::` syntax reference card
+# `cruxx::` syntax reference card
 
 ## Attribute macros
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn name(args) -> Crux<T> { ... }
 
-#[cruxai::agent(registry = "reg", checkpoint_every_step)]
-#[cruxai::agent(replay = "strict")]   // default
-#[cruxai::agent(replay = "lenient")]  // re-run mismatches instead of failing
+#[cruxx::agent(registry = "reg", checkpoint_every_step)]
+#[cruxx::agent(replay = "strict")]   // default
+#[cruxx::agent(replay = "lenient")]  // re-run mismatches instead of failing
 ```
 
 Injects a `&mut CruxCtx` binding called `x` into the function body. Wraps
@@ -88,7 +88,7 @@ x.snapshot_steps();    // &[Step]
 x.snapshot();          // Crux<Value> (mid-run checkpoint)
 
 // Replay
-x.replay_from(&previous_crux);
+x.replay_from(&previous_cruxx);
 x.set_replay_mode(ReplayMode::Lenient);
 
 // Task registry integration
@@ -114,17 +114,17 @@ pub struct Crux<T> {
 }
 
 // Inspection
-crux.value() -> Result<&T, &CruxErr>;
-crux.into_value() -> Result<T, CruxErr>;
-crux.causal_chain() -> Vec<&Step>;
-crux.delegations() -> Vec<Delegation<'_>>;
-crux.rejected_branches() -> Vec<&Step>;
-crux.duration_ms() -> Option<u64>;
-crux.succeeded_count() -> usize;
-crux.failed_count() -> usize;
+cruxx.value() -> Result<&T, &CruxErr>;
+cruxx.into_value() -> Result<T, CruxErr>;
+cruxx.causal_chain() -> Vec<&Step>;
+cruxx.delegations() -> Vec<Delegation<'_>>;
+cruxx.rejected_branches() -> Vec<&Step>;
+cruxx.duration_ms() -> Option<u64>;
+cruxx.succeeded_count() -> usize;
+cruxx.failed_count() -> usize;
 
 // Checkpointing (requires T: Serialize)
-crux.to_snapshot() -> Result<Crux<serde_json::Value>, serde_json::Error>;
+cruxx.to_snapshot() -> Result<Crux<serde_json::Value>, serde_json::Error>;
 ```
 
 ## `Step`
@@ -236,7 +236,7 @@ RedbBackend::open(path)?;            // behind --features redb
 reg.submit(kind, input).await?           -> TaskId
 reg.get(&id).await?                      -> Task
 reg.update_status(&id, status).await?
-reg.checkpoint(&id, &crux).await?
+reg.checkpoint(&id, &cruxx).await?
 reg.pending(kind).await?                 -> Vec<Task>
 reg.load_checkpoint(&id).await?          -> Option<Crux<Value>>
 ```
@@ -259,7 +259,7 @@ pub enum TaskStatus { Pending, Running, Done, Failed }
 ## Feature flags
 
 ```toml
-cruxai = { version = "0.2", features = ["redb", "tracing", "script"] }
+cruxx = { version = "0.2", features = ["redb", "tracing", "script"] }
 ```
 
 | Flag             | Turns on                                           |
@@ -267,16 +267,16 @@ cruxai = { version = "0.2", features = ["redb", "tracing", "script"] }
 | `tokio-runtime`  | Async support (tokio + futures). On by default.    |
 | `redb`           | `RedbBackend` for persistent task registry.        |
 | `tracing`        | Instrument with tracing spans.                     |
-| `script`         | Re-export `cruxai-script` for pipeline execution.  |
+| `script`         | Re-export `cruxx-script` for pipeline execution.  |
 
 ## Prelude
 
 ```rust
-use cruxai::prelude::*;
+use cruxx::prelude::*;
 // brings in: Agent, Context, CruxCtx, Crux, CruxErr, CruxId,
 //            Step, StepKind, StepStatus, Budget, Recovery,
 //            TaskRegistry, Task, TaskStatus, TaskId,
 //            BoxFut, ConfidenceRange, ConfidenceRoute, JoinArm, PipeStage,
 //            ReplayMode, hash_content,
-//            ExecutionContext, Priority, StepState, Urgency (from slashcrux)
+//            ExecutionContext, Priority, StepState, Urgency (from slashcruxx)
 ```

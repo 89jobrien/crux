@@ -1,11 +1,11 @@
 # 01 — Setup & Rust toolchain
 
-> Goal: get a `cruxai::` project building, run the smallest possible cruxd
+> Goal: get a `cruxx::` project building, run the smallest possible cruxxd
 > agent, and understand the shape of what comes out.
 
 ## Rust toolchain
 
-`cruxai::` is a Rust DSL, so the toolchain is just Rust. You need:
+`cruxx::` is a Rust DSL, so the toolchain is just Rust. You need:
 
 - `rustc` 1.85+ (MSRV — required for edition 2024 and native `async fn` in traits)
 - `cargo`
@@ -17,7 +17,7 @@ rustup default stable
 rustc --version   # 1.85 or newer
 ```
 
-No separate compiler, no custom build tool. If Rust builds, `cruxai::` builds.
+No separate compiler, no custom build tool. If Rust builds, `cruxx::` builds.
 
 ## Scaffolding a project
 
@@ -35,13 +35,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cruxai = { version = "0.1", features = ["serde", "tokio-runtime"] }
+cruxx = { version = "0.1", features = ["serde", "tokio-runtime"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-Three feature flags matter on `cruxai`:
+Three feature flags matter on `cruxx`:
 
 | Feature          | What it turns on                                                            |
 | ---------------- | --------------------------------------------------------------------------- |
@@ -49,17 +49,17 @@ Three feature flags matter on `cruxai`:
 | `tokio-runtime`  | `x.delegate` uses `tokio::spawn`, `Crux::join_all` uses `tokio::join!`     |
 | `redb`           | `TaskRegistry` can persist via redb embedded storage (chapter 04)          |
 
-If you omit `tokio-runtime`, `cruxai::` falls back to a synchronous executor — useful
+If you omit `tokio-runtime`, `cruxx::` falls back to a synchronous executor — useful
 for tests but not for real agents.
 
-## Your first cruxd function
+## Your first cruxxd function
 
 Create `src/main.rs`:
 
 ```rust
-use cruxai::prelude::*;
+use cruxx::prelude::*;
 
-#[cruxai::agent]
+#[cruxx::agent]
 async fn hello(name: String) -> Crux<String> {
     let greeting = x.step("greet", || async {
         Ok(format!("hello, {}", name))
@@ -74,11 +74,11 @@ async fn hello(name: String) -> Crux<String> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let crux = hello("world".into()).await;
+    let cruxx = hello("world".into()).await;
 
-    println!("result: {:?}", crux.value());
-    println!("steps:  {}", crux.causal_chain().len());
-    println!("json:   {}", serde_json::to_string_pretty(&crux)?);
+    println!("result: {:?}", cruxx.value());
+    println!("steps:  {}", cruxx.causal_chain().len());
+    println!("json:   {}", serde_json::to_string_pretty(&cruxx)?);
     Ok(())
 }
 ```
@@ -95,7 +95,7 @@ You should see something like:
 result: Ok("HELLO, WORLD")
 steps:  2
 json: {
-  "id": "crux_01HX...",
+  "id": "cruxx_01HX...",
   "agent": "hello",
   "steps": [
     { "name": "greet", "status": "ok", "duration_ms": 0, "confidence": 1.0 },
@@ -109,7 +109,7 @@ json: {
 
 Three things, and each one is new vs. a hand-rolled agent:
 
-### 1. `#[cruxai::agent]` injects `x`
+### 1. `#[cruxx::agent]` injects `x`
 
 The macro rewrites your function so that a `CruxCtx` binding called `x` is
 available in scope. Every call to `x.step`, `x.delegate`, `x.speculate` is
@@ -119,8 +119,8 @@ recorded on that context. When the function returns, `x` is rolled up into a
 This is the same idea as Python's `contextvars` or Go's `context.Context`, but
 with one important difference: **you don't have to thread it through every
 function call**. The macro wires it up. If you want to call another
-`#[cruxai::agent]` function from this one, the child's `x` automatically
-becomes a sub-crux of the parent's `x`.
+`#[cruxx::agent]` function from this one, the child's `x` automatically
+becomes a sub-cruxx of the parent's `x`.
 
 ### 2. `x.step` is _not_ just a log line
 
@@ -167,11 +167,11 @@ impl AgentRun {
 }
 ```
 
-`cruxai::` is that pattern, but:
+`cruxx::` is that pattern, but:
 
 - the `AgentRun` struct is `Crux<T>`, generic over your value
 - the `record_step` call is `x.step`, and it runs the closure for you
-- the propagation is automatic — child agents roll into parent cruxs
+- the propagation is automatic — child agents roll into parent cruxxs
 - it's serializable out of the box
 - crash recovery (chapter 04) is built on top of it
 

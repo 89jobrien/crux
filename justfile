@@ -30,12 +30,12 @@ build-locked:
 
 # Build with all features (baml, plugins)
 build-full:
-    cargo build --all-targets -p crux-agentic --features baml
+    cargo build --all-targets -p cruxx-agentic --features baml
 
 # Build dev binary with all features and install to cargo bin
 build-dev:
-    cargo build -p crux-agentic --features baml
-    cargo install --path crates/crux-agentic --features baml
+    cargo build -p cruxx-agentic --features baml
+    cargo install --path crates/cruxx-agentic --features baml
 
 # Run developer setup (auto-detects shell)
 setup:
@@ -64,14 +64,14 @@ fix:
 # Check BAML generator version matches baml crate version in Cargo.toml
 check-baml:
     #!/usr/bin/env nu
-    let gen_ver = (open crates/crux-agentic/baml_src/generators.baml
+    let gen_ver = (open crates/cruxx-agentic/baml_src/generators.baml
         | lines
         | where { |l| $l =~ 'version' }
         | first
         | parse --regex '"([0-9]+\.[0-9]+\.[0-9]+)"'
         | get capture0
         | first)
-    let cargo_ver = (open --raw crates/crux-agentic/Cargo.toml
+    let cargo_ver = (open --raw crates/cruxx-agentic/Cargo.toml
         | lines
         | where { |l| $l =~ 'version = "[0-9]' and ($l =~ '^baml') }
         | first

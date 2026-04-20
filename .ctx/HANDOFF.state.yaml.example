@@ -2,12 +2,12 @@ branch: main
 build: ok
 tests: 226 passed, 0 skipped
 touched_files:
-  - crates/crux-agentic/Cargo.toml
-  - crates/crux-agentic/baml_src/clients.baml
-  - crates/crux-agentic/baml_src/extract.baml
-  - crates/crux-agentic/baml_src/generators.baml
-  - crates/crux-agentic/src/baml_client/mod.rs
-  - crates/crux-agentic/src/lib.rs
-  - crates/crux-agentic/src/llm.rs
-  - crates/crux-agentic/tests/llm_extract.rs
+  - crates/cruxx-agentic/Cargo.toml
+  - crates/cruxx-agentic/baml_src/clients.baml
+  - crates/cruxx-agentic/baml_src/extract.baml
+  - crates/cruxx-agentic/baml_src/generators.baml
+  - crates/cruxx-agentic/src/baml_client/mod.rs
+  - crates/cruxx-agentic/src/lib.rs
+  - crates/cruxx-agentic/src/llm.rs
+  - crates/cruxx-agentic/tests/llm_extract.rs
 generated: "2026-04-17"

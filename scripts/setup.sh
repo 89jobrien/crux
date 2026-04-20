@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# crux developer setup — bash version
+# cruxx developer setup — bash version
 #
 # PARITY NOTICE: this script must stay in sync with setup.nu and setup.fish.
 # All three must perform the same steps in the same order. When editing one,
@@ -65,7 +65,7 @@ fi
 
 # --- 4. Generate BAML client ---
 header "BAML client generation"
-baml_dir="crates/crux-agentic"
+baml_dir="crates/cruxx-agentic"
 if [ -d "$baml_dir/baml_src" ]; then
     if command -v mise >/dev/null 2>&1; then
         if (cd "$baml_dir" && mise exec -- baml-cli generate) 2>&1; then

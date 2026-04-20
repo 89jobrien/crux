@@ -1,0 +1,25 @@
+[package]
+name = "cruxx-script"
+description = "YAML-driven pipeline scripting for the cruxx agentic DSL"
+version.workspace = true
+edition.workspace = true
+readme = "../../README.md"
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+cruxx-core = { path = "../cruxx-core", version = "0.2.4" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-saphyr = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

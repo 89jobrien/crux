@@ -1,11 +1,11 @@
 pipeline: read_and_pick
 # Read a file and extract fields — no API keys required.
 #
-# This pipeline demonstrates basic crux functionality using only
+# This pipeline demonstrates basic cruxx functionality using only
 # built-in handlers (fs::read, shell::capture, ctrl::log).
 #
 # Run:
-#   crux run examples/read_and_pick.yaml examples/input_read_and_pick.json
+#   cruxx run examples/read_and_pick.yaml examples/input_read_and_pick.json
 budget: { calls: 3 }
 
 steps:

@@ -1,18 +1,18 @@
-# cruxai
+# cruxx
 
 An agentic DSL for Rust -- inspectable, serializable, replayable agent execution.
 
-`cruxai` is not a standalone language. It's a set of macros, traits, and types that make agentic
+`cruxx` is not a standalone language. It's a set of macros, traits, and types that make agentic
 control flow explicit in the Rust type system. If you've written agents with `tokio` + `tracing`
-\+ a hand-rolled task queue, `cruxai` is what happens when you bake those patterns into the language
+\+ a hand-rolled task queue, `cruxx` is what happens when you bake those patterns into the language
 itself.
 
 ## Quick example
 
 ```rust
-use cruxai::prelude::*;
+use cruxx::prelude::*;
 
-#[cruxai::agent]
+#[cruxx::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = x.step("research", || search_web(&goal)).await?;
 
@@ -32,27 +32,27 @@ async fn plan_trip(goal: String) -> Crux<Itinerary> {
 Every `x.step`, `x.delegate`, `x.speculate` call is recorded in the `Crux<T>` value
 the function returns. That value is:
 
-- **Inspectable** -- `crux.causal_chain()`, `crux.delegations()`, `crux.rejected_branches()`
-- **Serializable** -- `serde_json::to_string(&crux)` just works
+- **Inspectable** -- `cruxx.causal_chain()`, `cruxx.delegations()`, `cruxx.rejected_branches()`
+- **Serializable** -- `serde_json::to_string(&cruxx)` just works
 - **Replayable** -- `Crux::replay_from(snapshot)` resumes after a crash
-- **Composable** -- `crux_a | crux_b`, `Crux::join_all([...])`
+- **Composable** -- `cruxx_a | cruxx_b`, `Crux::join_all([...])`
 
 ## Crates
 
 | Crate                                 | Description                                                |
 | ------------------------------------- | ---------------------------------------------------------- |
-| [`cruxai`](crates/crux)               | Facade crate -- re-exports `cruxai-core` + `cruxai-macros` |
-| [`cruxai-core`](crates/crux-core)     | Core types, traits, and runtime                            |
-| [`cruxai-macros`](crates/crux-macros) | `#[cruxai::agent]` proc macro                              |
-| [`cruxai-script`](crates/crux-script) | YAML-driven pipeline scripting                             |
-| [`crux-agentic`](crates/crux-agentic) | Built-in step handlers (shell, fs, git, json, llm)         |
-| [`cruxai-model`](crates/crux-model)   | Canonical model ID types and provider-specific parsers     |
-| [`crux-plugin`](crates/crux-plugin)   | Subprocess plugin host for pipelines                       |
-| [`crux-planner`](crates/crux-planner) | Goal-to-pipeline planner for crux-script                   |
+| [`cruxx`](crates/cruxx)               | Facade crate -- re-exports `cruxx-core` + `cruxx-macros` |
+| [`cruxx-core`](crates/cruxx-core)     | Core types, traits, and runtime                            |
+| [`cruxx-macros`](crates/cruxx-macros) | `#[cruxx::agent]` proc macro                              |
+| [`cruxx-script`](crates/cruxx-script) | YAML-driven pipeline scripting                             |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Built-in step handlers (shell, fs, git, json, llm)         |
+| [`cruxx-model`](crates/cruxx-model)   | Canonical model ID types and provider-specific parsers     |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                       |
+| [`cruxx-planner`](crates/cruxx-planner) | Goal-to-pipeline planner for cruxx-script                   |
 
 ## Features
 
-Enable via `cruxai`:
+Enable via `cruxx`:
 
 | Feature         | Default | Description                                                                |
 | --------------- | ------- | -------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ first-class value you can inspect, serialize, and replay.
 **`CruxCtx`** -- the runtime context threaded through agent execution. Provides `step()`,
 `delegate()`, `speculate()`, `pipe()`, `join_all()`, `route_on_confidence()`.
 
-**`Agent` trait** -- the single-method interface all agents implement. The `#[cruxai::agent]` macro
+**`Agent` trait** -- the single-method interface all agents implement. The `#[cruxx::agent]` macro
 generates this for you.
 
 **`TaskRegistry<B>`** -- typed task management with submit, checkpoint, replay, and status
@@ -85,21 +85,21 @@ and returns cache misses for changed ones.
 
 ```toml
 [dependencies]
-cruxai = "0.1"
+cruxx = "0.1"
 
 # With persistent storage (redb, pure-Rust):
-# cruxai = { version = "0.1", features = ["redb"] }
+# cruxx = { version = "0.1", features = ["redb"] }
 ```
 
 Requires Rust 1.85+ (edition 2024).
 
 ## Running pipelines
 
-`crux-run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
+`cruxx-run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
 feature to enable LLM extraction:
 
 ```bash
-cargo build -p crux-agentic --features baml --bin crux-run
+cargo build -p cruxx-agentic --features baml --bin cruxx-run
 ```
 
 Set your API key — BAML picks it up automatically:
@@ -113,7 +113,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 **Summarize text:**
 
 ```bash
-crux-run examples/extract_summary.crux examples/input_summary.json
+cruxx-run examples/extract_summary.cruxx examples/input_summary.json
 ```
 
 ```
@@ -142,7 +142,7 @@ system via Crux<T> values.",
 **Extract named entities:**
 
 ```bash
-crux-run examples/extract_entities.crux examples/input_entities.json
+cruxx-run examples/extract_entities.cruxx examples/input_entities.json
 ```
 
 ```
@@ -197,7 +197,7 @@ Output:
 | `llm::decompose` | `spec`              | Spec decomposition into task list         |
 | `llm::plan`      | `goal`              | Pipeline generation from natural language |
 
-See [docs/crux-capabilities.md](docs/crux-capabilities.md) for the full support
+See [docs/cruxx-capabilities.md](docs/cruxx-capabilities.md) for the full support
 matrix including combinators and known gaps.
 
 ## Examples
@@ -208,7 +208,7 @@ matrix including combinators and known gaps.
 cargo run --example basic_agent
 ```
 
-See [`examples/`](examples/) for pipeline `.crux` files and input fixtures.
+See [`examples/`](examples/) for pipeline `.cruxx` files and input fixtures.
 
 ## Documentation
 

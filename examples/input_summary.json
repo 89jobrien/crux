@@ -1,7 +1,7 @@
 {
   "function": "Summarize",
   "input": {
-    "text": "Crux is an agentic DSL for Rust. It provides macros, traits, and types that make agentic control flow explicit in the type system. Every step, delegation, speculation, and failure is a first-class value called Crux<T> that is inspectable, serializable, and replayable. The CruxCtx runtime provides step(), delegate(), speculate(), pipe(), join_all(), and route_on_confidence() primitives. The #[crux::agent] proc macro transforms an async function into an Agent trait implementation. TaskRegistry supports pluggable backends including InMemoryBackend and RedbBackend.",
+    "text": "Crux is an agentic DSL for Rust. It provides macros, traits, and types that make agentic control flow explicit in the type system. Every step, delegation, speculation, and failure is a first-class value called Crux<T> that is inspectable, serializable, and replayable. The CruxCtx runtime provides step(), delegate(), speculate(), pipe(), join_all(), and route_on_confidence() primitives. The #[cruxx::agent] proc macro transforms an async function into an Agent trait implementation. TaskRegistry supports pluggable backends including InMemoryBackend and RedbBackend.",
     "max_sentences": 3
   }
 }

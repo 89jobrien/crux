@@ -51,7 +51,7 @@ trip-planner/
 
 ```toml
 [dependencies]
-cruxai = { version = "0.1", features = ["serde", "tokio-runtime", "redb"] }
+cruxx = { version = "0.1", features = ["serde", "tokio-runtime", "redb"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -119,13 +119,13 @@ what the variants are. The `#[default]` attribute is used by
 `src/decomposer.rs`:
 
 ```rust
-use cruxai::prelude::*;
+use cruxx::prelude::*;
 use crate::types::{Plan, Subtask};
 use anyhow::Result;
 use chrono::Utc;
 use uuid::Uuid;
 
-#[cruxai::agent]
+#[cruxx::agent]
 pub async fn decompose(goal: String) -> Crux<Plan> {
     // 1. Draft a plan with a cheap model.
     let draft = x.step("draft_plan", || async {
@@ -170,10 +170,10 @@ What's new vs. chapters 01-05:
 - **Three different branching primitives in 30 lines.** Plain `x.step` for
   the draft, `delegate` with a call-site hook for the critic, and
   `route_on_confidence` for the revise/keep decision. Each one corresponds
-  to a different *kind* of choice — and the crux records each one with a
+  to a different *kind* of choice — and the cruxx records each one with a
   different `StepKind`.
 - **`validate_dag` is a `x.step`**, not a free function. That's deliberate:
-  if someone hands us a cyclic plan, we want the crux to record "validation
+  if someone hands us a cyclic plan, we want the cruxx to record "validation
   ran and failed" as a first-class step, not as a hidden panic deep in a
   helper.
 
@@ -185,14 +185,14 @@ concurrently, and updates the registry as tasks move through states.
 `src/executor.rs`:
 
 ```rust
-use cruxai::prelude::*;
-use cruxai::registry::{TaskRegistry, TaskId};
+use cruxx::prelude::*;
+use cruxx::registry::{TaskRegistry, TaskId};
 use crate::types::{Plan, Subtask, SubtaskId, ExecStatus, Report};
 use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use anyhow::Result;
 
-#[cruxai::agent(registry = "reg", checkpoint_every_step)]
+#[cruxx::agent(registry = "reg", checkpoint_every_step)]
 pub async fn execute(
     reg: &TaskRegistry,
     plan_task_id: TaskId,
@@ -320,11 +320,11 @@ the full tree.
 We run the DAG in waves — one wave per topological level — rather than
 continuously draining a ready-queue. Three reasons:
 
-1. **The crux stays readable.** Each wave is one `x.step`, so the final
-   crux has a flat sequence of wave steps instead of an interleaved mess.
+1. **The cruxx stays readable.** Each wave is one `x.step`, so the final
+   cruxx has a flat sequence of wave steps instead of an interleaved mess.
 2. **Checkpointing happens at wave boundaries.** If the process crashes
    during wave 3, replay restarts at wave 3 — not at wave 1.
-3. **Concurrency is obvious.** Anyone reading the crux can see "wave 2 had
+3. **Concurrency is obvious.** Anyone reading the cruxx can see "wave 2 had
    4 subtasks running in parallel" without parsing span timings.
 
 If you need continuous scheduling, you can build it — but waves are almost
@@ -333,11 +333,11 @@ always enough, and they're easier to reason about.
 ### `futures::future::join_all` instead of `Crux::join_all`
 
 This is a subtle one. We're using raw `join_all` here because the
-per-subtask futures are *not* `#[cruxai::agent]` functions — they're helper
+per-subtask futures are *not* `#[cruxx::agent]` functions — they're helper
 functions that return `Result<_, CruxErr>`. If we wanted each subtask to
-get its own sub-crux attached to the parent, we'd convert `run_one_subtask`
-into a `#[cruxai::agent]` and use `Crux::join_all(...)` instead. Both work;
-the agent version gives richer cruxs at the cost of slightly more
+get its own sub-cruxx attached to the parent, we'd convert `run_one_subtask`
+into a `#[cruxx::agent]` and use `Crux::join_all(...)` instead. Both work;
+the agent version gives richer cruxxs at the cost of slightly more
 ceremony.
 
 ### Where does replay pick up?
@@ -365,7 +365,7 @@ code" payoff.
 
 ```rust
 use clap::{Parser, Subcommand};
-use cruxai::registry::TaskRegistry;
+use cruxx::registry::TaskRegistry;
 use std::path::PathBuf;
 
 mod types;
@@ -389,7 +389,7 @@ enum Cmd {
     Run { goal: String },
     /// Resume any tasks left pending by a prior crash.
     Resume,
-    /// Show the latest crux as pretty JSON.
+    /// Show the latest cruxx as pretty JSON.
     Show { task_id: String },
 }
 
@@ -400,12 +400,12 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.cmd {
         Cmd::Run { goal } => {
-            let plan_crux = decomposer::decompose(goal.clone()).await;
-            let plan = plan_crux.value()?;
+            let plan_cruxx = decomposer::decompose(goal.clone()).await;
+            let plan = plan_cruxx.value()?;
 
             let plan_id = reg.submit::<types::ExecStatus, _>("plan", &plan).await?;
-            let exec_crux = executor::execute(&reg, plan_id, plan).await;
-            let report = exec_crux.value()?;
+            let exec_cruxx = executor::execute(&reg, plan_id, plan).await;
+            let report = exec_cruxx.value()?;
 
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
@@ -429,14 +429,14 @@ async fn main() -> anyhow::Result<()> {
 ## Exercises
 
 If you want to push the tutorial further, try one of these. Each uses a
-different set of `cruxai::` features.
+different set of `cruxx::` features.
 
 | # | Exercise | Which features |
 |---|----------|----------------|
 | 1 | Add an `on_budget_exceeded` hook that downgrades `PolishedReport` to `TemplateReport` when tokens run low | Lifecycle hooks + delegation |
 | 2 | Add a `speculate` call in the decomposer that runs three draft models and picks the best | Speculation + rejected branches |
 | 3 | Implement `skills::review` as a human-in-the-loop task that leaves the task in `AwaitingApproval` until marked done via a CLI command | Status machines + registry |
-| 4 | Add a `--replay` flag to the CLI that loads a saved task and re-runs it, asserting the crux is identical | Replay + input hashes |
+| 4 | Add a `--replay` flag to the CLI that loads a saved task and re-runs it, asserting the cruxx is identical | Replay + input hashes |
 | 5 | Switch from waves to continuous scheduling, building a `reg.ready_to_run::<ExecStatus>()` query on top of the registry | Registry internals |
 
 ## The payoff
@@ -454,7 +454,7 @@ goal.
 
 ## Check your understanding
 
-- **Why run waves instead of continuous scheduling?** *Cleaner cruxs,
+- **Why run waves instead of continuous scheduling?** *Cleaner cruxxs,
   checkpoint alignment, obvious concurrency.*
 - **What happens if you crash mid-wave?** *On resume, `enqueue_subtasks`
   and `plan_waves` are replayed from cache; previous completed waves are
@@ -462,9 +462,9 @@ goal.
 - **How does the Decomposer use three different branching primitives?**
   *`x.step` for the draft, `delegate` + hook for the critic,
   `route_on_confidence` for revise-or-keep.*
-- **Why isn't `run_one_subtask` a `#[cruxai::agent]`?** *It's a helper, and
+- **Why isn't `run_one_subtask` a `#[cruxx::agent]`?** *It's a helper, and
   we wanted raw `join_all`. You could absolutely convert it and use
-  `Crux::join_all` for richer sub-cruxs.*
+  `Crux::join_all` for richer sub-cruxxs.*
 
 Chapter **07** is the comparison against existing agentic patterns — the
 one you originally asked for.

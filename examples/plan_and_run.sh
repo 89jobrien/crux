@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-CRUX="./target/debug/crux"
+CRUX="./target/debug/cruxx"
 INPUT="examples/input_plugin_plan.json"
 GOAL="read a markdown plan file and decompose it into implementation tasks"
 

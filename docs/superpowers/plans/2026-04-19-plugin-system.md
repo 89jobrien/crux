@@ -1,4 +1,4 @@
-# crux Plugin System Implementation Plan
+# cruxx Plugin System Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
@@ -6,12 +6,12 @@
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Enable third-party integrations (GitHub, Slack, Linear,
-Jira, etc.) to register as crux pipeline handlers via a subprocess
+Jira, etc.) to register as cruxx pipeline handlers via a subprocess
 JSON-RPC protocol.
 
 **Architecture:** Plugins are external binaries that speak a minimal
 JSON-RPC protocol over stdin/stdout. The host discovers plugins from
-a manifest file (`~/.crux/plugins.toml`), launches them as persistent
+a manifest file (`~/.cruxx/plugins.toml`), launches them as persistent
 child processes, and proxies handler invocations through the protocol.
 Built-in handlers remain compiled-in; the plugin system layers on top
 of `HandlerRegistry`.
@@ -25,35 +25,35 @@ of `HandlerRegistry`.
 
 | File | Responsibility |
 |------|---------------|
-| `crates/crux-plugin/Cargo.toml` | New crate: plugin host + protocol types |
-| `crates/crux-plugin/src/lib.rs` | Re-exports, top-level docs |
-| `crates/crux-plugin/src/protocol.rs` | JSON-RPC message types (Declare, Invoke, Response) |
-| `crates/crux-plugin/src/manifest.rs` | Parse `plugins.toml`, resolve plugin binaries |
-| `crates/crux-plugin/src/host.rs` | Spawn + manage persistent plugin subprocesses |
-| `crates/crux-plugin/src/bridge.rs` | Adaptor: register plugin handlers into `HandlerRegistry` |
-| `crates/crux-plugin/tests/protocol.rs` | Protocol serialization round-trip tests |
-| `crates/crux-plugin/tests/manifest.rs` | Manifest parsing tests |
-| `crates/crux-plugin/tests/bridge.rs` | End-to-end: mock plugin binary -> registry -> invoke |
-| `crates/crux-plugin/tests/fixtures/echo-plugin.rs` | Tiny test plugin binary (echo handler) |
-| `crates/crux-agentic/src/bin/crux.rs` | Wire plugin loading into the CLI |
-| `Cargo.toml` | Add crux-plugin to workspace deps |
+| `crates/cruxx-plugin/Cargo.toml` | New crate: plugin host + protocol types |
+| `crates/cruxx-plugin/src/lib.rs` | Re-exports, top-level docs |
+| `crates/cruxx-plugin/src/protocol.rs` | JSON-RPC message types (Declare, Invoke, Response) |
+| `crates/cruxx-plugin/src/manifest.rs` | Parse `plugins.toml`, resolve plugin binaries |
+| `crates/cruxx-plugin/src/host.rs` | Spawn + manage persistent plugin subprocesses |
+| `crates/cruxx-plugin/src/bridge.rs` | Adaptor: register plugin handlers into `HandlerRegistry` |
+| `crates/cruxx-plugin/tests/protocol.rs` | Protocol serialization round-trip tests |
+| `crates/cruxx-plugin/tests/manifest.rs` | Manifest parsing tests |
+| `crates/cruxx-plugin/tests/bridge.rs` | End-to-end: mock plugin binary -> registry -> invoke |
+| `crates/cruxx-plugin/tests/fixtures/echo-plugin.rs` | Tiny test plugin binary (echo handler) |
+| `crates/cruxx-agentic/src/bin/cruxx.rs` | Wire plugin loading into the CLI |
+| `Cargo.toml` | Add cruxx-plugin to workspace deps |
 
 ---
 
 ## Task 1: Protocol types (`protocol.rs`)
 
 **Files:**
-- Create: `crates/crux-plugin/Cargo.toml`
-- Create: `crates/crux-plugin/src/lib.rs`
-- Create: `crates/crux-plugin/src/protocol.rs`
-- Test: `crates/crux-plugin/tests/protocol.rs`
+- Create: `crates/cruxx-plugin/Cargo.toml`
+- Create: `crates/cruxx-plugin/src/lib.rs`
+- Create: `crates/cruxx-plugin/src/protocol.rs`
+- Test: `crates/cruxx-plugin/tests/protocol.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/crux-plugin/tests/protocol.rs
+// crates/cruxx-plugin/tests/protocol.rs
 
-use crux_plugin::protocol::{Request, Response, HandlerDecl};
+use cruxx_plugin::protocol::{Request, Response, HandlerDecl};
 
 #[test]
 fn declare_request_round_trips() {
@@ -135,16 +135,16 @@ fn shutdown_request_round_trips() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux-plugin`
-Expected: compilation error — `crux_plugin` crate doesn't exist yet.
+Run: `cargo nextest run -p cruxx-plugin`
+Expected: compilation error — `cruxx_plugin` crate doesn't exist yet.
 
 - [ ] **Step 3: Create the crate and implement protocol types**
 
 ```toml
-# crates/crux-plugin/Cargo.toml
+# crates/cruxx-plugin/Cargo.toml
 [package]
-name = "crux-plugin"
-description = "Subprocess plugin host for crux pipelines"
+name = "cruxx-plugin"
+description = "Subprocess plugin host for cruxx pipelines"
 version = "0.2.4"
 edition.workspace = true
 rust-version.workspace = true
@@ -161,8 +161,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = "0.8"
-cruxai-core = { path = "../crux-core", version = "0.2.4" }
-cruxai-script = { path = "../crux-script", version = "0.2.4" }
+cruxx-core = { path = "../cruxx-core", version = "0.2.4" }
+cruxx-script = { path = "../cruxx-script", version = "0.2.4" }
 
 [dev-dependencies]
 tokio = { workspace = true }
@@ -172,20 +172,20 @@ tempfile = { workspace = true }
 Add `toml = "0.8"` to `[workspace.dependencies]` in root `Cargo.toml`.
 
 ```rust
-// crates/crux-plugin/src/lib.rs
-//! crux-plugin -- subprocess plugin host for crux pipelines.
+// crates/cruxx-plugin/src/lib.rs
+//! cruxx-plugin -- subprocess plugin host for cruxx pipelines.
 //!
 //! Plugins are external binaries speaking a JSON-RPC protocol over
 //! stdin/stdout. The host discovers them from a manifest, launches
 //! them as persistent child processes, and bridges their handlers
-//! into the crux `HandlerRegistry`.
+//! into the cruxx `HandlerRegistry`.
 
 pub mod protocol;
 ```
 
 ```rust
-// crates/crux-plugin/src/protocol.rs
-//! JSON-RPC-like protocol for crux plugin communication.
+// crates/cruxx-plugin/src/protocol.rs
+//! JSON-RPC-like protocol for cruxx plugin communication.
 //!
 //! Messages are newline-delimited JSON on stdin/stdout.
 //! Host sends `Request`, plugin replies with `Response`.
@@ -240,14 +240,14 @@ pub struct HandlerDecl {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo nextest run -p crux-plugin`
+Run: `cargo nextest run -p cruxx-plugin`
 Expected: 6 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/crux-plugin/ Cargo.toml Cargo.lock
-git commit -m "feat(plugin): add crux-plugin crate with protocol types"
+git add crates/cruxx-plugin/ Cargo.toml Cargo.lock
+git commit -m "feat(plugin): add cruxx-plugin crate with protocol types"
 ```
 
 ---
@@ -255,30 +255,30 @@ git commit -m "feat(plugin): add crux-plugin crate with protocol types"
 ## Task 2: Manifest parsing (`manifest.rs`)
 
 **Files:**
-- Create: `crates/crux-plugin/src/manifest.rs`
-- Modify: `crates/crux-plugin/src/lib.rs`
-- Test: `crates/crux-plugin/tests/manifest.rs`
+- Create: `crates/cruxx-plugin/src/manifest.rs`
+- Modify: `crates/cruxx-plugin/src/lib.rs`
+- Test: `crates/cruxx-plugin/tests/manifest.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/crux-plugin/tests/manifest.rs
+// crates/cruxx-plugin/tests/manifest.rs
 
-use crux_plugin::manifest::{PluginManifest, PluginEntry};
+use cruxx_plugin::manifest::{PluginManifest, PluginEntry};
 
 #[test]
 fn parse_minimal_manifest() {
     let toml = r#"
 [[plugin]]
 name = "github"
-path = "/usr/local/bin/crux-github"
+path = "/usr/local/bin/cruxx-github"
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
     assert_eq!(manifest.plugin.len(), 1);
     assert_eq!(manifest.plugin[0].name, "github");
     assert_eq!(
         manifest.plugin[0].path,
-        "/usr/local/bin/crux-github"
+        "/usr/local/bin/cruxx-github"
     );
     assert!(manifest.plugin[0].env.is_empty());
 }
@@ -288,7 +288,7 @@ fn parse_manifest_with_env() {
     let toml = r#"
 [[plugin]]
 name = "slack"
-path = "crux-slack"
+path = "cruxx-slack"
 env = { SLACK_TOKEN = "xoxb-test" }
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
@@ -300,11 +300,11 @@ fn parse_manifest_multiple_plugins() {
     let toml = r#"
 [[plugin]]
 name = "github"
-path = "crux-github"
+path = "cruxx-github"
 
 [[plugin]]
 name = "linear"
-path = "crux-linear"
+path = "cruxx-linear"
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
     assert_eq!(manifest.plugin.len(), 2);
@@ -322,20 +322,20 @@ fn parse_empty_manifest() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux-plugin -- manifest`
+Run: `cargo nextest run -p cruxx-plugin -- manifest`
 Expected: compilation error -- `manifest` module doesn't exist.
 
 - [ ] **Step 3: Implement manifest types**
 
 ```rust
-// crates/crux-plugin/src/manifest.rs
-//! Plugin manifest: `~/.crux/plugins.toml` or per-project
-//! `.crux/plugins.toml`.
+// crates/cruxx-plugin/src/manifest.rs
+//! Plugin manifest: `~/.cruxx/plugins.toml` or per-project
+//! `.cruxx/plugins.toml`.
 //!
 //! ```toml
 //! [[plugin]]
 //! name = "github"
-//! path = "crux-github"          # binary name or absolute path
+//! path = "cruxx-github"          # binary name or absolute path
 //! env = { GITHUB_TOKEN = "..." } # optional env vars for the process
 //! ```
 
@@ -393,14 +393,14 @@ pub mod manifest;
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo nextest run -p crux-plugin -- manifest`
+Run: `cargo nextest run -p cruxx-plugin -- manifest`
 Expected: 4 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/crux-plugin/src/manifest.rs crates/crux-plugin/src/lib.rs \
-  crates/crux-plugin/tests/manifest.rs
+git add crates/cruxx-plugin/src/manifest.rs crates/cruxx-plugin/src/lib.rs \
+  crates/cruxx-plugin/tests/manifest.rs
 git commit -m "feat(plugin): manifest parsing for plugins.toml"
 ```
 
@@ -409,15 +409,15 @@ git commit -m "feat(plugin): manifest parsing for plugins.toml"
 ## Task 3: Plugin host (`host.rs`)
 
 **Files:**
-- Create: `crates/crux-plugin/src/host.rs`
-- Modify: `crates/crux-plugin/src/lib.rs`
-- Test: `crates/crux-plugin/tests/fixtures/echo-plugin.rs`
+- Create: `crates/cruxx-plugin/src/host.rs`
+- Modify: `crates/cruxx-plugin/src/lib.rs`
+- Test: `crates/cruxx-plugin/tests/fixtures/echo-plugin.rs`
   (test binary)
-- Test: `crates/crux-plugin/tests/host.rs`
+- Test: `crates/cruxx-plugin/tests/host.rs`
 
 - [ ] **Step 1: Create the echo-plugin test fixture binary**
 
-Add to `crates/crux-plugin/Cargo.toml`:
+Add to `crates/cruxx-plugin/Cargo.toml`:
 
 ```toml
 [[bin]]
@@ -430,7 +430,7 @@ __test-fixture = []
 ```
 
 ```rust
-// crates/crux-plugin/tests/fixtures/echo-plugin.rs
+// crates/cruxx-plugin/tests/fixtures/echo-plugin.rs
 //! Minimal test plugin: declares one handler "echo::reflect" that
 //! returns its input unchanged.
 
@@ -506,10 +506,10 @@ fn main() {
 - [ ] **Step 2: Write the failing host tests**
 
 ```rust
-// crates/crux-plugin/tests/host.rs
+// crates/cruxx-plugin/tests/host.rs
 
-use crux_plugin::host::PluginHost;
-use crux_plugin::manifest::PluginEntry;
+use cruxx_plugin::host::PluginHost;
+use cruxx_plugin::manifest::PluginEntry;
 use std::collections::HashMap;
 
 fn echo_entry() -> PluginEntry {
@@ -568,14 +568,14 @@ async fn host_shutdown() {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux-plugin --features __test-fixture
+Run: `cargo nextest run -p cruxx-plugin --features __test-fixture
 -- host`
 Expected: compilation error -- `host` module doesn't exist.
 
 - [ ] **Step 4: Implement the plugin host**
 
 ```rust
-// crates/crux-plugin/src/host.rs
+// crates/cruxx-plugin/src/host.rs
 //! Plugin host: spawn, communicate with, and manage plugin
 //! subprocesses.
 //!
@@ -796,21 +796,21 @@ pub mod host;
 
 - [ ] **Step 5: Build the echo-plugin fixture**
 
-Run: `cargo build -p crux-plugin --features __test-fixture`
+Run: `cargo build -p cruxx-plugin --features __test-fixture`
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `cargo nextest run -p crux-plugin --features __test-fixture
+Run: `cargo nextest run -p cruxx-plugin --features __test-fixture
 -- host`
 Expected: 4 tests pass.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/crux-plugin/src/host.rs \
-  crates/crux-plugin/tests/host.rs \
-  crates/crux-plugin/tests/fixtures/echo-plugin.rs \
-  crates/crux-plugin/Cargo.toml crates/crux-plugin/src/lib.rs
+git add crates/cruxx-plugin/src/host.rs \
+  crates/cruxx-plugin/tests/host.rs \
+  crates/cruxx-plugin/tests/fixtures/echo-plugin.rs \
+  crates/cruxx-plugin/Cargo.toml crates/cruxx-plugin/src/lib.rs
 git commit -m "feat(plugin): plugin host with subprocess management"
 ```
 
@@ -819,21 +819,21 @@ git commit -m "feat(plugin): plugin host with subprocess management"
 ## Task 4: Registry bridge (`bridge.rs`)
 
 **Files:**
-- Create: `crates/crux-plugin/src/bridge.rs`
-- Modify: `crates/crux-plugin/src/lib.rs`
-- Test: `crates/crux-plugin/tests/bridge.rs`
+- Create: `crates/cruxx-plugin/src/bridge.rs`
+- Modify: `crates/cruxx-plugin/src/lib.rs`
+- Test: `crates/cruxx-plugin/tests/bridge.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/crux-plugin/tests/bridge.rs
+// crates/cruxx-plugin/tests/bridge.rs
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crux_plugin::bridge::register_plugins;
-use crux_plugin::manifest::PluginEntry;
-use cruxai_script::HandlerRegistry;
+use cruxx_plugin::bridge::register_plugins;
+use cruxx_plugin::manifest::PluginEntry;
+use cruxx_script::HandlerRegistry;
 
 fn echo_entry() -> PluginEntry {
     let bin = env!("CARGO_BIN_EXE_echo-plugin");
@@ -870,7 +870,7 @@ async fn bridge_handler_invokes_plugin() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux-plugin --features __test-fixture
+Run: `cargo nextest run -p cruxx-plugin --features __test-fixture
 -- bridge`
 Expected: compilation error -- `bridge` module doesn't exist.
 
@@ -881,7 +881,7 @@ closures (which must be `Fn + Send + Sync + 'static`) can share
 access to the host.
 
 ```rust
-// crates/crux-plugin/src/bridge.rs
+// crates/cruxx-plugin/src/bridge.rs
 //! Bridge plugin handlers into `HandlerRegistry`.
 //!
 //! Wraps `PluginHost` in shared state so that type-erased handler
@@ -889,8 +889,8 @@ access to the host.
 
 use std::sync::Arc;
 
-use cruxai_core::prelude::CruxErr;
-use cruxai_script::HandlerRegistry;
+use cruxx_core::prelude::CruxErr;
+use cruxx_script::HandlerRegistry;
 use tokio::sync::Mutex;
 
 use crate::host::{PluginHost, PluginError};
@@ -942,16 +942,16 @@ pub mod bridge;
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo nextest run -p crux-plugin --features __test-fixture
+Run: `cargo nextest run -p cruxx-plugin --features __test-fixture
 -- bridge`
 Expected: 2 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/crux-plugin/src/bridge.rs \
-  crates/crux-plugin/tests/bridge.rs \
-  crates/crux-plugin/src/lib.rs
+git add crates/cruxx-plugin/src/bridge.rs \
+  crates/cruxx-plugin/tests/bridge.rs \
+  crates/cruxx-plugin/src/lib.rs
 git commit -m "feat(plugin): bridge plugin handlers into HandlerRegistry"
 ```
 
@@ -960,36 +960,36 @@ git commit -m "feat(plugin): bridge plugin handlers into HandlerRegistry"
 ## Task 5: Wire into CLI
 
 **Files:**
-- Modify: `crates/crux-agentic/Cargo.toml` (add crux-plugin dep)
-- Modify: `crates/crux-agentic/src/bin/crux.rs`
+- Modify: `crates/cruxx-agentic/Cargo.toml` (add cruxx-plugin dep)
+- Modify: `crates/cruxx-agentic/src/bin/cruxx.rs`
 
-- [ ] **Step 1: Add crux-plugin dependency**
+- [ ] **Step 1: Add cruxx-plugin dependency**
 
-Add to `crates/crux-agentic/Cargo.toml` under `[dependencies]`:
+Add to `crates/cruxx-agentic/Cargo.toml` under `[dependencies]`:
 
 ```toml
-crux-plugin = { path = "../crux-plugin", version = "0.2.4" }
+cruxx-plugin = { path = "../cruxx-plugin", version = "0.2.4" }
 ```
 
 - [ ] **Step 2: Wire plugin loading into `build_registry`**
 
-In `crates/crux-agentic/src/bin/crux.rs`, modify `build_registry`
+In `crates/cruxx-agentic/src/bin/cruxx.rs`, modify `build_registry`
 to accept a tokio runtime handle, load the manifest, and register
 plugin handlers:
 
 ```rust
 // Add to imports at top:
-use crux_plugin::manifest::load_manifest;
-use crux_plugin::bridge::register_plugins;
+use cruxx_plugin::manifest::load_manifest;
+use cruxx_plugin::bridge::register_plugins;
 
 // Add --plugins flag to both Run and Plan subcommands:
 // In Cli::Run:
-    /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+    /// Path to plugins.toml (default: ~/.cruxx/plugins.toml)
     #[arg(long)]
     plugins: Option<String>,
 
 // In Cli::Plan:
-    /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+    /// Path to plugins.toml (default: ~/.cruxx/plugins.toml)
     #[arg(long)]
     plugins: Option<String>,
 ```
@@ -1011,10 +1011,10 @@ fn cmd_run(
     let runner = Runner::new(Arc::new(registry));
 
     let start = Instant::now();
-    let crux = rt.block_on(runner.run(&pipeline, input));
+    let cruxx = rt.block_on(runner.run(&pipeline, input));
     let elapsed = start.elapsed();
 
-    print_trace(&crux, elapsed);
+    print_trace(&cruxx, elapsed);
 }
 ```
 
@@ -1026,7 +1026,7 @@ async fn build_registry(
     plugins_path: Option<&str>,
 ) -> HandlerRegistry {
     let mut reg = HandlerRegistry::new();
-    crux_agentic::register_all(&mut reg);
+    cruxx_agentic::register_all(&mut reg);
 
     // Load plugins from manifest
     let manifest_path = plugins_path
@@ -1034,7 +1034,7 @@ async fn build_registry(
         .unwrap_or_else(|| {
             let home = std::env::var("HOME")
                 .unwrap_or_else(|_| ".".into());
-            format!("{home}/.crux/plugins.toml")
+            format!("{home}/.cruxx/plugins.toml")
         });
     let manifest = load_manifest(&manifest_path)
         .unwrap_or_default();
@@ -1043,7 +1043,7 @@ async fn build_registry(
             register_plugins(&mut reg, &manifest.plugin).await
         {
             eprintln!(
-                "[crux] warning: failed to load plugins: {e}"
+                "[cruxx] warning: failed to load plugins: {e}"
             );
         }
     }
@@ -1056,7 +1056,7 @@ async fn build_registry(
                 let handler_name = n.clone();
                 async move {
                     eprintln!(
-                        "[crux] warning: no builtin for \
+                        "[cruxx] warning: no builtin for \
                          '{handler_name}', using stub"
                     );
                     Ok(json!({
@@ -1075,20 +1075,20 @@ async fn build_registry(
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo build -p crux-agentic`
-Expected: compiles. `crux run --help` shows `--plugins` flag.
+Run: `cargo build -p cruxx-agentic`
+Expected: compiles. `cruxx run --help` shows `--plugins` flag.
 
 - [ ] **Step 4: Manual smoke test**
 
-Run: `./target/debug/crux run examples/extract_entities.yaml`
+Run: `./target/debug/cruxx run examples/extract_entities.yaml`
 Expected: works exactly as before (no plugins loaded, same output).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/crux-agentic/Cargo.toml \
-  crates/crux-agentic/src/bin/crux.rs
-git commit -m "feat(cli): wire plugin loading into crux CLI"
+git add crates/cruxx-agentic/Cargo.toml \
+  crates/cruxx-agentic/src/bin/cruxx.rs
+git commit -m "feat(cli): wire plugin loading into cruxx CLI"
 ```
 
 ---
@@ -1096,7 +1096,7 @@ git commit -m "feat(cli): wire plugin loading into crux CLI"
 ## Task 6: Planner awareness of plugin handlers
 
 **Files:**
-- Modify: `crates/crux-agentic/src/planner.rs`
+- Modify: `crates/cruxx-agentic/src/planner.rs`
 
 - [ ] **Step 1: Extend `handler_manifest` to accept extra handlers**
 
@@ -1163,7 +1163,7 @@ pub fn register_plan(
 
 - [ ] **Step 2: Update `register_all` signature**
 
-In `crates/crux-agentic/src/lib.rs`, change `register_all` to
+In `crates/cruxx-agentic/src/lib.rs`, change `register_all` to
 pass extra handlers through:
 
 ```rust
@@ -1192,7 +1192,7 @@ pub fn register_all_with_plugins(
 
 - [ ] **Step 3: Update CLI to pass plugin handler descriptions**
 
-In `crux.rs`, after loading plugins, collect their descriptions
+In `cruxx.rs`, after loading plugins, collect their descriptions
 and pass to `register_all_with_plugins`:
 
 ```rust
@@ -1230,7 +1230,7 @@ fn cmd_plan(
         .unwrap_or_else(|| {
             let home = std::env::var("HOME")
                 .unwrap_or_else(|_| ".".into());
-            format!("{home}/.crux/plugins.toml")
+            format!("{home}/.cruxx/plugins.toml")
         });
     let extra: Vec<String> = load_manifest(&manifest_path)
         .unwrap_or_default()
@@ -1242,7 +1242,7 @@ fn cmd_plan(
         .collect();
 
     let yaml = rt
-        .block_on(crux_agentic::planner::generate_pipeline(
+        .block_on(cruxx_agentic::planner::generate_pipeline(
             goal,
             constraints,
             &extra,
@@ -1255,7 +1255,7 @@ fn cmd_plan(
 
 - [ ] **Step 5: Verify compilation**
 
-Run: `cargo check -p crux-agentic --features baml`
+Run: `cargo check -p cruxx-agentic --features baml`
 Expected: compiles without errors.
 
 - [ ] **Step 6: Run existing tests to verify no regressions**
@@ -1266,9 +1266,9 @@ Expected: all 275+ tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/crux-agentic/src/planner.rs \
-  crates/crux-agentic/src/lib.rs \
-  crates/crux-agentic/src/bin/crux.rs
+git add crates/cruxx-agentic/src/planner.rs \
+  crates/cruxx-agentic/src/lib.rs \
+  crates/cruxx-agentic/src/bin/cruxx.rs
 git commit -m "feat(planner): include plugin handlers in pipeline generation"
 ```
 
@@ -1282,33 +1282,33 @@ git commit -m "feat(planner): include plugin handlers in pipeline generation"
 - [ ] **Step 1: Write plugin authoring docs**
 
 ```markdown
-# crux Plugins
+# cruxx Plugins
 
-Plugins extend crux pipelines with handlers for third-party
-services. A plugin is any executable that speaks the crux plugin
+Plugins extend cruxx pipelines with handlers for third-party
+services. A plugin is any executable that speaks the cruxx plugin
 protocol over stdin/stdout.
 
 ## Quick Start
 
-1. Create a `~/.crux/plugins.toml`:
+1. Create a `~/.cruxx/plugins.toml`:
 
    ```toml
    [[plugin]]
    name = "github"
-   path = "/usr/local/bin/crux-github"
+   path = "/usr/local/bin/cruxx-github"
    env = { GITHUB_TOKEN = "ghp_..." }
    ```
 
 2. Run a pipeline that uses plugin handlers:
 
    ```bash
-   crux run my-pipeline.yaml
+   cruxx run my-pipeline.yaml
    ```
 
 3. Or generate a pipeline that uses plugins:
 
    ```bash
-   crux plan --goal "create a GitHub issue for each TODO"
+   cruxx plan --goal "create a GitHub issue for each TODO"
    ```
 
 ## Plugin Protocol
@@ -1386,7 +1386,7 @@ A plugin is any binary that:
 2. Writes newline-delimited JSON to stdout
 3. Handles `Declare`, `Invoke`, and `Shutdown` methods
 
-See `crates/crux-plugin/tests/fixtures/echo-plugin.rs` for a
+See `crates/cruxx-plugin/tests/fixtures/echo-plugin.rs` for a
 minimal Rust example.
 
 ## Handler Naming
@@ -1407,7 +1407,7 @@ Run:
 cargo check --workspace
 cargo clippy --all-targets -- -D warnings
 cargo nextest run
-cargo nextest run -p crux-plugin --features __test-fixture
+cargo nextest run -p cruxx-plugin --features __test-fixture
 ```
 
 Expected: all pass, no warnings.
@@ -1426,11 +1426,11 @@ git commit -m "docs: plugin authoring guide and protocol reference"
 1. `cargo check --workspace` -- all crates compile
 2. `cargo clippy --all-targets -- -D warnings` -- no warnings
 3. `cargo nextest run` -- all existing tests pass (no regressions)
-4. `cargo nextest run -p crux-plugin --features __test-fixture`
+4. `cargo nextest run -p cruxx-plugin --features __test-fixture`
    -- all plugin tests pass (protocol, manifest, host, bridge)
-5. `./target/debug/crux run examples/extract_entities.yaml` --
+5. `./target/debug/cruxx run examples/extract_entities.yaml` --
    existing pipelines still work
-6. `./target/debug/crux run --plugins /dev/null
+6. `./target/debug/cruxx run --plugins /dev/null
    examples/extract_entities.yaml` -- works with empty manifest
 7. Echo plugin end-to-end: register in `plugins.toml`, run a
    pipeline referencing `echo::reflect`, verify output

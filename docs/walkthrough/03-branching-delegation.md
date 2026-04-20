@@ -4,14 +4,14 @@
 > `delegate`, and why each one is a separate language construct instead of
 > just an `if`.
 
-Regular Rust gives you `if`, `match`, and `tokio::spawn`. `cruxai::` gives
+Regular Rust gives you `if`, `match`, and `tokio::spawn`. `cruxx::` gives
 you four additional primitives that each correspond to a different _kind_ of
 decision an agent makes. The four exist because they have different replay,
 budget, and recovery semantics — not because any one of them is "better".
 
 ## The four branching kinds
 
-| Primitive               | When to use                             | Records in crux as                           |
+| Primitive               | When to use                             | Records in cruxx as                           |
 | ----------------------- | --------------------------------------- | -------------------------------------------- |
 | `match` (plain Rust)    | Pure pattern match on known-shape data  | `Step { kind: Branch, ... }`                 |
 | `x.route_on_confidence` | Dispatch on a model's confidence score  | `Step { kind: Branch, ... }` with the score  |
@@ -25,14 +25,14 @@ Pick the primitive by asking: _what does "failure" mean here?_
 - `speculate` — failure means "none of the approaches worked"
 - `delegate` — failure means "the sub-agent couldn't handle it"
 
-Each one leaves a different shape of record in the crux.
+Each one leaves a different shape of record in the cruxx.
 
 ## Value branching with `match`
 
 No macro needed. Just `match`:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn classify(doc: Document) -> Crux<Category> {
     let embedding = x.step("embed", || embed(&doc)).await?;
 
@@ -59,11 +59,11 @@ If any arm involves calling out to another model, reach for
 
 ## Confidence branching with `route_on_confidence`
 
-This is the primitive that makes `cruxai::` feel agentic rather than
+This is the primitive that makes `cruxx::` feel agentic rather than
 procedural. You hand it a score and a set of arms keyed by threshold:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn answer(question: String) -> Crux<Answer> {
     let draft = x.step("draft", || quick_draft(&question)).await?;
 
@@ -83,14 +83,14 @@ What the compiler checks for you:
    ambiguity about which arm runs.
 3. **Arms must return the same type.** Exactly like `match`.
 
-What the crux records:
+What the cruxx records:
 
 - The score (`0.82`)
 - The range that matched (`0.70..0.90`)
 - The step name you gave (`"answer_route"` by default)
-- The sub-crux of whatever the arm did (because `delegate` is used inside)
+- The sub-cruxx of whatever the arm did (because `delegate` is used inside)
 
-When you're debugging later, you can filter `crux.steps.iter().filter(|s|
+When you're debugging later, you can filter `cruxx.steps.iter().filter(|s|
 s.kind == StepKind::Branch)` and see the exact confidence score at each
 decision point. That's the kind of thing you'd normally build an entire
 eval harness for.
@@ -100,7 +100,7 @@ eval harness for.
 Run several approaches concurrently, let them race, pick the best:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn finalize(draft: Draft) -> Crux<Itinerary> {
     x.speculate("finalize", [
         ("cheap", || async { finalize_cheap(&draft).await }),
@@ -123,12 +123,12 @@ Three terminators, each with different semantics:
 
 ### What speculation records
 
-This is the interesting bit. The crux records:
+This is the interesting bit. The cruxx records:
 
 - The winner as a normal `Ok` step
-- **Every loser as a `Rejected` step**, complete with its own sub-crux
+- **Every loser as a `Rejected` step**, complete with its own sub-cruxx
 
-That means you can replay `crux.rejected_branches()` later, or pipe them
+That means you can replay `cruxx.rejected_branches()` later, or pipe them
 into an eval dataset. Nothing is thrown away silently. If you've ever
 built an LLM app where you wished you had a record of "what other options
 did the model consider?", this is that.
@@ -137,7 +137,7 @@ did the model consider?", this is that.
 
 `with_budget` applies to the _whole speculation_, not per arm. Arms share a
 single budget pool. If `cheap` burns 6000 tokens, `fast` and `safe` get
-2000 between them. This is the one place in `cruxai::` where arms are _not_
+2000 between them. This is the one place in `cruxx::` where arms are _not_
 independent — speculation is explicitly cooperative.
 
 ## Delegation with `x.delegate::<A>`
@@ -146,7 +146,7 @@ Delegation is a handoff to another `Agent`. It's the only primitive that
 crosses the "who owns this decision" boundary:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn plan_trip(goal: String) -> Crux<Itinerary> {
     let research = x.step("research", || search_web(&goal)).await?;
 
@@ -171,7 +171,7 @@ Three things that are painful to get right by hand:
 1. **Crux context crosses the boundary.** The child agent runs with its
    own `CruxCtx`, but that context carries the parent's `CruxId` as
    `parent`. When the child finishes, its `Crux<_>` is appended to
-   `parent.children`. `crux.causal_chain()` walks across the boundary
+   `parent.children`. `cruxx.causal_chain()` walks across the boundary
    transparently.
 
 2. **Lifecycle hooks attach per call site.** Same `DraftAgent`, two
@@ -183,16 +183,16 @@ Three things that are painful to get right by hand:
    Inside the child, speculation gets 3k. The runtime tracks all three
    and fails with a specific `BudgetExceeded` if any is exceeded.
 
-### Delegation vs. calling another `#[cruxai::agent]` function directly
+### Delegation vs. calling another `#[cruxx::agent]` function directly
 
 You _can_ just call another agent function:
 
 ```rust
-let sub_crux = drafter(input).await;
-let draft = sub_crux.value()?;
+let sub_cruxx = drafter(input).await;
+let draft = sub_cruxx.value()?;
 ```
 
-That works, and the child crux rolls up into the parent automatically.
+That works, and the child cruxx rolls up into the parent automatically.
 But you don't get:
 
 - Budget scoping per call site
@@ -211,7 +211,7 @@ branching code that they belong in this chapter.
 ### Pipe operator `|` (sequential)
 
 ```rust
-let crux = drafter(input) | refiner() | finalizer();
+let cruxx = drafter(input) | refiner() | finalizer();
 ```
 
 Desugars to:
@@ -220,7 +220,7 @@ Desugars to:
 let t1 = drafter(input).await;
 let t2 = refiner(t1.value()?).await;
 let t3 = finalizer(t2.value()?).await;
-merge_cruxs(&[t1, t2, t3])
+merge_cruxxs(&[t1, t2, t3])
 ```
 
 Errors short-circuit. Cruxs concatenate. Useful for linear pipelines.
@@ -234,7 +234,7 @@ let results: Crux<Vec<Answer>> = Crux::join_all(
 ```
 
 All sub-agents run concurrently. The parent `Crux<Vec<Answer>>` carries
-every sub-crux as a child. If any child fails, you can choose:
+every sub-cruxx as a child. If any child fails, you can choose:
 
 - `.join_all(...)` — propagate the first error
 - `.join_all_best_effort(...)` — collect successes, record failures as
@@ -248,9 +248,9 @@ every sub-crux as a child. If any child fails, you can choose:
 - **You want to try three draft styles and keep the best.** Which one?
   _`speculate` + `pick_best_by`._
 - **You want to call a helper you wrote five minutes ago.** Which one?
-  _Plain function call. The crux still rolls up._
+  _Plain function call. The cruxx still rolls up._
 - **You want a sub-agent with its own budget and human-escalation hook.**
   Which one? _`delegate`._
 
 Chapter **04** is where the tutorial gets useful: we wire in the task
-registry so these cruxs can survive a crash.
+registry so these cruxxs can survive a crash.

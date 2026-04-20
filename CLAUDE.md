@@ -19,7 +19,7 @@ just fix                             # cargo fmt --all (in-place)
 just build                           # cargo build --all-targets
 just hooks                           # Install git hooks from .githooks/
 
-cargo nextest run -p crux-core       # Test a single crate
+cargo nextest run -p cruxx-core       # Test a single crate
 cargo nextest run test_name          # Run a single test
 cargo nextest run --features redb    # Include redb adapter tests
 ```
@@ -30,10 +30,10 @@ Always use `cargo nextest run` instead of `cargo test`.
 
 Three crates in `crates/`:
 
-- **`crux`** -- Facade crate. Re-exports `crux-core` + `crux-macros`. Integration tests live here
+- **`cruxx`** -- Facade crate. Re-exports `cruxx-core` + `cruxx-macros`. Integration tests live here
   (`tests/agent_macro.rs`, `combinators.rs`, `delegation.rs`, `speculation.rs`, `task_registry.rs`).
-- **`crux-core`** -- All domain logic: types, traits, runtime. This is where most code changes happen.
-- **`crux-macros`** -- `#[crux::agent]` proc macro. Transforms an `async fn` into an `Agent` trait
+- **`cruxx-core`** -- All domain logic: types, traits, runtime. This is where most code changes happen.
+- **`cruxx-macros`** -- `#[cruxx::agent]` proc macro. Transforms an `async fn` into an `Agent` trait
   impl + wrapper struct (e.g. `hello` -> `HelloAgent`).
 
 ## Feature Flags
@@ -64,7 +64,7 @@ The `RegistryBackend` trait is the persistence port. Two adapters exist:
 
 ### Key Types
 
-- `Crux<T>` (`types/crux_value.rs`) -- execution trace fused with result
+- `Crux<T>` (`types/cruxx_value.rs`) -- execution trace fused with result
 - `Step` (`types/step.rs`) -- recorded unit of work (kind, status, confidence, output, children)
 - `CruxCtx` (`ctx.rs`) -- runtime: `step()`, `delegate()`, `speculate()`, `pipe()`, `join_all()`,
   `route_on_confidence()`
@@ -81,16 +81,16 @@ recovery path, not a fallback.
 
 ### Proc Macro
 
-`#[crux::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
+`#[cruxx::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
 1. Inner function with `CruxCtx` injected as `t`
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
 
 ## Pipeline Files
 
-Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.yaml`.
+Pipeline definitions use the `.cruxx` file extension (YAML syntax). Previously `.yaml`.
 
-## BAML (crux-agentic)
+## BAML (cruxx-agentic)
 
 - `just check-baml` — validates `generators.baml` version matches `Cargo.toml` baml dep;
   auto-downloads native lib if missing. Run after any baml version bump.
@@ -98,10 +98,10 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   or bumping the baml version. The `baml` crate version in `Cargo.toml` must match `version` in
   `generators.baml` exactly. When bumping baml, update both files together.
 - `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
-  `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
-- Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
-- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
-  examples/<pipeline>.crux examples/input_<name>.json`
+  `crates/cruxx-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
+- Build `cruxx-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
+- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/cruxx-run
+  examples/<pipeline>.cruxx examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
   for the exact injection commands (machine-local, gitignored).
 
@@ -115,4 +115,4 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
 
 ## Pipeline Capabilities Reference
 
-See `docs/crux-capabilities.md` for the full list of supported step types, handlers, and known gaps.
+See `docs/cruxx-capabilities.md` for the full list of supported step types, handlers, and known gaps.

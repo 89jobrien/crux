@@ -1,0 +1,324 @@
+/// End-to-end tests for #[cruxx::agent] proc macro.
+///
+/// These tests verify that the macro generates correct Agent impls,
+/// wrapper functions, and integrates with CruxCtx lifecycle hooks.
+use cruxx::prelude::*;
+use cruxx::registry::{InMemoryBackend, TaskRegistry, TaskStatus};
+
+// -- Basic: zero-param agent ------------------------------------------------
+
+#[cruxx::agent]
+async fn greet() -> Crux<String> {
+    Ok("hello".to_string())
+}
+
+#[tokio::test]
+async fn zero_param_agent() {
+    let cruxx = greet().await;
+    assert_eq!(cruxx.value().unwrap(), "hello");
+    assert_eq!(cruxx.agent, "greet");
+    assert!(cruxx.finished_at.is_some());
+}
+
+#[test]
+fn zero_param_agent_trait_name() {
+    assert_eq!(GreetAgent::name(), "greet");
+}
+
+// -- Basic: single-param agent ----------------------------------------------
+
+#[cruxx::agent]
+async fn echo(msg: String) -> Crux<String> {
+    Ok(msg)
+}
+
+#[tokio::test]
+async fn single_param_agent() {
+    let cruxx = echo("hi".to_string()).await;
+    assert_eq!(cruxx.value().unwrap(), "hi");
+    assert_eq!(cruxx.agent, "echo");
+}
+
+#[test]
+fn single_param_agent_trait_name() {
+    assert_eq!(EchoAgent::name(), "echo");
+}
+
+// -- Basic: multi-param agent -----------------------------------------------
+
+#[cruxx::agent]
+async fn add(a: i32, b: i32) -> Crux<i32> {
+    Ok(a + b)
+}
+
+#[tokio::test]
+async fn multi_param_agent() {
+    let cruxx = add(3, 4).await;
+    assert_eq!(cruxx.value().unwrap(), &7);
+    assert_eq!(cruxx.agent, "add");
+}
+
+#[test]
+fn multi_param_agent_trait_name() {
+    assert_eq!(AddAgent::name(), "add");
+}
+
+// -- Agent with steps -------------------------------------------------------
+
+#[cruxx::agent]
+async fn two_step(input: String) -> Crux<String> {
+    let upper: String = x
+        .step("uppercase", || {
+            let inp = input.clone();
+            async move { Ok(inp.to_uppercase()) }
+        })
+        .await?;
+
+    let result: String = x
+        .step("append", || {
+            let u = upper.clone();
+            async move { Ok(format!("{u}!")) }
+        })
+        .await?;
+
+    Ok(result)
+}
+
+#[tokio::test]
+async fn agent_with_steps_records_trace() {
+    let cruxx = two_step("hello".to_string()).await;
+    assert_eq!(cruxx.value().unwrap(), "HELLO!");
+    assert_eq!(cruxx.steps.len(), 2);
+    assert_eq!(cruxx.steps[0].name, "uppercase");
+    assert_eq!(cruxx.steps[1].name, "append");
+    assert!(cruxx.steps.iter().all(|s| s.is_ok()));
+}
+
+// -- Agent that fails -------------------------------------------------------
+
+#[cruxx::agent]
+async fn fallible(should_fail: bool) -> Crux<String> {
+    if should_fail {
+        return Err(CruxErr::step_failed("check", "intentional failure"));
+    }
+    Ok("success".to_string())
+}
+
+#[tokio::test]
+async fn agent_failure_captured_in_cruxx() {
+    let cruxx = fallible(true).await;
+    assert!(cruxx.value().is_err());
+
+    let cruxx_ok = fallible(false).await;
+    assert_eq!(cruxx_ok.value().unwrap(), "success");
+}
+
+// -- Agent uses x.step that fails -------------------------------------------
+
+#[cruxx::agent]
+async fn step_fails() -> Crux<i32> {
+    let _: i32 = x.step("ok_step", || async { Ok(1) }).await?;
+    let _: i32 = x
+        .step("bad_step", || async {
+            Err(CruxErr::step_failed("bad_step", "oops"))
+        })
+        .await?;
+    Ok(0) // unreachable
+}
+
+#[tokio::test]
+async fn step_failure_propagates_through_macro() {
+    let cruxx = step_fails().await;
+    assert!(cruxx.value().is_err());
+    // First step succeeded, second failed
+    assert_eq!(cruxx.steps.len(), 2);
+    assert!(cruxx.steps[0].is_ok());
+    assert!(cruxx.steps[1].is_err());
+}
+
+// -- Agent with confidence --------------------------------------------------
+
+#[cruxx::agent]
+async fn uncertain() -> Crux<String> {
+    let val: String = x
+        .step_with_confidence("guess", 0.4, || async { Ok("maybe".to_string()) })
+        .await?;
+    Ok(val)
+}
+
+#[tokio::test]
+async fn step_confidence_recorded() {
+    let cruxx = uncertain().await;
+    assert_eq!(cruxx.value().unwrap(), "maybe");
+    assert_eq!(cruxx.steps[0].confidence, 0.4);
+}
+
+// -- Agent with lifecycle hooks via x ---------------------------------------
+
+#[cruxx::agent]
+async fn hooked() -> Crux<i32> {
+    x.on_step_failure(|_err| async { Recovery::Substitute(serde_json::json!(42)) });
+
+    let val: i32 = x
+        .step("will_fail", || async {
+            Err(CruxErr::step_failed("will_fail", "expected"))
+        })
+        .await?;
+
+    Ok(val)
+}
+
+#[tokio::test]
+async fn lifecycle_hooks_work_through_macro() {
+    let cruxx = hooked().await;
+    assert_eq!(cruxx.value().unwrap(), &42);
+}
+
+// -- Agent struct naming: snake_case -> PascalCase --------------------------
+
+#[cruxx::agent]
+async fn my_complex_name() -> Crux<bool> {
+    Ok(true)
+}
+
+#[test]
+fn snake_to_pascal_naming() {
+    assert_eq!(MyComplexNameAgent::name(), "my_complex_name");
+}
+
+// -- Agent::run can be called directly with CruxCtx -------------------------
+
+#[tokio::test]
+async fn agent_run_directly() {
+    let mut ctx = CruxCtx::new("direct_test");
+    let result = <EchoAgent as Agent>::run(&mut ctx, "direct".to_string()).await;
+    assert_eq!(result.unwrap(), "direct");
+}
+
+// -- Wrapper function returns Crux with correct metadata --------------------
+
+#[tokio::test]
+async fn wrapper_produces_complete_cruxx() {
+    let cruxx = greet().await;
+
+    // Has an ID
+    assert!(!cruxx.id.as_str().is_empty());
+    assert!(cruxx.id.as_str().starts_with("cruxx_"));
+
+    // Has timing
+    assert!(cruxx.started_at <= cruxx.finished_at.unwrap());
+
+    // No children (no delegation)
+    assert!(cruxx.children.is_empty());
+}
+
+// -- Serialization of macro-generated Crux ----------------------------------
+
+#[tokio::test]
+async fn cruxx_from_macro_serializes() {
+    let cruxx = two_step("test".to_string()).await;
+    let json = serde_json::to_string_pretty(&cruxx).unwrap();
+    let back: Crux<String> = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.value().unwrap(), "TEST!");
+    assert_eq!(back.steps.len(), 2);
+}
+
+// -- replay attribute: lenient mode -------------------------------------------
+
+#[cruxx::agent(replay = "lenient")]
+async fn lenient_agent(input: String) -> Crux<String> {
+    let val: String = x
+        .step("process", || {
+            let i = input.clone();
+            async move { Ok(i.to_uppercase()) }
+        })
+        .await?;
+    Ok(val)
+}
+
+#[tokio::test]
+async fn replay_lenient_attribute_compiles_and_runs() {
+    let cruxx = lenient_agent("hello".to_string()).await;
+    assert_eq!(cruxx.value().unwrap(), "HELLO");
+    assert_eq!(cruxx.steps.len(), 1);
+    assert_eq!(cruxx.steps[0].name, "process");
+}
+
+#[test]
+fn lenient_agent_struct_exists() {
+    assert_eq!(LenientAgentAgent::name(), "lenient_agent");
+}
+
+// -- replay attribute: lenient enables replay from prior trace ----------------
+
+#[tokio::test]
+async fn replay_lenient_attribute_uses_lenient_mode() {
+    // First run: produce a trace
+    let first = lenient_agent("world".to_string()).await;
+    assert!(first.value().is_ok());
+
+    // Snapshot to Value for replay
+    let snapshot = first.to_snapshot().unwrap();
+
+    // Second run: replay from prior trace — lenient mode should match by name
+    // even if ordinals shift. We just verify replay doesn't error.
+    let mut ctx = CruxCtx::new("lenient_agent");
+    ctx.set_replay_mode(ReplayMode::Lenient);
+    ctx.replay_from(&snapshot);
+    let result = <LenientAgentAgent as Agent>::run(&mut ctx, "world".to_string()).await;
+    assert_eq!(result.unwrap(), "WORLD");
+}
+
+// -- registry attribute: run_registered method --------------------------------
+
+#[cruxx::agent(registry = "process")]
+async fn registered_agent(input: String) -> Crux<String> {
+    let val: String = x
+        .step("transform", || {
+            let i = input.clone();
+            async move { Ok(i.to_uppercase()) }
+        })
+        .await?;
+    Ok(val)
+}
+
+#[tokio::test]
+async fn registry_attribute_generates_run_registered() {
+    let registry = TaskRegistry::new(InMemoryBackend::new());
+    let (cruxx, task_id) =
+        RegisteredAgentAgent::run_registered(&registry, "test".to_string()).await;
+
+    assert_eq!(cruxx.value().unwrap(), "TEST");
+
+    // Task was created and marked done
+    let task = registry.get(&task_id).await.unwrap();
+    assert_eq!(task.kind, "process");
+    assert_eq!(task.status, TaskStatus::Done);
+    assert!(task.checkpoint.is_some());
+}
+
+#[cruxx::agent(registry = "compute")]
+async fn failing_registered(should_fail: bool) -> Crux<String> {
+    if should_fail {
+        return Err(CruxErr::step_failed("check", "intentional"));
+    }
+    Ok("ok".to_string())
+}
+
+#[tokio::test]
+async fn registry_attribute_marks_failed_on_error() {
+    let registry = TaskRegistry::new(InMemoryBackend::new());
+    let (cruxx, task_id) = FailingRegisteredAgent::run_registered(&registry, true).await;
+
+    assert!(cruxx.value().is_err());
+
+    let task = registry.get(&task_id).await.unwrap();
+    assert_eq!(task.status, TaskStatus::Failed);
+}
+
+#[tokio::test]
+async fn registry_attribute_wrapper_still_works_standalone() {
+    // The normal wrapper function should still work without a registry
+    let cruxx = registered_agent("hello".to_string()).await;
+    assert_eq!(cruxx.value().unwrap(), "HELLO");
+}

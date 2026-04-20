@@ -11,7 +11,7 @@
 | `Step`    | A span event or log line               | First-class, typed, serializable        |
 | `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope         |
 | `Agent`   | A struct with an `async fn run`        | Declarative lifecycle hooks             |
-| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxai::agent]` function  |
+| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxx::agent]` function  |
 
 The rest of this chapter walks through each one.
 
@@ -32,13 +32,13 @@ pub struct Crux<T> {
 ### Why the value is inside
 
 `Crux<T>` holds the value _and_ the causal chain. You don't return a value
-and separately emit a crux — they're one thing. This sounds pedantic, but it
+and separately emit a cruxx — they're one thing. This sounds pedantic, but it
 has two downstream effects:
 
-1. **You can't forget the crux.** If you return a `Crux<T>`, the crux goes
+1. **You can't forget the cruxx.** If you return a `Crux<T>`, the cruxx goes
    with it. There's no "oh, I logged this but forgot to attach the span ID"
    class of bug.
-2. **Replay is trivial.** Because the crux _is_ the return value, replaying
+2. **Replay is trivial.** Because the cruxx _is_ the return value, replaying
    a function means re-running it with a snapshot of `Crux<T>` as the seed.
    See chapter 04.
 
@@ -47,35 +47,35 @@ has two downstream effects:
 ```rust
 let t: Crux<String> = hello("world".into()).await;
 
-// Unwrap just the value (ignores crux):
+// Unwrap just the value (ignores cruxx):
 let s: String = t.value()?;
 
-// Pattern match on the result while keeping the crux:
+// Pattern match on the result while keeping the cruxx:
 match t.value() {
     Ok(s) => println!("got {s} in {} steps", t.steps.len()),
     Err(e) => println!("failed at step {:?}: {e}", e.failed_step),
 }
 ```
 
-The `?` operator works _inside_ an `#[cruxai::agent]` function because the
+The `?` operator works _inside_ an `#[cruxx::agent]` function because the
 macro rewrites it to propagate through `x`. Outside an agent, you call
 `.value()` to extract the inner `Result`.
 
-### Querying the crux
+### Querying the cruxx
 
 ```rust
 // Every step, in causal order:
-for step in crux.causal_chain() {
+for step in cruxx.causal_chain() {
     println!("{}: {:?} ({}ms)", step.name, step.status, step.duration_ms);
 }
 
 // Only the delegations:
-for d in crux.delegations() {
+for d in cruxx.delegations() {
     println!("delegated {} -> {}", d.from_agent, d.to_agent);
 }
 
 // Branches that were considered but rejected:
-for r in crux.rejected_branches() {
+for r in cruxx.rejected_branches() {
     println!("rejected {}: confidence={}", r.name, r.confidence);
 }
 ```
@@ -106,7 +106,7 @@ The important fields for day-to-day work are **`kind`**, **`status`**, and
 
 This is the biggest single departure from `tracing` / OpenTelemetry. Those
 libraries treat a span as a timing primitive — it happened, here's how long.
-`cruxai::` treats a step as an _epistemic_ primitive: it happened, here's how
+`cruxx::` treats a step as an _epistemic_ primitive: it happened, here's how
 sure we are the output is right.
 
 That score is what powers:
@@ -139,8 +139,8 @@ Three things to notice:
    `Delegation { to: "drafter", source: Box::new(StepFailed { ... }) }`. You
    can unwrap as deep as you need to know where the real fault was.
 3. **`ReplayMismatch` is a real variant.** Replay isn't a library concern in
-   `cruxai::` — it's a language feature, and it can fail loudly if your code
-   changed in a way that invalidates a saved crux.
+   `cruxx::` — it's a language feature, and it can fail loudly if your code
+   changed in a way that invalidates a saved cruxx.
 
 ## `Agent` trait
 
@@ -162,7 +162,7 @@ pub trait Agent: Send + Sync + 'static {
 }
 ```
 
-You almost never implement this by hand. The `#[cruxai::agent]` attribute
+You almost never implement this by hand. The `#[cruxx::agent]` attribute
 generates an impl from a free function. You implement it directly only when
 you need to override the lifecycle hooks at the _type_ level — usually for an
 agent that's going to be delegated to from many places and needs consistent
@@ -178,7 +178,7 @@ recovery behavior.
 
 ## `CruxCtx`
 
-The `x` binding you see inside `#[cruxai::agent]` functions is of type
+The `x` binding you see inside `#[cruxx::agent]` functions is of type
 `&mut CruxCtx`. You don't construct it yourself — the macro does.
 
 ```rust
@@ -223,4 +223,4 @@ Before moving on, make sure you can answer these:
   type-level lifecycle hooks across many callers._
 
 Chapter **03** puts these types to work on branching and delegation — where
-`cruxai::` diverges most from regular Rust.
+`cruxx::` diverges most from regular Rust.

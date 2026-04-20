@@ -1,30 +1,30 @@
-# crux Plugins
+# cruxx Plugins
 
-Plugins extend crux pipelines with handlers for third-party
-services. A plugin is any executable that speaks the crux plugin
+Plugins extend cruxx pipelines with handlers for third-party
+services. A plugin is any executable that speaks the cruxx plugin
 protocol over stdin/stdout.
 
 ## Quick Start
 
-1. Create a `~/.crux/plugins.toml`:
+1. Create a `~/.cruxx/plugins.toml`:
 
    ```toml
    [[plugin]]
    name = "github"
-   path = "/usr/local/bin/crux-github"
+   path = "/usr/local/bin/cruxx-github"
    env = { GITHUB_TOKEN = "ghp_..." }
    ```
 
 2. Run a pipeline that uses plugin handlers:
 
    ```bash
-   crux run my-pipeline.crux
+   cruxx run my-pipeline.cruxx
    ```
 
 3. Or generate a pipeline that uses plugins:
 
    ```bash
-   crux plan --goal "create a GitHub issue for each TODO"
+   cruxx plan --goal "create a GitHub issue for each TODO"
    ```
 
 ## Plugin Protocol
@@ -102,7 +102,7 @@ A plugin is any binary that:
 2. Writes newline-delimited JSON to stdout
 3. Handles `Declare`, `Invoke`, and `Shutdown` methods
 
-See `crates/crux-plugin/tests/host.rs` and `crates/crux-plugin/tests/bridge.rs`
+See `crates/cruxx-plugin/tests/host.rs` and `crates/cruxx-plugin/tests/bridge.rs`
 for working examples.
 
 ## Handler Naming

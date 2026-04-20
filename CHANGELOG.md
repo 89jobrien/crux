@@ -13,7 +13,7 @@ Initial release.
 - `Crux<T>` execution trace type -- inspectable, serializable, replayable
 - `CruxCtx` runtime with `step()`, `delegate()`, `speculate()`, `pipe()`, `join_all()`,
   `route_on_confidence()`, `step_stream()`
-- `#[crux::agent]` proc macro with `replay` and `registry` attribute wiring
+- `#[cruxx::agent]` proc macro with `replay` and `registry` attribute wiring
 - `Agent` trait with lifecycle hooks (`on_low_confidence`, `on_step_failure`, `on_budget_exceeded`)
 - `Recovery<T>` enum: Retry, RetryWith, Substitute, Escalate, Propagate, Skip, Continue
 - `Budget` constraints: tokens, calls, duration, cost, combined

@@ -1,6 +1,6 @@
 # Crux Pipeline Capabilities
 
-Native support status for crux-script pipeline step types and handlers.
+Native support status for cruxx-script pipeline step types and handlers.
 
 ## Pipeline Combinators
 

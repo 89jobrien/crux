@@ -5,7 +5,7 @@
 > gracefully" — without scattering the recovery logic across your business
 > code.
 
-Lifecycle hooks are the reason `cruxai::` treats recovery as a language
+Lifecycle hooks are the reason `cruxx::` treats recovery as a language
 feature instead of a pattern. In a regular Rust agent, you'd write:
 
 ```rust
@@ -92,7 +92,7 @@ behavior. Call-site hooks override the per-agent ones if both are set.
 ### 3. Scoped with `x.on_low_confidence`
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn session(input: Input) -> Crux<Output> {
     x.on_low_confidence(0.8, escalate_handler);
     x.on_step_failure(retry_handler);
@@ -116,7 +116,7 @@ Here's the classic three-tier escalation (cheap model → expensive model →
 human) expressed with hooks instead of nested `if`s:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn answer(question: String) -> Crux<Answer> {
     let draft = x.delegate::<CheapModel>("draft", question.clone())
         .on_low_confidence(0.7, |score, ctx| async move {
@@ -139,13 +139,13 @@ async fn answer(question: String) -> Crux<Answer> {
 Read that as: _try cheap; if confidence < 0.7, try expensive; if that's still
 < 0.9, get a human._
 
-The crux records:
+The cruxx records:
 
 - Every tier that fired
 - Which confidence scores triggered each escalation
 - The final answer and which tier produced it
 
-When you look at this crux two weeks later, you know _exactly_ why the
+When you look at this cruxx two weeks later, you know _exactly_ why the
 answer came from a human instead of the cheap model.
 
 ## Worked example: retry with backoff
@@ -154,7 +154,7 @@ answer came from a human instead of the cheap model.
 writing a retry loop:
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn fetch_data(url: String) -> Crux<Vec<Record>> {
     x.on_step_failure(|err, ctx| async move {
         if ctx.attempt() >= 3 {
@@ -177,15 +177,15 @@ Three things to notice:
    per-step retry state without maintaining it yourself.
 2. **Backoff is your code.** The hook runs arbitrary async; `tokio::time`
    works fine.
-3. **The crux records every attempt.** Failed attempts become `Step {
+3. **The cruxx records every attempt.** Failed attempts become `Step {
 status: Err, attempt: 1 }`, the successful one becomes `Step { status:
-Ok, attempt: 3 }`. When you look at the crux later, the full retry
+Ok, attempt: 3 }`. When you look at the cruxx later, the full retry
    history is there.
 
 ## Worked example: budget-aware degradation
 
 ```rust
-#[cruxai::agent]
+#[cruxx::agent]
 async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
     x.on_budget_exceeded(|budget, ctx| async move {
         // Out of tokens? Fall back to a cheaper path.
@@ -205,7 +205,7 @@ async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
 ```
 
 When the polish step would exceed budget, the hook swaps in a template-based
-report instead. The crux records the budget-exceeded event _and_ the
+report instead. The cruxx records the budget-exceeded event _and_ the
 substitution. You can tell, per request, whether it got the polished output
 or the template fallback.
 
@@ -217,7 +217,7 @@ Hooks and the registry (chapter 04) play nicely:
   counter in the registry.
 - **A hook that returns `Recovery::Escalate`** to a human-review agent
   will typically leave the task in an `AwaitingApproval` status. The
-  registry has the full crux, so the human reviewer can see exactly what
+  registry has the full cruxx, so the human reviewer can see exactly what
   the agent tried.
 - **`Recovery::Propagate`** causes the registry to mark the task `Failed`
   with the full error chain preserved.
@@ -233,9 +233,9 @@ debugging harder if you overuse them. Two anti-patterns:
 
 1. **Hooks that mutate global state.** A hook should be about recovery for
    _this_ step, not about bumping a global counter or sending a webhook.
-   Put those in `x.step` so they appear in the crux as ordinary steps.
+   Put those in `x.step` so they appear in the cruxx as ordinary steps.
 2. **Hooks that silently succeed.** `Recovery::Substitute(default_value)`
-   makes every failure look like success in your business code. The crux
+   makes every failure look like success in your business code. The cruxx
    still records the substitution, but callers 500 feet downstream have no
    idea the real step failed. Use it sparingly; prefer `Escalate`.
 
@@ -243,7 +243,7 @@ debugging harder if you overuse them. Two anti-patterns:
 
 - **Where do you attach a hook that applies to all steps in one function?**
   _Call `x.on_low_confidence(...)` / `x.on_step_failure(...)` inside the
-  `#[cruxai::agent]` function._
+  `#[cruxx::agent]` function._
 - **Which `Recovery` variant replays the same step?** _`Retry`._
 - **Which one replaces the output without retrying?** _`Substitute(T)`._
 - **What happens if you don't attach any hook?** _Errors propagate to the
