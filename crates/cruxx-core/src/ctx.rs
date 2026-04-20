@@ -370,7 +370,23 @@ impl CruxCtx {
             if range.contains(confidence) {
                 trace_route!(name, confidence, label);
                 let step_name = format!("{name}::{label}");
-                return self.step(&step_name, move || fut).await;
+                let val = self.step(&step_name, move || fut).await?;
+                // If the handler output is a JSON object with a "confidence" field
+                // (finite f32 in [0.0, 1.0]), propagate it to the recorded step so
+                // that route_on_confidence can act on meaningful handler-reported scores.
+                if let Ok(json) = serde_json::to_value(&val) {
+                    if let Some(handler_conf) = json
+                        .get("confidence")
+                        .and_then(|v| v.as_f64())
+                        .map(|f| f as f32)
+                        .filter(|f| f.is_finite() && (0.0..=1.0).contains(f))
+                    {
+                        if let Some(step) = self.recorder.steps_mut().last_mut() {
+                            step.confidence = handler_conf;
+                        }
+                    }
+                }
+                return Ok(val);
             }
         }
 
@@ -1391,6 +1407,43 @@ mod tests {
                 Box::pin(async move { Ok(high_val) }),
             ),
         ]
+    }
+
+    // -- Issue #8: route_on_confidence confidence field propagation -----------
+
+    #[tokio::test]
+    async fn route_on_confidence_propagates_confidence_from_handler_output() {
+        // Handler returns a JSON object with a "confidence" field.
+        // The recorded step's confidence should reflect that value, not 1.0.
+        let mut ctx = CruxCtx::new("test");
+        let routes: Vec<ConfidenceRoute<'static, serde_json::Value>> = vec![
+            (
+                ConfidenceRange::exclusive(0.0, 0.5),
+                "low",
+                Box::pin(async { Ok(serde_json::json!({"result": "low", "confidence": 0.2})) }),
+            ),
+            (
+                ConfidenceRange::inclusive(0.5, 1.0),
+                "high",
+                Box::pin(async { Ok(serde_json::json!({"result": "high", "confidence": 0.9})) }),
+            ),
+        ];
+        let _ = ctx
+            .route_on_confidence("classify", 0.7, routes)
+            .await
+            .unwrap();
+
+        // The step for the matched route should record confidence from the output.
+        let step = ctx
+            .snapshot_steps()
+            .iter()
+            .find(|s| s.name == "classify::high")
+            .expect("classify::high step not found");
+        assert!(
+            (step.confidence - 0.9).abs() < 1e-6,
+            "expected confidence 0.9 from handler output, got {}",
+            step.confidence
+        );
     }
 
     #[tokio::test]

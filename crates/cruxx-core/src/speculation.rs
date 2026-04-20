@@ -139,6 +139,25 @@ where
         Ok(winner_val.unwrap())
     }
 
+    /// Run all arms, pick the one with the highest `score` field in the output JSON.
+    ///
+    /// Scoring rule:
+    /// 1. If the serialized output is a JSON object containing a numeric `"score"` field,
+    ///    use that value.
+    /// 2. Otherwise, fall back to the byte-length of the serialized output so that arms
+    ///    with more content win over arms with no score field (avoiding arbitrary first-wins).
+    pub async fn pick_best(self) -> Result<T, CruxErr> {
+        self.pick_best_by(|val| {
+            let json = serde_json::to_value(val).unwrap_or(serde_json::Value::Null);
+            if let Some(score) = json.get("score").and_then(|v| v.as_f64()) {
+                return score as f32;
+            }
+            // Fallback: use serialized output length as a proxy for richer content.
+            json.to_string().len() as f32
+        })
+        .await
+    }
+
     /// Return the first arm that succeeds. Failed arms recorded as Rejected.
     pub async fn first_ok(self) -> Result<T, CruxErr> {
         trace_speculate!(&self.name, self.arms.len());
@@ -211,6 +230,45 @@ mod tests {
     }
 
     // pick_best tests
+
+    // -- Issue #9: pick_best uses "score" field, falls back to output length ----
+
+    #[tokio::test]
+    async fn pick_best_uses_score_field_from_output() {
+        // Arms emit a "score" field; pick_best should select the arm with the
+        // highest score, not the first arm (first-wins-on-tie is the bug this fixes).
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            ok_arm("low", serde_json::json!({"score": 0.1, "answer": "low"})),
+            ok_arm("high", serde_json::json!({"score": 0.9, "answer": "high"})),
+            ok_arm("mid", serde_json::json!({"score": 0.5, "answer": "mid"})),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.pick_best().await.unwrap();
+        assert_eq!(
+            result["answer"].as_str().unwrap(),
+            "high",
+            "expected high-scored arm to win"
+        );
+    }
+
+    #[tokio::test]
+    async fn pick_best_falls_back_to_output_length_when_no_score_field() {
+        // Arms emit no "score" field; pick_best should fall back to output JSON
+        // length so that the "larger" output wins rather than always picking first.
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![
+            ok_arm("short", serde_json::json!("hi")),
+            ok_arm("long", serde_json::json!("this is a longer answer string")),
+        ];
+        let builder = SpeculationBuilder::new(&mut ctx, "spec", arms);
+        let result = builder.pick_best().await.unwrap();
+        assert_eq!(
+            result.as_str().unwrap(),
+            "this is a longer answer string",
+            "expected longer output arm to win when no score field"
+        );
+    }
 
     #[tokio::test]
     async fn pick_best_selects_highest_score() {

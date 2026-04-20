@@ -1,4 +1,4 @@
-/// Core domain types for the cruxx DSL.
+// Core domain types for the cruxx DSL.
 
 // Re-export all wire-format types from cruxx-types.
 pub use cruxx_types::budget;
