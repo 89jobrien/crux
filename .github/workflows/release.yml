@@ -20,6 +20,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
+      - name: stub generated modules for fmt
+        run: mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo nextest run

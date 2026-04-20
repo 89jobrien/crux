@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   audit:
@@ -40,3 +41,48 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo check on MSRV
         run: cargo check --workspace --all-targets
+
+  regression:
+    name: regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: stub generated modules for fmt
+        run: mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo nextest run
+        run: cargo nextest run
+
+  nightly-release:
+    name: nightly release
+    runs-on: ubuntu-latest
+    needs: [audit, machete, msrv, regression]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: set nightly tag
+        id: tag
+        run: echo "tag=nightly-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          git tag -f "$TAG"
+          git push -f origin "$TAG"
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --title "Nightly $TAG" \
+            --notes "Automated nightly release from main. All regression tests passed." \
+            --prerelease
