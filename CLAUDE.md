@@ -28,13 +28,21 @@ Always use `cargo nextest run` instead of `cargo test`.
 
 ## Workspace Structure
 
-Three crates in `crates/`:
+Crates in `crates/`:
 
 - **`cruxx`** -- Facade crate. Re-exports `cruxx-core` + `cruxx-macros`. Integration tests live here
   (`tests/agent_macro.rs`, `combinators.rs`, `delegation.rs`, `speculation.rs`, `task_registry.rs`).
-- **`cruxx-core`** -- All domain logic: types, traits, runtime. This is where most code changes happen.
-- **`cruxx-macros`** -- `#[cruxx::agent]` proc macro. Transforms an `async fn` into an `Agent` trait
-  impl + wrapper struct (e.g. `hello` -> `HelloAgent`).
+- **`cruxx-core`** -- All domain logic: types, traits, runtime. Includes orchestrator types
+  (`HarnessProfile`, `ResourceHints`, `HarnessDiff`, `EvolutionOutcome`) and ports
+  (`SafetyPolicy`, `ApprovalGate`).
+- **`cruxx-macros`** -- `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` proc macros.
+- **`cruxx-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
+  `AutoApproveGate`, `TerminalApprovalGate`.
+- **`cruxx-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven harness profile evolution.
+  Accepts `RunMetrics`, emits `HarnessDiff`.
+- **`cruxx-script`** -- YAML-driven pipeline scripting.
+- **`cruxx-model`** -- Canonical model ID types and provider-specific parsers.
+- **`cruxx-plugin`** -- Subprocess plugin host for pipelines.
 
 ## Feature Flags
 
@@ -72,6 +80,12 @@ The `RegistryBackend` trait is the persistence port. Two adapters exist:
 - `TaskRegistry<B>` (`registry/mod.rs`) -- submit/get/update_status/checkpoint/pending with CAS
 - `Recovery<T>` (`types/recovery.rs`) -- hook return: Continue, Skip, Retry, Escalate, Substitute(T)
 - `Budget` (`types/budget.rs`) -- token/step/time limits, scoped per delegation
+- `HarnessProfile` (`types/harness.rs`) -- resource spec for a container/process harness
+- `ResourceHints` -- advisory scheduling metadata attached to a profile
+- `HarnessDiff` -- incremental description of profile changes
+- `EvolutionOutcome` -- result of applying a diff (accepted, rejected, or pending approval)
+- `SafetyPolicy` trait -- port for diff approval logic; returns Approved/Rejected/RequiresApproval
+- `ApprovalGate` trait -- hook-level port called when `SafetyPolicy` returns `RequiresApproval`
 
 ### Replay
 
@@ -79,12 +93,18 @@ Steps are matched by name + ordinal hash (`hash_step_identity`). Strict mode fai
 Lenient mode does a forward name scan, so ordinal shifts are expected -- the scan is the designed
 recovery path, not a fallback.
 
-### Proc Macro
+### Proc Macros
 
 `#[cruxx::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
 1. Inner function with `CruxCtx` injected as `t`
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
+
+`#[cruxx::harness]` on a struct marks it as a managed container/process harness. The struct
+must have `image: String` and any additional fields mapped to `HarnessProfile`.
+
+`#[cruxx::evolve]` on `async fn f(metrics: RunMetrics) -> Crux<EvolutionOutcome>` injects
+an `EvolutionPlanner` (as `planner`) and a `CruxCtx` (as `x`) into the function body.
 
 ## Pipeline Files
 
@@ -115,4 +135,4 @@ Pipeline definitions use the `.cruxx` file extension (YAML syntax). Previously `
 
 ## Pipeline Capabilities Reference
 
-See `docs/cruxx-capabilities.md` for the full list of supported step types, handlers, and known gaps.
+See `docs/crux-capabilities.md` for the full list of supported step types, handlers, and known gaps.

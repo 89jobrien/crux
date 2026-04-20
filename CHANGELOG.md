@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `HarnessProfile`, `ResourceHints`, `HarnessDiff`, `EvolutionOutcome` types in `cruxx-core`
+  for container/process harness lifecycle management
+- `SafetyPolicy` trait (port) -- user-defined diff approval logic; returns Approved, Rejected,
+  or RequiresApproval
+- `ApprovalGate` trait (hook port) -- called when `SafetyPolicy` returns RequiresApproval
+- `on_approval_required` lifecycle hook on `Agent` -- fires before a diff is applied
+- `AutoApproveGate` and `TerminalApprovalGate` adapters in `cruxx-agentic`
+- `container::run` and `container::wait` pipeline handlers in `cruxx-agentic`
+- `harness::evolve` and `harness::canary` pipeline handlers in `cruxx-agentic`
+- `EvolutionPlanner` and `RunMetrics` in new `cruxx-planner` crate -- deterministic,
+  metrics-driven harness profile evolution
+- `#[cruxx::harness]` proc macro -- annotates a struct as a managed harness
+- `#[cruxx::evolve]` proc macro -- injects `EvolutionPlanner` + `CruxCtx` into an evolution fn
+
 ## [0.1.0] - 2026-04-12
 
 Initial release.

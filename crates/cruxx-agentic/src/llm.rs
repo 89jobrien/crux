@@ -122,11 +122,215 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     "reasoning": result.reasoning,
                 }))
             }
+            "DescribeProject" => {
+                let name = input_map
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            "llm::extract",
+                            "DescribeProject requires 'name' field",
+                        )
+                    })?
+                    .to_string();
+                let language = input_map
+                    .get("language")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let readme = input_map
+                    .get("readme")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let commits: Vec<String> = input_map
+                    .get("commits")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let result = b
+                    .DescribeProject
+                    .call(name, language, readme, &commits)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(json!({ "description": result.description }))
+            }
+            "AssessHealth" => {
+                let name = input_map
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed("llm::extract", "AssessHealth requires 'name' field")
+                    })?
+                    .to_string();
+                let pushed_at = input_map
+                    .get("pushed_at")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            "llm::extract",
+                            "AssessHealth requires 'pushed_at' field",
+                        )
+                    })?
+                    .to_string();
+                let commit_dates: Vec<String> = input_map
+                    .get("commit_dates")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let open_issues = input_map.get("open_issues").and_then(|v| v.as_i64());
+
+                let result = b
+                    .AssessHealth
+                    .call(name, pushed_at, &commit_dates, open_issues)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(json!({
+                    "status": result.status,
+                    "confidence": result.confidence,
+                    "reason": result.reason,
+                }))
+            }
+            "ClassifyProject" => {
+                let name = input_map
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            "llm::extract",
+                            "ClassifyProject requires 'name' field",
+                        )
+                    })?
+                    .to_string();
+                let description = input_map
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let language = input_map
+                    .get("language")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let topics: Vec<String> = input_map
+                    .get("topics")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let commits: Vec<String> = input_map
+                    .get("commits")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let result = b
+                    .ClassifyProject
+                    .call(name, description, language, &topics, &commits)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(json!({
+                    "category": result.category,
+                    "confidence": result.confidence,
+                }))
+            }
+            "GenerateChangelog" => {
+                let name = input_map
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            "llm::extract",
+                            "GenerateChangelog requires 'name' field",
+                        )
+                    })?
+                    .to_string();
+                let commits: Vec<String> = input_map
+                    .get("commits")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let result = b
+                    .GenerateChangelog
+                    .call(name, &commits)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(json!({
+                    "summary": result.summary,
+                    "highlights": result.highlights,
+                }))
+            }
+            "SuggestRelated" => {
+                let name = input_map
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CruxErr::step_failed("llm::extract", "SuggestRelated requires 'name' field")
+                    })?
+                    .to_string();
+                let description = input_map
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let category = input_map
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let all_projects: Vec<String> = input_map
+                    .get("all_projects")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let result = b
+                    .SuggestRelated
+                    .call(name, description, category, &all_projects)
+                    .await
+                    .map_err(|e| {
+                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
+                    })?;
+
+                Ok(json!({ "related": result.related }))
+            }
             unknown => Err(CruxErr::step_failed(
                 "llm::extract",
                 format!(
                     "unknown BAML function '{unknown}'; expected one of: \
-                     ExtractEntities, Summarize, Classify"
+                     ExtractEntities, Summarize, Classify, DescribeProject, \
+                     AssessHealth, ClassifyProject, GenerateChangelog, SuggestRelated"
                 ),
             )),
         }

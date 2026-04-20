@@ -36,7 +36,11 @@ Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
 | `ctrl::noop`        | Pass input through unchanged                   |
 | `ctrl::log`         | Log to stderr and pass through                 |
 | `ctrl::assert`      | Assert `args.condition` is truthy or fail      |
-| `llm::invoke`     | Raw LLM completion (OpenAI/Anthropic/Ollama)   |
+| `llm::invoke`       | Raw LLM completion (OpenAI/Anthropic/Ollama)              |
+| `container::run`    | Start a container from a `HarnessProfile` (`image`, `env`, `limits` args) |
+| `container::wait`   | Block until container exits; emits exit code and captured logs             |
+| `harness::evolve`   | Run `EvolutionPlanner` against `RunMetrics` and apply resulting diff       |
+| `harness::canary`   | Deploy a canary image alongside the current harness (`traffic_percent` arg)|
 
 ## Handlers (behind `--features baml`)
 

@@ -410,6 +410,7 @@ dependencies = [
 name = "cruxx-planner"
 version = "0.2.5"
 dependencies = [
+ "cruxx-core",
  "cruxx-script",
  "serde",
  "serde_json",

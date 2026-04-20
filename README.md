@@ -41,14 +41,14 @@ the function returns. That value is:
 
 | Crate                                   | Description                                              |
 | --------------------------------------- | -------------------------------------------------------- |
-| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros` |
-| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                          |
-| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]` proc macro                             |
-| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                           |
-| [`cruxx-agentic`](crates/cruxx-agentic) | Built-in step handlers (shell, fs, git, json, llm)       |
-| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers   |
-| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                     |
-| [`cruxx-planner`](crates/cruxx-planner) | Goal-to-pipeline planner for cruxx-script                |
+| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros`            |
+| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                     |
+| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros   |
+| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                      |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness        |
+| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers              |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                |
+| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution        |
 
 ## Features
 
@@ -80,6 +80,56 @@ actions (skip, retry, escalate, substitute).
 
 **Replay** -- strict or lenient mode. Strict rejects hash mismatches; lenient skips removed steps
 and returns cache misses for changed ones.
+
+**`HarnessProfile`** -- resource specification for a container or process harness (image, env,
+limits). Paired with `ResourceHints` for advisory scheduling metadata and `HarnessDiff` to
+describe incremental profile changes.
+
+**`SafetyPolicy` trait** -- port for user-defined approval logic. Receives a proposed
+`HarnessDiff` and returns `Approved`, `Rejected`, or `RequiresApproval`. Two adapters ship in
+`cruxx-agentic`: `AutoApproveGate` (always approves) and `TerminalApprovalGate` (interactive
+stdin prompt).
+
+**`EvolutionPlanner`** (`cruxx-planner`) -- drives deterministic, metrics-based profile
+evolution. Accepts `RunMetrics` and emits a `HarnessDiff` describing resource adjustments.
+`EvolutionOutcome` records the result of applying a diff.
+
+## Orchestrator patterns
+
+The `harness::evolve` and `harness::canary` pipeline handlers expose container lifecycle
+management as first-class pipeline steps.
+
+```yaml
+steps:
+  - name: evolve_profile
+    handler: harness::evolve
+    args:
+      profile: base
+      metrics_from: run_metrics
+
+  - name: canary
+    handler: harness::canary
+    args:
+      image: myapp:next
+      traffic_percent: 10
+```
+
+Use `#[cruxx::harness]` to annotate a struct as a managed harness, and `#[cruxx::evolve]` to
+mark an `async fn` as an evolution entry point (injects `EvolutionPlanner` + `CruxCtx`):
+
+```rust
+#[cruxx::harness]
+struct ApiServer { image: String, replicas: u32 }
+
+#[cruxx::evolve]
+async fn scale_on_p99(metrics: RunMetrics) -> Crux<EvolutionOutcome> {
+    let diff = planner.suggest(&metrics).await?;
+    x.step("apply", || harness.apply_diff(&diff)).await
+}
+```
+
+The `on_approval_required` lifecycle hook fires when `SafetyPolicy` returns `RequiresApproval`,
+giving agents an opportunity to pause, log, or escalate before a diff is applied.
 
 ## Installation
 
@@ -187,7 +237,11 @@ Output:
 | `ctrl::noop`        | —                             | Pass input through unchanged                 |
 | `ctrl::log`         | —                             | Log to stderr and pass through               |
 | `ctrl::assert`      | `condition`                   | Assert condition is truthy or fail           |
-| `llm::invoke`       | `prompt`, `provider`, `model` | Raw LLM completion (OpenAI/Anthropic/Ollama) |
+| `llm::invoke`       | `prompt`, `provider`, `model` | Raw LLM completion (OpenAI/Anthropic/Ollama)      |
+| `container::run`    | `image`, `env`, `limits`      | Start a container from a `HarnessProfile`         |
+| `container::wait`   | `timeout_ms`                  | Block until container exits, emit exit code/logs  |
+| `harness::evolve`   | `profile`, `metrics_from`     | Run `EvolutionPlanner` and apply resulting diff   |
+| `harness::canary`   | `image`, `traffic_percent`    | Deploy canary alongside current harness           |
 
 **Behind `--features baml`:**
 
