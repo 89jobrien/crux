@@ -1,0 +1,15 @@
+{
+  "client": "OpenAI",
+  "function": "AssessHealth",
+  "input": {
+    "name": "crux",
+    "pushed_at": "2026-04-20T12:00:00Z",
+    "commit_dates": [
+      "2026-04-20",
+      "2026-04-19",
+      "2026-04-18",
+      "2026-04-15"
+    ],
+    "open_issues": 3
+  }
+}

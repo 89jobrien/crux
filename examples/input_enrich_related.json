@@ -1,0 +1,19 @@
+{
+  "client": "OpenAI",
+  "function": "SuggestRelated",
+  "input": {
+    "name": "crux",
+    "description": "Agentic DSL for Rust with macros, traits, and types for explicit agentic control flow.",
+    "category": "runtime-labs",
+    "all_projects": [
+      "braid",
+      "slash",
+      "rx",
+      "devloop",
+      "minibox",
+      "doob",
+      "devkit",
+      "obfsck"
+    ]
+  }
+}

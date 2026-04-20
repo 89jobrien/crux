@@ -1,0 +1,14 @@
+{
+  "client": "OpenAI",
+  "function": "GenerateChangelog",
+  "input": {
+    "name": "crux",
+    "commits": [
+      "438d7d5 docs: revise walkthrough series for cruxx rename and clarity",
+      "fcea75b chore: bump all crate versions to 0.2.5, rename binary to crux",
+      "4fce1c0 refactor: rename cruxai to cruxx, rename crate directories to cruxx-*",
+      "9da80b0 chore: bump workspace version to 0.2.5",
+      "cae63c9 fix: update stale #[crux::agent] references to #[cruxai::agent] in macro crate"
+    ]
+  }
+}

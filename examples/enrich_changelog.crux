@@ -1,0 +1,11 @@
+pipeline: enrich_changelog
+# Input: { function: "GenerateChangelog", input: { name, commits } }
+# Output: { summary: "...", highlights: [...] }
+budget: { calls: 2 }
+
+steps:
+  - step: changelog
+    handler: llm::extract
+
+  - step: log
+    handler: ctrl::log

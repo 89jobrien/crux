@@ -1,0 +1,11 @@
+pipeline: enrich_health
+# Input: { function: "AssessHealth", input: { name, pushed_at, commit_dates, open_issues } }
+# Output: { status: "...", confidence: 0.0, reason: "..." }
+budget: { calls: 2 }
+
+steps:
+  - step: health
+    handler: llm::extract
+
+  - step: log
+    handler: ctrl::log

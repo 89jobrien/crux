@@ -1,0 +1,15 @@
+{
+  "client": "OpenAI",
+  "function": "ClassifyProject",
+  "input": {
+    "name": "crux",
+    "description": "Agentic DSL for Rust with macros, traits, and types for explicit agentic control flow.",
+    "language": "Rust",
+    "topics": ["agents", "dsl", "macros", "rust"],
+    "commits": [
+      "refactor: rename cruxai to cruxx",
+      "feat: add speculation builder",
+      "feat: add replay cache with strict/lenient modes"
+    ]
+  }
+}

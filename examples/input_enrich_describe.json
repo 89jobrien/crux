@@ -1,0 +1,14 @@
+{
+  "client": "OpenAI",
+  "function": "DescribeProject",
+  "input": {
+    "name": "crux",
+    "language": "Rust",
+    "readme": "Agentic DSL for Rust -- macros, traits, and types that make agentic control flow explicit in the type system.",
+    "commits": [
+      "refactor: rename cruxai to cruxx",
+      "fix: update stale agent references in macro crate",
+      "feat: add delegation builder with per-call-site budget"
+    ]
+  }
+}

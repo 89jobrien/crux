@@ -1,0 +1,11 @@
+pipeline: enrich_related
+# Input: { function: "SuggestRelated", input: { name, description, category, all_projects } }
+# Output: { related: ["...", "...", "..."] }
+budget: { calls: 2 }
+
+steps:
+  - step: related
+    handler: llm::extract
+
+  - step: log
+    handler: ctrl::log

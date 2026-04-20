@@ -1,0 +1,11 @@
+pipeline: enrich_describe
+# Input: { function: "DescribeProject", input: { name, language, readme, commits } }
+# Output: { description: "..." }
+budget: { calls: 2 }
+
+steps:
+  - step: describe
+    handler: llm::extract
+
+  - step: log
+    handler: ctrl::log
