@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -e
 
+# Ensure generated baml_client module exists for cargo fmt
+mkdir -p crates/crux-agentic/src/baml_client
+[ -f crates/crux-agentic/src/baml_client/mod.rs ] || touch crates/crux-agentic/src/baml_client/mod.rs
+
 echo "pre-commit: fmt check"
 cargo fmt --all -- --check
 
