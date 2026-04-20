@@ -4,6 +4,7 @@
 //! module's `register` function individually to pick only what you need.
 
 pub mod adapters;
+pub mod handlers;
 pub mod container;
 pub mod ctrl;
 pub mod error;
