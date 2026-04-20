@@ -34,7 +34,23 @@ pub use provider::{LlmProvider, LlmRequest, LlmResponse};
 #[cfg(feature = "baml")]
 pub(crate) mod baml_client;
 
+use cruxx_core::prelude::CruxErr;
 use cruxx_script::HandlerRegistry;
+use serde_json::Value;
+use std::future::Future;
+
+/// Register a named agent closure so that `delegate:` pipeline steps can invoke it.
+///
+/// This is the public API for pre-registering agents without requiring a concrete
+/// [`cruxx_core::prelude::Agent`] impl.  Accepts any `async Fn(Value) -> Result<Value,
+/// CruxErr>`.
+pub fn register_agent<F, Fut>(registry: &mut HandlerRegistry, name: impl Into<String>, f: F)
+where
+    F: Fn(Value) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+{
+    registry.agent_fn(name, f);
+}
 
 /// Register all built-in handlers into the given registry.
 ///

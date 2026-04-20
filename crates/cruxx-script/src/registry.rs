@@ -108,6 +108,21 @@ impl HandlerRegistry {
         );
     }
 
+    /// Register a named agent using a plain async closure.
+    ///
+    /// Unlike [`agent`](Self::agent), this does not require a concrete [`Agent`] impl —
+    /// any `async Fn(Value) -> Result<Value, CruxErr>` is accepted.  This is the
+    /// preferred way to register pipeline-level delegate targets programmatically.
+    pub fn agent_fn<F, Fut>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+    {
+        let name = name.into();
+        self.agents
+            .insert(name, Arc::new(move |v| Box::pin(f(v))));
+    }
+
     /// Look up a handler by name.
     pub fn get_handler(&self, name: &str) -> Option<&BoxHandler> {
         self.handlers.get(name)
