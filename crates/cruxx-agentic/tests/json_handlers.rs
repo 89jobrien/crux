@@ -73,3 +73,63 @@ async fn jq_missing_path_returns_null() {
     let result = handler(input).await.unwrap();
     assert_eq!(result, json!(null));
 }
+
+#[tokio::test]
+async fn jq_keys_returns_sorted_keys() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": "keys"}, "b": 2, "a": 1});
+    let result = handler(input).await.unwrap();
+    // keys of the payload (args key excluded)
+    assert!(result.is_array());
+    let arr: Vec<&str> = result.as_array().unwrap().iter()
+        .filter_map(|v| v.as_str()).collect();
+    assert!(arr.contains(&"a"));
+    assert!(arr.contains(&"b"));
+    assert!(!arr.contains(&"args"));
+}
+
+#[tokio::test]
+async fn jq_length_returns_count() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".items | length"}, "items": [1, 2, 3]});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!(3));
+}
+
+#[tokio::test]
+async fn jq_type_returns_type_string() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".count | type"}, "count": 42});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!("number"));
+}
+
+#[tokio::test]
+async fn jq_has_key_returns_bool() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input_yes = json!({"args": {"expr": "has(\"name\")"}, "name": "alice"});
+    let result = handler(input_yes).await.unwrap();
+    assert_eq!(result, json!(true));
+}
+
+#[tokio::test]
+async fn jq_first_returns_first_element() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".items | first"}, "items": ["x", "y"]});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!("x"));
+}
+
+#[tokio::test]
+async fn jq_last_returns_last_element() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".items | last"}, "items": ["x", "y", "z"]});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!("z"));
+}
