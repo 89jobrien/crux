@@ -39,16 +39,16 @@ the function returns. That value is:
 
 ## Crates
 
-| Crate                                 | Description                                                |
-| ------------------------------------- | ---------------------------------------------------------- |
-| [`cruxx`](crates/cruxx)               | Facade crate -- re-exports `cruxx-core` + `cruxx-macros` |
-| [`cruxx-core`](crates/cruxx-core)     | Core types, traits, and runtime                            |
-| [`cruxx-macros`](crates/cruxx-macros) | `#[cruxx::agent]` proc macro                              |
-| [`cruxx-script`](crates/cruxx-script) | YAML-driven pipeline scripting                             |
-| [`cruxx-agentic`](crates/cruxx-agentic) | Built-in step handlers (shell, fs, git, json, llm)         |
-| [`cruxx-model`](crates/cruxx-model)   | Canonical model ID types and provider-specific parsers     |
-| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                       |
-| [`cruxx-planner`](crates/cruxx-planner) | Goal-to-pipeline planner for cruxx-script                   |
+| Crate                                   | Description                                              |
+| --------------------------------------- | -------------------------------------------------------- |
+| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros` |
+| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                          |
+| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]` proc macro                             |
+| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                           |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Built-in step handlers (shell, fs, git, json, llm)       |
+| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers   |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                     |
+| [`cruxx-planner`](crates/cruxx-planner) | Goal-to-pipeline planner for cruxx-script                |
 
 ## Features
 

@@ -28,11 +28,19 @@ type BudgetHandler = Box<
         + Sync,
 >;
 
+/// Boxed async handler for approval-required events.
+type ApprovalHandler = Box<
+    dyn Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>
+        + Send
+        + Sync,
+>;
+
 pub struct HookRegistry {
     pub(crate) confidence_threshold: Option<f32>,
     confidence_handler: Option<ConfidenceHandler>,
     failure_handler: Option<FailureHandler>,
     budget_handler: Option<BudgetHandler>,
+    approval_handler: Option<ApprovalHandler>,
 }
 
 impl HookRegistry {
@@ -42,6 +50,7 @@ impl HookRegistry {
             confidence_handler: None,
             failure_handler: None,
             budget_handler: None,
+            approval_handler: None,
         }
     }
 
@@ -118,6 +127,27 @@ impl HookRegistry {
     pub fn has_failure_handler(&self) -> bool {
         self.failure_handler.is_some()
     }
+
+    /// Register an approval-required handler. Fires when a step needs gate approval.
+    pub fn on_approval_required<F, Fut>(&mut self, handler: F)
+    where
+        F: Fn(serde_json::Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Recovery<serde_json::Value>> + Send + 'static,
+    {
+        self.approval_handler = Some(Box::new(move |req| Box::pin(handler(req))));
+    }
+
+    /// Invoke the approval handler if registered.
+    pub async fn check_approval(
+        &self,
+        request: serde_json::Value,
+    ) -> Option<Recovery<serde_json::Value>> {
+        if let Some(handler) = &self.approval_handler {
+            Some(handler(request).await)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for HookRegistry {
@@ -133,6 +163,7 @@ impl std::fmt::Debug for HookRegistry {
             .field("has_confidence_handler", &self.confidence_handler.is_some())
             .field("has_failure_handler", &self.failure_handler.is_some())
             .field("has_budget_handler", &self.budget_handler.is_some())
+            .field("has_approval_handler", &self.approval_handler.is_some())
             .finish()
     }
 }
@@ -174,5 +205,24 @@ mod tests {
     async fn budget_returns_none_without_handler() {
         let hooks = HookRegistry::new();
         assert!(hooks.check_budget(Budget::tokens(10)).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn approval_fires_when_registered() {
+        let mut hooks = HookRegistry::new();
+        hooks.on_approval_required(|req| async move {
+            let _ = req;
+            Recovery::Continue
+        });
+        let request = serde_json::json!({"summary": "enable network"});
+        let result = hooks.check_approval(request).await;
+        assert!(result.is_some());
+    }
+
+    #[tokio::test]
+    async fn approval_returns_none_without_handler() {
+        let hooks = HookRegistry::new();
+        let request = serde_json::json!({"summary": "enable network"});
+        assert!(hooks.check_approval(request).await.is_none());
     }
 }
