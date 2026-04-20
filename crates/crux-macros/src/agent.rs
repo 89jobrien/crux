@@ -1,7 +1,7 @@
-/// Code generation for `#[crux::agent]`.
+/// Code generation for `#[cruxai::agent]`.
 ///
 /// Transforms:
-///   #[crux::agent]
+///   #[cruxai::agent]
 ///   async fn hello(name: String) -> Crux<String> { ... }
 ///
 /// Into:
@@ -191,7 +191,7 @@ fn extract_crux_inner_type(output: &syn::ReturnType) -> syn::Result<TokenStream>
     match output {
         syn::ReturnType::Default => Err(syn::Error::new_spanned(
             output,
-            "#[crux::agent] functions must return Crux<T>",
+            "#[cruxai::agent] functions must return Crux<T>",
         )),
         syn::ReturnType::Type(_, ty) => {
             // Parse Crux<T> and extract T

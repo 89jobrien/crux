@@ -1,6 +1,6 @@
 /// crux-macros: proc macros for the crux agentic DSL.
 ///
-/// Provides `#[crux::agent]` which transforms async functions into
+/// Provides `#[cruxai::agent]` which transforms async functions into
 /// traced, replayable agent functions.
 use proc_macro::TokenStream;
 

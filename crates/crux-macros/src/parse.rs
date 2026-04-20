@@ -1,4 +1,4 @@
-/// Parse `#[crux::agent]` attribute arguments.
+/// Parse `#[cruxai::agent]` attribute arguments.
 use syn::parse::{Parse, ParseStream};
 use syn::{Ident, LitStr, Token};
 
