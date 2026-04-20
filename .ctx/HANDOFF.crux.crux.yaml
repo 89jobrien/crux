@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: "20260419::193106"
+updated: "20260420::001527"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -21,6 +21,23 @@ items:
       - docs/planner-design.md
 
 log:
+  - date: "20260420::001527"
+    session: 21
+    summary: >
+      Fixed CI fmt failure caused by missing generated baml_client module on fresh checkout.
+      Added baml_client stub step to ci.yml, release.yml, and pre-commit hook. Reordered
+      CI gates (fmt+clippy before build, removed redundant cargo check). Added nightly
+      release workflow (regression tests → GitHub pre-release on schedule). Updated
+      BAML clients.baml: env-configurable model names (OPENAI_MODEL, ANTHROPIC_MODEL)
+      with fallback to updated defaults; Anthropic default updated to claude-haiku-4-5-20251001.
+      Expanded .env.example with model vars, OLLAMA_BASE_URL, RUST_LOG.
+    commits:
+      - sha: 7d5d47e
+        branch: main
+      - sha: ca00d9b
+        branch: main
+      - sha: 8143fda
+        branch: main
   - date: "20260419::193106"
     session: 20
     summary: >
@@ -64,57 +81,30 @@ log:
     summary: >
       Walkthrough doc audit: fixed CruxCtx binding (t→x), edition 2024, MSRV 1.85,
       feature flags (tokio→tokio-runtime, sqlite→redb) across all 8 walkthrough files and
-      README. Reviewed and merged 8 orphaned subagent worktrees (crux-agentic modules:
-      json, fs, shell, llm, git, ctrl + crux-script static args + example pipelines) with
-      sentinel review and forge sequential merge. Fixed blocking issues: error.rs design
-      consistency, json::pick payload fix, json::merge args-stripping doc, api_key lookup
-      consistency, git ref→revision rename, pr_review hardcoded approve. 242/242 tests pass.
-      Added orphaned worktree detection to workspace-health skill and subagent guardrails to
-      CLAUDE.md and subagent-setup skill.
+      README. Reviewed and merged 8 orphaned subagent worktrees with sentinel review and
+      forge sequential merge. Fixed blocking issues across crux-agentic modules.
+      242/242 tests pass.
     commits:
       - sha: 2fd62a5
         branch: main
-        note: "docs(walkthrough): fix CruxCtx binding x, edition 2024, MSRV 1.85, feature flags"
       - sha: 883790a
         branch: main
-        note: "fix(crux-agentic/json): pick from payload not raw input; document args stripping in merge"
       - sha: 4f73aa3
         branch: main
-        note: "merge(crux-agentic): integrate json module skeleton"
       - sha: ff25b6e
         branch: main
-        note: "docs(crux-agentic/shell): add doc comment noting static args injection requirement"
       - sha: 466aa08
         branch: main
-        note: "fix(crux-agentic/git): rename ref arg to revision"
       - sha: 5eb1fee
         branch: main
-        note: "fix(examples/pr_review): replace hardcoded --approve with ctrl::log + TODO"
   - date: "20260419:142500"
     session: 17
     summary: >
       Added llm::decompose handler (BAML DecomposeSpec function) to crux-agentic.
-      Ran all three pipeline examples end-to-end: extract_entities, extract_summary,
-      decompose_spec. Added .mise.toml pinning baml-cli 0.221.0. 241/241 tests pass.
+      Ran all three pipeline examples end-to-end. Added .mise.toml pinning baml-cli 0.221.0.
+      241/241 tests pass.
     commits:
       - sha: 87764f3
         branch: main
-        note: "feat(crux-agentic): llm::decompose handler + decompose_spec pipeline example"
       - sha: 397e422
         branch: main
-        note: "feat(baml): add project enrichment and CI triage functions"
-  - date: "20260418:180000"
-    session: 16
-    summary: >
-      LlmProvider trait + LlmStep<P> + AnthropicAdapter + OpenAiAdapter added to
-      crux-agentic (spec 2026-04-18-llm-provider-trait-design.md). Wave 1 TDD agent:
-      38/38 tests, clippy clean. crux-agentic 0.2.3 published. GitHub issues #1 and #2
-      closed (done prior session), #3 updated to 0.2.3, #5 and #6 created and #5 closed.
-      minibox-agent Wave 2 agent in progress (crux-25).
-    commits:
-      - sha: 129e3bd
-        branch: main
-        note: "design spec: LlmProvider + LlmStep + minibox-agent adapter"
-      - sha: a4ef7de
-        branch: main
-        note: "feat(crux-agentic): LlmProvider trait, LlmStep, typed adapters (v0.2.3)"
