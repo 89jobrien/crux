@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash:*)",
+      "Bash(nu:*)",
+      "Write",
+      "Update",
+      "Read",
+      "Glob",
+      "Search",
+      "Agent",
+      "WebFetch",
+      "Bash(echo:*)",
+      "Bash(uv:*)",
+      "Bash(devloop:*)",
+      "Bash(crux:*)",
+      "Bash(devkit:*)",
+      "Bash(baml-cli:*)",
+      "Bash(head:*)",
+      "Bash(xargs:*)"
+    ]
+  }
+}

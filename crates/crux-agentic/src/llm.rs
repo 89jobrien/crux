@@ -172,11 +172,11 @@ pub fn register_decompose(registry: &mut HandlerRegistry) {
 }
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("llm::complete", |input: Value| async move {
+    registry.handler("llm::invoke", |input: Value| async move {
         let prompt = input
             .get("prompt")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| CruxErr::step_failed("llm::complete", "missing 'prompt' field"))?
+            .ok_or_else(|| CruxErr::step_failed("llm::invoke", "missing 'prompt' field"))?
             .to_string();
 
         let vendor = opt_str(&input, "provider")

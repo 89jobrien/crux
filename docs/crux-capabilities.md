@@ -36,7 +36,7 @@ Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
 | `ctrl::noop`        | Pass input through unchanged                   |
 | `ctrl::log`         | Log to stderr and pass through                 |
 | `ctrl::assert`      | Assert `args.condition` is truthy or fail      |
-| `llm::complete`     | Raw LLM completion (OpenAI/Anthropic/Ollama)   |
+| `llm::invoke`     | Raw LLM completion (OpenAI/Anthropic/Ollama)   |
 
 ## Handlers (behind `--features baml`)
 

@@ -6,6 +6,7 @@ target/
 !.ctx/HANDOFF.md
 !.ctx/HANDOFF.state.yaml
 *.local.md
+*.local.json
 .DS_Store
 .claude/worktrees/
 
@@ -18,3 +19,4 @@ target/
 # handoff-end
 #
 .envrc
+.claude/settings.local.json

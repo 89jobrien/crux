@@ -56,7 +56,7 @@ function GeneratePipeline(goal: string, input: PlannerIntent) -> PipelineYaml {
 
     Goal: {{ goal }}
     Constraints: {{ input.constraints }}
-    Handler Registry: [fs::read, fs::write, llm::complete, llm::extract,
+    Handler Registry: [fs::read, fs::write, llm::invoke, llm::extract,
                        json::parse, json::write, shell::capture, ...]
 
     Output: Valid BAML-generated YAML following crux-script schema.
@@ -217,12 +217,12 @@ steps:
 ### Static Mode
 
 **Input:** NL goal or structured intent YAML
-**Output:** `.yaml` file on disk
-**Execution:** User runs `crux-run <generated>.yaml <input>.json`
+**Output:** `.crux` file on disk
+**Execution:** User runs `crux-run <generated>.crux <input>.json`
 
 ```bash
-crux-planner plan --goal "summarize and extract" --output my_pipeline.yaml
-crux-run my_pipeline.yaml input.json
+crux-planner plan --goal "summarize and extract" --output my_pipeline.crux
+crux-run my_pipeline.crux input.json
 ```
 
 **Use case:** One-off scripts, reusable templates, version control.
@@ -311,7 +311,7 @@ steps:
 - [ ] Write BAML function schema for pipeline generation
 - [ ] Wire to `crux-agentic` planner module
 - [ ] Implement `planner::generate(goal) -> String` (returns YAML)
-- [ ] CLI: `crux-planner plan --goal "..." --output plan.yaml`
+- [ ] CLI: `crux-planner plan --goal "..." --output plan.crux`
 - [ ] Integration tests with OPENAI_API_KEY
 
 ### Phase 3: Path B (Rust Crate, High Effort, Future)

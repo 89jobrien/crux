@@ -59,7 +59,7 @@ fn handler_manifest() -> Vec<String> {
         "ctrl::noop -- pass through unchanged".into(),
         "ctrl::log -- log input and pass through".into(),
         "ctrl::assert -- assert condition on input".into(),
-        "llm::complete -- raw LLM completion".into(),
+        "llm::invoke -- raw LLM completion".into(),
         "llm::extract -- BAML structured extraction".into(),
         "llm::decompose -- decompose spec into tasks".into(),
     ]

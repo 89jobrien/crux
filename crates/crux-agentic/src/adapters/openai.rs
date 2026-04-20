@@ -64,15 +64,15 @@ impl LlmProvider for OpenAiAdapter {
             let resp = http_req
                 .send()
                 .await
-                .map_err(|e| CruxErr::step_failed("llm::complete", format!("HTTP error: {e}")))?;
+                .map_err(|e| CruxErr::step_failed("llm::invoke", format!("HTTP error: {e}")))?;
 
             let json: serde_json::Value = resp.json().await.map_err(|e| {
-                CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}"))
+                CruxErr::step_failed("llm::invoke", format!("JSON decode error: {e}"))
             })?;
 
             let text = json["choices"][0]["message"]["content"]
                 .as_str()
-                .ok_or_else(|| CruxErr::step_failed("llm::complete", "unexpected response shape"))?
+                .ok_or_else(|| CruxErr::step_failed("llm::invoke", "unexpected response shape"))?
                 .to_string();
 
             Ok(LlmResponse {

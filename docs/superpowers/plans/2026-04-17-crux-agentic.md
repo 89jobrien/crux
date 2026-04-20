@@ -35,7 +35,7 @@ updated last to use the canonical builtin handler names with embedded `args`.
 | `crates/crux-agentic/src/git.rs` | `git::staged_files`, `git::diff`, `git::log`, `git::status` |
 | `crates/crux-agentic/src/json.rs` | `json::pick`, `json::merge`, `json::jq` |
 | `crates/crux-agentic/src/ctrl.rs` | `ctrl::log`, `ctrl::noop`, `ctrl::assert` |
-| `crates/crux-agentic/src/llm.rs` | `llm::complete` (OpenAI-compat + Anthropic paths) |
+| `crates/crux-agentic/src/llm.rs` | `llm::invoke` (OpenAI-compat + Anthropic paths) |
 | `crates/crux-agentic/src/error.rs` | `AgenticError` → `CruxErr` conversion |
 | `crates/crux-agentic/tests/shell.rs` | Integration tests for shell module |
 | `crates/crux-agentic/tests/fs.rs` | Integration tests for fs module |
@@ -1037,7 +1037,7 @@ git commit -m "feat(crux-agentic): implement json module (pick, merge, jq)"
 - Modify: `crates/crux-agentic/src/llm.rs`
 - Create: `crates/crux-agentic/tests/llm.rs`
 
-Handler: `llm::complete`
+Handler: `llm::invoke`
 
 Input contract:
 ```json
@@ -1125,7 +1125,7 @@ async fn mock_anthropic_server() -> (String, tokio::task::JoinHandle<()>) {
 async fn complete_openai_compat() {
     let (base_url, _server) = mock_openai_server().await;
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({
         "prompt": "What is 2+2?",
         "args": {
@@ -1143,7 +1143,7 @@ async fn complete_openai_compat() {
 async fn complete_anthropic_path() {
     let (base_url, _server) = mock_anthropic_server().await;
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({
         "prompt": "What is 2+2?",
         "args": {
@@ -1161,7 +1161,7 @@ async fn complete_anthropic_path() {
 #[tokio::test]
 async fn complete_missing_prompt_errors() {
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({"args": {"model": "x"}})).await;
     assert!(result.is_err());
 }
@@ -1182,10 +1182,10 @@ use serde_json::{Value, json};
 use crate::error::{opt_str, require_str};
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler("llm::complete", |input: Value| async move {
+    registry.handler("llm::invoke", |input: Value| async move {
         let prompt = input.get("prompt")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| CruxErr::step_failed("llm::complete", "missing 'prompt' field"))?
+            .ok_or_else(|| CruxErr::step_failed("llm::invoke", "missing 'prompt' field"))?
             .to_string();
 
         let provider = opt_str(&input, "provider").unwrap_or("openai").to_string();
@@ -1246,16 +1246,16 @@ async fn complete_openai(
     }
 
     let resp = req.send().await.map_err(|e| {
-        CruxErr::step_failed("llm::complete", format!("HTTP error: {e}"))
+        CruxErr::step_failed("llm::invoke", format!("HTTP error: {e}"))
     })?;
 
     let json: Value = resp.json().await.map_err(|e| {
-        CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}"))
+        CruxErr::step_failed("llm::invoke", format!("JSON decode error: {e}"))
     })?;
 
     let content = json["choices"][0]["message"]["content"]
         .as_str()
-        .ok_or_else(|| CruxErr::step_failed("llm::complete", "unexpected response shape"))?
+        .ok_or_else(|| CruxErr::step_failed("llm::invoke", "unexpected response shape"))?
         .to_string();
 
     Ok(json!({
@@ -1291,15 +1291,15 @@ async fn complete_anthropic(
         .json(&body)
         .send()
         .await
-        .map_err(|e| CruxErr::step_failed("llm::complete", format!("HTTP error: {e}")))?;
+        .map_err(|e| CruxErr::step_failed("llm::invoke", format!("HTTP error: {e}")))?;
 
     let json: Value = resp.json().await.map_err(|e| {
-        CruxErr::step_failed("llm::complete", format!("JSON decode error: {e}"))
+        CruxErr::step_failed("llm::invoke", format!("JSON decode error: {e}"))
     })?;
 
     let content = json["content"][0]["text"]
         .as_str()
-        .ok_or_else(|| CruxErr::step_failed("llm::complete", "unexpected response shape"))?
+        .ok_or_else(|| CruxErr::step_failed("llm::invoke", "unexpected response shape"))?
         .to_string();
 
     Ok(json!({
@@ -1352,7 +1352,7 @@ fn register_all_installs_expected_handlers() {
         "fs::read", "fs::write", "fs::glob", "fs::exists",
         "git::staged_files", "git::diff", "git::log", "git::status",
         "json::pick", "json::merge", "json::jq",
-        "llm::complete",
+        "llm::invoke",
     ];
 
     for name in &expected {

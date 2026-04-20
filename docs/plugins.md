@@ -18,7 +18,7 @@ protocol over stdin/stdout.
 2. Run a pipeline that uses plugin handlers:
 
    ```bash
-   crux run my-pipeline.yaml
+   crux run my-pipeline.crux
    ```
 
 3. Or generate a pipeline that uses plugins:

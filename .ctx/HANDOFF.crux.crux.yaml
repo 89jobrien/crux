@@ -55,7 +55,7 @@ log:
       Implemented cruxai-model crate (canonical model ID system): Vendor enum, CanonicalModelId,
       ProviderModelRef, vendor-specific parsers (Anthropic, OpenAI, Google, Mistral, Ollama).
       Wired into crux-agentic: adapters updated to ProviderModelRef, OllamaAdapter added,
-      llm::complete handler uses typed Vendor dispatch. Council review: fixed dead MissingSegment
+      llm::invoke handler uses typed Vendor dispatch. Council review: fixed dead MissingSegment
       variant and Mistral tier semantics. 76/76 tests pass.
     commits:
       - sha: 8ba0dca

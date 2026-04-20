@@ -116,13 +116,13 @@ impl LlmProvider for OpenAiAdapter { ... }
 
 ### Modified: `src/llm.rs`
 
-The `llm::complete` and `llm::extract` script handlers are **rewired** to use the adapter
+The `llm::invoke` and `llm::extract` script handlers are **rewired** to use the adapter
 structs. The raw reqwest calls are removed. External behavior (input JSON shape, output JSON
 shape) is unchanged — existing crux-script pipelines continue to work without modification.
 
 ```rust
-// llm::complete handler: instantiate adapter from "provider" field, call .complete()
-registry.handler("llm::complete", |input: Value| async move {
+// llm::invoke handler: instantiate adapter from "provider" field, call .complete()
+registry.handler("llm::invoke", |input: Value| async move {
     let provider = opt_str(&input, "provider").unwrap_or("openai");
     let req = LlmRequest::from_json(&input)?;
     match provider {
@@ -249,7 +249,7 @@ pub use cruxai_core::{agent::Agent, ctx::CruxCtx, types::error::CruxErr};
 - Unit test `AnthropicAdapter` and `OpenAiAdapter` with `wiremock` (already a dev-dep in minibox;
   add to crux dev-deps)
 - Unit test `LlmStep` with a `MockLlmProvider` that returns a fixed `LlmResponse`
-- Verify `llm::complete` handler output shape is unchanged (regression test against existing
+- Verify `llm::invoke` handler output shape is unchanged (regression test against existing
   crux-script pipeline tests)
 
 **minibox-agent:**

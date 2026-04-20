@@ -57,7 +57,7 @@ async fn mock_anthropic_server() -> (String, tokio::task::JoinHandle<()>) {
 async fn complete_openai_compat() {
     let (base_url, _server) = mock_openai_server().await;
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({
         "prompt": "What is 2+2?",
         "args": {
@@ -77,7 +77,7 @@ async fn complete_openai_compat() {
 async fn complete_anthropic_path() {
     let (base_url, _server) = mock_anthropic_server().await;
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({
         "prompt": "What is 2+2?",
         "args": {
@@ -97,7 +97,7 @@ async fn complete_anthropic_path() {
 #[tokio::test]
 async fn complete_missing_prompt_errors() {
     let reg = registry();
-    let handler = reg.get_handler("llm::complete").unwrap();
+    let handler = reg.get_handler("llm::invoke").unwrap();
     let result = handler(json!({"args": {"model": "x"}})).await;
     assert!(result.is_err());
 }

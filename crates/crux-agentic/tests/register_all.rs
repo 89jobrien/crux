@@ -22,7 +22,7 @@ fn register_all_installs_expected_handlers() {
         "json::pick",
         "json::merge",
         "json::jq",
-        "llm::complete",
+        "llm::invoke",
     ];
 
     for name in &expected {

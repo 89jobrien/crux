@@ -39,22 +39,27 @@ the function returns. That value is:
 
 ## Crates
 
-| Crate | Description |
-|-------|-------------|
-| [`cruxai`](crates/crux) | Facade crate -- re-exports `cruxai-core` + `cruxai-macros` |
-| [`cruxai-core`](crates/crux-core) | Core types, traits, and runtime |
-| [`cruxai-macros`](crates/crux-macros) | `#[cruxai::agent]` proc macro |
-| [`cruxai-script`](crates/crux-script) | YAML-driven pipeline scripting |
+| Crate                                 | Description                                                |
+| ------------------------------------- | ---------------------------------------------------------- |
+| [`cruxai`](crates/crux)               | Facade crate -- re-exports `cruxai-core` + `cruxai-macros` |
+| [`cruxai-core`](crates/crux-core)     | Core types, traits, and runtime                            |
+| [`cruxai-macros`](crates/crux-macros) | `#[cruxai::agent]` proc macro                              |
+| [`cruxai-script`](crates/crux-script) | YAML-driven pipeline scripting                             |
+| [`crux-agentic`](crates/crux-agentic) | Built-in step handlers (shell, fs, git, json, llm)         |
+| [`cruxai-model`](crates/crux-model)   | Canonical model ID types and provider-specific parsers     |
+| [`crux-plugin`](crates/crux-plugin)   | Subprocess plugin host for pipelines                       |
+| [`crux-planner`](crates/crux-planner) | Goal-to-pipeline planner for crux-script                   |
 
 ## Features
 
 Enable via `cruxai`:
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `tokio-runtime` | yes | Async runtime support via tokio + futures |
-| `redb` | no | Persistent `TaskRegistry` backend via redb (pure-Rust) |
-| `tracing` | no | Instrument with `tracing` spans |
+| Feature         | Default | Description                                                                |
+| --------------- | ------- | -------------------------------------------------------------------------- |
+| `tokio-runtime` | yes     | Async runtime support via tokio + futures                                  |
+| `redb`          | no      | Persistent `TaskRegistry` backend via redb (pure-Rust)                     |
+| `tracing`       | no      | Instrument with `tracing` spans                                            |
+| `baml`          | no      | BAML-backed LLM extraction (`llm::extract`, `llm::decompose`, `llm::plan`) |
 
 ## Core concepts
 
@@ -108,7 +113,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 **Summarize text:**
 
 ```bash
-crux-run examples/extract_summary.yaml examples/input_summary.json
+crux-run examples/extract_summary.crux examples/input_summary.json
 ```
 
 ```
@@ -137,7 +142,7 @@ system via Crux<T> values.",
 **Extract named entities:**
 
 ```bash
-crux-run examples/extract_entities.yaml examples/input_entities.json
+crux-run examples/extract_entities.crux examples/input_entities.json
 ```
 
 ```
@@ -162,17 +167,38 @@ Output:
 
 ### Available handlers
 
-| Handler | Key args | Description |
-|---------|----------|-------------|
-| `llm::extract` | `function`, `input` | BAML-backed extraction (`baml` feature required) |
-| `llm::complete` | `prompt`, `provider`, `model` | Raw LLM completion via OpenAI or Anthropic |
-| `fs::read` | `path` | Read a file; output: `{ content, path }` |
-| `fs::write` | `path`, `content` | Write a string to a file |
-| `shell::capture` | `cmd` | Run a shell command; output: `{ stdout, stderr, exit_code }` |
-| `ctrl::log` | — | Log input to stderr and pass through |
-| `ctrl::noop` | — | Pass input through unchanged |
-| `json::pick` | `fields` | Extract named fields from the input object |
-| `json::jq` | `expr` | Minimal dot-path traversal (e.g. `".foo.bar"`) |
+**Always available:**
+
+| Handler             | Key args                      | Description                                  |
+| ------------------- | ----------------------------- | -------------------------------------------- |
+| `shell::exec`       | `cmd`                         | Run shell command, ignore exit code          |
+| `shell::capture`    | `cmd`                         | Run shell command, fail on non-zero exit     |
+| `fs::read`          | `path`                        | Read a file to string                        |
+| `fs::write`         | `path`, `content`             | Write a string to a file                     |
+| `fs::glob`          | `pattern`                     | Glob pattern match                           |
+| `fs::exists`        | `path`                        | Check path existence                         |
+| `git::staged_files` | —                             | `git diff --cached --name-only`              |
+| `git::diff`         | `revision`                    | `git diff [revision]`                        |
+| `git::log`          | `count`                       | `git log -N --format=%H\t%s`                 |
+| `git::status`       | —                             | `git status --porcelain`                     |
+| `json::pick`        | `fields`                      | Extract named fields from input object       |
+| `json::merge`       | `with`                        | Merge static object into input               |
+| `json::jq`          | `expr`                        | Dot-path traversal (e.g. `".foo.bar"`)       |
+| `ctrl::noop`        | —                             | Pass input through unchanged                 |
+| `ctrl::log`         | —                             | Log to stderr and pass through               |
+| `ctrl::assert`      | `condition`                   | Assert condition is truthy or fail           |
+| `llm::invoke`       | `prompt`, `provider`, `model` | Raw LLM completion (OpenAI/Anthropic/Ollama) |
+
+**Behind `--features baml`:**
+
+| Handler          | Key args            | Description                               |
+| ---------------- | ------------------- | ----------------------------------------- |
+| `llm::extract`   | `function`, `input` | BAML structured extraction                |
+| `llm::decompose` | `spec`              | Spec decomposition into task list         |
+| `llm::plan`      | `goal`              | Pipeline generation from natural language |
+
+See [docs/crux-capabilities.md](docs/crux-capabilities.md) for the full support
+matrix including combinators and known gaps.
 
 ## Examples
 
@@ -182,7 +208,7 @@ Output:
 cargo run --example basic_agent
 ```
 
-See [`examples/`](examples/) for pipeline YAML and input fixtures.
+See [`examples/`](examples/) for pipeline `.crux` files and input fixtures.
 
 ## Documentation
 

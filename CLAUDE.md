@@ -97,7 +97,7 @@ recovery path, not a fallback.
   `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
 - Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
 - Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
-  examples/<pipeline>.yaml examples/input_<name>.json`
+  examples/<pipeline>.crux examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
   for the exact injection commands (machine-local, gitignored).
 

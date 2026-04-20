@@ -44,7 +44,7 @@ function GeneratePipeline(goal: string, available_handlers: string[], constraint
            - shell::capture
 
     4. delegate (sub-pipeline call):
-       - delegate: llm::complete
+       - delegate: llm::invoke
          budget:
            tokens: 1000
 
@@ -53,14 +53,14 @@ function GeneratePipeline(goal: string, available_handlers: string[], constraint
          mode: pick_best
          arms:
            - llm::extract
-           - llm::complete
+           - llm::invoke
 
     6. route_on_confidence (conditional routing):
        - route_on_confidence: route-quality
          value: "steps.classify.confidence"
          routes:
            - range: "[0.0, 0.5)"
-             handler: llm::complete
+             handler: llm::invoke
            - range: "[0.5, 1.0]"
              handler: ctrl::noop
 
