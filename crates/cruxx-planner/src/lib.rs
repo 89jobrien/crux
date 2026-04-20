@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 pub mod evolution;
 pub mod metrics;
 
+#[cfg(feature = "baml")]
+pub mod llm;
+
+#[cfg(feature = "baml")]
+pub use llm::LlmPlanner;
+
 /// A user-facing goal to be translated into a pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Goal {

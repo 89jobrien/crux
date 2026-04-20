@@ -308,11 +308,12 @@ steps:
 - [ ] Snapshot golden pipeline examples (10-15 test cases)
 
 ### Phase 2: Path A (BAML-based, Low Effort)
-- [ ] Write BAML function schema for pipeline generation
-- [ ] Wire to `cruxx-agentic` planner module
-- [ ] Implement `planner::generate(goal) -> String` (returns `.cruxx` pipeline)
+- [x] Write BAML function schema for pipeline generation (`baml_src/planner.baml`)
+- [x] Wire to `cruxx-agentic` planner module (`crates/cruxx-agentic/src/planner.rs`)
+- [x] Implement `planner::generate_pipeline(goal) -> String` (returns `.cruxx` pipeline YAML)
+- [x] `LlmPlanner` type in `cruxx-planner` delegates to `cruxx-agentic::planner` (feature `baml`)
 - [ ] CLI: `cruxx-planner plan --goal "..." --output plan.cruxx`
-- [ ] Integration tests with OPENAI_API_KEY
+- [ ] Integration tests with OPENAI_API_KEY (test exists, gated `#[ignore]`)
 
 ### Phase 3: Path B (Rust Crate, High Effort, Future)
 - [ ] New crate `cruxx-planner` with AST + codegen
