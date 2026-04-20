@@ -102,9 +102,7 @@ impl ContainerClient for DockerContainerClient {
         _timeout_seconds: u64,
     ) -> Result<ContainerHandle, String> {
         use bollard::models::{ContainerCreateBody, HostConfig};
-        use bollard::query_parameters::{
-            CreateContainerOptionsBuilder, CreateImageOptionsBuilder,
-        };
+        use bollard::query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder};
         use futures::TryStreamExt;
 
         // Pull image if not present (best-effort; ignore errors).
@@ -141,10 +139,7 @@ impl ContainerClient for DockerContainerClient {
 
         let container = self
             .docker
-            .create_container(
-                Some(CreateContainerOptionsBuilder::default().build()),
-                body,
-            )
+            .create_container(Some(CreateContainerOptionsBuilder::default().build()), body)
             .await
             .map_err(|e| format!("create container: {e}"))?;
 

@@ -2,7 +2,13 @@ use cruxx_core::prelude::CruxErr;
 use cruxx_script::HandlerRegistry;
 use serde_json::{Value, json};
 
-use crate::adapters::container_client::{ContainerClient, MockContainerClient};
+use crate::adapters::container_client::ContainerClient;
+
+#[cfg(feature = "docker")]
+use crate::adapters::container_client::DockerContainerClient;
+
+#[cfg(not(feature = "docker"))]
+use crate::adapters::container_client::MockContainerClient;
 
 /// Register container step handlers.
 pub fn register(registry: &mut HandlerRegistry) {
@@ -12,6 +18,20 @@ pub fn register(registry: &mut HandlerRegistry) {
     registry.handler("container::wait", |input: Value| async move {
         handle_wait(input).await
     });
+}
+
+/// Build the default container client for the current feature set.
+///
+/// - With `docker` feature: connects to the local Docker daemon.
+/// - Without: uses `MockContainerClient` (test / CI safe).
+#[cfg(feature = "docker")]
+fn default_client() -> impl ContainerClient {
+    DockerContainerClient::new().expect("failed to connect to Docker daemon")
+}
+
+#[cfg(not(feature = "docker"))]
+fn default_client() -> impl ContainerClient {
+    MockContainerClient
 }
 
 async fn handle_run(input: Value) -> Result<Value, CruxErr> {
@@ -29,7 +49,7 @@ async fn handle_run(input: Value) -> Result<Value, CruxErr> {
     let cpu_millicores = args["cpu_millicores"].as_u64().unwrap_or(1000);
     let timeout = args["timeout_seconds"].as_u64().unwrap_or(300);
 
-    let client = MockContainerClient;
+    let client = default_client();
     let handle = client
         .run(image, &cmd, memory_mb, cpu_millicores, timeout)
         .await
@@ -44,7 +64,7 @@ async fn handle_wait(input: Value) -> Result<Value, CruxErr> {
         .ok_or_else(|| CruxErr::step_failed("container::wait", "missing container_id"))?;
     let timeout = args["timeout_seconds"].as_u64().unwrap_or(300);
 
-    let client = MockContainerClient;
+    let client = default_client();
     let state = client
         .wait(container_id, timeout)
         .await
