@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260420::062404"
+updated: "20260420:131613"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -23,17 +23,53 @@ items:
 
   - id: cruxx-26
     name: planner-implementation
-    title: "Implement cruxx-planner: goal-to-pipeline generation"
+    title: "Implement cruxx-planner: LLM-based goal-to-pipeline generation (Path A)"
     description: >
-      Implement the planner designed in docs/planner-design.md. Start with the
-      BAML-based path: NL goal → BAML function → .cruxx pipeline emitted to stdout.
-      New crate cruxx-planner or extension of cruxx-agentic.
+      Deterministic EvolutionPlanner (Path B) implemented this session. Remaining work:
+      the BAML-based NL path — NL goal → BAML function → .cruxx pipeline emitted to
+      stdout. See docs/planner-design.md.
     priority: P2
     status: open
     files:
       - docs/planner-design.md
+      - crates/cruxx-planner/src/lib.rs
+
+  - id: cruxx-28
+    name: container-real-adapter
+    title: "Implement real ContainerClient adapter (Docker/OCI)"
+    description: >
+      container::run and container::wait handlers use MockContainerClient. A real adapter
+      backed by Docker API or OCI runtime (e.g. containerd) is needed for production use.
+      ContainerClient trait is the port — add a new adapter under cruxx-agentic/src/adapters/.
+    priority: P2
+    status: open
+    files:
+      - crates/cruxx-agentic/src/adapters/container_client.rs
+      - crates/cruxx-agentic/src/container.rs
 
 log:
+  - date: "20260420:131613"
+    session: 25
+    summary: >
+      Implemented orchestrator patterns: HarnessProfile, ResourceHints, HarnessDiff,
+      EvolutionOutcome, SafetyPolicy trait, ApprovalGate trait, on_approval_required hook
+      (cruxx-core); container::run/wait, harness::evolve/canary handlers, AutoApproveGate,
+      TerminalApprovalGate (cruxx-agentic); EvolutionPlanner + RunMetrics (cruxx-planner);
+      #[cruxx::harness] and #[cruxx::evolve] proc macros (cruxx-macros). Updated all docs.
+      358/358 tests pass, clippy clean.
+    commits:
+      - sha: 115846b
+        branch: main
+      - sha: 51bf8e6
+        branch: main
+      - sha: ae488df
+        branch: main
+      - sha: eb65ad8
+        branch: main
+      - sha: b77f691
+        branch: main
+      - sha: 3772d0b
+        branch: main
   - date: "20260420::062404"
     session: 24
     summary: >
@@ -69,314 +105,4 @@ log:
       - sha: ca00d9b
         branch: main
       - sha: 8143fda
-        branch: main
-  - date: "20260419::193106"
-    session: 20
-    summary: >
-      Implemented cruxx-model crate (canonical model ID system): Vendor enum, CanonicalModelId,
-      ProviderModelRef, vendor-specific parsers (Anthropic, OpenAI, Google, Mistral, Ollama).
-      Wired into cruxx-agentic: adapters updated to ProviderModelRef, OllamaAdapter added,
-      llm::invoke handler uses typed Vendor dispatch. Council review: fixed dead MissingSegment
-      variant and Mistral tier semantics. 76/76 tests pass.
-    commits:
-      - sha: 8ba0dca
-        branch: main
-      - sha: c8b79bb
-        branch: main
-      - sha: 709be0f
-        branch: main
-      - sha: 5064ced
-        branch: main
-      - sha: 9804778
-        branch: main
-      - sha: 1aa17ff
-        branch: main
-      - sha: 2f33688
-        branch: main
-      - sha: 62ad7c5
-        branch: main
-      - sha: 9814b63
-        branch: main
-  - date: "20260419::165500"
-    session: 19
-    summary: >
-      Verified minibox-agent (cruxx-25) was fully implemented in minibox repo (session 16).
-      Committed remaining unstaged files: error.rs, provider.rs/step.rs import cleanup,
-      Cargo.toml workspace member addition. Pre-commit passed. cruxx-25 closed.
-    commits:
-      - sha: 08ba4c4
-        branch: main
-        repo: minibox
-        note: "feat(minibox-agent): wire into workspace + finalize AgentError + import cleanup"
-  - date: "20260419::154936"
-    session: 18
-    summary: >
-      Walkthrough doc audit: fixed CruxCtx binding (t→x), edition 2024, MSRV 1.85,
-      feature flags (tokio→tokio-runtime, sqlite→redb) across all 8 walkthrough files and
-      README. Reviewed and merged 8 orphaned subagent worktrees with sentinel review and
-      forge sequential merge. Fixed blocking issues across cruxx-agentic modules.
-      242/242 tests pass.
-    commits:
-      - sha: 2fd62a5
-        branch: main
-      - sha: 883790a
-        branch: main
-      - sha: 4f73aa3
-        branch: main
-      - sha: ff25b6e
-        branch: main
-      - sha: 466aa08
-        branch: main
-      - sha: 5eb1fee
-        branch: main
-  - date: "20260419::142500"
-    session: 17
-    summary: >
-      Added llm::decompose handler (BAML DecomposeSpec function) to cruxx-agentic.
-      Ran all three pipeline examples end-to-end. Added .mise.toml pinning baml-cli 0.221.0.
-      241/241 tests pass.
-    commits:
-      - sha: 87764f3
-        branch: main
-      - sha: 397e422
-        branch: main
-  - date: "20260419::012339"
-    session: 16
-    summary: >
-      Designed LlmProvider trait + LlmStep + minibox-agent adapter spec. Implemented
-      LlmProvider trait, LlmStep, typed adapters in cruxx-agentic v0.2.3.
-    commits:
-      - sha: 129e3bd
-        branch: main
-      - sha: a4ef7de
-        branch: main
-      - sha: 340a398
-        branch: main
-  - date: "20260418::051121"
-    session: 15
-    summary: >
-      Added examples, shared test fixtures, restructured CI workflows. Bumped baml to
-      0.221.0 with version parity check and native lib auto-download. Added BAML section
-      to CLAUDE.md. Gitignored baml_client/. Addressed council findings.
-    commits:
-      - sha: e2743fd
-        branch: main
-      - sha: 4141bdf
-        branch: main
-      - sha: 7f07616
-        branch: main
-      - sha: b9bc089
-        branch: main
-      - sha: 4cc0c50
-        branch: main
-      - sha: 8121557
-        branch: main
-      - sha: 2ce0e0f
-        branch: main
-      - sha: c618719
-        branch: main
-  - date: "20260418::051121"
-    session: 14
-    summary: >
-      Addressed strict-critic council findings. Updated handoff timestamps. Bumped
-      cruxx-agentic to v0.2.2 (baml feature + llm::extract). Closed cruxx-20, cruxx-22.
-    commits:
-      - sha: b8cbd94
-        branch: main
-      - sha: 00fd5ba
-        branch: main
-      - sha: 1f3d1a0
-        branch: main
-      - sha: dca076f
-        branch: main
-      - sha: c003ff2
-        branch: main
-      - sha: 6837e66
-        branch: main
-      - sha: 498c3cc
-        branch: main
-  - date: "20260418::051121"
-    session: 13
-    summary: >
-      Completed cruxx-21 demo pipelines and README examples. Added end-to-end BAML
-      extraction pipeline examples. Wrote comprehensive planner design spec (cruxx-23).
-    commits:
-      - sha: df3ae65
-        branch: main
-      - sha: 8836b8e
-        branch: main
-      - sha: 962c377
-        branch: main
-      - sha: 0d51d7f
-        branch: main
-  - date: "20260418::051121"
-    session: 12
-    summary: >
-      Renamed handoff to canonical HANDOFF.cruxx.cruxx.yaml. Added llm::extract handler
-      behind baml feature flag in cruxx-agentic.
-    commits:
-      - sha: d9cbaa0
-        branch: main
-      - sha: 8832902
-        branch: main
-      - sha: 67426ce
-        branch: main
-  - date: "20260417::231905"
-    session: 11
-    summary: >
-      Implemented cruxx-agentic crate: all handler modules (ctrl, shell, fs, git, json, llm).
-      Added static args injection to cruxx-script StepNode. Wired cruxx-run to use
-      cruxx-agentic builtins. Added slashcruxx dep, bumped to v0.2.0 then v0.2.1.
-    commits:
-      - sha: 1fb8506
-        branch: main
-      - sha: 8bb1c6f
-        branch: main
-      - sha: 0b1bc84
-        branch: main
-      - sha: ee0a9bd
-        branch: main
-      - sha: 40fc6ff
-        branch: main
-      - sha: 8813608
-        branch: main
-      - sha: f388dcc
-        branch: main
-      - sha: 778389f
-        branch: main
-      - sha: 8f2797d
-        branch: main
-  - date: "20260417::231905"
-    session: 10
-    summary: >
-      Scaffolded cruxx-agentic crate with module stubs. Implemented json module
-      (pick, merge, jq). Updated joe/ example pipelines to use cruxx-agentic handler names.
-    commits:
-      - sha: b4b9cb7
-        branch: main
-      - sha: 20d0cdb
-        branch: main
-      - sha: e3c1d72
-        branch: main
-      - sha: 5ee570d
-        branch: main
-  - date: "20260417::174303"
-    session: 9
-    summary: >
-      Renamed HANDOFF.yaml to HANDOFF.cruxx.cruxx.yaml. Fixed .gitignore patterns.
-      Normalized table formatting. Wired slashcruxx dep, opened cruxx-19.
-    commits:
-      - sha: 2eb8aff
-        branch: main
-      - sha: 75f788a
-        branch: main
-      - sha: 0d4b1c2
-        branch: main
-      - sha: 7ce497e
-        branch: main
-  - date: "20260413::214411"
-    session: 8
-    summary: >
-      Moved HANDOFF.yaml to .ctx/ directory (gitignored). Reorganized docs into
-      walkthrough/. Renamed crates to cruxx-* to avoid crates.io conflicts. Added
-      cruxx-script crate and YAML pipeline examples. Updated README for cruxx rename.
-    commits:
-      - sha: 1abca9c
-        branch: main
-      - sha: 56e6760
-        branch: main
-      - sha: 9532bf1
-        branch: main
-      - sha: 50a62a0
-        branch: main
-      - sha: e1be068
-        branch: main
-      - sha: c50a74a
-        branch: main
-      - sha: 1dd57d1
-        branch: main
-  - date: "20260413::214411"
-    session: 7
-    summary: >
-      Publish-readiness: CHANGELOG, deny.toml, example, README fixes. Added version
-      specifiers to path deps for crates.io. Phase 2 features: macro wiring, tracing,
-      streaming, checkpoint/resume. Tightened lenient replay with content_hash filtering.
-    commits:
-      - sha: 21914aa
-        branch: main
-      - sha: c888375
-        branch: main
-      - sha: 0bfadd0
-        branch: main
-      - sha: 23854a2
-        branch: main
-      - sha: 68e868e
-        branch: main
-  - date: "20260413::214411"
-    session: 6
-    summary: >
-      Replaced rusqlite with redb for pure-Rust persistent storage. Fixed lenient
-      replay semantics and join_all budget check. Added CLAUDE.md.
-    commits:
-      - sha: 4ce04d9
-        branch: main
-      - sha: 23ae5cc
-        branch: main
-      - sha: 07ada3f
-        branch: main
-  - date: "20260413::214411"
-    session: 5
-    summary: >
-      Added proptest suites for ctx, delegation, task registry, replay, speculation.
-      Added README, LICENSE, and crates.io publish metadata.
-    commits:
-      - sha: c5926b2
-        branch: main
-      - sha: 912a68c
-        branch: main
-      - sha: 426d6ba
-        branch: main
-  - date: "20260413::214411"
-    session: 4
-    summary: >
-      Replay modes, task registry, sqlite adapter, and composition combinators (cruxx-4/5/9).
-      Fixed pending(kind) filtering and lenient replay semantics. CAS retry loops and
-      confidence validation fixes.
-    commits:
-      - sha: 14ec036
-        branch: main
-      - sha: c74d9bc
-        branch: main
-      - sha: cefea93
-        branch: main
-  - date: "20260413::214411"
-    session: 3
-    summary: >
-      Decomposed CruxCtx into SOLID collaborators. Added DelegationBuilder and
-      SpeculationBuilder (cruxx-3).
-    commits:
-      - sha: 1464fe3
-        branch: main
-      - sha: b8222ea
-        branch: main
-  - date: "20260413::214411"
-    session: 2
-    summary: >
-      Scaffolded cruxx workspace with core types, runtime, and proc macro. Added lifecycle
-      hooks, replay, and end-to-end proc macro tests. Added CI workflow, git hooks, justfile.
-    commits:
-      - sha: 015ff69
-        branch: main
-      - sha: 11d558f
-        branch: main
-      - sha: 8571560
-        branch: main
-  - date: "20260413::214411"
-    session: 1
-    summary: >
-      Initial trace language specification and tutorials. Renamed trace to cruxx.
-    commits:
-      - sha: bd9a5e1
-        branch: main
-      - sha: 500e7cc
         branch: main
