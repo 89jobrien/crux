@@ -1,11 +1,9 @@
-# cruxx
+# crux
 
-An agentic DSL for Rust -- inspectable, serializable, replayable agent execution.
+An agentic DSL for Rust -- inspectable, serializable, replayable agent orchestration.
 
 `cruxx` is not a standalone language. It's a set of macros, traits, and types that make agentic
-control flow explicit in the Rust type system. If you've written agents with `tokio` + `tracing`
-\+ a hand-rolled task queue, `cruxx` is what happens when you bake those patterns into the language
-itself.
+control flow explicit in the Rust type system. 
 
 ## Quick example
 
@@ -41,24 +39,24 @@ async fn review_pr(pr: PullRequest) -> Crux<ReviewReport> {
 Every `x.step`, `x.delegate`, `x.speculate` call is recorded in the `Crux<T>` value
 the function returns. That value is:
 
-- **Inspectable** -- `cruxx.causal_chain()`, `cruxx.delegations()`, `cruxx.rejected_branches()`
-- **Serializable** -- `serde_json::to_string(&cruxx)` just works
-- **Replayable** -- `Crux::replay_from(snapshot)` resumes after a crash
-- **Composable** -- `cruxx_a | cruxx_b`, `Crux::join_all([...])`
+- **Inspectable**: `cruxx.causal_chain()`, `cruxx.delegations()`, `cruxx.rejected_branches()`
+- **Serializable**: `serde_json::to_string(&cruxx)` just works
+- **Replayable**: `Crux::replay_from(snapshot)` resumes after a crash
+- **Composable**: `cruxx_a | cruxx_b`, `Crux::join_all([...])`
 
 ## Crates
 
 | Crate                                   | Description                                              |
 | --------------------------------------- | -------------------------------------------------------- |
-| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros`                        |
-| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                                 |
-| [`cruxx-types`](crates/cruxx-types)     | Serializable wire-format types (`Crux<T>`, `Step`, `Budget`, `RecoveryKind`)    |
-| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros               |
-| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                                  |
-| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness                   |
-| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers                          |
-| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                            |
-| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution                    |
+| [`cruxx`](crates/cruxx)                 | Facade crate, re-exports `cruxx-core` + `cruxx-macros`                       |
+| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                              |
+| [`cruxx-types`](crates/cruxx-types)     | Serializable wire-format types (`Crux<T>`, `Step`, `Budget`, `RecoveryKind`) |
+| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros            |
+| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                      |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness        |
+| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers              |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                |
+| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution        |
 
 ## Features
 
@@ -73,34 +71,34 @@ Enable via `cruxx`:
 
 ## Core concepts
 
-**`Crux<T>`** -- the execution trace. Every step, delegation, speculation, and failure is a
+**`Crux<T>`**: the execution trace. Every step, delegation, speculation, and failure is a
 first-class value you can inspect, serialize, and replay.
 
-**`CruxCtx`** -- the runtime context threaded through agent execution. Provides `step()`,
+**`CruxCtx`**: the runtime context threaded through agent execution. Provides `step()`,
 `delegate()`, `speculate()`, `pipe()`, `join_all()`, `route_on_confidence()`.
 
-**`Agent` trait** -- the single-method interface all agents implement. The `#[cruxx::agent]` macro
+**`Agent` trait**: the single-method interface all agents implement. The `#[cruxx::agent]` macro
 generates this for you.
 
-**`TaskRegistry<B>`** -- typed task management with submit, checkpoint, replay, and status
+**`TaskRegistry<B>`**: typed task management with submit, checkpoint, replay, and status
 transitions. Pluggable backend (`InMemoryBackend`, `RedbBackend`).
 
-**Lifecycle hooks** -- `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` with recovery
+**Lifecycle hooks**: `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` with recovery
 actions (skip, retry, escalate, substitute).
 
-**Replay** -- strict or lenient mode. Strict rejects hash mismatches; lenient skips removed steps
+**Replay**: strict or lenient mode. Strict rejects hash mismatches; lenient skips removed steps
 and returns cache misses for changed ones.
 
-**`HarnessProfile`** -- resource specification for a container or process harness (image, env,
+**`HarnessProfile`**: resource specification for a container or process harness (image, env,
 limits). Paired with `ResourceHints` for advisory scheduling metadata and `HarnessDiff` to
 describe incremental profile changes.
 
-**`SafetyPolicy` trait** -- port for user-defined approval logic. Receives a proposed
+**`SafetyPolicy` trait**: port for user-defined approval logic. Receives a proposed
 `HarnessDiff` and returns `Approved`, `Rejected`, or `RequiresApproval`. Two adapters ship in
 `cruxx-agentic`: `AutoApproveGate` (always approves) and `TerminalApprovalGate` (interactive
 stdin prompt).
 
-**`EvolutionPlanner`** (`cruxx-planner`) -- drives deterministic, metrics-based profile
+**`EvolutionPlanner`** (`cruxx-planner`): drives deterministic, metrics-based profile
 evolution. Accepts `RunMetrics` and emits a `HarnessDiff` describing resource adjustments.
 `EvolutionOutcome` records the result of applying a diff.
 
@@ -155,7 +153,7 @@ Requires Rust 1.85+ (edition 2024).
 
 ## Running pipelines
 
-`cruxx-run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
+`cruxx run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
 feature to enable LLM extraction:
 
 ```bash
@@ -173,7 +171,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 **Summarize text:**
 
 ```bash
-cruxx-run examples/extract_summary.crux examples/input_summary.json
+cruxx run examples/extract_summary.crux examples/input_summary.json
 ```
 
 ```
@@ -202,7 +200,7 @@ system via Crux<T> values.",
 **Extract named entities:**
 
 ```bash
-cruxx-run examples/extract_entities.crux examples/input_entities.json
+cruxx run examples/extract_entities.crux examples/input_entities.json
 ```
 
 ```
@@ -261,7 +259,7 @@ Output:
 | `llm::decompose` | `spec`              | Spec decomposition into task list         |
 | `llm::plan`      | `goal`              | Pipeline generation from natural language |
 
-See [docs/cruxx-capabilities.md](docs/cruxx-capabilities.md) for the full support
+See [docs/crux-capabilities.md](docs/crux-capabilities.md) for the full support
 matrix including combinators and known gaps.
 
 ## Examples
