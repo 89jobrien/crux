@@ -105,45 +105,6 @@ correct by construction.
 
 ---
 
-## vs. your own agent trace crate
-
-This section is hypothetical but common enough to be worth naming. If you have
-spent any time building agentic infrastructure in Rust, you have probably assembled
-something like an `agent_trace` crate — a private, project-specific library that
-records what your agents do. The patterns converge because the problems are the
-same. The differences tend to be:
-
-| Hypothetical `agent_trace`          | `cruxx::`                                 |
-| ------------------------------------ | ----------------------------------------- |
-| `AgentRun` struct in your code       | `Crux<T>` as a generic type               |
-| Manual `run.record_step(...)` calls  | `ctx.step(...)` with automatic recording  |
-| Checkpointing bolted on later        | `#[cruxx::agent(checkpoint_every_step)]`  |
-| Provider trait for LLM calls         | `Agent` trait for any delegatable work    |
-| Status enum per agent type           | Fixed `TaskStatus` enum, shared           |
-
-**Should you replace your own crate with `cruxx::`?** Three questions decide it:
-
-1. **How much of your crate is domain-specific?** A provider wrapper that
-   handles token counting, rate limits, and prompt formatting is something you
-   want to keep. `cruxx::` does not replace it — it gives you a place to call it
-   from inside a `ctx.step` closure. Your provider becomes a collaborator, not a
-   competitor.
-
-2. **How much replay do you need?** If "run it again from the start" has been
-   sufficient, you may not need `cruxx::`'s `ReplayCache`. If you have been
-   building ad-hoc checkpoint files, `cruxx::` formalizes exactly that.
-
-3. **How many agents do you have?** `cruxx::` has a fixed learning cost — you
-   need to understand steps, delegations, and speculations and structure code
-   around them. That cost amortizes over many agents. For a single agent, your
-   own crate is probably fine.
-
-The realistic migration: **keep your provider, use `cruxx::` as the agent shell
-around it.** Your provider knows about tokens and API semantics. `cruxx::` knows
-about steps, delegations, and replay. They compose.
-
----
-
 ## vs. LangGraph
 
 LangGraph is Python-first and graph-first. The mental model is: define nodes and
