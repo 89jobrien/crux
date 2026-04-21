@@ -11,6 +11,27 @@ control flow explicit in the Rust type system.
 use cruxx::prelude::*;
 
 #[cruxx::agent]
+async fn plan_trip(goal: String) -> Crux<Itinerary> {
+    let research = x.step("research", || async {
+        Ok(search_web(&goal).await?)
+    }).await?;
+
+    let draft = x.delegate::<DraftAgent>("draft", research)
+        .with_budget(Budget::tokens(4000))
+        .run().await?;
+
+    x.speculate("finalize", vec![
+        ("cheap", Box::pin(async { finalize_cheap(&draft).await })),
+        ("fast",  Box::pin(async { finalize_fast(&draft).await })),
+        ("safe",  Box::pin(async { finalize_safe(&draft).await })),
+    ]).pick_best_by(|r| r.confidence).await
+}
+```
+
+```rust
+use cruxx::prelude::*;
+
+#[cruxx::agent]
 async fn review_pr(pr: PullRequest) -> Crux<ReviewReport> {
     // Fan out: fetch diff and CI results in parallel
     let (diff, ci) = x.join_all([
