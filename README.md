@@ -28,6 +28,8 @@ async fn plan_trip(goal: String) -> Crux<Itinerary> {
 }
 ```
 
+## Example
+
 ```rust
 use cruxx::prelude::*;
 
