@@ -32,16 +32,16 @@ async fn plan_trip(goal: String) -> Crux<Itinerary> {
 Every `x.step`, `x.delegate`, `x.speculate` call is recorded in the `Crux<T>` value
 the function returns. That value is:
 
-- **Inspectable** -- `cruxx.causal_chain()`, `cruxx.delegations()`, `cruxx.rejected_branches()`
-- **Serializable** -- `serde_json::to_string(&cruxx)` just works
-- **Replayable** -- `Crux::replay_from(snapshot)` resumes after a crash
-- **Composable** -- `cruxx_a | cruxx_b`, `Crux::join_all([...])`
+- **Inspectable**: `cruxx.causal_chain()`, `cruxx.delegations()`, `cruxx.rejected_branches()`
+- **Serializable**: `serde_json::to_string(&cruxx)` just works
+- **Replayable**: `Crux::replay_from(snapshot)` resumes after a crash
+- **Composable**: `cruxx_a | cruxx_b`, `Crux::join_all([...])`
 
 ## Crates
 
 | Crate                                   | Description                                              |
 | --------------------------------------- | -------------------------------------------------------- |
-| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros`            |
+| [`cruxx`](crates/cruxx)                 | Facade crate, re-exports `cruxx-core` + `cruxx-macros`            |
 | [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                     |
 | [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros   |
 | [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                      |
@@ -63,34 +63,34 @@ Enable via `cruxx`:
 
 ## Core concepts
 
-**`Crux<T>`** -- the execution trace. Every step, delegation, speculation, and failure is a
+**`Crux<T>`**: the execution trace. Every step, delegation, speculation, and failure is a
 first-class value you can inspect, serialize, and replay.
 
-**`CruxCtx`** -- the runtime context threaded through agent execution. Provides `step()`,
+**`CruxCtx`**: the runtime context threaded through agent execution. Provides `step()`,
 `delegate()`, `speculate()`, `pipe()`, `join_all()`, `route_on_confidence()`.
 
-**`Agent` trait** -- the single-method interface all agents implement. The `#[cruxx::agent]` macro
+**`Agent` trait**: the single-method interface all agents implement. The `#[cruxx::agent]` macro
 generates this for you.
 
-**`TaskRegistry<B>`** -- typed task management with submit, checkpoint, replay, and status
+**`TaskRegistry<B>`**: typed task management with submit, checkpoint, replay, and status
 transitions. Pluggable backend (`InMemoryBackend`, `RedbBackend`).
 
-**Lifecycle hooks** -- `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` with recovery
+**Lifecycle hooks**: `on_low_confidence`, `on_step_failure`, `on_budget_exceeded` with recovery
 actions (skip, retry, escalate, substitute).
 
-**Replay** -- strict or lenient mode. Strict rejects hash mismatches; lenient skips removed steps
+**Replay**: strict or lenient mode. Strict rejects hash mismatches; lenient skips removed steps
 and returns cache misses for changed ones.
 
-**`HarnessProfile`** -- resource specification for a container or process harness (image, env,
+**`HarnessProfile`**: resource specification for a container or process harness (image, env,
 limits). Paired with `ResourceHints` for advisory scheduling metadata and `HarnessDiff` to
 describe incremental profile changes.
 
-**`SafetyPolicy` trait** -- port for user-defined approval logic. Receives a proposed
+**`SafetyPolicy` trait**: port for user-defined approval logic. Receives a proposed
 `HarnessDiff` and returns `Approved`, `Rejected`, or `RequiresApproval`. Two adapters ship in
 `cruxx-agentic`: `AutoApproveGate` (always approves) and `TerminalApprovalGate` (interactive
 stdin prompt).
 
-**`EvolutionPlanner`** (`cruxx-planner`) -- drives deterministic, metrics-based profile
+**`EvolutionPlanner`** (`cruxx-planner`): drives deterministic, metrics-based profile
 evolution. Accepts `RunMetrics` and emits a `HarnessDiff` describing resource adjustments.
 `EvolutionOutcome` records the result of applying a diff.
 
