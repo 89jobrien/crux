@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260420:173838"
+updated: "20260421:052733"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,22 @@ description: >
 items: []
 
 log:
+  - date: "20260421:052733"
+    session: 28
+    summary: >
+      Structured BAML types for GeneratePipeline planner (PipelineDef replacing raw yaml
+      string); serde_yaml serialization in planner.rs. Added SafetyPolicy + ApprovalGate
+      conformance tests (45 total, all pass). Fixed 7 example pipeline audit issues:
+      DelegateNode field rename in planner.baml, llm::extract function args in 5 enrich
+      pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote
+      conformance spec to .ctx/conformance-spec.md.
+    commits:
+      - sha: 482936e
+        branch: main
+      - sha: 262dbce
+        branch: main
+      - sha: 390a2ed
+        branch: main
   - date: "20260420:173838"
     session: 27
     summary: >
@@ -46,27 +62,12 @@ log:
     commits:
       - sha: 115846b
         branch: main
-      - sha: 51bf8e6
-        branch: main
-      - sha: ae488df
-        branch: main
-      - sha: eb65ad8
-        branch: main
-      - sha: b77f691
-        branch: main
       - sha: 3772d0b
         branch: main
-  - date: "20260420::062404"
+  - date: "20260420:062404"
     session: 24
     summary: >
       Doc audit and corrections: rewrote cruxx-syntax-reference.md from code (fixed binding
       x vs t, feature flags, TaskRegistry API, prelude, removed aspirational APIs). Updated
-      planner-design.md and plugins.md for .cruxx rename and stale paths. Fixed agent.rs doc
-      comment (t->x). Added CLAUDE.md pipeline files section. Added `cruxx check` subcommand
-      for pipeline validation (GH #15). Filed GH #16 for stale macro doc comments.
-  - date: "20260419::210016"
-    session: 23
-    summary: >
-      Audited cruxx-script pipeline capabilities. Created docs/cruxx-capabilities.md (handler/combinator
-      support matrix). Filed GH issues #7-#12 for 6 known gaps. Added pipeline capabilities
-      reference to CLAUDE.md. 329/329 tests pass, build clean.
+      planner-design.md and plugins.md for .cruxx rename and stale paths. Added cruxx check
+      subcommand for pipeline validation (GH #15). Filed GH #16 for stale macro doc comments.
