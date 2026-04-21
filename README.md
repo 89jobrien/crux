@@ -1,11 +1,9 @@
-# cruxx
+# crux
 
 An agentic DSL for Rust -- inspectable, serializable, replayable agent orchestration.
 
 `cruxx` is not a standalone language. It's a set of macros, traits, and types that make agentic
-control flow explicit in the Rust type system. If you've written agents with `tokio` + `tracing`
-\+ a hand-rolled task queue, `cruxx` is what happens when you bake those patterns into the language
-itself.
+control flow explicit in the Rust type system. 
 
 ## Quick example
 
