@@ -353,19 +353,5 @@ enforces limits through `BudgetTracker` and raises `CruxErr::BudgetExceeded` on 
 
 ---
 
-## Check your understanding
-
-Before moving on, make sure you can answer these:
-
-- **Where does the value live?** Inside `Crux<T>`, alongside the steps and timing.
-- **How do you fail a step?** Return `Err(...)` from the closure passed to `ctx.step`, or let
-  `?` propagate. The macro wraps it into `CruxErr::StepFailed`.
-- **What is the difference between a `Step` and a `tracing::Event`?** A step has confidence,
-  a typed JSON output, an attempt counter, and is part of a value you can serialize and replay.
-- **When do you implement `Agent` directly?** When you need stable, type-level lifecycle hooks
-  across many callers, or when the agent needs a registered identity in `TaskRegistry`.
-- **Why is `agent: String` and not `&'static str`?** Agent names are resolved at runtime from
-  the registry, so they cannot be guaranteed to be `'static` string literals.
-
 Chapter **03** puts these types to work on branching and delegation — where `cruxx::` diverges
 most from regular Rust.
