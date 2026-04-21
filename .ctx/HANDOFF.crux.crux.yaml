@@ -19,12 +19,9 @@ log:
       pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote
       conformance spec to .ctx/conformance-spec.md.
     commits:
-      - sha: 482936e
-        branch: main
-      - sha: 262dbce
-        branch: main
-      - sha: 390a2ed
-        branch: main
+      - 482936e
+      - 262dbce
+      - 390a2ed
   - date: "20260420:173838"
     session: 27
     summary: >
@@ -34,10 +31,8 @@ log:
       cruxx-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated
       on baml. 360/360 tests pass, CI clean.
     commits:
-      - sha: bce2cbb
-        branch: main
-      - sha: 68164ee
-        branch: main
+      - bce2cbb
+      - 68164ee
   - date: "20260420:132031"
     session: 26
     summary: >
@@ -46,10 +41,8 @@ log:
       cruxx-plugin, cruxx-script) and new proc macros (#[cruxx::harness], #[cruxx::evolve]).
       358/358 tests pass.
     commits:
-      - sha: 438d7d5
-        branch: main
-      - sha: afc798c
-        branch: main
+      - 438d7d5
+      - afc798c
   - date: "20260420:131613"
     session: 25
     summary: >
@@ -60,10 +53,8 @@ log:
       #[cruxx::harness] and #[cruxx::evolve] proc macros (cruxx-macros). Updated all docs.
       358/358 tests pass, clippy clean.
     commits:
-      - sha: 115846b
-        branch: main
-      - sha: 3772d0b
-        branch: main
+      - 115846b
+      - 3772d0b
   - date: "20260420:062404"
     session: 24
     summary: >
