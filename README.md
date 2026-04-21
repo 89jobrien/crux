@@ -13,19 +13,28 @@ itself.
 use cruxx::prelude::*;
 
 #[cruxx::agent]
-async fn plan_trip(goal: String) -> Crux<Itinerary> {
-    let research = x.step("research", || search_web(&goal)).await?;
+async fn review_pr(pr: PullRequest) -> Crux<ReviewReport> {
+    // Fan out: fetch diff and CI results in parallel
+    let (diff, ci) = x.join_all([
+        x.step("fetch_diff", || git::diff(&pr.base, &pr.head)),
+        x.step("fetch_ci",   || ci::latest_run(&pr.repo, &pr.head)),
+    ]).await?;
 
-    let draft = x.delegate::<DraftAgent>("draft", &research)
-        .with_budget(Budget::tokens(4000))
-        .on_low_confidence(0.7, escalate_to_human)
+    // Delegate deep analysis to a specialist; escalate if confidence is low
+    let analysis = x.delegate::<SecurityAnalysisAgent>("security", &diff)
+        .with_budget(Budget::tokens(8000))
+        .on_low_confidence(0.75, escalate_to_human)
+        .on_step_failure(Recovery::Retry(2))
         .await?;
 
-    x.speculate("finalize", [
-        ("cheap", || finalize_cheap(&draft)),
-        ("fast",  || finalize_fast(&draft)),
-        ("safe",  || finalize_safe(&draft)),
-    ]).pick_best_by(|r| r.confidence).await
+    // Race three review styles; keep whichever scores highest
+    let review = x.speculate("style", [
+        ("strict",  || apply_strict_style(&analysis, &ci)),
+        ("lenient", || apply_lenient_style(&analysis, &ci)),
+        ("summary", || apply_summary_style(&analysis, &ci)),
+    ]).pick_best_by(|r| r.confidence).await?;
+
+    x.step("emit", || build_report(pr, analysis, review)).await
 }
 ```
 
@@ -41,14 +50,15 @@ the function returns. That value is:
 
 | Crate                                   | Description                                              |
 | --------------------------------------- | -------------------------------------------------------- |
-| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros`            |
-| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                     |
-| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros   |
-| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                      |
-| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness        |
-| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers              |
-| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                |
-| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution        |
+| [`cruxx`](crates/cruxx)                 | Facade crate -- re-exports `cruxx-core` + `cruxx-macros`                        |
+| [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                                 |
+| [`cruxx-types`](crates/cruxx-types)     | Serializable wire-format types (`Crux<T>`, `Step`, `Budget`, `RecoveryKind`)    |
+| [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros               |
+| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                                  |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness                   |
+| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers                          |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                            |
+| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution                    |
 
 ## Features
 
@@ -163,7 +173,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 **Summarize text:**
 
 ```bash
-cruxx-run examples/extract_summary.cruxx examples/input_summary.json
+cruxx-run examples/extract_summary.crux examples/input_summary.json
 ```
 
 ```
@@ -192,7 +202,7 @@ system via Crux<T> values.",
 **Extract named entities:**
 
 ```bash
-cruxx-run examples/extract_entities.cruxx examples/input_entities.json
+cruxx-run examples/extract_entities.crux examples/input_entities.json
 ```
 
 ```
@@ -262,7 +272,7 @@ matrix including combinators and known gaps.
 cargo run --example basic_agent
 ```
 
-See [`examples/`](examples/) for pipeline `.cruxx` files and input fixtures.
+See [`examples/`](examples/) for pipeline `.crux` files and input fixtures.
 
 ## Documentation
 
