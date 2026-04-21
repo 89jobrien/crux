@@ -145,7 +145,7 @@ Requires Rust 1.85+ (edition 2024).
 
 ## Running pipelines
 
-`cruxx-run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
+`cruxx run` executes YAML pipelines using the built-in handler registry. Build it with the `baml`
 feature to enable LLM extraction:
 
 ```bash
@@ -163,7 +163,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 **Summarize text:**
 
 ```bash
-cruxx-run examples/extract_summary.cruxx examples/input_summary.json
+cruxx run examples/extract_summary.cruxx examples/input_summary.json
 ```
 
 ```
@@ -192,7 +192,7 @@ system via Crux<T> values.",
 **Extract named entities:**
 
 ```bash
-cruxx-run examples/extract_entities.cruxx examples/input_entities.json
+cruxx run examples/extract_entities.cruxx examples/input_entities.json
 ```
 
 ```
