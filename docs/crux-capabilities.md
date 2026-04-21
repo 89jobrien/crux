@@ -61,9 +61,9 @@ Two registry methods exist for registering handlers:
 
 | Area                   | Gap                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------- |
-| `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents |
+| `delegate`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents |
 | `route_on_confidence`  | `handler_value` handlers default to 1.0; use `handler` + `HandlerOutput::with_confidence` to emit scores |
-| `speculate: pick_best` | Arms that don't emit `score` all tie at 0.0 (first arm wins)                 |
+| `speculate::pick_best` | Arms that don't emit `score` all tie at 0.0 (first arm wins)                 |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()`                      |
 | Domain analysis arms   | All `ctrl::noop` scaffolding in `examples/joe/` (aspirational)               |
