@@ -6,6 +6,8 @@ budget: { calls: 2 }
 steps:
   - step: describe
     handler: llm::extract
+    args:
+      function: DescribeProject
 
   - step: log
     handler: ctrl::log

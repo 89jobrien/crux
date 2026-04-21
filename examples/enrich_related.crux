@@ -6,6 +6,8 @@ budget: { calls: 2 }
 steps:
   - step: related
     handler: llm::extract
+    args:
+      function: SuggestRelated
 
   - step: log
     handler: ctrl::log

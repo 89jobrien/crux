@@ -20,7 +20,7 @@ class StepNode {
 }
 
 class DelegateNode {
-  target string
+  delegate_handler string
   name string?
   budget BudgetDef?
 }
@@ -101,7 +101,7 @@ function GeneratePipeline(goal: string, available_handlers: string[], constraint
        ]}
 
     4. delegation (sub-pipeline call):
-       delegation: { target: "llm::invoke", budget: { tokens: 1000 } }
+       delegation: { delegate: "llm::invoke", budget: { tokens: 1000 } }
 
     5. speculate (pick best or first ok):
        speculate: { speculate: "try-approaches", mode: "pick_best", arms: [

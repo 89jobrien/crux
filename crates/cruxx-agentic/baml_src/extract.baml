@@ -193,7 +193,7 @@ class ClassifyCIFailureOutput {
 }
 
 function ClassifyCIFailure(failure_output: string, known_patterns: string[]) -> ClassifyCIFailureOutput {
-  client Auto
+  client OpenAIDefault
   prompt #"
     You are a CI and pre-commit hook repair agent.
     Classify this failure and suggest the minimal fix.
@@ -221,6 +221,43 @@ function ClassifyCIFailure(failure_output: string, known_patterns: string[]) -> 
     {{ ctx.output_format }}
   "#
 }
+
+test TestClassifyCIFailureObfsck {
+  functions [ClassifyCIFailure]
+  args {
+    failure_output #"
+      [obfsck] Potential secret detected in crates/cruxx-agentic/src/handlers/llm.rs:42
+      Pattern: API_KEY assignment
+      Match: api_key = "test_fixture_value"
+      Exit code: 1
+    "#
+    known_patterns [
+      #"test fixture values in test files"#,
+      #"localhost IP addresses in integration tests"#,
+      #"variable names containing 'password' in test modules"#
+    ]
+  }
+}
+
+test TestClassifyCIFailureRealClippy {
+  functions [ClassifyCIFailure]
+  args {
+    failure_output #"
+      error[E0502]: cannot borrow `ctx` as mutable because it is also borrowed as immutable
+        --> crates/cruxx-core/src/ctx.rs:88:9
+         |
+      85 |     let step = ctx.current_step();
+         |                --- immutable borrow occurs here
+      88 |     ctx.record(output);
+         |     ^^^ mutable borrow occurs here
+      error: aborting due to previous error
+    "#
+    known_patterns [
+      #"test fixture values in test files"#
+    ]
+  }
+}
+
 
 // ============================================================================
 // Spec / Plan Decomposition
@@ -274,7 +311,7 @@ class ClassifyOutput {
 }
 
 function Classify(text: string, labels: string[]) -> ClassifyOutput {
-  client Auto
+  client OpenAIDefault
   prompt #"
     Classify the following text into exactly one of the provided labels.
 
@@ -288,4 +325,37 @@ function Classify(text: string, labels: string[]) -> ClassifyOutput {
 
     {{ ctx.output_format }}
   "#
+}
+
+test TestClassifyPipelineStep {
+  functions [Classify]
+  args {
+    text #"
+      Runs cargo clippy --all-targets -- -D warnings and fails the build if any lint
+      violations are found. Reports results as a structured JSON summary to stdout.
+    "#
+    labels [
+      #"lint"#,
+      #"test"#,
+      #"build"#,
+      #"deploy"#,
+      #"security"#
+    ]
+  }
+}
+
+test TestClassifyAgentOutput {
+  functions [Classify]
+  args {
+    text #"
+      The agent successfully extracted 14 entities from the document, including 3 people,
+      5 organizations, and 6 locations. Confidence was high across all extractions.
+    "#
+    labels [
+      #"success"#,
+      #"partial_success"#,
+      #"failure"#,
+      #"timeout"#
+    ]
+  }
 }

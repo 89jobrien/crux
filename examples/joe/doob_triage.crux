@@ -28,7 +28,7 @@ steps:
   - step: fetch_pending
     handler: shell::capture
     args:
-      cmd: "doob todo list --status pending --format json"
+      cmd: "doob todo list --status pending"
     # `doob todo list --status pending --json` — full pending list across repos
 
   - pipe: normalize
@@ -52,10 +52,18 @@ steps:
   - step: per_repo_prioritize
     handler: shell::capture
     args:
-      cmd: "doob todo list --status pending --format json"
+      cmd: "doob todo list --status pending"
+
+  # Classify prioritization into a confidence score.
+  # Reads per_repo_prioritize output and produces a confidence metric for routing.
+  - step: classify_priority
+    handler: llm::extract
+    args:
+      input: "{{ steps.per_repo_prioritize.output }}"
+      function: Classify
 
   - route_on_confidence: schedule
-    value: "{{ steps.per_repo_prioritize.confidence }}"
+    value: "{{ steps.classify_priority.confidence }}"
     routes:
       - range: "[0.0, 0.45)"
         label: ambiguous
@@ -71,5 +79,5 @@ steps:
         label: confident
         handler: shell::capture
         args:
-          cmd: "doob todo list --status pending --format json"
+          cmd: "doob todo list --status pending"
         # High confidence: also mark stale resolved items as done automatically

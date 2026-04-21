@@ -6,6 +6,8 @@ budget: { calls: 2 }
 steps:
   - step: classify
     handler: llm::extract
+    args:
+      function: ClassifyProject
 
   - step: log
     handler: ctrl::log

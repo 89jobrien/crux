@@ -55,8 +55,16 @@ steps:
         handler: ctrl::noop
         # heuristic: is there an obvious one-line fix?
 
+  # Classify ranked diagnostics into a confidence score.
+  # This is a template placeholder — in production, replace with an llm::extract step.
+  - step: confidence_from_rank
+    handler: llm::extract
+    args:
+      input: "{{ steps.rank.output }}"
+      function: Classify
+
   - route_on_confidence: action
-    value: "{{ steps.rank.confidence }}"
+    value: "{{ steps.confidence_from_rank.confidence }}"
     routes:
       - range: "[0.0, 0.4)"
         label: unclear

@@ -6,6 +6,8 @@ budget: { calls: 2 }
 steps:
   - step: changelog
     handler: llm::extract
+    args:
+      function: GenerateChangelog
 
   - step: log
     handler: ctrl::log

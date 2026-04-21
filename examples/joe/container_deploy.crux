@@ -46,8 +46,16 @@ steps:
     args:
       cmd: "ssh minibox 'minibox-cli status --json'"
 
+  # Classify health status into a confidence score (0.0–1.0).
+  # Reads health_check output and produces a confidence metric for routing.
+  - step: classify_health
+    handler: llm::extract
+    args:
+      input: "{{ steps.health_check.output }}"
+      function: Classify
+
   - route_on_confidence: outcome
-    value: "{{ steps.health_check.confidence }}"
+    value: "{{ steps.classify_health.confidence }}"
     routes:
       - range: "[0.0, 0.5)"
         label: unhealthy
