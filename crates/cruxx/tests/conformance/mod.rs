@@ -6,6 +6,8 @@
 ///   agent_port       — Agent port, macro vs hand-written equivalence
 ///   llm_provider     — LlmProvider port, stub adapter
 pub mod agent_port;
+pub mod approval_gate;
 pub mod context_adapter;
 pub mod llm_provider;
 pub mod registry_backend;
+pub mod safety_policy;
