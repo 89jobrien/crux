@@ -200,7 +200,7 @@ Key methods:
 
 ---
 
-## Mental Model: Hand-Rolled vs. Cruxx
+## Mental Model: Hand-Rolled vs. Crux
 
 Without Cruxx, a typical agent looks like this:
 
