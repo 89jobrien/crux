@@ -2,7 +2,7 @@
 ///
 /// Verifies AlwaysApprove / AlwaysDeny adapters satisfy port contract and that
 /// ApprovalRequest / ApprovalDecision serde contracts are stable.
-use cruxx::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
+use cruxx::prelude::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 
 // ── Test-local adapters ──────────────────────────────────────────────────────
 
@@ -104,6 +104,10 @@ fn conformance_approval_gate_decision_deferred_contains_timeout() {
     assert!(
         json.contains("timeout_seconds"),
         "expected 'timeout_seconds' field, got: {json}"
+    );
+    assert!(
+        json.contains(r#""decision":"deferred""#),
+        "ApprovalDecision::Deferred must serialize decision tag as 'deferred', got: {json}"
     );
     let back: ApprovalDecision = serde_json::from_str(&json).expect("deserialize");
     assert!(
