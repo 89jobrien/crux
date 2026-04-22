@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0

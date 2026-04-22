@@ -89,3 +89,11 @@ check-baml:
         http get $url | save --force $lib
     }
     print $"BAML versions match: ($gen_ver)"
+
+# Run hook bats tests
+test-hooks:
+    bats scripts/tests/hooks.bats
+
+# Run hook fuzz suite (default 500 iterations)
+fuzz-hooks iterations="500":
+    bash scripts/tests/fuzz.sh --iterations {{iterations}}

@@ -1,5 +1,77 @@
-#!/usr/bin/env sh
-set -e
+#!/usr/bin/env bash
+# Generic pre-push hook: compile + clippy (changed crates) + conformance tests.
+# Env: PRE_PUSH_CONFORMANCE_TEST (default: "conformance", empty to disable)
+#      PRE_PUSH_SHARED_CRATES    (space-sep crates that trigger workspace-wide clippy)
+#      PRE_PUSH_TF_DIR           (default: "infrastructure/terraform/")
+# Bypass: git push --no-verify
+set -eo pipefail
 
-echo "pre-push: running tests"
-cargo nextest run
+R='\033[0;31m' G='\033[0;32m' Y='\033[1;33m' B='\033[0;34m' N='\033[0m'
+FAILED=false
+
+lint() {
+    local label=$1 tool=$2 fix=$3; shift 3
+    [[ -n "$tool" ]] && ! command -v "$tool" &>/dev/null && { echo -e "${Y}⚠ $tool not found, skipping${N}"; return 0; }
+    echo -e "\n${Y}$label...${N}"
+    "$@" && echo -e "${G}✓ $label${N}" || { echo -e "${R}✗ $label. $fix${N}"; FAILED=true; }
+}
+
+cd "$(git rev-parse --show-toplevel)"
+
+CHANGED=""
+while read -r _ lo _ ro; do
+    [[ "$ro" == 0000* ]] && CHANGED+=$'\n'"$(git diff --name-only "origin/main..$lo" 2>/dev/null || git diff --name-only HEAD~1..HEAD 2>/dev/null || true)"
+    [[ "$lo" != 0000* ]] && [[ "$ro" != 0000* ]] && CHANGED+=$'\n'"$(git diff --name-only "$ro..$lo" 2>/dev/null || true)"
+done
+
+HAS_RS=false HAS_TF=false SH=() MD=() DC=() DIRS=()
+while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in *.rs) HAS_RS=true;; *.tf) HAS_TF=true;; *.sh) SH+=("$f");; *.md) MD+=("$f");; *devcontainer*.json) DC+=("$f");; esac
+    DIRS+=("${f%%/*}")
+done <<< "$CHANGED"
+mapfile -t DIRS < <(printf '%s\n' "${DIRS[@]}" | sort -u)
+
+[[ "$HAS_RS" == false && "$HAS_TF" == false && ${#SH[@]} -eq 0 && ${#MD[@]} -eq 0 && ${#DC[@]} -eq 0 ]] && { echo -e "${G}✓ No lintable changes${N}"; exit 0; }
+
+echo -e "${B}Running pre-push checks...${N}"
+
+if [[ "$HAS_RS" == true ]]; then
+    lint "Workspace compile" "" "cargo check --workspace" cargo check --workspace
+
+    read -r -a SHARED <<< "${PRE_PUSH_SHARED_CRATES:-}"
+    CLIPPY_ALL=false CLIPPY_PKGS=()
+    for d in "${DIRS[@]}"; do
+        [[ ! -f "$d/Cargo.toml" ]] && continue
+        for sc in "${SHARED[@]}"; do [[ "$d" == "$sc" ]] && CLIPPY_ALL=true; done
+        name=$(cargo metadata --no-deps --format-version 1 2>/dev/null \
+            | jq -r --arg d "$d" '.packages[]|select(.manifest_path|contains($d+"/Cargo.toml"))|.name' 2>/dev/null | head -1)
+        CLIPPY_PKGS+=("${name:-$d}")
+    done
+
+    if [[ "$CLIPPY_ALL" == true ]]; then
+        lint "Clippy (workspace)" "" "cargo clippy --workspace --all-targets -- -D warnings" \
+            cargo clippy --workspace --all-targets -- -D warnings
+    else
+        for p in "${CLIPPY_PKGS[@]}"; do
+            lint "Clippy $p" "" "cargo clippy -p $p --all-targets -- -D warnings" \
+                cargo clippy -p "$p" --all-targets -- -D warnings
+        done
+    fi
+
+    PAT="${PRE_PUSH_CONFORMANCE_TEST-conformance}"
+    [[ -n "$PAT" ]] && cargo nextest --version &>/dev/null 2>&1 && \
+        lint "Conformance ($PAT)" "" "cargo nextest run --workspace -E 'test(~$PAT)'" \
+            cargo nextest run --workspace -E "test(~$PAT)"
+fi
+
+TF="${PRE_PUSH_TF_DIR:-infrastructure/terraform/}"
+[[ "$HAS_TF" == true && -d "$TF" ]] && lint "Terraform lint"     tflint           "Fix tflint warnings."           tflint --chdir="$TF"
+[[ ${#SH[@]}  -gt 0 ]]              && lint "Shell (shellcheck)"  shellcheck       "Fix shellcheck warnings."       shellcheck "${SH[@]}"
+[[ ${#MD[@]}  -gt 0 ]]              && lint "Markdown lint"       markdownlint-cli2 "Fix markdownlint warnings."    markdownlint-cli2 "${MD[@]}"
+[[ ${#DC[@]}  -gt 0 ]]              && lint "Devcontainer schema" check-jsonschema  "Fix schema violations."        \
+    check-jsonschema --schemafile "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json" "${DC[@]}"
+
+echo ""
+[[ "$FAILED" == true ]] && { echo -e "${R}✗ Pre-push checks failed${N}"; exit 1; }
+echo -e "${G}✓ All pre-push checks passed!${N}"
