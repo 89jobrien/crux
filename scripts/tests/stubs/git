@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 case "$*" in
     "diff --name-only"*|"diff --cached --name-only"*)
+        # GIT_STUB_CHANGED: space-separated list of changed paths (no paths with spaces).
         printf '%s\n' ${GIT_STUB_CHANGED:-} ;;
     "rev-parse --show-toplevel")
         echo "${GIT_STUB_TOPLEVEL:-$PWD}" ;;

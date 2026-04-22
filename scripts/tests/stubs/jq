@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 case "$*" in
+    # Returns empty so per-crate clippy falls back to dir name (tests the fallback path).
     *packages*) echo "" ;;
     *)          exit "${STUB_EXIT:-0}" ;;
 esac

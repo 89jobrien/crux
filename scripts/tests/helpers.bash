@@ -14,6 +14,7 @@ setup_repo() {
     touch README.md
     git add README.md
     git commit -q -m "init"
+    # Real git used for setup above; stub takes over after PATH export below.
     export PATH="$STUBS_DIR:$PATH"
     export GIT_PREFIX=""
 }
@@ -31,5 +32,6 @@ run_pre_commit() {
 
 run_pre_push() {
     local stdin="$1"
+    # stdin format: "<local-ref> <local-sha1> <remote-ref> <remote-sha1>"
     printf '%s\n' "$stdin" | bash "$HOOKS_DIR/pre-push"
 }
