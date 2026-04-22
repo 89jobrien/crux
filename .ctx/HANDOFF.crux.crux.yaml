@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260421:052733"
+updated: "20260422:130205"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,34 @@ description: >
 items: []
 
 log:
+  - date: "20260422:130205"
+    session: 29
+    summary: >
+      Generalized .githooks/pre-commit and pre-push hooks (removed Maestro-specific
+      hardcoding; auto-detect crates via cargo metadata; env-var config for shared
+      crates, conformance test pattern, TF dir). Added bats test suite
+      (18 tests: 9 pre-commit, 9 pre-push) and fuzz.sh (filename classifier +
+      git-ref input fuzzer, 500 iterations). Wired just test-hooks and fuzz-hooks
+      recipes. All 18 tests pass.
+    commits:
+      - sha: fd35e13
+        branch: main
+      - sha: f4a66c7
+        branch: main
+      - sha: e4af825
+        branch: main
+      - sha: e4c1f4d
+        branch: main
+      - sha: a300557
+        branch: main
+      - sha: d4a7505
+        branch: main
+      - sha: 4230e53
+        branch: main
+      - sha: 6f5b835
+        branch: main
+      - sha: c11892b
+        branch: main
   - date: "20260421:052733"
     session: 28
     summary: >
