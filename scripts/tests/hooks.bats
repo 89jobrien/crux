@@ -3,6 +3,7 @@ load "${BATS_TEST_DIRNAME}/helpers"
 
 setup() {
     rm -rf "$BATS_TMPDIR/repo"
+    export GIT_STUB_CHANGED=""
 }
 
 # fake_stage: create a file and tell the git stub it is staged, without running
@@ -29,12 +30,13 @@ fake_stage() {
     rm -f "$REPO/crates/cruxx-agentic/src/baml_client/mod.rs"
     fake_stage "crates/cruxx-agentic/src/lib.rs" "fn main(){}"
     run run_pre_commit
+    [ "$status" -eq 0 ]
     [ -f "$REPO/crates/cruxx-agentic/src/baml_client/mod.rs" ]
 }
 
 @test "pre-commit: staged .rs file invokes cargo fmt check" {
     setup_repo
-    export STUB_RECORD="$BATS_TMPDIR/calls-fmt"
+    export STUB_RECORD="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
     rm -f "$STUB_RECORD"
     printf '%s\n' '#!/usr/bin/env bash' 'echo "$*" >> "$STUB_RECORD"' 'exit 0' > "$STUBS_DIR/cargo"
     chmod +x "$STUBS_DIR/cargo"
@@ -46,12 +48,13 @@ fake_stage() {
 
 @test "pre-commit: staged .rs file invokes clippy" {
     setup_repo
-    export STUB_RECORD="$BATS_TMPDIR/calls-clippy"
+    export STUB_RECORD="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
     rm -f "$STUB_RECORD"
     printf '%s\n' '#!/usr/bin/env bash' 'echo "$*" >> "$STUB_RECORD"' 'exit 0' > "$STUBS_DIR/cargo"
     chmod +x "$STUBS_DIR/cargo"
     fake_stage "src/main.rs" "fn main(){}"
     run run_pre_commit
+    [ "$status" -eq 0 ]
     grep -q "clippy" "$STUB_RECORD"
 }
 
@@ -86,22 +89,24 @@ fake_stage() {
 
 @test "pre-commit: staged .md file invokes prettier markdown" {
     setup_repo
-    export STUB_RECORD="$BATS_TMPDIR/calls-prettier-md"
+    export STUB_RECORD="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
     rm -f "$STUB_RECORD"
     printf '%s\n' '#!/usr/bin/env bash' 'echo "$*" >> "$STUB_RECORD"' 'exit 0' > "$STUBS_DIR/prettier"
     chmod +x "$STUBS_DIR/prettier"
     fake_stage "README.md" "# hello"
     run run_pre_commit
+    [ "$status" -eq 0 ]
     grep -q "markdown" "$STUB_RECORD"
 }
 
 @test "pre-commit: staged .yaml file invokes prettier yaml" {
     setup_repo
-    export STUB_RECORD="$BATS_TMPDIR/calls-prettier-yaml"
+    export STUB_RECORD="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
     rm -f "$STUB_RECORD"
     printf '%s\n' '#!/usr/bin/env bash' 'echo "$*" >> "$STUB_RECORD"' 'exit 0' > "$STUBS_DIR/prettier"
     chmod +x "$STUBS_DIR/prettier"
     fake_stage "config.yaml" "key: value"
     run run_pre_commit
+    [ "$status" -eq 0 ]
     grep -q "yaml" "$STUB_RECORD"
 }
