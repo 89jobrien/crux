@@ -4,6 +4,10 @@ load "${BATS_TEST_DIRNAME}/helpers"
 setup() {
     rm -rf "$BATS_TMPDIR/repo"
     export GIT_STUB_CHANGED=""
+    unset PRE_PUSH_SHARED_CRATES
+    unset PRE_PUSH_CONFORMANCE_TEST
+    unset STUB_RECORD
+    unset GIT_STUB_TOPLEVEL
 }
 
 # fake_stage: create a file and tell the git stub it is staged, without running
@@ -109,4 +113,159 @@ fake_stage() {
     run run_pre_commit
     [ "$status" -eq 0 ]
     grep -q "yaml" "$STUB_RECORD"
+}
+
+# ── pre-push ─────────────────────────────────────────────────────────────────
+
+# Helper: build a push ref line for run_pre_push
+push_ref() {
+    echo "refs/heads/main $1 refs/heads/main $2"
+}
+
+ZERO="0000000000000000000000000000000000000000"
+LOCAL="aabbccddeeff00112233445566778899aabbccdd"
+REMOTE="11223344556677889900aabbccddeeff11223344"
+
+@test "pre-push: no lintable changed files exits 0" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="docs/notes.txt"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No lintable changes"* ]]
+}
+
+@test "pre-push: new branch (zero remote OID) runs checks" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="src/main.rs"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
+    run run_pre_push "$(push_ref $LOCAL $ZERO)"
+    [ "$status" -eq 0 ]
+    grep -q "check" "$record"
+}
+
+@test "pre-push: deleted branch (zero local OID) exits 0 with no checks" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="src/main.rs"
+    run run_pre_push "$(push_ref $ZERO $REMOTE)"
+    [ "$status" -eq 0 ]
+}
+
+@test "pre-push: changed .rs triggers cargo check --workspace" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="src/main.rs"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    grep -q "check --workspace" "$record"
+}
+
+@test "pre-push: changed crate dir triggers per-crate clippy" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    mkdir -p "$REPO/mycrate"
+    printf '[package]\nname = "mycrate"\nversion = "0.1.0"\nedition = "2021"\n' \
+        > "$REPO/mycrate/Cargo.toml"
+    export GIT_STUB_CHANGED="mycrate/src/lib.rs"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    grep -q "clippy" "$record"
+}
+
+@test "pre-push: PRE_PUSH_SHARED_CRATES triggers workspace-wide clippy" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    mkdir -p "$REPO/shared-core"
+    printf '[package]\nname = "shared-core"\nversion = "0.1.0"\nedition = "2021"\n' \
+        > "$REPO/shared-core/Cargo.toml"
+    export GIT_STUB_CHANGED="shared-core/src/lib.rs"
+    export PRE_PUSH_SHARED_CRATES="shared-core"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    grep -q -- "--workspace" "$record"
+}
+
+@test "pre-push: PRE_PUSH_CONFORMANCE_TEST='' disables conformance run" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="src/main.rs"
+    export PRE_PUSH_CONFORMANCE_TEST=""
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    ! grep -q "nextest" "$record" 2>/dev/null || true
+}
+
+@test "pre-push: changed .sh triggers shellcheck" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="scripts/deploy.sh"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/shellcheck" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/shellcheck"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    grep -q "deploy.sh" "$record"
+}
+
+@test "pre-push: changed .md triggers markdownlint" {
+    setup_repo
+    export GIT_STUB_TOPLEVEL="$REPO"
+    export GIT_STUB_CHANGED="README.md"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/markdownlint-cli2" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/markdownlint-cli2"
+    run run_pre_push "$(push_ref $LOCAL $REMOTE)"
+    [ "$status" -eq 0 ]
+    grep -q "README.md" "$record"
 }
