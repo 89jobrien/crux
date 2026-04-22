@@ -5,6 +5,7 @@
 set -eo pipefail
 
 ITERATIONS="${2:-500}"
+# Usage: bash fuzz.sh [--iterations N]  ($1=--iterations flag name, $2=N value)
 PASS=0 FAIL=0
 HOOKS_DIR="$(cd "$(dirname "$0")/../.." && pwd)/.githooks"
 
@@ -38,8 +39,8 @@ classify() {
 
 fuzz_classifier() {
     echo "==> Filename classifier fuzz ($ITERATIONS iterations)"
-    local i=0 pass=0 fail=0
-    while (( i++ < ITERATIONS )); do
+    local pass=0 fail=0
+    for (( i=0; i < ITERATIONS; i++ )); do
         local name
         name=$(LC_ALL=C tr -dc 'a-zA-Z0-9./\-_' < /dev/urandom | head -c $(( RANDOM % 60 + 1 )) 2>/dev/null || true)
         name="${name:-noname}"
@@ -64,7 +65,7 @@ fuzz_classifier() {
 
 fuzz_refs() {
     echo "==> Git ref input fuzz ($ITERATIONS iterations)"
-    local i=0 p=0 f=0
+    local p=0 f=0
 
     generate_oid() {
         local variant=$(( RANDOM % 6 ))
@@ -80,6 +81,7 @@ fuzz_refs() {
 
     local tmpdir
     tmpdir=$(mktemp -d)
+    trap "rm -rf '$tmpdir'" EXIT INT TERM
     GIT_CONFIG_NOSYSTEM=1 HOME="$tmpdir" git -C "$tmpdir" init -q
     GIT_CONFIG_NOSYSTEM=1 HOME="$tmpdir" git -C "$tmpdir" config user.email t@t.com
     GIT_CONFIG_NOSYSTEM=1 HOME="$tmpdir" git -C "$tmpdir" config user.name T
@@ -87,7 +89,7 @@ fuzz_refs() {
     GIT_CONFIG_NOSYSTEM=1 HOME="$tmpdir" git -C "$tmpdir" add f
     GIT_CONFIG_NOSYSTEM=1 HOME="$tmpdir" git -C "$tmpdir" -c core.hooksPath=/dev/null commit -q -m init
 
-    while (( i++ < ITERATIONS )); do
+    for (( i=0; i < ITERATIONS; i++ )); do
         local lo ro
         lo=$(generate_oid)
         ro=$(generate_oid)
@@ -112,7 +114,6 @@ fuzz_refs() {
             p=$(( p + 1 ))
         fi
     done
-    rm -rf "$tmpdir"
     echo "  ref inputs: $p passed, $f failed"
     PASS=$(( PASS + p )) FAIL=$(( FAIL + f ))
 }
