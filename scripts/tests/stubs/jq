@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+case "$*" in
+    *packages*) echo "" ;;
+    *)          exit "${STUB_EXIT:-0}" ;;
+esac
