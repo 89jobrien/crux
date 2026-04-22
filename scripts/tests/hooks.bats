@@ -156,8 +156,17 @@ EOF
     setup_repo
     export GIT_STUB_TOPLEVEL="$REPO"
     export GIT_STUB_CHANGED="src/main.rs"
+    local record="$BATS_TMPDIR/${BATS_TEST_NAME//[^a-zA-Z0-9]/_}"
+    export STUB_RECORD="$record"
+    cat > "$STUBS_DIR/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_RECORD"
+exit 0
+EOF
+    chmod +x "$STUBS_DIR/cargo"
     run run_pre_push "$(push_ref $ZERO $REMOTE)"
     [ "$status" -eq 0 ]
+    ! grep -q "check" "$record" 2>/dev/null
 }
 
 @test "pre-push: changed .rs triggers cargo check --workspace" {
@@ -233,7 +242,9 @@ EOF
     chmod +x "$STUBS_DIR/cargo"
     run run_pre_push "$(push_ref $LOCAL $REMOTE)"
     [ "$status" -eq 0 ]
-    ! grep -q "nextest" "$record" 2>/dev/null || true
+    if [[ -f "$record" ]]; then
+        ! grep -q "nextest" "$record"
+    fi
 }
 
 @test "pre-push: changed .sh triggers shellcheck" {
