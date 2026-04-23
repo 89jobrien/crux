@@ -1,0 +1,37 @@
+[workspace]
+
+[package]
+name = "cruxx-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+tempfile = "3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dependencies.cruxx-agentic]
+path = "../crates/cruxx-agentic"
+
+[dependencies.cruxx-script]
+path = "../crates/cruxx-script"
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sqlite_args"
+path = "fuzz_targets/sqlite_args.rs"
+test = false
+doc = false
+bench = false
