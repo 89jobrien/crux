@@ -150,7 +150,10 @@ pub fn register(registry: &mut HandlerRegistry) {
         let params = json_params(&input);
         let mut rows = rows_to_json(&conn, &sql, &params).map_err(to_crux)?;
         match rows.len() {
-            0 => Err(CruxErr::step_failed("sqlite::query_one", "no rows returned")),
+            0 => Err(CruxErr::step_failed(
+                "sqlite::query_one",
+                "no rows returned",
+            )),
             1 => Ok(json!({ "row": rows.remove(0) })),
             n => Err(CruxErr::step_failed(
                 "sqlite::query_one",

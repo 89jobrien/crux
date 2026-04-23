@@ -82,8 +82,12 @@ async fn jq_keys_returns_sorted_keys() {
     let result = handler(input).await.unwrap();
     // keys of the payload (args key excluded)
     assert!(result.is_array());
-    let arr: Vec<&str> = result.as_array().unwrap().iter()
-        .filter_map(|v| v.as_str()).collect();
+    let arr: Vec<&str> = result
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
     assert!(arr.contains(&"a"));
     assert!(arr.contains(&"b"));
     assert!(!arr.contains(&"args"));

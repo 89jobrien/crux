@@ -119,8 +119,7 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.agents
-            .insert(name, Arc::new(move |v| Box::pin(f(v))));
+        self.agents.insert(name, Arc::new(move |v| Box::pin(f(v))));
     }
 
     /// Look up a handler by name.

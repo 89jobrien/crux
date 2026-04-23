@@ -10,28 +10,43 @@ fn planner() -> DeterministicPlanner {
 
 #[test]
 fn plan_read_file_goal_contains_fs_read() {
-    let yaml = planner().plan("Read a file and print its contents").unwrap();
+    let yaml = planner()
+        .plan("Read a file and print its contents")
+        .unwrap();
     assert!(yaml.contains("fs::read"), "expected fs::read in:\n{yaml}");
-    assert!(yaml.contains("pipeline:"), "expected 'pipeline:' key in:\n{yaml}");
+    assert!(
+        yaml.contains("pipeline:"),
+        "expected 'pipeline:' key in:\n{yaml}"
+    );
     assert!(yaml.contains("steps:"), "expected 'steps:' in:\n{yaml}");
 }
 
 #[test]
 fn plan_git_diff_goal_contains_git_handler() {
-    let yaml = planner().plan("Review a git commit and summarize changes").unwrap();
+    let yaml = planner()
+        .plan("Review a git commit and summarize changes")
+        .unwrap();
     assert!(yaml.contains("git::diff"), "expected git::diff in:\n{yaml}");
 }
 
 #[test]
 fn plan_extract_entities_goal_contains_llm_extract() {
     let yaml = planner().plan("Extract named entities from text").unwrap();
-    assert!(yaml.contains("llm::extract"), "expected llm::extract in:\n{yaml}");
+    assert!(
+        yaml.contains("llm::extract"),
+        "expected llm::extract in:\n{yaml}"
+    );
 }
 
 #[test]
 fn plan_write_json_goal_contains_json_write() {
-    let yaml = planner().plan("Write extracted data to a JSON file").unwrap();
-    assert!(yaml.contains("json::write"), "expected json::write in:\n{yaml}");
+    let yaml = planner()
+        .plan("Write extracted data to a JSON file")
+        .unwrap();
+    assert!(
+        yaml.contains("json::write"),
+        "expected json::write in:\n{yaml}"
+    );
 }
 
 #[test]

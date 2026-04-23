@@ -111,7 +111,12 @@ fn conformance_approval_gate_decision_deferred_contains_timeout() {
     );
     let back: ApprovalDecision = serde_json::from_str(&json).expect("deserialize");
     assert!(
-        matches!(back, ApprovalDecision::Deferred { timeout_seconds: 300 }),
+        matches!(
+            back,
+            ApprovalDecision::Deferred {
+                timeout_seconds: 300
+            }
+        ),
         "expected Deferred(300), got {back:?}"
     );
 }

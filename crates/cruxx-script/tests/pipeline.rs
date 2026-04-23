@@ -64,10 +64,7 @@ steps:
     let runner = Runner::new(test_registry());
     let cruxx = runner.run(&pipeline, json!("hello")).await;
 
-    assert_eq!(
-        cruxx.value().unwrap(),
-        &json!({ "result": "analyzed" })
-    );
+    assert_eq!(cruxx.value().unwrap(), &json!({ "result": "analyzed" }));
     assert_eq!(cruxx.steps.len(), 1);
     assert_eq!(cruxx.steps[0].name, "analyze");
 }

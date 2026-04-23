@@ -4,13 +4,11 @@
 /// - Default plugin path resolves to ~/.cruxx/plugins.toml
 /// - A missing plugins.toml gracefully produces an empty manifest (no panic)
 /// - A valid plugins.toml with a plugin entry is parsed correctly
-
-use cruxx_plugin::manifest::{load_manifest, PluginManifest};
+use cruxx_plugin::manifest::{PluginManifest, load_manifest};
 
 #[test]
 fn missing_plugins_toml_returns_empty_manifest() {
-    let manifest = load_manifest("/nonexistent/path/plugins.toml".to_string())
-        .unwrap_or_default();
+    let manifest = load_manifest("/nonexistent/path/plugins.toml".to_string()).unwrap_or_default();
     assert!(
         manifest.plugin.is_empty(),
         "missing plugins.toml should produce empty manifest"
@@ -24,7 +22,10 @@ fn default_plugins_path_uses_home_directory() {
 
     // Simulate the resolve_plugins_path logic from the binary.
     let resolved = resolve_plugins_path(None);
-    assert_eq!(resolved, expected, "default plugin path should be ~/.cruxx/plugins.toml");
+    assert_eq!(
+        resolved, expected,
+        "default plugin path should be ~/.cruxx/plugins.toml"
+    );
 }
 
 #[test]

@@ -164,7 +164,9 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                         CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
                     })?;
 
-                Ok(HandlerOutput::new(json!({ "description": result.description })))
+                Ok(HandlerOutput::new(
+                    json!({ "description": result.description }),
+                ))
             }
             "AssessHealth" => {
                 let name = input_map
@@ -480,7 +482,9 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
                 let base_url = opt_str(&input, "base_url")
                     .unwrap_or("http://localhost:11434")
                     .to_string();
-                OllamaAdapter::new(model_ref, base_url).complete(req).await?
+                OllamaAdapter::new(model_ref, base_url)
+                    .complete(req)
+                    .await?
             }
             _ => {
                 let base_url = opt_str(&input, "base_url")

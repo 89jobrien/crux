@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260422:130205"
+updated: "20260422:164000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,27 @@ description: >
 items: []
 
 log:
+  - date: "20260422:164000"
+    session: 30
+    summary: >
+      Implemented cruxx-agentic sqlite handler module: 7 CRUD handlers (open, close,
+      prepare, execute, query, bind, step). Added sqlite handler name constants
+      (OPEN, CLOSE, PREPARE, EXECUTE, QUERY, BIND, STEP) and comprehensive test
+      coverage: property tests for CRUD invariants (32 property tests) validating
+      lifecycle safety (connection → statement → execution), state transitions, and
+      error conditions; fuzz target for arg-parsing resilience. All 360+ tests pass,
+      clippy clean. gitignore updated: .env exclusion in root and crates/ dir.
+    commits:
+      - sha: 55be86f
+        branch: main
+      - sha: 32f60da
+        branch: main
+      - sha: 94c4092
+        branch: main
+      - sha: f8bc96e
+        branch: main
+      - sha: cdb7651
+        branch: main
   - date: "20260422:130205"
     session: 29
     summary: >

@@ -53,8 +53,7 @@ steps:
       fields: [a]
 "#;
     let f = write_pipeline(yaml);
-    let pipeline = cruxx_script::load_file(f.path().to_str().unwrap())
-        .expect("should parse");
+    let pipeline = cruxx_script::load_file(f.path().to_str().unwrap()).expect("should parse");
 
     // Collect handler names (same logic as cmd_check in the binary).
     use cruxx_script::schema::StepDef;
@@ -83,8 +82,7 @@ steps:
     handler: unknown::handler
 "#;
     let f = write_pipeline(yaml);
-    let pipeline = cruxx_script::load_file(f.path().to_str().unwrap())
-        .expect("yaml parses fine");
+    let pipeline = cruxx_script::load_file(f.path().to_str().unwrap()).expect("yaml parses fine");
 
     // Build a registry and check which handlers are missing.
     let mut reg = cruxx_script::HandlerRegistry::new();

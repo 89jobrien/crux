@@ -4,19 +4,19 @@
 //! module's `register` function individually to pick only what you need.
 
 pub mod adapters;
-pub mod handlers;
 pub mod container;
-pub mod sqlite;
 pub mod ctrl;
 pub mod error;
 pub mod fs;
 pub mod git;
+pub mod handlers;
 pub mod harness;
 pub mod json;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
 pub mod shell;
+pub mod sqlite;
 
 #[cfg(feature = "baml")]
 pub mod planner;

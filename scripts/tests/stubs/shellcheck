@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-exit "${STUB_EXIT:-0}"
+echo "$*" >> "$STUB_RECORD"
+exit 0

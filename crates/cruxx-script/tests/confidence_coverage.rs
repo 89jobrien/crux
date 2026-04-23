@@ -34,15 +34,11 @@ steps:
 // Branch handlers (shared across tests).
 // ---------------------------------------------------------------------------
 
-async fn branch_low(
-    _input: Value,
-) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
+async fn branch_low(_input: Value) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
     Ok(HandlerOutput::new(json!("branch:low")))
 }
 
-async fn branch_high(
-    _input: Value,
-) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
+async fn branch_high(_input: Value) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
     Ok(HandlerOutput::new(json!("branch:high")))
 }
 
@@ -87,9 +83,9 @@ async fn handler_value_with_route_on_confidence_returns_error() {
     let runner = Runner::new(Arc::new(reg));
     let crux = runner.run(&pipeline, json!({})).await;
 
-    let err = crux
-        .value()
-        .expect_err("pipeline should fail when handler_value step is used with route_on_confidence");
+    let err = crux.value().expect_err(
+        "pipeline should fail when handler_value step is used with route_on_confidence",
+    );
     let err_msg = format!("{err:?}");
     assert!(
         err_msg.contains("produced no confidence score"),
@@ -104,9 +100,8 @@ async fn handler_value_with_route_on_confidence_returns_error() {
 #[tokio::test]
 async fn confidence_zero_routes_to_low_branch() {
     let pipeline = load(ROUTE_PIPELINE).unwrap();
-    let reg = registry_with(|_: Value| async {
-        Ok(HandlerOutput::with_confidence(json!("zero"), 0.0))
-    });
+    let reg =
+        registry_with(|_: Value| async { Ok(HandlerOutput::with_confidence(json!("zero"), 0.0)) });
     let runner = Runner::new(reg);
     let crux = runner.run(&pipeline, json!({})).await;
 
@@ -125,9 +120,8 @@ async fn confidence_zero_routes_to_low_branch() {
 #[tokio::test]
 async fn confidence_one_routes_to_high_branch() {
     let pipeline = load(ROUTE_PIPELINE).unwrap();
-    let reg = registry_with(|_: Value| async {
-        Ok(HandlerOutput::with_confidence(json!("one"), 1.0))
-    });
+    let reg =
+        registry_with(|_: Value| async { Ok(HandlerOutput::with_confidence(json!("one"), 1.0)) });
     let runner = Runner::new(reg);
     let crux = runner.run(&pipeline, json!({})).await;
 
@@ -147,9 +141,8 @@ async fn confidence_one_routes_to_high_branch() {
 #[tokio::test]
 async fn confidence_at_boundary_point_routes_correctly() {
     let pipeline = load(ROUTE_PIPELINE).unwrap();
-    let reg = registry_with(|_: Value| async {
-        Ok(HandlerOutput::with_confidence(json!("mid"), 0.5))
-    });
+    let reg =
+        registry_with(|_: Value| async { Ok(HandlerOutput::with_confidence(json!("mid"), 0.5)) });
     let runner = Runner::new(reg);
     let crux = runner.run(&pipeline, json!({})).await;
 

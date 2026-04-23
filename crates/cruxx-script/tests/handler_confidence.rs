@@ -8,15 +8,23 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// A handler that emits a low confidence score (0.3).
-async fn low_confidence_handler(_input: Value) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
-    Ok(HandlerOutput::with_confidence(json!({ "data": "low" }), 0.3))
+async fn low_confidence_handler(
+    _input: Value,
+) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
+    Ok(HandlerOutput::with_confidence(
+        json!({ "data": "low" }),
+        0.3,
+    ))
 }
 
 /// A handler that emits a high confidence score (0.9).
 async fn high_confidence_handler(
     _input: Value,
 ) -> Result<HandlerOutput, cruxx_core::prelude::CruxErr> {
-    Ok(HandlerOutput::with_confidence(json!({ "data": "high" }), 0.9))
+    Ok(HandlerOutput::with_confidence(
+        json!({ "data": "high" }),
+        0.9,
+    ))
 }
 
 /// Route taken when confidence is in [0.0, 0.5) — the "low" branch.
@@ -45,7 +53,16 @@ steps:
         handler: branch_high
 "#;
 
-fn make_registry(classify: fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HandlerOutput, cruxx_core::prelude::CruxErr>> + Send>>) -> Arc<HandlerRegistry> {
+fn make_registry(
+    classify: fn(
+        Value,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<HandlerOutput, cruxx_core::prelude::CruxErr>>
+                + Send,
+        >,
+    >,
+) -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
     reg.handler("classify_handler", classify);
     reg.handler("branch_low", branch_low);

@@ -159,7 +159,10 @@ fn eval_jq(value: &Value, expr: &str) -> Result<Value, CruxErr> {
     // `has("key")` — boolean key existence.
     if let Some(key) = parse_has(expr) {
         return Ok(Value::Bool(
-            value.as_object().map(|m| m.contains_key(key)).unwrap_or(false),
+            value
+                .as_object()
+                .map(|m| m.contains_key(key))
+                .unwrap_or(false),
         ));
     }
 
