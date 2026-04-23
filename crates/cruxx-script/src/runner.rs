@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use cruxx_core::prelude::*;
 use serde_json::Value;
 
-use crate::expr::{ExprContext, StepResult};
+use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{BudgetDef, PipelineDef, SpeculateMode, StepDef};
 
@@ -69,12 +69,15 @@ impl Runner {
                     })?
                     .clone();
                 // Merge static step args into the current input under the "args" key.
+                // Template strings (`{{ input.field }}`, `{{ steps.X.output.field }}`) in
+                // args string values are expanded against the current ExprContext before merge.
                 let input = if let Some(step_args) = &node.args {
+                    let expanded = expand_args(step_args.clone(), expr_ctx);
                     let mut merged = current_input.clone();
                     if let Value::Object(ref mut map) = merged {
-                        map.insert("args".to_string(), step_args.clone());
+                        map.insert("args".to_string(), expanded);
                     } else {
-                        merged = serde_json::json!({ "args": step_args, "input": current_input });
+                        merged = serde_json::json!({ "args": expanded, "input": current_input });
                     }
                     merged
                 } else {
@@ -337,6 +340,31 @@ impl Runner {
                 Ok(result)
             }
         }
+    }
+}
+
+/// Recursively expand `{{ expr }}` templates in all string leaves of a JSON value.
+///
+/// Non-string leaves (numbers, booleans, null, arrays, objects) are traversed but not
+/// substituted. Strings that are not `{{ ... }}` templates are returned unchanged.
+/// Expansion errors (unknown step, unknown path) are silently ignored — the original
+/// string is preserved. This keeps static pipelines working without any ExprContext setup.
+fn expand_args(value: Value, ctx: &ExprContext) -> Value {
+    match value {
+        Value::String(s) => match ctx.eval(&s) {
+            Ok(expanded) => expanded,
+            Err(ExprError::Syntax(_) | ExprError::UnknownStep(_) | ExprError::UnknownPath(_)) => {
+                Value::String(s)
+            }
+            Err(_) => Value::String(s),
+        },
+        Value::Array(arr) => Value::Array(arr.into_iter().map(|v| expand_args(v, ctx)).collect()),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(k, v)| (k, expand_args(v, ctx)))
+                .collect(),
+        ),
+        other => other,
     }
 }
 

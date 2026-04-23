@@ -2,9 +2,21 @@
 use cruxx_script::{HandlerOutput, HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use cruxx_core::prelude::CruxErr;
 
 fn test_registry() -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
+
+    // Echo handler: returns args.msg as output value (used for template expansion tests)
+    reg.handler_value("echo_msg", |input: Value| async move {
+        let msg = input
+            .get("args")
+            .and_then(|a| a.get("msg"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok::<Value, CruxErr>(Value::String(msg))
+    });
 
     // Uses `handler` (not `handler_value`) so that a real confidence score of 0.85
     // is emitted, making `{{ steps.analyze.confidence }}` resolvable in routing tests.
@@ -238,6 +250,82 @@ steps:
     let cruxx = runner.run(&pipeline, json!(null)).await;
 
     assert!(cruxx.value().is_err());
+}
+
+#[tokio::test]
+async fn args_template_expands_input_field() {
+    // `{{ input.greeting }}` in args.msg should resolve to the pipeline input value
+    let yaml = r#"
+pipeline: template_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ input.greeting }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let cruxx = runner
+        .run(&pipeline, json!({ "greeting": "hello crux" }))
+        .await;
+    assert_eq!(cruxx.value().unwrap(), &json!("hello crux"));
+}
+
+#[tokio::test]
+async fn args_template_expands_step_output() {
+    // `{{ steps.analyze.output.result }}` should resolve to a prior step's output field
+    let yaml = r#"
+pipeline: step_ref_test
+steps:
+  - step: analyze
+    handler: analyzer
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ steps.analyze.output.result }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let cruxx = runner.run(&pipeline, json!("input")).await;
+    assert_eq!(cruxx.value().unwrap(), &json!("analyzed"));
+}
+
+#[tokio::test]
+async fn args_non_template_string_unchanged() {
+    // A plain string with no `{{ }}` should pass through as-is
+    let yaml = r#"
+pipeline: static_args_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "static value"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let cruxx = runner.run(&pipeline, json!(null)).await;
+    assert_eq!(cruxx.value().unwrap(), &json!("static value"));
+}
+
+#[tokio::test]
+async fn args_unknown_template_preserved() {
+    // An unresolvable `{{ steps.missing.output }}` should not crash — string preserved
+    let yaml = r#"
+pipeline: unknown_ref_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ steps.missing.output }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let cruxx = runner.run(&pipeline, json!(null)).await;
+    // Should still run; unknown ref preserved as literal string
+    assert_eq!(
+        cruxx.value().unwrap(),
+        &json!("{{ steps.missing.output }}")
+    );
 }
 
 #[tokio::test]

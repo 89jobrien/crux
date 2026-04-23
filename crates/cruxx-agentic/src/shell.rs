@@ -11,6 +11,10 @@ use crate::error::{opt_str, require_str};
 /// Both handlers require a `cmd` arg to be present in the step's `args` field at runtime.
 /// Use cruxx-script's static args injection to supply `cmd` at the pipeline-definition level;
 /// without it the handler will return a `MissingArg` error.
+///
+/// Optional args:
+/// - `cwd`: working directory for the command
+/// - `env`: object of `{ "KEY": "VALUE" }` pairs injected as environment variables
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("shell::exec", |input: Value| async move {
         run_shell(input, false).await
@@ -29,6 +33,17 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
     command.arg("-c").arg(cmd);
     if let Some(dir) = cwd {
         command.current_dir(dir);
+    }
+    if let Some(env_map) = input
+        .get("args")
+        .and_then(|a| a.get("env"))
+        .and_then(|e| e.as_object())
+    {
+        for (k, v) in env_map {
+            if let Some(s) = v.as_str() {
+                command.env(k, s);
+            }
+        }
     }
 
     let output = command

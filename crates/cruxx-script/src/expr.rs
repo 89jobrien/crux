@@ -59,8 +59,15 @@ impl ExprContext {
             return Ok(self.input.clone());
         }
 
+        // `input.<field>.<subfield>...` — dot-path into the pipeline input
+        if let Some(rest) = path.strip_prefix("input.") {
+            return json_get(&self.input, rest)
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
+        }
+
         let parts: Vec<&str> = path.splitn(3, '.').collect();
         match parts.as_slice() {
+            // `steps.<name>.output` — full output value
             ["steps", name, "output"] => self
                 .steps
                 .get(*name)
@@ -80,9 +87,35 @@ impl ExprContext {
                         .expect("confidence is always finite"),
                 ))
             }
+            // `steps.<name>.output.<field>...` — dot-path into a step's output
+            ["steps", name, rest] if rest.starts_with("output.") => {
+                let step = self
+                    .steps
+                    .get(*name)
+                    .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
+                let field_path = rest.strip_prefix("output.").unwrap();
+                json_get(&step.output, field_path)
+                    .ok_or_else(|| ExprError::UnknownPath(path.to_string()))
+            }
             _ => Err(ExprError::UnknownPath(path.to_string())),
         }
     }
+}
+
+/// Walk a dot-separated key path into a JSON value, returning the nested value if found.
+fn json_get(value: &Value, path: &str) -> Option<Value> {
+    let mut current = value;
+    let mut owned;
+    for key in path.split('.') {
+        match current.get(key) {
+            Some(v) => {
+                owned = v.clone();
+                current = &owned;
+            }
+            None => return None,
+        }
+    }
+    Some(current.clone())
 }
 
 #[derive(Debug, thiserror::Error)]
