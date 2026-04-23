@@ -19,4 +19,6 @@ target/
 # handoff-end
 #
 .envrc
+.env
+crates/.env
 .claude/settings.local.json
