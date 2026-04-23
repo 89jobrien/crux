@@ -38,3 +38,12 @@ pub const LLM_STREAM: &str = "llm::stream";
 // container / harness
 pub const CONTAINER_RUN: &str = "container::run";
 pub const HARNESS_RUN: &str = "harness::run";
+
+// sqlite
+pub const SQLITE_EXEC: &str = "sqlite::exec";
+pub const SQLITE_QUERY_ONE: &str = "sqlite::query_one";
+pub const SQLITE_QUERY_MANY: &str = "sqlite::query_many";
+pub const SQLITE_INSERT: &str = "sqlite::insert";
+pub const SQLITE_UPDATE: &str = "sqlite::update";
+pub const SQLITE_DELETE: &str = "sqlite::delete";
+pub const SQLITE_UPSERT: &str = "sqlite::upsert";
