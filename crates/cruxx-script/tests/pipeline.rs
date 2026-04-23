@@ -329,6 +329,23 @@ steps:
 }
 
 #[tokio::test]
+async fn args_interpolated_string() {
+    // A string with `{{ }}` embedded mid-string should be interpolated, not replaced wholesale
+    let yaml = r#"
+pipeline: interp_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "hello {{ input.name }}!"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let cruxx = runner.run(&pipeline, json!({"name": "crux"})).await;
+    assert_eq!(cruxx.value().unwrap(), &json!("hello crux!"));
+}
+
+#[tokio::test]
 async fn expression_input_passthrough() {
     let yaml = r#"
 pipeline: expr_test

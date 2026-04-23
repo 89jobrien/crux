@@ -29,23 +29,50 @@ impl ExprContext {
         }
     }
 
-    /// Evaluate an expression string. Returns the resolved Value.
+    /// Resolve an expression string to a JSON value.
     ///
-    /// If the string is `{{ path }}`, resolves it. Otherwise returns
-    /// the string as a JSON string value.
+    /// - `{{ path }}` (entire string) — resolves to the typed JSON value at path.
+    /// - Strings containing one or more `{{ path }}` snippets — interpolated: each
+    ///   snippet is replaced with its string representation; result is a JSON string.
+    /// - Plain strings with no `{{ }}` — returned unchanged as a JSON string.
     pub fn eval(&self, expr: &str) -> Result<Value, ExprError> {
         let trimmed = expr.trim();
-        if let Some(path) = trimmed.strip_prefix("{{") {
-            let path = path
-                .strip_suffix("}}")
-                .ok_or_else(|| ExprError::Syntax(expr.to_string()))?;
-            self.resolve_path(path.trim())
-        } else {
-            Ok(Value::String(expr.to_string()))
+
+        // Fast path: entire string is a single template — return typed value.
+        if let Some(inner) = trimmed
+            .strip_prefix("{{")
+            .and_then(|s| s.strip_suffix("}}"))
+        {
+            return self.resolve_path(inner.trim());
         }
+
+        // No template markers at all — return as-is.
+        if !expr.contains("{{") {
+            return Ok(Value::String(expr.to_string()));
+        }
+
+        // Interpolation: replace every `{{ path }}` occurrence within the string.
+        let mut result = String::with_capacity(expr.len());
+        let mut remaining = expr;
+        while let Some(start) = remaining.find("{{") {
+            result.push_str(&remaining[..start]);
+            let after_open = &remaining[start + 2..];
+            let end = after_open
+                .find("}}")
+                .ok_or_else(|| ExprError::Syntax(expr.to_string()))?;
+            let path = after_open[..end].trim();
+            let value = self.resolve_path(path)?;
+            match value {
+                Value::String(s) => result.push_str(&s),
+                other => result.push_str(&other.to_string()),
+            }
+            remaining = &after_open[end + 2..];
+        }
+        result.push_str(remaining);
+        Ok(Value::String(result))
     }
 
-    /// Evaluate an expression to f32 (for confidence routing).
+    /// Resolve an expression to f32 (for confidence routing).
     pub fn eval_f32(&self, expr: &str) -> Result<f32, ExprError> {
         let value = self.eval(expr)?;
         match value {
