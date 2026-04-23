@@ -9,6 +9,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "Serializable wire-format types for the cruxx agentic DSL"
 
+[features]
+test-utils = []
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

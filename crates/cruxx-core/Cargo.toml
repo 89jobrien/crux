@@ -33,6 +33,7 @@ tracing = { workspace = true, optional = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 proptest = { workspace = true }
+cruxx-types = { path = "../cruxx-types", features = ["test-utils"] }
 
 [features]
 default = ["tokio-runtime"]

@@ -4,6 +4,9 @@
 //! It has no runtime, no async, no LLM dependencies. Designed for
 //! cross-workspace consumption (e.g., minibox trace storage).
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod testing;
+
 pub mod budget;
 pub mod crux_value;
 pub mod error;

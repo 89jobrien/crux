@@ -207,38 +207,14 @@ mod tests {
             self.inner.cas(id, expected, new).await
         }
     }
-    use crate::types::crux_value::Crux;
-    use crate::types::id::CruxId;
-    use crate::types::step::{Step, StepKind, StepStatus};
-    use chrono::Utc;
+    use cruxx_types::testing::{crux_ok, step_ok};
 
     fn make_registry() -> TaskRegistry<InMemoryBackend> {
         TaskRegistry::new(InMemoryBackend::new())
     }
 
-    fn make_cruxx() -> Crux<String> {
-        Crux {
-            id: CruxId::new(),
-            agent: "test".into(),
-            value: Ok("result".into()),
-            steps: vec![Step {
-                name: "fetch".into(),
-                kind: StepKind::Plain,
-                status: StepStatus::Ok,
-                confidence: 1.0,
-                started_at: Utc::now(),
-                duration_ms: 5,
-                input_hash: 42,
-                content_hash: None,
-                output: Some(serde_json::json!("data")),
-                error: None,
-                attempt: 1,
-                events: vec![],
-            }],
-            children: vec![],
-            started_at: Utc::now(),
-            finished_at: Some(Utc::now()),
-        }
+    fn make_cruxx() -> cruxx_types::crux_value::Crux<String> {
+        crux_ok("test", "result".into(), vec![step_ok("fetch", 42, Some(serde_json::json!("data")))])
     }
 
     #[tokio::test]

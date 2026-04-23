@@ -110,47 +110,20 @@ impl<T: Serialize> Crux<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use crate::testing::{crux_ok, step_ok};
 
     fn sample_cruxx() -> Crux<String> {
-        Crux {
-            id: CruxId::new(),
-            agent: "test".into(),
-            value: Ok("hello".into()),
-            steps: vec![
-                Step {
-                    name: "greet".into(),
-                    kind: StepKind::Plain,
-                    status: StepStatus::Ok,
-                    confidence: 1.0,
-                    started_at: Utc::now(),
-                    duration_ms: 5,
-                    input_hash: 0,
-                    content_hash: None,
-                    output: Some(serde_json::json!("hello")),
-                    error: None,
-                    attempt: 1,
-                    events: vec![],
-                },
-                Step {
-                    name: "rejected_branch".into(),
-                    kind: StepKind::Speculation,
-                    status: StepStatus::Rejected,
-                    confidence: 0.3,
-                    started_at: Utc::now(),
-                    duration_ms: 2,
-                    input_hash: 0,
-                    content_hash: None,
-                    output: None,
-                    error: None,
-                    attempt: 1,
-                    events: vec![],
-                },
-            ],
-            children: vec![],
-            started_at: Utc::now(),
-            finished_at: Some(Utc::now()),
-        }
+        let rejected = Step {
+            name: "rejected_branch".into(),
+            kind: StepKind::Speculation,
+            status: StepStatus::Rejected,
+            confidence: 0.3,
+            ..step_ok("rejected_branch", 0, None)
+        };
+        crux_ok("test", "hello".into(), vec![
+            step_ok("greet", 0, Some(serde_json::json!("hello"))),
+            rejected,
+        ])
     }
 
     #[test]

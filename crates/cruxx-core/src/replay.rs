@@ -204,38 +204,14 @@ pub fn deserialize_replay<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::crux_value::Crux;
-    use crate::types::id::CruxId;
-    use crate::types::step::{Step, StepKind, StepStatus};
-    use chrono::Utc;
+    use cruxx_types::testing::{crux_ok, step_ok, step_with_content};
 
-    fn make_snapshot(steps: Vec<Step>) -> Crux<serde_json::Value> {
-        Crux {
-            id: CruxId::new(),
-            agent: "test".into(),
-            value: Ok(serde_json::json!(null)),
-            steps,
-            children: vec![],
-            started_at: Utc::now(),
-            finished_at: Some(Utc::now()),
-        }
+    fn make_snapshot(steps: Vec<cruxx_types::step::Step>) -> cruxx_types::crux_value::Crux<serde_json::Value> {
+        crux_ok("test", serde_json::json!(null), steps)
     }
 
-    fn make_step(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> Step {
-        Step {
-            name: name.into(),
-            kind: StepKind::Plain,
-            status: StepStatus::Ok,
-            confidence: 1.0,
-            started_at: Utc::now(),
-            duration_ms: 0,
-            input_hash,
-            content_hash: None,
-            output,
-            error: None,
-            attempt: 1,
-            events: vec![],
-        }
+    fn make_step(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> cruxx_types::step::Step {
+        step_ok(name, input_hash, output)
     }
 
     #[test]
@@ -397,21 +373,8 @@ mod tests {
         input_hash: u64,
         content_hash: Option<u64>,
         output: Option<serde_json::Value>,
-    ) -> Step {
-        Step {
-            name: name.into(),
-            kind: StepKind::Plain,
-            status: StepStatus::Ok,
-            confidence: 1.0,
-            started_at: Utc::now(),
-            duration_ms: 0,
-            input_hash,
-            content_hash,
-            output,
-            error: None,
-            attempt: 1,
-            events: vec![],
-        }
+    ) -> cruxx_types::step::Step {
+        step_with_content(name, input_hash, content_hash, output)
     }
 
     #[test]
@@ -505,8 +468,7 @@ mod tests {
 #[cfg(test)]
 mod proptest_replay {
     use super::*;
-    use crate::types::step::{Step, StepKind, StepStatus};
-    use chrono::Utc;
+    use cruxx_types::testing::{crux_ok, step_ok};
     use proptest::prelude::*;
 
     fn arb_step_name() -> impl Strategy<Value = String> {
@@ -517,34 +479,12 @@ mod proptest_replay {
         any::<u64>()
     }
 
-    fn make_step_prop(name: String, hash: u64, output: Option<serde_json::Value>) -> Step {
-        Step {
-            name,
-            kind: StepKind::Plain,
-            status: StepStatus::Ok,
-            confidence: 1.0,
-            started_at: Utc::now(),
-            duration_ms: 0,
-            input_hash: hash,
-            content_hash: None,
-            output,
-            error: None,
-            attempt: 1,
-            events: vec![],
-        }
+    fn make_step_prop(name: String, hash: u64, output: Option<serde_json::Value>) -> cruxx_types::step::Step {
+        step_ok(&name, hash, output)
     }
 
-    fn make_snapshot_prop(steps: Vec<Step>) -> Crux<serde_json::Value> {
-        use crate::types::id::CruxId;
-        Crux {
-            id: CruxId::new(),
-            agent: "test".into(),
-            value: Ok(serde_json::json!(null)),
-            steps,
-            children: vec![],
-            started_at: Utc::now(),
-            finished_at: Some(Utc::now()),
-        }
+    fn make_snapshot_prop(steps: Vec<cruxx_types::step::Step>) -> Crux<serde_json::Value> {
+        crux_ok("test", serde_json::json!(null), steps)
     }
 
     proptest! {
@@ -648,7 +588,7 @@ mod proptest_replay {
             let names = &names[..len];
             let hashes = &hashes[..len];
 
-            let steps: Vec<Step> = names
+            let steps: Vec<cruxx_types::step::Step> = names
                 .iter()
                 .zip(hashes.iter())
                 .map(|(n, &h)| make_step_prop(n.clone(), h, Some(serde_json::json!(h))))
