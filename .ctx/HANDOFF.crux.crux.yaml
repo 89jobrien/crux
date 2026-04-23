@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260422:164000"
+updated: "20260423:000000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,17 @@ description: >
 items: []
 
 log:
+  - date: "20260423:000000"
+    session: 31
+    summary: >
+      Implemented rx handler module for crux-agentic: rx::run (execute scripts from
+      registry by name) and rx::list (enumerate registered scripts). Registry types
+      mirror rx-registry-json without dependency. Fixed planner test signature (added
+      missing extra_handlers arg). Updated README and crux-capabilities.md. All 453
+      tests pass.
+    commits:
+      - sha: b7cb692
+        branch: main
   - date: "20260422:164000"
     session: 30
     summary: >
