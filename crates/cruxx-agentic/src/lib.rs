@@ -6,6 +6,7 @@
 pub mod adapters;
 pub mod handlers;
 pub mod container;
+pub mod sqlite;
 pub mod ctrl;
 pub mod error;
 pub mod fs;
@@ -69,6 +70,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     git::register(registry);
     json::register(registry);
     ctrl::register(registry);
+    sqlite::register(registry);
     llm::register(registry);
     llm::register_stream(registry);
     #[cfg(feature = "baml")]
