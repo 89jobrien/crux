@@ -15,6 +15,7 @@ pub mod json;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
+pub mod rx;
 pub mod shell;
 pub mod sqlite;
 
@@ -70,6 +71,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     git::register(registry);
     json::register(registry);
     ctrl::register(registry);
+    rx::register(registry);
     sqlite::register(registry);
     llm::register(registry);
     llm::register_stream(registry);

@@ -48,6 +48,8 @@ Two registry methods exist for registering handlers:
 | `container::wait`   | Block until container exits; emits exit code and captured logs              |
 | `harness::evolve`   | Run `EvolutionPlanner` against `RunMetrics` and apply resulting diff        |
 | `harness::canary`   | Deploy a canary image alongside the current harness (`traffic_percent` arg) |
+| `rx::run`           | Run a script from the rx registry by name (`name`, optional `args`, `registry`) |
+| `rx::list`          | List all commands in the rx registry (optional `registry` path override)    |
 
 ## Handlers (behind `--features baml`)
 

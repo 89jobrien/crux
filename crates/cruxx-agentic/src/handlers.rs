@@ -39,6 +39,10 @@ pub const LLM_STREAM: &str = "llm::stream";
 pub const CONTAINER_RUN: &str = "container::run";
 pub const HARNESS_RUN: &str = "harness::run";
 
+// rx
+pub const RX_RUN: &str = "rx::run";
+pub const RX_LIST: &str = "rx::list";
+
 // sqlite
 pub const SQLITE_EXEC: &str = "sqlite::exec";
 pub const SQLITE_QUERY_ONE: &str = "sqlite::query_one";

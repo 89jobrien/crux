@@ -273,6 +273,8 @@ Output:
 | `container::wait`   | `timeout_ms`                  | Block until container exits, emit exit code/logs  |
 | `harness::evolve`   | `profile`, `metrics_from`     | Run `EvolutionPlanner` and apply resulting diff   |
 | `harness::canary`   | `image`, `traffic_percent`    | Deploy canary alongside current harness           |
+| `rx::run`           | `name`, `args?`, `registry?`  | Run a script registered in the rx registry        |
+| `rx::list`          | `registry?`                   | List all commands in the rx registry              |
 
 **Behind `--features baml`:**
 

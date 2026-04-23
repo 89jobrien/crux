@@ -1,7 +1,7 @@
 #[cfg(feature = "baml")]
 #[tokio::test]
 async fn generate_pipeline_returns_valid_yaml() {
-    let yaml = cruxx_agentic::planner::generate_pipeline("read a file and count lines", None)
+    let yaml = cruxx_agentic::planner::generate_pipeline("read a file and count lines", None, &[])
         .await
         .unwrap();
     // Parse as PipelineDef to validate structure
