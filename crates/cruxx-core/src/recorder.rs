@@ -4,6 +4,8 @@
 /// No hook invocation, no replay, no budget logic.
 use chrono::{DateTime, Utc};
 
+use std::collections::HashMap;
+
 use crate::types::step::{Step, StepKind, StepStatus};
 
 /// Parameters for recording a step outcome.
@@ -55,6 +57,7 @@ impl StepRecorder {
             error: None,
             attempt: rec.attempt,
             events: vec![],
+            metadata: HashMap::new(),
         });
     }
 
@@ -73,6 +76,7 @@ impl StepRecorder {
             error: Some(error.to_string()),
             attempt: rec.attempt,
             events: vec![],
+            metadata: HashMap::new(),
         });
     }
 
@@ -91,6 +95,7 @@ impl StepRecorder {
             error: None,
             attempt: 0,
             events: vec![],
+            metadata: HashMap::new(),
         });
     }
 
@@ -116,6 +121,7 @@ impl StepRecorder {
             error: None,
             attempt: 0,
             events: vec![],
+            metadata: HashMap::new(),
         });
     }
 

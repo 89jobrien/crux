@@ -4,6 +4,8 @@
 /// blocks and integration test crates across the workspace.
 use chrono::Utc;
 
+use std::collections::HashMap;
+
 use crate::crux_value::Crux;
 use crate::id::CruxId;
 use crate::step::{Step, StepKind, StepStatus};
@@ -23,6 +25,7 @@ pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -
         error: None,
         attempt: 1,
         events: vec![],
+        metadata: HashMap::new(),
     }
 }
 

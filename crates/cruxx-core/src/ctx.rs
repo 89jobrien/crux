@@ -313,6 +313,7 @@ impl CruxCtx {
             error,
             attempt: 1,
             events: vec![],
+            metadata: std::collections::HashMap::new(),
         });
 
         if let Ok(snapshot) = child_cruxx.to_snapshot() {

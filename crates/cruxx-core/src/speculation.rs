@@ -85,6 +85,7 @@ where
                     error: Some(error),
                     attempt: 1,
                     events: vec![],
+                    metadata: std::collections::HashMap::new(),
                 });
             }
             return Err(CruxErr::step_failed(
@@ -112,6 +113,7 @@ where
                     error: None,
                     attempt: 1,
                     events: vec![],
+                    metadata: std::collections::HashMap::new(),
                 });
                 winner_val = Some(val);
             } else {
@@ -132,6 +134,7 @@ where
                     error,
                     attempt: 1,
                     events: vec![],
+                    metadata: std::collections::HashMap::new(),
                 });
             }
         }
@@ -180,6 +183,7 @@ where
                         error: None,
                         attempt: 1,
                         events: vec![],
+                        metadata: std::collections::HashMap::new(),
                     });
                     return Ok(val);
                 }
@@ -197,6 +201,7 @@ where
                         error: Some(e.to_string()),
                         attempt: 1,
                         events: vec![],
+                        metadata: std::collections::HashMap::new(),
                     });
                     last_err = Some(e);
                 }

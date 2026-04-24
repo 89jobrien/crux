@@ -1,4 +1,6 @@
 /// A single recorded step in an agent's execution.
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +20,9 @@ pub struct Step {
     /// Intermediate events emitted during streaming steps.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<serde_json::Value>,
+    /// Arbitrary per-step metadata for extensibility.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
