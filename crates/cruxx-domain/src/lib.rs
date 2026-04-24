@@ -5,11 +5,14 @@
 
 pub mod action;
 pub mod plan_result;
+pub mod planner;
 
 #[cfg(test)]
 mod tests {
     use crate::action::{Action, StepIntent};
     use crate::plan_result::PlanResult;
+
+    use crate::planner::{PassthroughPlanner, Planner};
 
     #[test]
     fn domain_crate_compiles() {}
@@ -45,6 +48,23 @@ mod tests {
         let r = PlanResult::Simulate { output: serde_json::json!(42) };
         if let PlanResult::Simulate { output } = r {
             assert_eq!(output, serde_json::json!(42));
+        }
+    }
+
+    #[test]
+    fn passthrough_allows_all_steps() {
+        let p = PassthroughPlanner;
+        let result = p.next_action("my_step", 0);
+        assert!(matches!(result, PlanResult::Allow(_)));
+    }
+
+    #[test]
+    fn passthrough_preserves_step_name() {
+        let p = PassthroughPlanner;
+        if let PlanResult::Allow(action) = p.next_action("fetch_data", 0) {
+            assert_eq!(action.name(), "fetch_data");
+        } else {
+            panic!("expected Allow");
         }
     }
 }
