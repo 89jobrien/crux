@@ -2,7 +2,7 @@
 ///
 /// Subcommands:
 ///   run   Execute a YAML pipeline
-///   plan  Generate a pipeline from a natural language goal (requires `baml` feature)
+///   plan  Generate a pipeline from a natural language goal
 use std::io::Read as _;
 use std::sync::Arc;
 use std::time::Instant;
@@ -10,7 +10,7 @@ use std::time::Instant;
 use clap::{Parser, ValueEnum};
 use cruxx_core::prelude::*;
 use cruxx_plugin::bridge::register_plugins;
-use cruxx_plugin::manifest::load_manifest;
+use cruxx_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use cruxx_script::{HandlerRegistry, Runner, schema::PipelineDef};
 use serde_json::{Value, json};
 
@@ -48,7 +48,6 @@ enum Cli {
         plugins: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
-    #[cfg(feature = "baml")]
     Plan {
         /// Natural language goal
         #[arg(long)]
@@ -56,7 +55,7 @@ enum Cli {
         /// Output file (stdout if omitted)
         #[arg(short, long)]
         output: Option<String>,
-        /// Optional constraints
+        /// Optional constraints (llm planner only)
         #[arg(long)]
         constraints: Option<String>,
         /// Output format
@@ -65,6 +64,9 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.cruxx/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Planner backend: "rule" (default, no API key needed) or "llm" (requires --features baml)
+        #[arg(long, default_value = "rule")]
+        planner: String,
     },
 }
 
@@ -78,19 +80,20 @@ fn main() {
             input,
             plugins,
         } => cmd_run(&pipeline, input.as_deref(), plugins.as_deref()),
-        #[cfg(feature = "baml")]
         Cli::Plan {
             goal,
             output,
             constraints,
             output_type,
             plugins,
+            planner,
         } => cmd_plan(
             &goal,
             output.as_deref(),
             constraints.as_deref(),
             &output_type,
             plugins.as_deref(),
+            &planner,
         ),
     }
 }
@@ -151,8 +154,121 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, plugins_path: Option<&
     print_trace(&cruxx, elapsed);
 }
 
-#[cfg(feature = "baml")]
+// ---------------------------------------------------------------------------
+// Inline rule planner — avoids circular dep with cruxx-planner (which depends
+// on cruxx-agentic for its baml feature). Mirrors cruxx-planner::RulePlanner.
+// ---------------------------------------------------------------------------
+
+/// A rule mapping goal keywords → handler step sequence.
+pub struct PlanRule {
+    pub keywords: Vec<String>,
+    pub steps: Vec<String>,
+}
+
+impl PlanRule {
+    pub fn new(
+        keywords: impl IntoIterator<Item = impl Into<String>>,
+        steps: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        Self {
+            keywords: keywords.into_iter().map(Into::into).collect(),
+            steps: steps.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    fn matches(&self, goal_lower: &str) -> bool {
+        self.keywords
+            .iter()
+            .all(|kw| goal_lower.contains(kw.to_lowercase().as_str()))
+    }
+}
+
+/// Deterministic rule-based planner (no network, no API key).
+pub struct RulePlanner {
+    rules: Vec<PlanRule>,
+    default_steps: Vec<String>,
+}
+
+impl RulePlanner {
+    pub fn new(rules: Vec<PlanRule>, default_steps: Vec<String>) -> Self {
+        Self {
+            rules,
+            default_steps,
+        }
+    }
+
+    pub fn plan(&self, goal: &str) -> Vec<String> {
+        let lower = goal.to_lowercase();
+        self.rules
+            .iter()
+            .find(|r| r.matches(&lower))
+            .map(|r| r.steps.clone())
+            .unwrap_or_else(|| self.default_steps.clone())
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 fn cmd_plan(
+    goal: &str,
+    output: Option<&str>,
+    constraints: Option<&str>,
+    output_type: &OutputType,
+    plugins_path: Option<&str>,
+    planner: &str,
+) {
+    match planner {
+        "llm" => cmd_plan_llm(goal, output, constraints, output_type, plugins_path),
+        _ => cmd_plan_rule(goal, output),
+    }
+}
+
+fn cmd_plan_rule(goal: &str, output: Option<&str>) {
+    let steps = rule_planner_steps(goal);
+    let yaml = steps_to_yaml(goal, &steps);
+    if let Some(path) = output {
+        std::fs::write(path, &yaml).expect("failed to write output file");
+        eprintln!("Pipeline written to {path}");
+    } else {
+        println!("{yaml}");
+    }
+}
+
+/// Build the default RulePlanner and return the step sequence for `goal`.
+pub fn rule_planner_steps(goal: &str) -> Vec<String> {
+    let rules = default_plan_rules();
+    let planner = RulePlanner::new(rules, vec!["shell::capture".into()]);
+    planner.plan(goal)
+}
+
+/// Default rule set used by the `plan --planner rule` subcommand.
+pub fn default_plan_rules() -> Vec<PlanRule> {
+    vec![
+        PlanRule::new(
+            ["fetch", "summarize"],
+            ["http::get", "llm::complete"],
+        ),
+        PlanRule::new(["fetch"], ["http::get"]),
+        PlanRule::new(["summarize"], ["llm::complete"]),
+    ]
+}
+
+/// Serialize a step list to a minimal YAML pipeline string.
+fn steps_to_yaml(goal: &str, steps: &[String]) -> String {
+    let name = goal
+        .split_whitespace()
+        .take(4)
+        .collect::<Vec<_>>()
+        .join("-");
+    let mut out = format!("pipeline: {name}\nsteps:\n");
+    for step in steps {
+        out.push_str(&format!("  - step: {step}\n    handler: {step}\n"));
+    }
+    out
+}
+
+#[cfg(feature = "baml")]
+fn cmd_plan_llm(
     goal: &str,
     output: Option<&str>,
     constraints: Option<&str>,
@@ -178,9 +294,9 @@ fn cmd_plan(
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
-    let extra: Vec<String> = manifest
-        .plugin
+    let disc = TomlFileDiscovery::new(resolve_plugins_path(plugins_path));
+    let entries = disc.discover().unwrap_or_default();
+    let extra: Vec<String> = entries
         .iter()
         .map(|p| format!("{}::* -- plugin (see plugins.toml)", p.name))
         .collect();
@@ -201,6 +317,21 @@ fn cmd_plan(
     } else {
         println!("{formatted}");
     }
+}
+
+#[cfg(not(feature = "baml"))]
+fn cmd_plan_llm(
+    _goal: &str,
+    _output: Option<&str>,
+    _constraints: Option<&str>,
+    _output_type: &OutputType,
+    _plugins_path: Option<&str>,
+) {
+    eprintln!(
+        "cruxx plan --planner llm requires --features baml. \
+         Run: cargo build --features baml"
+    );
+    std::process::exit(1);
 }
 
 #[cfg(feature = "baml")]
@@ -337,7 +468,9 @@ fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
 
 /// Build a registry seeded with all cruxx-agentic built-in handlers.
 async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> HandlerRegistry {
-    let manifest = load_manifest(resolve_plugins_path(plugins_path)).unwrap_or_default();
+    let disc = TomlFileDiscovery::new(resolve_plugins_path(plugins_path));
+    let entries = disc.discover().unwrap_or_default();
+    let manifest = cruxx_plugin::manifest::PluginManifest { plugin: entries };
 
     let plugin_handler_descs: Vec<String> = manifest
         .plugin
@@ -456,5 +589,36 @@ fn print_trace(cruxx: &Crux<Value>, elapsed: std::time::Duration) {
         Err(e) => {
             println!("Error: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_subcommand_with_rule_planner_prints_steps() {
+        let steps = rule_planner_steps("fetch data");
+        assert!(!steps.is_empty(), "rule planner must return at least one step for 'fetch data'");
+        assert!(
+            steps.contains(&"http::get".to_string()),
+            "expected http::get for goal containing 'fetch', got: {steps:?}"
+        );
+    }
+
+    #[test]
+    fn plan_subcommand_rule_planner_summarize() {
+        let steps = rule_planner_steps("summarize the report");
+        assert!(
+            steps.contains(&"llm::complete".to_string()),
+            "expected llm::complete for goal containing 'summarize', got: {steps:?}"
+        );
+    }
+
+    #[test]
+    fn plan_subcommand_goal_required() {
+        // Empty goal returns the default fallback — must not panic and must be non-empty.
+        let steps = rule_planner_steps("");
+        assert!(!steps.is_empty(), "rule planner must return default steps for empty goal");
     }
 }
