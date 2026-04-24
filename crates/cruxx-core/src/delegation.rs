@@ -75,8 +75,9 @@ where
         trace_delegate!(&self.name, A::name());
         let input_hash = self.ctx.next_delegation_hash(&self.name);
 
-        // Create child context
+        // Create child context, inheriting the parent's planner
         let mut child_ctx = CruxCtx::new(A::name());
+        child_ctx.set_planner_arc(std::sync::Arc::clone(&self.ctx.planner));
         if let Some(budget) = self.budget {
             child_ctx.set_budget_direct(budget);
         }
@@ -169,6 +170,20 @@ mod tests {
         ) -> Result<Self::Output, CruxErr> {
             Err(CruxErr::step_failed("fail", "always fails"))
         }
+    }
+
+    #[tokio::test]
+    async fn deny_planner_propagates_to_child_delegation() {
+        use cruxx_domain::planner::DenyAllPlanner;
+
+        let mut ctx = CruxCtx::new("parent");
+        ctx.set_planner(DenyAllPlanner { reason: "no-exec".into() });
+
+        let result = DelegationBuilder::<DoubleAgent>::new(&mut ctx, "child", 5)
+            .run()
+            .await;
+
+        assert!(result.is_err());
     }
 
     #[tokio::test]

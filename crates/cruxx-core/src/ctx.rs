@@ -134,7 +134,7 @@ pub struct CruxCtx {
     children: Vec<Crux<serde_json::Value>>,
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
-    planner: std::sync::Arc<dyn Planner>,
+    pub(crate) planner: std::sync::Arc<dyn Planner>,
 }
 
 impl CruxCtx {
@@ -156,6 +156,11 @@ impl CruxCtx {
     /// Set the planner for this context. The planner is consulted before each step.
     pub fn set_planner(&mut self, planner: impl Planner + 'static) {
         self.planner = std::sync::Arc::new(planner);
+    }
+
+    /// Set a pre-boxed Arc planner (used internally for child context propagation).
+    pub(crate) fn set_planner_arc(&mut self, planner: std::sync::Arc<dyn Planner>) {
+        self.planner = planner;
     }
 
     /// Seed replay from a previous trace.
