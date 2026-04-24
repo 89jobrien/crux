@@ -33,6 +33,11 @@ pub enum CruxErr {
         expected: u64,
         actual: u64,
     },
+    /// A planner denied this step.
+    Denied {
+        step: String,
+        reason: String,
+    },
 }
 
 impl CruxErr {
@@ -58,7 +63,7 @@ impl CruxErr {
             | Self::LowConfidence { step, .. }
             | Self::ReplayMismatch { step, .. } => Some(step),
             Self::Delegation { source, .. } => source.failed_step(),
-            Self::BudgetExceeded { .. } | Self::Cancelled { .. } => None,
+            Self::BudgetExceeded { .. } | Self::Cancelled { .. } | Self::Denied { .. } => None,
         }
     }
 
@@ -71,6 +76,7 @@ impl CruxErr {
             Self::Delegation { source, .. } => source.is_transient(),
             Self::Cancelled { .. } => false,
             Self::ReplayMismatch { .. } => false,
+            Self::Denied { .. } => false,
         }
     }
 }
@@ -109,6 +115,9 @@ impl std::fmt::Display for CruxErr {
                 f,
                 "replay mismatch at '{step}': expected hash {expected}, got {actual}"
             ),
+            Self::Denied { step, reason } => {
+                write!(f, "step '{step}' denied by planner: {reason}")
+            }
         }
     }
 }

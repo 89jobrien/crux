@@ -110,6 +110,9 @@ use std::future::Future;
 
 use chrono::Utc;
 
+use cruxx_domain::plan_result::PlanResult;
+use cruxx_domain::planner::{PassthroughPlanner, Planner};
+
 use crate::agent::Agent;
 use crate::context::Context;
 use crate::hooks::HookRegistry;
@@ -121,7 +124,6 @@ use crate::types::error::CruxErr;
 use crate::types::id::CruxId;
 use crate::types::recovery::Recovery;
 
-#[derive(Debug)]
 pub struct CruxCtx {
     id: CruxId,
     agent_name: String,
@@ -132,6 +134,7 @@ pub struct CruxCtx {
     children: Vec<Crux<serde_json::Value>>,
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
+    planner: std::sync::Arc<dyn Planner>,
 }
 
 impl CruxCtx {
@@ -146,7 +149,13 @@ impl CruxCtx {
             children: Vec::new(),
             started_at: Utc::now(),
             max_retries: 3,
+            planner: std::sync::Arc::new(PassthroughPlanner),
         }
+    }
+
+    /// Set the planner for this context. The planner is consulted before each step.
+    pub fn set_planner(&mut self, planner: impl Planner + 'static) {
+        self.planner = std::sync::Arc::new(planner);
     }
 
     /// Seed replay from a previous trace.
@@ -760,6 +769,22 @@ impl CruxCtx {
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
         trace_step!(name, confidence);
+
+        // Planner check — before replay cache and closure execution.
+        match self.planner.next_action(name, 0) {
+            PlanResult::Deny { reason } => {
+                return Err(CruxErr::Denied {
+                    step: name.to_string(),
+                    reason,
+                });
+            }
+            PlanResult::Simulate { output } => {
+                return serde_json::from_value(output)
+                    .map_err(|e| CruxErr::step_failed(name, e.to_string()));
+            }
+            PlanResult::Allow(_) => {} // proceed normally
+        }
+
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check (by-name for better matching in both modes).
