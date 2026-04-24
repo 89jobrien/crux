@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260423:000000"
+updated: "20260424:103928"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,14 @@ description: >
 items: []
 
 log:
+  - date: "20260424:103928"
+    session: 32
+    summary: >
+      Ran jcmd:ideate audit — cross-checked all 7 superpowers plan docs against git log.
+      All plans confirmed landed (cruxx-agentic, plugin-system, orchestrator-patterns,
+      cruxx-types-extraction, hook-tests, agentic-substrate, sqlite-handlers). Added
+      `status: done` header to all 7 plan files.
+    commits: []
   - date: "20260423:000000"
     session: 31
     summary: >
@@ -79,9 +87,12 @@ log:
       pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote
       conformance spec to .ctx/conformance-spec.md.
     commits:
-      - 482936e
-      - 262dbce
-      - 390a2ed
+      - sha: 482936e
+        branch: main
+      - sha: 262dbce
+        branch: main
+      - sha: 390a2ed
+        branch: main
   - date: "20260420:173838"
     session: 27
     summary: >
@@ -91,8 +102,10 @@ log:
       cruxx-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated
       on baml. 360/360 tests pass, CI clean.
     commits:
-      - bce2cbb
-      - 68164ee
+      - sha: bce2cbb
+        branch: main
+      - sha: 68164ee
+        branch: main
   - date: "20260420:132031"
     session: 26
     summary: >
@@ -101,8 +114,10 @@ log:
       cruxx-plugin, cruxx-script) and new proc macros (#[cruxx::harness], #[cruxx::evolve]).
       358/358 tests pass.
     commits:
-      - 438d7d5
-      - afc798c
+      - sha: 438d7d5
+        branch: main
+      - sha: afc798c
+        branch: main
   - date: "20260420:131613"
     session: 25
     summary: >
@@ -113,12 +128,7 @@ log:
       #[cruxx::harness] and #[cruxx::evolve] proc macros (cruxx-macros). Updated all docs.
       358/358 tests pass, clippy clean.
     commits:
-      - 115846b
-      - 3772d0b
-  - date: "20260420:062404"
-    session: 24
-    summary: >
-      Doc audit and corrections: rewrote cruxx-syntax-reference.md from code (fixed binding
-      x vs t, feature flags, TaskRegistry API, prelude, removed aspirational APIs). Updated
-      planner-design.md and plugins.md for .cruxx rename and stale paths. Added cruxx check
-      subcommand for pipeline validation (GH #15). Filed GH #16 for stale macro doc comments.
+      - sha: 115846b
+        branch: main
+      - sha: 3772d0b
+        branch: main
