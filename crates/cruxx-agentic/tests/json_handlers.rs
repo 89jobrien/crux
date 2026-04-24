@@ -137,3 +137,42 @@ async fn jq_last_returns_last_element() {
     let result = handler(input).await.unwrap();
     assert_eq!(result, json!("z"));
 }
+
+#[tokio::test]
+async fn jq_dot_path_still_works() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".foo.bar"}, "foo": {"bar": 42}});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!(42));
+}
+
+#[tokio::test]
+async fn jq_unsupported_syntax_returns_error() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": "select(.x > 1)"}, "x": 2});
+    let err = handler(input).await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("json::jq only supports"),
+        "expected unsupported-syntax error, got: {msg}"
+    );
+    assert!(
+        msg.contains("shell::capture"),
+        "expected shell::capture hint, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn jq_map_syntax_returns_error() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": "map(.x)"}, "items": [{"x": 1}]});
+    let err = handler(input).await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("json::jq only supports"),
+        "expected unsupported-syntax error, got: {msg}"
+    );
+}

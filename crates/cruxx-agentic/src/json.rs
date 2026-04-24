@@ -94,7 +94,141 @@ pub fn register(registry: &mut HandlerRegistry) {
 /// - `has("key")`               — boolean key existence check
 ///
 /// For complex queries use `shell::capture` with the `jq` binary.
+/// Unsupported jq builtins — these require a real `jq` binary.
+/// When an expression starts with one of these prefixes, return a descriptive
+/// error pointing the caller toward `shell::capture` with `jq`.
+const UNSUPPORTED_PREFIXES: &[&str] = &[
+    "select(",
+    "map(",
+    "map_values(",
+    "reduce ",
+    "env",
+    "path(",
+    "recurse",
+    "limit(",
+    "until(",
+    "any(",
+    "all(",
+    "indices(",
+    "inside(",
+    "contains(",
+    "input",
+    "debug",
+    "error",
+    "halt",
+    "ascii_downcase",
+    "ascii_upcase",
+    "tostring",
+    "tonumber",
+    "tojson",
+    "fromjson",
+    "ltrimstr(",
+    "rtrimstr(",
+    "startswith(",
+    "endswith(",
+    "split(",
+    "join(",
+    "test(",
+    "match(",
+    "capture(",
+    "scan(",
+    "sub(",
+    "gsub(",
+    "explode",
+    "implode",
+    "ascii",
+    "nan",
+    "infinite",
+    "isinfinite",
+    "isnan",
+    "isnormal",
+    "isfinite",
+    "sort_by(",
+    "group_by(",
+    "unique_by(",
+    "min_by(",
+    "max_by(",
+    "to_entries",
+    "from_entries",
+    "with_entries(",
+    "transpose",
+    "input",
+    "inputs",
+    "empty",
+    "add",
+    "any",
+    "all",
+    "flatten",
+    "range(",
+    "floor",
+    "round",
+    "ceil",
+    "sqrt",
+    "pow(",
+    "log",
+    "fabs",
+    "not",
+    "recurse_down",
+    "walk(",
+    "env.",
+    "@base32",
+    "@base64",
+    "@csv",
+    "@html",
+    "@json",
+    "@sh",
+    "@text",
+    "@tsv",
+    "@uri",
+    "label-",
+    "$__loc__",
+    "builtins",
+    "paths",
+    "leaf_paths",
+    "getpath(",
+    "setpath(",
+    "delpaths(",
+    "isvalid",
+    "modulemeta",
+    "stderr",
+    "input",
+    "debug(",
+    "indices(",
+    "index(",
+    "rindex(",
+    "foreach",
+    "try ",
+    "if ",
+    "def ",
+    "import ",
+    "include ",
+];
+
+fn is_unsupported(expr: &str) -> bool {
+    // Root-level array construction/slicing or object construction
+    if expr.starts_with('[') || expr.starts_with('{') {
+        return true;
+    }
+    UNSUPPORTED_PREFIXES
+        .iter()
+        .any(|p| expr.starts_with(p) || expr == p.trim_end_matches('('))
+}
+
 fn eval_jq(value: &Value, expr: &str) -> Result<Value, CruxErr> {
+    // Detect unsupported jq syntax and return a descriptive error before
+    // attempting evaluation. This guards the left side of a pipe too.
+    if is_unsupported(expr) {
+        return Err(CruxErr::step_failed(
+            "json::jq",
+            format!(
+                "json::jq only supports dot-path traversal and a limited set of \
+                 built-ins (keys, length, type, first, last, has). \
+                 Expression '{expr}' requires a full jq runtime. \
+                 For complex queries use shell::capture with jq."
+            ),
+        ));
+    }
+
     // Pipe: evaluate left, pass result to right.
     if let Some(pipe_pos) = find_pipe(expr) {
         let left = expr[..pipe_pos].trim();
