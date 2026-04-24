@@ -17,6 +17,10 @@ pub mod speculation;
 pub mod types;
 
 pub mod prelude {
+    pub use cruxx_domain::action::{Action, StepIntent};
+    pub use cruxx_domain::plan_result::PlanResult;
+    pub use cruxx_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
+
     pub use crate::agent::Agent;
     pub use crate::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
     pub use crate::context::Context;
