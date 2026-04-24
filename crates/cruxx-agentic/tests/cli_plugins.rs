@@ -4,7 +4,7 @@
 /// - Default plugin path resolves to ~/.cruxx/plugins.toml
 /// - A missing plugins.toml gracefully produces an empty manifest (no panic)
 /// - A valid plugins.toml with a plugin entry is parsed correctly
-use cruxx_plugin::manifest::{PluginManifest, load_manifest};
+use cruxx_plugin::manifest::load_manifest;
 
 #[test]
 fn missing_plugins_toml_returns_empty_manifest() {
