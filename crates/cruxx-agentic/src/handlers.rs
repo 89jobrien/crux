@@ -35,9 +35,13 @@ pub const LLM_DECOMPOSE: &str = "llm::decompose";
 pub const LLM_PLAN: &str = "llm::plan";
 pub const LLM_STREAM: &str = "llm::stream";
 
-// container / harness
+// container
 pub const CONTAINER_RUN: &str = "container::run";
-pub const HARNESS_RUN: &str = "harness::run";
+pub const CONTAINER_WAIT: &str = "container::wait";
+
+// harness
+pub const HARNESS_EVOLVE: &str = "harness::evolve";
+pub const HARNESS_CANARY: &str = "harness::canary";
 
 // rx
 pub const RX_RUN: &str = "rx::run";

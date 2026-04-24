@@ -40,6 +40,13 @@ fn handler_constants_match_registered_names() {
         handlers::CTRL_LOG,
         handlers::CTRL_ASSERT,
         handlers::LLM_INVOKE,
+        handlers::LLM_STREAM,
+        handlers::CONTAINER_RUN,
+        handlers::CONTAINER_WAIT,
+        handlers::HARNESS_EVOLVE,
+        handlers::HARNESS_CANARY,
+        handlers::RX_RUN,
+        handlers::RX_LIST,
     ];
 
     for name in &constants {
