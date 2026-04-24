@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260424:103928"
+updated: "20260424:000000"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,17 @@ description: >
 items: []
 
 log:
+  - date: "20260424:000000"
+    session: 33
+    summary: >
+      Major feature session — cruxx-domain scaffolded with Planner trait
+      (Passthrough/DenyAll/Simulate), Action enum, PlanResult, StepEvent typed enum.
+      EventPipeline with broadcast fan-out wired into CruxCtx step dispatch.
+      RulePlanner (deterministic Path B) added to cruxx-planner. cruxx-agentic: plan
+      subcommand, --plugins flag via PluginDiscovery port, handler name constants, jq
+      limitation docs. substrate: Step.metadata field + end-to-end integration tests.
+      All plan items marked status: done in handoff.
+    commits: []
   - date: "20260424:103928"
     session: 32
     summary: >
