@@ -110,6 +110,8 @@ use std::future::Future;
 
 use chrono::Utc;
 
+use cruxx_domain::event::StepEvent;
+use cruxx_domain::pipeline::EventSender;
 use cruxx_domain::plan_result::PlanResult;
 use cruxx_domain::planner::{PassthroughPlanner, Planner};
 
@@ -135,6 +137,7 @@ pub struct CruxCtx {
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
     pub(crate) planner: std::sync::Arc<dyn Planner>,
+    event_sender: Option<EventSender>,
 }
 
 impl CruxCtx {
@@ -150,6 +153,7 @@ impl CruxCtx {
             started_at: Utc::now(),
             max_retries: 3,
             planner: std::sync::Arc::new(PassthroughPlanner),
+            event_sender: None,
         }
     }
 
@@ -161,6 +165,18 @@ impl CruxCtx {
     /// Set a pre-boxed Arc planner (used internally for child context propagation).
     pub(crate) fn set_planner_arc(&mut self, planner: std::sync::Arc<dyn Planner>) {
         self.planner = planner;
+    }
+
+    /// Attach an event sender so this context emits `StepEvent`s on every step.
+    pub fn set_event_sender(&mut self, sender: EventSender) {
+        self.event_sender = Some(sender);
+    }
+
+    /// Emit a step event to the attached sender, if any.
+    fn emit(&self, event: StepEvent) {
+        if let Some(ref tx) = self.event_sender {
+            let _ = tx.send(event);
+        }
     }
 
     /// Seed replay from a previous trace.
@@ -715,6 +731,7 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
+        self.emit(StepEvent::Started { step_name: name.to_string() });
         let step_start = Utc::now();
         let result = f().await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
@@ -741,10 +758,18 @@ impl CruxCtx {
                 }
                 self.recorder
                     .record_ok(&rec, serde_json::to_value(&val).ok());
+                self.emit(StepEvent::Completed {
+                    step_name: name.to_string(),
+                    duration_ms,
+                });
                 Ok(val)
             }
             Err(e) => {
                 self.recorder.record_err(&rec, &e.to_string());
+                self.emit(StepEvent::Failed {
+                    step_name: name.to_string(),
+                    error: e.to_string(),
+                });
 
                 if self.hooks.has_failure_handler() {
                     trace_hook!("on_step_failure", name);
