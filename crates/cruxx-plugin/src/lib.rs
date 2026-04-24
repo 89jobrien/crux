@@ -6,6 +6,7 @@
 //! into the cruxx `HandlerRegistry`.
 
 pub mod bridge;
+pub mod discovery;
 pub mod host;
 pub mod manifest;
 pub mod protocol;
