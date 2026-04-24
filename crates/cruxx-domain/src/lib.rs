@@ -7,6 +7,8 @@ pub mod action;
 pub mod event;
 pub mod plan_result;
 pub mod planner;
+#[cfg(feature = "tokio-pipeline")]
+pub mod pipeline;
 
 #[cfg(test)]
 mod tests {
@@ -90,5 +92,46 @@ mod tests {
         let e = StepEvent::Completed { step_name: "fetch".into(), duration_ms: 42 };
         let json = serde_json::to_value(&e).unwrap();
         assert_eq!(json["duration_ms"], 42);
+    }
+}
+
+#[cfg(all(test, feature = "tokio-pipeline"))]
+mod pipeline_tests {
+    use crate::event::StepEvent;
+    use crate::pipeline::EventPipeline;
+
+    #[tokio::test]
+    async fn pipeline_delivers_event_to_subscriber() {
+        let pipeline = EventPipeline::new(64);
+        let mut rx = pipeline.subscribe();
+
+        let sender = pipeline.sender();
+        sender.send(StepEvent::Started { step_name: "test".into() }).ok();
+
+        let received = rx.recv().await.unwrap();
+        assert!(matches!(received, StepEvent::Started { .. }));
+    }
+
+    #[tokio::test]
+    async fn pipeline_drops_events_when_no_subscriber() {
+        let pipeline = EventPipeline::new(64);
+        let sender = pipeline.sender();
+        // Sending with no subscriber should not panic or block
+        let _ = sender.send(StepEvent::Started { step_name: "x".into() });
+    }
+
+    #[tokio::test]
+    async fn multiple_subscribers_each_receive_event() {
+        let pipeline = EventPipeline::new(64);
+        let mut rx1 = pipeline.subscribe();
+        let mut rx2 = pipeline.subscribe();
+
+        pipeline
+            .sender()
+            .send(StepEvent::Completed { step_name: "s".into(), duration_ms: 1 })
+            .ok();
+
+        assert!(matches!(rx1.recv().await.unwrap(), StepEvent::Completed { .. }));
+        assert!(matches!(rx2.recv().await.unwrap(), StepEvent::Completed { .. }));
     }
 }
