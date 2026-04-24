@@ -10,6 +10,7 @@ pub mod deterministic;
 pub mod evolution;
 pub mod generator;
 pub mod metrics;
+pub mod rule_planner;
 
 #[cfg(feature = "baml")]
 pub mod llm;
@@ -48,3 +49,4 @@ pub struct Intent {
 }
 
 pub use deterministic::PlannerConfig;
+pub use rule_planner::{PlanRule, RulePlanner};
