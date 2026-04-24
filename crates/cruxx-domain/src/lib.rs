@@ -4,12 +4,14 @@
 //! can depend on this crate without pulling tokio or BAML.
 
 pub mod action;
+pub mod event;
 pub mod plan_result;
 pub mod planner;
 
 #[cfg(test)]
 mod tests {
     use crate::action::{Action, StepIntent};
+    use crate::event::StepEvent;
     use crate::plan_result::PlanResult;
 
     use crate::planner::{PassthroughPlanner, Planner};
@@ -66,5 +68,27 @@ mod tests {
         } else {
             panic!("expected Allow");
         }
+    }
+
+    #[test]
+    fn step_event_serializes_tag() {
+        let e = StepEvent::Started { step_name: "fetch".into() };
+        let json = serde_json::to_value(&e).unwrap();
+        assert_eq!(json["kind"], "started");
+        assert_eq!(json["step_name"], "fetch");
+    }
+
+    #[test]
+    fn step_event_chunk_carries_payload() {
+        let e = StepEvent::Chunk { payload: serde_json::json!({"token": "hello"}) };
+        let json = serde_json::to_value(&e).unwrap();
+        assert_eq!(json["kind"], "chunk");
+    }
+
+    #[test]
+    fn step_event_completed_carries_duration() {
+        let e = StepEvent::Completed { step_name: "fetch".into(), duration_ms: 42 };
+        let json = serde_json::to_value(&e).unwrap();
+        assert_eq!(json["duration_ms"], 42);
     }
 }
