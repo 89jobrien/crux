@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260424:000000"
+updated: "20260424:212604"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,14 @@ description: >
 items: []
 
 log:
+  - date: "20260424:212604"
+    session: 34
+    summary: >
+      Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit,
+      pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs
+      by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased
+      commits to origin.
+    commits: []
   - date: "20260424:000000"
     session: 33
     summary: >
