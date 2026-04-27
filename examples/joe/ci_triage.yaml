@@ -1,5 +1,5 @@
 pipeline: ci_triage
-# ASPIRATIONAL TEMPLATE — not all steps are implemented.
+# ASPIRATIONAL TEMPLATE — not all steps are implemented but close.
 #
 # Steps marked `handler: ctrl::noop` are design placeholders. They pass their
 # input through unchanged so the pipeline runs end-to-end against real data,
