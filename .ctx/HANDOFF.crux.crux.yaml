@@ -45,7 +45,7 @@ log:
       missing extra_handlers arg). Updated README and crux-capabilities.md. All 453
       tests pass.
     commits:
-      - sha: b7cb692
+      - sha: "b7cb692"
         branch: main
   - date: "20260422:164000"
     session: 30
@@ -58,15 +58,15 @@ log:
       error conditions; fuzz target for arg-parsing resilience. All 360+ tests pass,
       clippy clean. gitignore updated: .env exclusion in root and crates/ dir.
     commits:
-      - sha: 55be86f
+      - sha: "55be86f"
         branch: main
-      - sha: 32f60da
+      - sha: "32f60da"
         branch: main
-      - sha: 94c4092
+      - sha: "94c4092"
         branch: main
-      - sha: f8bc96e
+      - sha: "f8bc96e"
         branch: main
-      - sha: cdb7651
+      - sha: "cdb7651"
         branch: main
   - date: "20260422:130205"
     session: 29
@@ -78,23 +78,23 @@ log:
       git-ref input fuzzer, 500 iterations). Wired just test-hooks and fuzz-hooks
       recipes. All 18 tests pass.
     commits:
-      - sha: fd35e13
+      - sha: "fd35e13"
         branch: main
-      - sha: f4a66c7
+      - sha: "f4a66c7"
         branch: main
-      - sha: e4af825
+      - sha: "e4af825"
         branch: main
-      - sha: e4c1f4d
+      - sha: "e4c1f4d"
         branch: main
-      - sha: a300557
+      - sha: "a300557"
         branch: main
-      - sha: d4a7505
+      - sha: "d4a7505"
         branch: main
-      - sha: 4230e53
+      - sha: "4230e53"
         branch: main
-      - sha: 6f5b835
+      - sha: "6f5b835"
         branch: main
-      - sha: c11892b
+      - sha: "c11892b"
         branch: main
   - date: "20260421:052733"
     session: 28
@@ -106,11 +106,11 @@ log:
       pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote
       conformance spec to .ctx/conformance-spec.md.
     commits:
-      - sha: 482936e
+      - sha: "482936e"
         branch: main
-      - sha: 262dbce
+      - sha: "262dbce"
         branch: main
-      - sha: 390a2ed
+      - sha: "390a2ed"
         branch: main
   - date: "20260420:173838"
     session: 27
@@ -121,9 +121,9 @@ log:
       cruxx-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated
       on baml. 360/360 tests pass, CI clean.
     commits:
-      - sha: bce2cbb
+      - sha: "bce2cbb"
         branch: main
-      - sha: 68164ee
+      - sha: "68164ee"
         branch: main
   - date: "20260420:132031"
     session: 26
@@ -133,9 +133,9 @@ log:
       cruxx-plugin, cruxx-script) and new proc macros (#[cruxx::harness], #[cruxx::evolve]).
       358/358 tests pass.
     commits:
-      - sha: 438d7d5
+      - sha: "438d7d5"
         branch: main
-      - sha: afc798c
+      - sha: "afc798c"
         branch: main
   - date: "20260420:131613"
     session: 25
@@ -147,7 +147,7 @@ log:
       #[cruxx::harness] and #[cruxx::evolve] proc macros (cruxx-macros). Updated all docs.
       358/358 tests pass, clippy clean.
     commits:
-      - sha: 115846b
+      - sha: "115846b"
         branch: main
-      - sha: 3772d0b
+      - sha: "3772d0b"
         branch: main
