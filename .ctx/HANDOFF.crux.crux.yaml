@@ -1,6 +1,6 @@
 project: cruxx
 id: cruxx
-updated: "20260424:212604"
+updated: "20260504:224027"
 description: >
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution.
   Rust-embedded DSL (macros, traits, types) for writing agentic programs where every
@@ -9,6 +9,8 @@ description: >
 items: []
 
 log:
+  - date: "20260504:224027"
+    summary: "handjobs triage — 0 open items, 0 GH issues synced"
   - date: "20260424:212604"
     session: 34
     summary: >
