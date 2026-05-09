@@ -396,6 +396,7 @@ version = "0.2.5"
 dependencies = [
  "cruxx-agentic",
  "cruxx-core",
+ "cruxx-domain",
  "cruxx-macros",
  "cruxx-script",
  "futures",
@@ -433,6 +434,7 @@ name = "cruxx-core"
 version = "0.2.5"
 dependencies = [
  "chrono",
+ "cruxx-domain",
  "cruxx-types",
  "futures",
  "proptest",
@@ -445,6 +447,31 @@ dependencies = [
  "tokio",
  "tracing",
  "ulid",
+]
+
+[[package]]
+name = "cruxx-domain"
+version = "0.2.5"
+dependencies = [
+ "cruxx-types",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "cruxx-improve"
+version = "0.2.5"
+dependencies = [
+ "chrono",
+ "cruxx-core",
+ "cruxx-planner",
+ "cruxx-types",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
