@@ -2213,19 +2213,19 @@ mod if_guard_tests {
     #[test]
     fn eval_expr_literal_true() {
         let state = Default::default();
-        assert_eq!(eval_expr("true", &state).unwrap(), true);
+        assert!(eval_expr("true", &state).unwrap());
     }
 
     #[test]
     fn eval_expr_literal_false() {
         let state = Default::default();
-        assert_eq!(eval_expr("false", &state).unwrap(), false);
+        assert!(!eval_expr("false", &state).unwrap());
     }
 
     #[test]
     fn eval_expr_no_tokens_is_true() {
         let state = Default::default();
-        assert_eq!(eval_expr("", &state).unwrap(), true);
+        assert!(eval_expr("", &state).unwrap());
     }
 
     #[test]
@@ -2235,7 +2235,7 @@ mod if_guard_tests {
         state.insert("build".to_string(), serde_json::json!({"exit_code": 0}));
         let result = eval_expr("${{ outputs['build'].exit_code }}", &state).unwrap();
         // exit_code = 0 → "0" → false
-        assert_eq!(result, false);
+        assert!(!result);
     }
 
     #[test]
@@ -2307,7 +2307,7 @@ mod step_state_tests {
 
     #[test]
     fn propagate_then_read_output_round_trips() {
-        let mut ctx = CruxCtx::new_for_test();
+        let ctx = CruxCtx::new_for_test();
         ctx.propagate_output("build", serde_json::json!({"exit_code": 0}));
         let val = ctx.read_output("build").unwrap();
         assert_eq!(val["exit_code"], 0);
@@ -2358,8 +2358,16 @@ mod final_phase_tests {
     #[test]
     fn all_continue_on_error_returns_succeeded() {
         let steps = vec![
-            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Failed, continue_on_error: true },
-            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Errored, continue_on_error: true },
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Failed,
+                continue_on_error: true,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: true,
+            },
         ];
         assert_eq!(determine_final_phase(&steps, false), FinalPhase::Succeeded);
     }
@@ -2367,8 +2375,16 @@ mod final_phase_tests {
     #[test]
     fn single_errored_returns_errored() {
         let steps = vec![
-            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Succeeded, continue_on_error: false },
-            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Errored, continue_on_error: false },
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Succeeded,
+                continue_on_error: false,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: false,
+            },
         ];
         assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
     }
@@ -2376,8 +2392,16 @@ mod final_phase_tests {
     #[test]
     fn failed_does_not_override_errored() {
         let steps = vec![
-            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Errored, continue_on_error: false },
-            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Failed, continue_on_error: false },
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: false,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Failed,
+                continue_on_error: false,
+            },
         ];
         assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
     }
@@ -2385,9 +2409,11 @@ mod final_phase_tests {
     #[test]
     fn ignore_continue_on_error_false_includes_all_steps() {
         // ignore_continue_on_error = true means: include all steps regardless of flag
-        let steps = vec![
-            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Failed, continue_on_error: true },
-        ];
+        let steps = vec![PhaseStepRecord {
+            alias: "a".into(),
+            phase: FinalPhase::Failed,
+            continue_on_error: true,
+        }];
         assert_eq!(determine_final_phase(&steps, true), FinalPhase::Failed);
     }
 

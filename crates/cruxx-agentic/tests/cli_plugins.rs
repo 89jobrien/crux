@@ -8,7 +8,7 @@ use cruxx_plugin::manifest::load_manifest;
 
 #[test]
 fn missing_plugins_toml_returns_empty_manifest() {
-    let manifest = load_manifest("/nonexistent/path/plugins.toml".to_string()).unwrap_or_default();
+    let manifest = load_manifest("/nonexistent/path/plugins.toml").unwrap_or_default();
     assert!(
         manifest.plugin.is_empty(),
         "missing plugins.toml should produce empty manifest"
@@ -47,8 +47,8 @@ path = "/usr/local/bin/my-plugin"
     let mut f = NamedTempFile::new().unwrap();
     f.write_all(toml.as_bytes()).unwrap();
 
-    let manifest = load_manifest(f.path().to_str().unwrap().to_string())
-        .expect("valid plugins.toml should parse");
+    let manifest =
+        load_manifest(f.path().to_str().unwrap()).expect("valid plugins.toml should parse");
     assert_eq!(manifest.plugin.len(), 1);
     assert_eq!(manifest.plugin[0].name, "my-plugin");
 }

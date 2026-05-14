@@ -53,6 +53,7 @@ steps:
         handler: branch_high
 "#;
 
+#[allow(clippy::type_complexity)]
 fn make_registry(
     classify: fn(
         Value,

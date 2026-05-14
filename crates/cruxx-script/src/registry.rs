@@ -100,6 +100,28 @@ impl HandlerRegistry {
         );
     }
 
+    /// Register a plain-value handler together with its [`HandlerMetadata`].
+    ///
+    /// Combines [`handler_value`](Self::handler_value) and
+    /// [`register_metadata`](Self::register_metadata) in one call.  The metadata
+    /// name is used as the handler name — the two must match.
+    pub fn handler_value_with_metadata<F, Fut>(&mut self, meta: HandlerMetadata, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+    {
+        let name = meta.name.clone();
+        self.metadata.insert(name.clone(), meta);
+        self.handlers.insert(
+            name,
+            Arc::new(move |v| {
+                let fut = f(v);
+                Box::pin(async move { fut.await.map(HandlerOutput::from) })
+                    as Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
+            }),
+        );
+    }
+
     /// Register a cruxx Agent by name for delegation.
     ///
     /// The agent's `run` method will be called with a fresh CruxCtx.
