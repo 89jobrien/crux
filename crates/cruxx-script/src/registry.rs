@@ -8,6 +8,7 @@ use cruxx_core::prelude::{Agent, CruxCtx, CruxErr};
 use serde_json::Value;
 
 use crate::handler_output::HandlerOutput;
+use crate::metadata::HandlerMetadata;
 
 /// Type-erased async handler: Value in, HandlerOutput out.
 ///
@@ -32,6 +33,7 @@ pub type BoxAgentRunner = Arc<
 pub struct HandlerRegistry {
     handlers: HashMap<String, BoxHandler>,
     agents: HashMap<String, BoxAgentRunner>,
+    metadata: HashMap<String, HandlerMetadata>,
 }
 
 impl HandlerRegistry {
@@ -39,7 +41,18 @@ impl HandlerRegistry {
         Self {
             handlers: HashMap::new(),
             agents: HashMap::new(),
+            metadata: HashMap::new(),
         }
+    }
+
+    /// Register handler metadata for validation and introspection.
+    pub fn register_metadata(&mut self, meta: HandlerMetadata) {
+        self.metadata.insert(meta.name.clone(), meta);
+    }
+
+    /// Look up metadata for a registered handler by name.
+    pub fn get_metadata(&self, name: &str) -> Option<&HandlerMetadata> {
+        self.metadata.get(name)
     }
 
     /// Register a handler that returns [`HandlerOutput`] directly.
