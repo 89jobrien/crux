@@ -1189,6 +1189,21 @@ impl Context for CruxCtx {
     }
 }
 
+/// Determines the worst-case outcome across all steps.
+/// Steps flagged `continue_on_error` are excluded unless `ignore_continue_on_error` is true.
+pub fn determine_final_phase(
+    steps: &[cruxx_types::crux_value::StepRecord],
+    ignore_continue_on_error: bool,
+) -> cruxx_types::crux_value::FinalPhase {
+    use cruxx_types::crux_value::FinalPhase;
+    steps
+        .iter()
+        .filter(|s| ignore_continue_on_error || !s.continue_on_error)
+        .map(|s| s.phase)
+        .max()
+        .unwrap_or(FinalPhase::Succeeded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2325,6 +2340,92 @@ mod step_state_tests {
             ctx.propagate_output(&key_b, serde_json::json!("updated_b"));
             prop_assert_eq!(ctx.read_output(&key_a).unwrap(), serde_json::json!("original_a"));
             prop_assert_eq!(ctx.read_output(&key_b).unwrap(), serde_json::json!("updated_b"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod final_phase_tests {
+    use super::determine_final_phase;
+    use cruxx_types::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
+    use proptest::prelude::*;
+
+    #[test]
+    fn empty_steps_returns_succeeded() {
+        assert_eq!(determine_final_phase(&[], false), FinalPhase::Succeeded);
+    }
+
+    #[test]
+    fn all_continue_on_error_returns_succeeded() {
+        let steps = vec![
+            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Failed, continue_on_error: true },
+            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Errored, continue_on_error: true },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Succeeded);
+    }
+
+    #[test]
+    fn single_errored_returns_errored() {
+        let steps = vec![
+            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Succeeded, continue_on_error: false },
+            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Errored, continue_on_error: false },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
+    }
+
+    #[test]
+    fn failed_does_not_override_errored() {
+        let steps = vec![
+            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Errored, continue_on_error: false },
+            PhaseStepRecord { alias: "b".into(), phase: FinalPhase::Failed, continue_on_error: false },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
+    }
+
+    #[test]
+    fn ignore_continue_on_error_false_includes_all_steps() {
+        // ignore_continue_on_error = true means: include all steps regardless of flag
+        let steps = vec![
+            PhaseStepRecord { alias: "a".into(), phase: FinalPhase::Failed, continue_on_error: true },
+        ];
+        assert_eq!(determine_final_phase(&steps, true), FinalPhase::Failed);
+    }
+
+    prop_compose! {
+        fn arb_phase()(v in 0u8..5) -> FinalPhase {
+            match v {
+                0 => FinalPhase::Succeeded,
+                1 => FinalPhase::Skipped,
+                2 => FinalPhase::Aborted,
+                3 => FinalPhase::Failed,
+                _ => FinalPhase::Errored,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn result_gte_max_non_continue_on_error_phase(
+            phases in proptest::collection::vec(arb_phase(), 1..10),
+        ) {
+            let steps: Vec<PhaseStepRecord> = phases.iter().map(|p| PhaseStepRecord {
+                alias: "s".into(),
+                phase: *p,
+                continue_on_error: false,
+            }).collect();
+            let result = determine_final_phase(&steps, false);
+            let expected = phases.iter().copied().max().unwrap();
+            prop_assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn ord_is_total_and_consistent(a in arb_phase(), b in arb_phase()) {
+            // Reflexive
+            prop_assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
+            // Antisymmetric
+            if a != b {
+                prop_assert_ne!(a.cmp(&b), b.cmp(&a));
+            }
         }
     }
 }
