@@ -4,9 +4,11 @@
 /// in Rust, and execute without recompilation.
 pub mod expr;
 pub mod handler_output;
+pub mod metadata;
 pub mod registry;
 pub mod runner;
 pub mod schema;
+pub mod validator;
 
 use schema::PipelineDef;
 
@@ -30,5 +32,7 @@ pub enum LoadError {
 }
 
 pub use handler_output::HandlerOutput;
+pub use metadata::{ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect};
 pub use registry::HandlerRegistry;
 pub use runner::Runner;
+pub use validator::validate_pipeline;
