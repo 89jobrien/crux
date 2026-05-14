@@ -138,6 +138,7 @@ pub struct CruxCtx {
     max_retries: u32,
     pub(crate) planner: std::sync::Arc<dyn Planner>,
     event_sender: Option<EventSender>,
+    state: std::sync::Arc<std::sync::RwLock<cruxx_types::step::StepState>>,
 }
 
 impl CruxCtx {
@@ -154,7 +155,33 @@ impl CruxCtx {
             max_retries: 3,
             planner: std::sync::Arc::new(PassthroughPlanner),
             event_sender: None,
+            state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Store the output of a named pipe stage so later stages can read it.
+    pub fn propagate_output(&self, alias: &str, output: serde_json::Value) {
+        let mut state = self
+            .state
+            .write()
+            .expect("StepState RwLock poisoned — irrecoverable");
+        state.insert(alias.to_string(), output);
+    }
+
+    /// Retrieve a previously propagated output by alias name.
+    ///
+    /// Returns `None` if no output has been stored under `alias`.
+    pub fn read_output(&self, alias: &str) -> Option<serde_json::Value> {
+        let state = self
+            .state
+            .read()
+            .expect("StepState RwLock poisoned — irrecoverable");
+        state.get(alias).cloned()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test() -> Self {
+        Self::new("__test__")
     }
 
     /// Set the planner for this context. The planner is consulted before each step.
@@ -732,7 +759,9 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.emit(StepEvent::Started { step_name: name.to_string() });
+        self.emit(StepEvent::Started {
+            step_name: name.to_string(),
+        });
         let step_start = Utc::now();
         let result = f().await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
@@ -2049,6 +2078,50 @@ mod proptest_confidence_range {
             }
             // Values at or above hi.
             prop_assert!(!range.contains(hi));
+        }
+    }
+}
+
+#[cfg(test)]
+mod step_state_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    #[test]
+    fn propagate_then_read_output_round_trips() {
+        let mut ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("build", serde_json::json!({"exit_code": 0}));
+        let val = ctx.read_output("build").unwrap();
+        assert_eq!(val["exit_code"], 0);
+    }
+
+    #[test]
+    fn read_missing_alias_returns_none() {
+        let ctx = CruxCtx::new_for_test();
+        assert!(ctx.read_output("nonexistent").is_none());
+    }
+
+    #[test]
+    fn propagate_overwrites_previous_value() {
+        let ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("step", serde_json::json!({"v": 1}));
+        ctx.propagate_output("step", serde_json::json!({"v": 2}));
+        assert_eq!(ctx.read_output("step").unwrap()["v"], 2);
+    }
+
+    proptest! {
+        #[test]
+        fn propagate_sequence_never_corrupts_other_aliases(
+            key_a in "[a-z]{3,8}",
+            key_b in "[a-z]{3,8}",
+        ) {
+            prop_assume!(key_a != key_b);
+            let ctx = CruxCtx::new_for_test();
+            ctx.propagate_output(&key_a, serde_json::json!("original_a"));
+            ctx.propagate_output(&key_b, serde_json::json!("original_b"));
+            ctx.propagate_output(&key_b, serde_json::json!("updated_b"));
+            prop_assert_eq!(ctx.read_output(&key_a).unwrap(), serde_json::json!("original_a"));
+            prop_assert_eq!(ctx.read_output(&key_b).unwrap(), serde_json::json!("updated_b"));
         }
     }
 }
