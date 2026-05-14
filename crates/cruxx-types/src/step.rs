@@ -1,6 +1,9 @@
 /// A single recorded step in an agent's execution.
 use std::collections::HashMap;
 
+/// Shared mutable output map for `pipe()` stages — maps alias names to their outputs.
+pub type StepState = HashMap<String, serde_json::Value>;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
