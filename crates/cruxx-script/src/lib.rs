@@ -8,6 +8,7 @@ pub mod metadata;
 pub mod registry;
 pub mod runner;
 pub mod schema;
+pub mod step_runner;
 pub mod validator;
 
 use schema::PipelineDef;
@@ -35,4 +36,5 @@ pub use handler_output::HandlerOutput;
 pub use metadata::{ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect};
 pub use registry::HandlerRegistry;
 pub use runner::Runner;
-pub use validator::validate_pipeline;
+pub use step_runner::{RunnerCapability, StepContext, StepOutput, StepRunner, StepRunnerRegistry};
+pub use validator::{DiagnosticSeverity, ValidationDiagnostic, ValidationReport, validate_pipeline};
