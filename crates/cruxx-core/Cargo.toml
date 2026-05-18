@@ -16,7 +16,7 @@ categories.workspace = true
 # Always required — Step.output is Option<Value>, children are type-erased
 anyhow = { workspace = true }
 cruxx-types = { path = "../cruxx-types" }
-cruxx-domain = { path = "../cruxx-domain", version = "0.2.5", features = ["tokio-pipeline"] }
+cruxx-domain = { path = "../cruxx-domain", version = "0.2.6", features = ["tokio-pipeline"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

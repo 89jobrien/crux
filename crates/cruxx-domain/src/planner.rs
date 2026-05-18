@@ -36,7 +36,9 @@ pub struct DenyAllPlanner {
 
 impl Planner for DenyAllPlanner {
     fn next_action(&self, _name: &str, _priority: u8) -> PlanResult {
-        PlanResult::Deny { reason: self.reason.clone() }
+        PlanResult::Deny {
+            reason: self.reason.clone(),
+        }
     }
 }
 
@@ -47,6 +49,8 @@ pub struct SimulatePlanner {
 
 impl Planner for SimulatePlanner {
     fn next_action(&self, _name: &str, _priority: u8) -> PlanResult {
-        PlanResult::Simulate { output: self.output.clone() }
+        PlanResult::Simulate {
+            output: self.output.clone(),
+        }
     }
 }

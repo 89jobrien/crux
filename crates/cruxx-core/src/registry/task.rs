@@ -214,7 +214,11 @@ mod tests {
     }
 
     fn make_cruxx() -> cruxx_types::crux_value::Crux<String> {
-        crux_ok("test", "result".into(), vec![step_ok("fetch", 42, Some(serde_json::json!("data")))])
+        crux_ok(
+            "test",
+            "result".into(),
+            vec![step_ok("fetch", 42, Some(serde_json::json!("data")))],
+        )
     }
 
     #[tokio::test]

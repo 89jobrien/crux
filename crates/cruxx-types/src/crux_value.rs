@@ -139,10 +139,14 @@ mod tests {
             confidence: 0.3,
             ..step_ok("rejected_branch", 0, None)
         };
-        crux_ok("test", "hello".into(), vec![
-            step_ok("greet", 0, Some(serde_json::json!("hello"))),
-            rejected,
-        ])
+        crux_ok(
+            "test",
+            "hello".into(),
+            vec![
+                step_ok("greet", 0, Some(serde_json::json!("hello"))),
+                rejected,
+            ],
+        )
     }
 
     #[test]

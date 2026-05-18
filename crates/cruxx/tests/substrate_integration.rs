@@ -7,11 +7,11 @@ use cruxx_domain::planner::{DenyAllPlanner, SimulatePlanner};
 #[tokio::test]
 async fn deny_planner_blocks_all_steps_end_to_end() {
     let mut ctx = CruxCtx::new("agent");
-    ctx.set_planner(DenyAllPlanner { reason: "policy".into() });
+    ctx.set_planner(DenyAllPlanner {
+        reason: "policy".into(),
+    });
 
-    let result = ctx
-        .step("fetch", || async { Ok::<i32, CruxErr>(1) })
-        .await;
+    let result = ctx.step("fetch", || async { Ok::<i32, CruxErr>(1) }).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("policy"));
@@ -20,7 +20,9 @@ async fn deny_planner_blocks_all_steps_end_to_end() {
 #[tokio::test]
 async fn simulate_planner_returns_value_without_side_effects() {
     let mut ctx = CruxCtx::new("agent");
-    ctx.set_planner(SimulatePlanner { output: serde_json::json!(42) });
+    ctx.set_planner(SimulatePlanner {
+        output: serde_json::json!(42),
+    });
 
     let result = ctx
         .step("expensive_step", || async {

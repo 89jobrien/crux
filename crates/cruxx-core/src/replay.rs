@@ -206,11 +206,17 @@ mod tests {
     use super::*;
     use cruxx_types::testing::{crux_ok, step_ok, step_with_content};
 
-    fn make_snapshot(steps: Vec<cruxx_types::step::Step>) -> cruxx_types::crux_value::Crux<serde_json::Value> {
+    fn make_snapshot(
+        steps: Vec<cruxx_types::step::Step>,
+    ) -> cruxx_types::crux_value::Crux<serde_json::Value> {
         crux_ok("test", serde_json::json!(null), steps)
     }
 
-    fn make_step(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> cruxx_types::step::Step {
+    fn make_step(
+        name: &str,
+        input_hash: u64,
+        output: Option<serde_json::Value>,
+    ) -> cruxx_types::step::Step {
         step_ok(name, input_hash, output)
     }
 
@@ -479,7 +485,11 @@ mod proptest_replay {
         any::<u64>()
     }
 
-    fn make_step_prop(name: String, hash: u64, output: Option<serde_json::Value>) -> cruxx_types::step::Step {
+    fn make_step_prop(
+        name: String,
+        hash: u64,
+        output: Option<serde_json::Value>,
+    ) -> cruxx_types::step::Step {
         step_ok(&name, hash, output)
     }
 

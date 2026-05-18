@@ -177,7 +177,9 @@ mod tests {
         use cruxx_domain::planner::DenyAllPlanner;
 
         let mut ctx = CruxCtx::new("parent");
-        ctx.set_planner(DenyAllPlanner { reason: "no-exec".into() });
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no-exec".into(),
+        });
 
         let result = DelegationBuilder::<DoubleAgent>::new(&mut ctx, "child", 5)
             .run()

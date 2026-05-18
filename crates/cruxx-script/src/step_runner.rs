@@ -153,7 +153,10 @@ impl StepRunner for LlmCallRunner {
         "llm-call"
     }
     fn required_capabilities(&self) -> Vec<RunnerCapability> {
-        vec![RunnerCapability::LlmCall, RunnerCapability::OutputPropagation]
+        vec![
+            RunnerCapability::LlmCall,
+            RunnerCapability::OutputPropagation,
+        ]
     }
     fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
         Ok(StepOutput {
@@ -231,7 +234,9 @@ mod step_runner_registry_tests {
         let mut registry = StepRunnerRegistry::new();
         registry.register_builtin_runners();
         for (kind, _) in registry.list() {
-            let runner = registry.get(kind).expect("runner must be findable by its own kind");
+            let runner = registry
+                .get(kind)
+                .expect("runner must be findable by its own kind");
             assert_step_runner_contract(runner);
         }
     }

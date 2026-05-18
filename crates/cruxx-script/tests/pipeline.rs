@@ -1,8 +1,8 @@
+use cruxx_core::prelude::CruxErr;
 /// Integration tests for YAML-driven pipeline execution.
 use cruxx_script::{HandlerOutput, HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;
-use cruxx_core::prelude::CruxErr;
 
 fn test_registry() -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
@@ -322,10 +322,7 @@ steps:
     let runner = Runner::new(test_registry());
     let cruxx = runner.run(&pipeline, json!(null)).await;
     // Should still run; unknown ref preserved as literal string
-    assert_eq!(
-        cruxx.value().unwrap(),
-        &json!("{{ steps.missing.output }}")
-    );
+    assert_eq!(cruxx.value().unwrap(), &json!("{{ steps.missing.output }}"));
 }
 
 #[tokio::test]

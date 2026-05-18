@@ -65,9 +65,10 @@ pub fn register(registry: &mut HandlerRegistry) {
         let mut cmd = Command::new(&entry.install_path);
         cmd.args(&extra_args);
 
-        let output = cmd.output().await.map_err(|e| {
-            CruxErr::step_failed("rx::run", format!("failed to spawn {name}: {e}"))
-        })?;
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| CruxErr::step_failed("rx::run", format!("failed to spawn {name}: {e}")))?;
 
         let exit_code = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();

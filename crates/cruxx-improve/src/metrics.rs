@@ -42,18 +42,11 @@ impl TraceMetrics {
             };
         }
 
-        let ok_count = steps
-            .iter()
-            .filter(|s| s.status == StepStatus::Ok)
-            .count();
-        let error_count = steps
-            .iter()
-            .filter(|s| s.status == StepStatus::Err)
-            .count();
+        let ok_count = steps.iter().filter(|s| s.status == StepStatus::Ok).count();
+        let error_count = steps.iter().filter(|s| s.status == StepStatus::Err).count();
         let success_rate = ok_count as f32 / step_count as f32;
 
-        let avg_confidence =
-            steps.iter().map(|s| s.confidence).sum::<f32>() / step_count as f32;
+        let avg_confidence = steps.iter().map(|s| s.confidence).sum::<f32>() / step_count as f32;
 
         let total_duration_ms = steps.iter().map(|s| s.duration_ms).sum();
 
@@ -110,17 +103,12 @@ impl TraceMetrics {
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
+    use chrono::Utc;
     use cruxx_types::crux_value::Crux;
     use cruxx_types::id::CruxId;
     use cruxx_types::step::{Step, StepKind, StepStatus};
-    use chrono::Utc;
 
-    pub fn step(
-        name: &str,
-        status: StepStatus,
-        confidence: f32,
-        kind: StepKind,
-    ) -> Step {
+    pub fn step(name: &str, status: StepStatus, confidence: f32, kind: StepKind) -> Step {
         Step {
             name: name.into(),
             kind,
@@ -156,8 +144,8 @@ pub(crate) mod test_helpers {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::test_helpers::{step, trace};
+    use super::*;
     use cruxx_types::step::{StepKind, StepStatus};
 
     #[test]
