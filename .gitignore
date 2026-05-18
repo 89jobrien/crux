@@ -1,6 +1,8 @@
 target/
+
 # BAML generated client — regenerate with `baml-cli generate`
 **/baml_client/
+
 .ctx/*
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.md
@@ -22,7 +24,7 @@ target/
 .ctx/HANDOFF.hj.hj.state.json
 .ctx/.initialized
 # handoff-end
-#
+
 .envrc
 .env
 crates/.env
