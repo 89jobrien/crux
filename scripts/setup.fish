@@ -33,10 +33,10 @@ if command -q rustc
     set parts (string split . $rust_ver)
     set major $parts[1]
     set minor $parts[2]
-    if test $major -ge 1; and test $minor -ge 85
-        ok "rustc $rust_ver (>= 1.85)"
+    if test $major -ge 1; and test $minor -ge 88
+        ok "rustc $rust_ver (>= 1.88)"
     else
-        fail "rustc $rust_ver is below MSRV 1.85 — run: rustup update stable"
+        fail "rustc $rust_ver is below MSRV 1.88 — run: rustup update stable"
     end
 else
     fail "rustc not found — install from https://rustup.rs"

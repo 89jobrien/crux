@@ -8,6 +8,9 @@ target/
 *.local.md
 *.local.json
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+.venv/
 .claude/worktrees/
 
 # handoff-begin

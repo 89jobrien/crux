@@ -16,7 +16,6 @@ baml = ["dep:cruxx-agentic"]
 
 [dependencies]
 cruxx-core = { path = "../cruxx-core", version = "0.2.6" }
-cruxx-script = { path = "../cruxx-script", version = "0.2.6" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -7,11 +7,11 @@ runs a two-step agent, and prints a structured trace as JSON.
 
 ## Toolchain Requirements
 
-Cruxx requires **Rust 1.85 or later** and **edition 2024**.
+Cruxx requires **Rust 1.88 or later** and **edition 2024**.
 
 The two key language features that make the programming model work are:
 
-- **Native async fn in traits** (stabilized in 1.75, fully ergonomic in 1.85). The `Agent` trait
+- **Native async fn in traits** (stabilized in 1.75, fully ergonomic in 1.88). The `Agent` trait
   uses `async fn run(...)` directly. There is no `#[async_trait]` macro in this codebase and none
   is needed in yours.
 - **Edition 2024 resolver semantics**. Feature unification behaves differently in edition 2024.
@@ -21,7 +21,7 @@ Check your toolchain:
 
 ```bash
 rustup show active-toolchain
-# should print: stable-aarch64-apple-darwin (or similar) with version >= 1.85
+# should print: stable-aarch64-apple-darwin (or similar) with version >= 1.88
 ```
 
 If you are on an older toolchain:

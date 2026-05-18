@@ -22,10 +22,10 @@ if command -v rustc >/dev/null 2>&1; then
     rust_ver=$(rustc --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
     major=$(echo "$rust_ver" | cut -d. -f1)
     minor=$(echo "$rust_ver" | cut -d. -f2)
-    if [ "$major" -ge 1 ] && [ "$minor" -ge 85 ]; then
-        ok "rustc $rust_ver (>= 1.85)"
+    if [ "$major" -ge 1 ] && [ "$minor" -ge 88 ]; then
+        ok "rustc $rust_ver (>= 1.88)"
     else
-        fail "rustc $rust_ver is below MSRV 1.85 — run: rustup update stable"
+        fail "rustc $rust_ver is below MSRV 1.88 — run: rustup update stable"
     fi
 else
     fail "rustc not found — install from https://rustup.rs"
