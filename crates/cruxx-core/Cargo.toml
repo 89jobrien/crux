@@ -15,7 +15,7 @@ categories.workspace = true
 [dependencies]
 # Always required — Step.output is Option<Value>, children are type-erased
 anyhow = { workspace = true }
-cruxx-types = { path = "../cruxx-types" }
+cruxx-types = { path = "../cruxx-types", version = "0.2.6" }
 cruxx-domain = { path = "../cruxx-domain", version = "0.2.6", features = ["tokio-pipeline"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -35,7 +35,7 @@ tracing = { workspace = true, optional = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 proptest = { workspace = true }
-cruxx-types = { path = "../cruxx-types", features = ["test-utils"] }
+cruxx-types = { path = "../cruxx-types", version = "0.2.6", features = ["test-utils"] }
 
 [features]
 default = ["tokio-runtime"]
