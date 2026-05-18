@@ -22,5 +22,8 @@ pub enum StepEvent {
     /// Step was denied by planner.
     Denied { step_name: String, reason: String },
     /// Custom application event (escape hatch for domain-specific events).
-    Custom { tag: String, payload: serde_json::Value },
+    Custom {
+        tag: String,
+        payload: serde_json::Value,
+    },
 }

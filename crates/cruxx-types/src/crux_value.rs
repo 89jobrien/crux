@@ -107,6 +107,25 @@ impl<T: Serialize> Crux<T> {
     }
 }
 
+/// Severity-ordered outcome of a workflow execution.
+/// Variants declared in ascending severity order so Ord derivation is correct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum FinalPhase {
+    Succeeded,
+    Skipped,
+    Aborted,
+    Failed,
+    Errored, // highest severity
+}
+
+/// Per-step data used in final phase aggregation.
+#[derive(Debug, Clone)]
+pub struct StepRecord {
+    pub alias: String,
+    pub phase: FinalPhase,
+    pub continue_on_error: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,10 +139,14 @@ mod tests {
             confidence: 0.3,
             ..step_ok("rejected_branch", 0, None)
         };
-        crux_ok("test", "hello".into(), vec![
-            step_ok("greet", 0, Some(serde_json::json!("hello"))),
-            rejected,
-        ])
+        crux_ok(
+            "test",
+            "hello".into(),
+            vec![
+                step_ok("greet", 0, Some(serde_json::json!("hello"))),
+                rejected,
+            ],
+        )
     }
 
     #[test]

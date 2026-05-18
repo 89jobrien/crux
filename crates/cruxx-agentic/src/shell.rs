@@ -1,5 +1,7 @@
 use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use cruxx_script::{
+    ArgSchema, ArgType, Capability, HandlerMetadata, HandlerRegistry, RiskLevel, SideEffect,
+};
 use serde_json::{Value, json};
 use tokio::process::Command;
 
@@ -16,15 +18,37 @@ use crate::error::{opt_str, require_str};
 /// - `cwd`: working directory for the command
 /// - `env`: object of `{ "KEY": "VALUE" }` pairs injected as environment variables
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value("shell::exec", |input: Value| async move {
-        run_shell(input, false).await
-    });
+    registry.handler_value_with_metadata(
+        shell_metadata("shell::exec", false),
+        |input: Value| async move { run_shell(input, false).await },
+    );
 
-    registry.handler_value("shell::capture", |input: Value| async move {
-        run_shell(input, true).await
-    });
+    registry.handler_value_with_metadata(
+        shell_metadata("shell::capture", true),
+        |input: Value| async move { run_shell(input, true).await },
+    );
 }
 
+fn shell_metadata(name: &str, fail_on_nonzero: bool) -> HandlerMetadata {
+    let description = if fail_on_nonzero {
+        "Run a shell command, capture stdout/stderr, and fail on non-zero exit."
+    } else {
+        "Run a shell command and capture stdout/stderr without failing on non-zero exit."
+    };
+
+    HandlerMetadata::new(name)
+        .describe(description)
+        .args(
+            ArgSchema::new()
+                .required("cmd", ArgType::String)
+                .optional("cwd", ArgType::String)
+                .optional("env", ArgType::Object),
+        )
+        .risk(RiskLevel::High)
+        .side_effects(vec![SideEffect::Shell, SideEffect::Process])
+        .capabilities(vec![Capability::Shell, Capability::Process])
+        .deterministic(false)
+}
 async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr> {
     let cmd = require_str(&input, "cmd").map_err(CruxErr::from)?;
     let cwd = opt_str(&input, "cwd");

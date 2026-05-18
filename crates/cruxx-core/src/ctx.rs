@@ -138,6 +138,7 @@ pub struct CruxCtx {
     max_retries: u32,
     pub(crate) planner: std::sync::Arc<dyn Planner>,
     event_sender: Option<EventSender>,
+    state: std::sync::Arc<std::sync::RwLock<cruxx_types::step::StepState>>,
 }
 
 impl CruxCtx {
@@ -154,7 +155,33 @@ impl CruxCtx {
             max_retries: 3,
             planner: std::sync::Arc::new(PassthroughPlanner),
             event_sender: None,
+            state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Store the output of a named pipe stage so later stages can read it.
+    pub fn propagate_output(&self, alias: &str, output: serde_json::Value) {
+        let mut state = self
+            .state
+            .write()
+            .expect("StepState RwLock poisoned — irrecoverable");
+        state.insert(alias.to_string(), output);
+    }
+
+    /// Retrieve a previously propagated output by alias name.
+    ///
+    /// Returns `None` if no output has been stored under `alias`.
+    pub fn read_output(&self, alias: &str) -> Option<serde_json::Value> {
+        let state = self
+            .state
+            .read()
+            .expect("StepState RwLock poisoned — irrecoverable");
+        state.get(alias).cloned()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test() -> Self {
+        Self::new("__test__")
     }
 
     /// Set the planner for this context. The planner is consulted before each step.
@@ -732,7 +759,9 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.emit(StepEvent::Started { step_name: name.to_string() });
+        self.emit(StepEvent::Started {
+            step_name: name.to_string(),
+        });
         let step_start = Utc::now();
         let result = f().await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
@@ -1158,6 +1187,21 @@ impl Context for CruxCtx {
             }
         }
     }
+}
+
+/// Determines the worst-case outcome across all steps.
+/// Steps flagged `continue_on_error` are excluded unless `ignore_continue_on_error` is true.
+pub fn determine_final_phase(
+    steps: &[cruxx_types::crux_value::StepRecord],
+    ignore_continue_on_error: bool,
+) -> cruxx_types::crux_value::FinalPhase {
+    use cruxx_types::crux_value::FinalPhase;
+    steps
+        .iter()
+        .filter(|s| ignore_continue_on_error || !s.continue_on_error)
+        .map(|s| s.phase)
+        .max()
+        .unwrap_or(FinalPhase::Succeeded)
 }
 
 #[cfg(test)]
@@ -2049,6 +2093,365 @@ mod proptest_confidence_range {
             }
             // Values at or above hi.
             prop_assert!(!range.contains(hi));
+        }
+    }
+}
+
+// ─── if-guard: StepOpts, eval_expr, step_with_opts ───────────────────────────
+
+use std::collections::HashMap;
+
+/// Options for conditional step execution.
+#[derive(Debug, Default)]
+pub struct StepOpts {
+    /// An optional `${{ ... }}` expression; if it evaluates to `false` the step
+    /// is skipped and `step_with_opts` returns `Ok(None)`.
+    pub if_expr: Option<String>,
+    /// Per-step variable overrides (reserved for future use).
+    pub vars: HashMap<String, serde_json::Value>,
+}
+
+impl CruxCtx {
+    /// Run a step only when `opts.if_expr` evaluates to `true` (or is absent).
+    ///
+    /// Returns `Ok(Some(output))` when the step ran, `Ok(None)` when skipped.
+    pub fn step_with_opts<F>(
+        &mut self,
+        alias: &str,
+        opts: StepOpts,
+        f: F,
+    ) -> anyhow::Result<Option<serde_json::Value>>
+    where
+        F: FnOnce(&cruxx_types::step::StepState) -> anyhow::Result<serde_json::Value>,
+    {
+        if let Some(ref expr) = opts.if_expr {
+            let state = self.state.read().expect("StepState lock poisoned");
+            if !eval_expr(expr, &state)? {
+                return Ok(None);
+            }
+        }
+        let state = self.state.read().expect("StepState lock poisoned");
+        let output = f(&state)?;
+        drop(state);
+        self.propagate_output(alias, output.clone());
+        Ok(Some(output))
+    }
+}
+
+/// Evaluate a simple `${{ expr }}` expression against step state.
+///
+/// Returns `true` if the step should run, `false` if it should be skipped.
+///
+/// Supported forms:
+/// - `"true"` / `"false"` — boolean literals
+/// - `""` or strings without `${{ }}` — always `true` (unconditional)
+/// - `${{ outputs['alias'].field }}` — resolved to a string; `"false"`, `"0"`,
+///   or `""` map to `false`; anything else maps to `true`
+fn eval_expr(expr: &str, state: &cruxx_types::step::StepState) -> anyhow::Result<bool> {
+    let expr = expr.trim();
+
+    if expr.is_empty() || !expr.contains("${{") {
+        return Ok(expr != "false");
+    }
+
+    let start = expr.find("${{").unwrap();
+    let end = expr[start..]
+        .find("}}")
+        .map(|i| start + i + 2)
+        .ok_or_else(|| anyhow::anyhow!("unclosed '${{{{' in if_expr: {}", expr))?;
+    let inner = expr[start + 3..end - 2].trim();
+
+    let resolved = resolve_output_ref_for_guard(inner, state)?;
+
+    Ok(!matches!(resolved.as_str(), "false" | "0" | ""))
+}
+
+fn resolve_output_ref_for_guard(
+    expr: &str,
+    state: &cruxx_types::step::StepState,
+) -> anyhow::Result<String> {
+    use anyhow::Context as _;
+
+    let rest = expr
+        .strip_prefix("outputs['")
+        .ok_or_else(|| anyhow::anyhow!("unsupported guard expression: {}", expr))?;
+    let (alias, rest) = rest
+        .split_once("']")
+        .ok_or_else(|| anyhow::anyhow!("malformed alias in guard: {}", expr))?;
+    let field_path = rest.trim_start_matches('.');
+
+    let alias_val = state
+        .get(alias)
+        .ok_or_else(|| anyhow::anyhow!("alias '{}' not in state", alias))?;
+
+    let val = if field_path.is_empty() {
+        alias_val.clone()
+    } else {
+        let mut cur = alias_val;
+        for seg in field_path.split('.') {
+            cur = cur
+                .get(seg)
+                .with_context(|| format!("field '{}' not found in '{}'", seg, alias))?;
+        }
+        cur.clone()
+    };
+
+    Ok(match &val {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        other => other.to_string(),
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod if_guard_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    #[test]
+    fn eval_expr_literal_true() {
+        let state = Default::default();
+        assert!(eval_expr("true", &state).unwrap());
+    }
+
+    #[test]
+    fn eval_expr_literal_false() {
+        let state = Default::default();
+        assert!(!eval_expr("false", &state).unwrap());
+    }
+
+    #[test]
+    fn eval_expr_no_tokens_is_true() {
+        let state = Default::default();
+        assert!(eval_expr("", &state).unwrap());
+    }
+
+    #[test]
+    fn eval_expr_field_access_resolves_truthy_nonzero() {
+        use std::collections::HashMap;
+        let mut state = HashMap::new();
+        state.insert("build".to_string(), serde_json::json!({"exit_code": 0}));
+        let result = eval_expr("${{ outputs['build'].exit_code }}", &state).unwrap();
+        // exit_code = 0 → "0" → false
+        assert!(!result);
+    }
+
+    #[test]
+    fn eval_expr_missing_alias_returns_err() {
+        let state = Default::default();
+        assert!(eval_expr("${{ outputs['missing'].field }}", &state).is_err());
+    }
+
+    #[test]
+    fn step_with_opts_skips_when_if_expr_false() {
+        let mut ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("prev", serde_json::json!({"ok": false}));
+
+        let opts = StepOpts {
+            if_expr: Some("${{ outputs['prev'].ok }}".to_string()),
+            vars: Default::default(),
+        };
+
+        let mut ran = false;
+        let result = ctx.step_with_opts("my-step", opts, |_state| {
+            ran = true;
+            Ok(serde_json::json!({"done": true}))
+        });
+
+        assert!(result.unwrap().is_none()); // skipped → None
+        assert!(!ran);
+    }
+
+    #[test]
+    fn step_with_opts_runs_when_if_expr_true() {
+        let mut ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("prev", serde_json::json!({"ok": true}));
+
+        let opts = StepOpts {
+            if_expr: Some("${{ outputs['prev'].ok }}".to_string()),
+            vars: Default::default(),
+        };
+
+        let mut ran = false;
+        let result = ctx.step_with_opts("my-step", opts, |_state| {
+            ran = true;
+            Ok(serde_json::json!({"done": true}))
+        });
+
+        assert!(result.unwrap().is_some()); // ran → Some
+        assert!(ran);
+    }
+
+    proptest! {
+        #[test]
+        fn eval_expr_no_token_string_always_true(s in "[a-zA-Z0-9_]{1,20}") {
+            let state = Default::default();
+            let result = eval_expr(&s, &state);
+            if s == "false" {
+                prop_assert_eq!(result.unwrap(), false);
+            } else if s == "true" {
+                prop_assert_eq!(result.unwrap(), true);
+            } else {
+                prop_assert_eq!(result.unwrap(), true);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod step_state_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    #[test]
+    fn propagate_then_read_output_round_trips() {
+        let ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("build", serde_json::json!({"exit_code": 0}));
+        let val = ctx.read_output("build").unwrap();
+        assert_eq!(val["exit_code"], 0);
+    }
+
+    #[test]
+    fn read_missing_alias_returns_none() {
+        let ctx = CruxCtx::new_for_test();
+        assert!(ctx.read_output("nonexistent").is_none());
+    }
+
+    #[test]
+    fn propagate_overwrites_previous_value() {
+        let ctx = CruxCtx::new_for_test();
+        ctx.propagate_output("step", serde_json::json!({"v": 1}));
+        ctx.propagate_output("step", serde_json::json!({"v": 2}));
+        assert_eq!(ctx.read_output("step").unwrap()["v"], 2);
+    }
+
+    proptest! {
+        #[test]
+        fn propagate_sequence_never_corrupts_other_aliases(
+            key_a in "[a-z]{3,8}",
+            key_b in "[a-z]{3,8}",
+        ) {
+            prop_assume!(key_a != key_b);
+            let ctx = CruxCtx::new_for_test();
+            ctx.propagate_output(&key_a, serde_json::json!("original_a"));
+            ctx.propagate_output(&key_b, serde_json::json!("original_b"));
+            ctx.propagate_output(&key_b, serde_json::json!("updated_b"));
+            prop_assert_eq!(ctx.read_output(&key_a).unwrap(), serde_json::json!("original_a"));
+            prop_assert_eq!(ctx.read_output(&key_b).unwrap(), serde_json::json!("updated_b"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod final_phase_tests {
+    use super::determine_final_phase;
+    use cruxx_types::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
+    use proptest::prelude::*;
+
+    #[test]
+    fn empty_steps_returns_succeeded() {
+        assert_eq!(determine_final_phase(&[], false), FinalPhase::Succeeded);
+    }
+
+    #[test]
+    fn all_continue_on_error_returns_succeeded() {
+        let steps = vec![
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Failed,
+                continue_on_error: true,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: true,
+            },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Succeeded);
+    }
+
+    #[test]
+    fn single_errored_returns_errored() {
+        let steps = vec![
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Succeeded,
+                continue_on_error: false,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: false,
+            },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
+    }
+
+    #[test]
+    fn failed_does_not_override_errored() {
+        let steps = vec![
+            PhaseStepRecord {
+                alias: "a".into(),
+                phase: FinalPhase::Errored,
+                continue_on_error: false,
+            },
+            PhaseStepRecord {
+                alias: "b".into(),
+                phase: FinalPhase::Failed,
+                continue_on_error: false,
+            },
+        ];
+        assert_eq!(determine_final_phase(&steps, false), FinalPhase::Errored);
+    }
+
+    #[test]
+    fn ignore_continue_on_error_false_includes_all_steps() {
+        // ignore_continue_on_error = true means: include all steps regardless of flag
+        let steps = vec![PhaseStepRecord {
+            alias: "a".into(),
+            phase: FinalPhase::Failed,
+            continue_on_error: true,
+        }];
+        assert_eq!(determine_final_phase(&steps, true), FinalPhase::Failed);
+    }
+
+    prop_compose! {
+        fn arb_phase()(v in 0u8..5) -> FinalPhase {
+            match v {
+                0 => FinalPhase::Succeeded,
+                1 => FinalPhase::Skipped,
+                2 => FinalPhase::Aborted,
+                3 => FinalPhase::Failed,
+                _ => FinalPhase::Errored,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn result_gte_max_non_continue_on_error_phase(
+            phases in proptest::collection::vec(arb_phase(), 1..10),
+        ) {
+            let steps: Vec<PhaseStepRecord> = phases.iter().map(|p| PhaseStepRecord {
+                alias: "s".into(),
+                phase: *p,
+                continue_on_error: false,
+            }).collect();
+            let result = determine_final_phase(&steps, false);
+            let expected = phases.iter().copied().max().unwrap();
+            prop_assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn ord_is_total_and_consistent(a in arb_phase(), b in arb_phase()) {
+            // Reflexive
+            prop_assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
+            // Antisymmetric
+            if a != b {
+                prop_assert_ne!(a.cmp(&b), b.cmp(&a));
+            }
         }
     }
 }

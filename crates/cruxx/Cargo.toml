@@ -13,18 +13,18 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-cruxx-core = { path = "../cruxx-core", version = "0.2.5" }
-cruxx-macros = { path = "../cruxx-macros", version = "0.2.5" }
-cruxx-domain = { path = "../cruxx-domain", version = "0.2.5" }
-cruxx-script = { path = "../cruxx-script", version = "0.2.5", optional = true }
+cruxx-core = { path = "../cruxx-core", version = "0.2.6" }
+cruxx-macros = { path = "../cruxx-macros", version = "0.2.6" }
+cruxx-domain = { path = "../cruxx-domain", version = "0.2.6" }
+cruxx-script = { path = "../cruxx-script", version = "0.2.6", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 futures = { workspace = true }
-cruxx-agentic = { path = "../cruxx-agentic", version = "0.2.5" }
-cruxx-domain = { path = "../cruxx-domain", version = "0.2.5", features = ["tokio-pipeline"] }
+cruxx-agentic = { path = "../cruxx-agentic", version = "0.2.6" }
+cruxx-domain = { path = "../cruxx-domain", version = "0.2.6", features = ["tokio-pipeline"] }
 
 [features]
 default = ["tokio-runtime"]

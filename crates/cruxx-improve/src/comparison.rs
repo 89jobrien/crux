@@ -22,10 +22,7 @@ pub struct Comparison {
 ///
 /// This is crux-domain logic: it knows what steps mean, how to weight
 /// success rate vs confidence, and what constitutes a meaningful delta.
-pub fn replay_compare(
-    old: &Crux<serde_json::Value>,
-    new: &Crux<serde_json::Value>,
-) -> Comparison {
+pub fn replay_compare(old: &Crux<serde_json::Value>, new: &Crux<serde_json::Value>) -> Comparison {
     let old_metrics = TraceMetrics::extract(old);
     let new_metrics = TraceMetrics::extract(new);
     let delta = new_metrics.score - old_metrics.score;

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use cruxx_core::types::harness::HarnessDiff;
 use cruxx_types::id::CruxId;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// What kind of improvement is being proposed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,10 +53,7 @@ impl StrategyDiff {
             || !self.confidence_thresholds.is_empty()
             || !self.delegation_rules.is_empty()
             || !self.prompt_patches.is_empty()
-            || self
-                .harness_diff
-                .as_ref()
-                .is_some_and(|d| d.has_changes())
+            || self.harness_diff.as_ref().is_some_and(|d| d.has_changes())
     }
 }
 
@@ -108,7 +105,10 @@ mod tests {
     #[test]
     fn kind_serializes_as_snake_case() {
         let kind = ImprovementKind::ToolPreference;
-        assert_eq!(serde_json::to_string(&kind).unwrap(), r#""tool_preference""#);
+        assert_eq!(
+            serde_json::to_string(&kind).unwrap(),
+            r#""tool_preference""#
+        );
     }
 
     #[test]

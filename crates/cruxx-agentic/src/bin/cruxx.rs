@@ -244,10 +244,7 @@ pub fn rule_planner_steps(goal: &str) -> Vec<String> {
 /// Default rule set used by the `plan --planner rule` subcommand.
 pub fn default_plan_rules() -> Vec<PlanRule> {
     vec![
-        PlanRule::new(
-            ["fetch", "summarize"],
-            ["http::get", "llm::complete"],
-        ),
+        PlanRule::new(["fetch", "summarize"], ["http::get", "llm::complete"]),
         PlanRule::new(["fetch"], ["http::get"]),
         PlanRule::new(["summarize"], ["llm::complete"]),
     ]
@@ -599,7 +596,10 @@ mod tests {
     #[test]
     fn plan_subcommand_with_rule_planner_prints_steps() {
         let steps = rule_planner_steps("fetch data");
-        assert!(!steps.is_empty(), "rule planner must return at least one step for 'fetch data'");
+        assert!(
+            !steps.is_empty(),
+            "rule planner must return at least one step for 'fetch data'"
+        );
         assert!(
             steps.contains(&"http::get".to_string()),
             "expected http::get for goal containing 'fetch', got: {steps:?}"
@@ -619,6 +619,9 @@ mod tests {
     fn plan_subcommand_goal_required() {
         // Empty goal returns the default fallback — must not panic and must be non-empty.
         let steps = rule_planner_steps("");
-        assert!(!steps.is_empty(), "rule planner must return default steps for empty goal");
+        assert!(
+            !steps.is_empty(),
+            "rule planner must return default steps for empty goal"
+        );
     }
 }

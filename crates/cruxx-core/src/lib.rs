@@ -7,13 +7,13 @@ pub mod approval;
 pub mod context;
 pub mod ctx;
 pub mod delegation;
+pub mod event_sink;
 pub mod hooks;
+pub mod planner_gate;
 pub mod recorder;
 pub mod registry;
 pub mod replay;
 pub mod safety;
-pub mod event_sink;
-pub mod planner_gate;
 pub mod speculation;
 pub mod types;
 

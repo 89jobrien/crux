@@ -1,11 +1,11 @@
 //! EventSink — port for emitting step events from CruxCtx.
 #[cfg(test)]
 mod tests {
+    use crate::context::Context as _;
+    use crate::ctx::CruxCtx;
+    use crate::types::error::CruxErr;
     use cruxx_domain::event::StepEvent;
     use cruxx_domain::pipeline::EventPipeline;
-    use crate::ctx::CruxCtx;
-    use crate::context::Context as _;
-    use crate::types::error::CruxErr;
 
     #[tokio::test]
     async fn ctx_emits_started_event_on_step() {

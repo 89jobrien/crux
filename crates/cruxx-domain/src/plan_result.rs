@@ -1,6 +1,6 @@
 //! Verdict returned by a Planner for a step request.
-use serde::{Deserialize, Serialize};
 use crate::action::Action;
+use serde::{Deserialize, Serialize};
 
 /// What the planner decided to do with a requested step.
 #[derive(Debug, Clone, Serialize, Deserialize)]

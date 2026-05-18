@@ -29,6 +29,8 @@ path = "/usr/local/bin/my-plugin"
 #[test]
 fn toml_file_discovery_returns_empty_for_nonexistent_path() {
     let disc = TomlFileDiscovery::new("/tmp/cruxx-no-such-plugins-file-xyz.toml");
-    let entries = disc.discover().expect("missing file should return Ok(empty)");
+    let entries = disc
+        .discover()
+        .expect("missing file should return Ok(empty)");
     assert!(entries.is_empty());
 }

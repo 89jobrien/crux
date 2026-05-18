@@ -21,11 +21,16 @@ mod tests {
     #[tokio::test]
     async fn deny_planner_fails_step_with_denied_error() {
         let mut ctx = CruxCtx::new("agent");
-        ctx.set_planner(DenyAllPlanner { reason: "blocked".into() });
+        ctx.set_planner(DenyAllPlanner {
+            reason: "blocked".into(),
+        });
         let result = ctx.step("a", || async { Ok::<i32, CruxErr>(1) }).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("blocked"), "expected 'blocked' in: {err}");
+        assert!(
+            err.to_string().contains("blocked"),
+            "expected 'blocked' in: {err}"
+        );
     }
 
     #[tokio::test]
@@ -34,7 +39,9 @@ mod tests {
         let ran2 = ran.clone();
 
         let mut ctx = CruxCtx::new("agent");
-        ctx.set_planner(SimulatePlanner { output: serde_json::json!(99) });
+        ctx.set_planner(SimulatePlanner {
+            output: serde_json::json!(99),
+        });
 
         let result = ctx
             .step("a", || async move {

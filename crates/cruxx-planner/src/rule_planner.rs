@@ -18,7 +18,10 @@ pub struct PlanRule {
 
 impl PlanRule {
     /// Convenience constructor — accepts anything `Into<String>`.
-    pub fn new(keywords: impl IntoIterator<Item = impl Into<String>>, steps: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    pub fn new(
+        keywords: impl IntoIterator<Item = impl Into<String>>,
+        steps: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
         Self {
             keywords: keywords.into_iter().map(Into::into).collect(),
             steps: steps.into_iter().map(Into::into).collect(),
@@ -29,7 +32,9 @@ impl PlanRule {
     ///
     /// `goal_lower` must already be lowercased by the caller.
     fn matches(&self, goal_lower: &str) -> bool {
-        self.keywords.iter().all(|kw| goal_lower.contains(kw.to_lowercase().as_str()))
+        self.keywords
+            .iter()
+            .all(|kw| goal_lower.contains(kw.to_lowercase().as_str()))
     }
 }
 
@@ -59,7 +64,10 @@ pub struct RulePlanner {
 impl RulePlanner {
     /// Create a new planner with the given rules and fallback step sequence.
     pub fn new(rules: Vec<PlanRule>, default_steps: Vec<String>) -> Self {
-        Self { rules, default_steps }
+        Self {
+            rules,
+            default_steps,
+        }
     }
 
     /// Match the goal against rules and return the first matching step sequence.
@@ -87,7 +95,10 @@ mod tests {
     fn rule_matches_by_keyword() {
         let rules = vec![PlanRule::new(["fetch"], ["http::get", "json::write"])];
         let planner = RulePlanner::new(rules, steps(&["shell::capture"]));
-        assert_eq!(planner.plan("fetch the remote resource"), steps(&["http::get", "json::write"]));
+        assert_eq!(
+            planner.plan("fetch the remote resource"),
+            steps(&["http::get", "json::write"])
+        );
     }
 
     #[test]
@@ -97,7 +108,10 @@ mod tests {
         // only "read" present — should NOT match
         assert_eq!(planner.plan("read the file"), steps(&["shell::capture"]));
         // both keywords present — should match
-        assert_eq!(planner.plan("read and parse json"), steps(&["fs::read", "json::parse"]));
+        assert_eq!(
+            planner.plan("read and parse json"),
+            steps(&["fs::read", "json::parse"])
+        );
     }
 
     #[test]
@@ -108,14 +122,20 @@ mod tests {
         ];
         let planner = RulePlanner::new(rules, steps(&["shell::capture"]));
         // "git write" matches the first rule (git), not the second
-        assert_eq!(planner.plan("git write a summary"), steps(&["git::diff", "json::write"]));
+        assert_eq!(
+            planner.plan("git write a summary"),
+            steps(&["git::diff", "json::write"])
+        );
     }
 
     #[test]
     fn default_steps_when_no_match() {
         let rules = vec![PlanRule::new(["git"], ["git::diff"])];
         let planner = RulePlanner::new(rules, steps(&["shell::capture", "json::write"]));
-        assert_eq!(planner.plan("xyzzy frobnicate"), steps(&["shell::capture", "json::write"]));
+        assert_eq!(
+            planner.plan("xyzzy frobnicate"),
+            steps(&["shell::capture", "json::write"])
+        );
     }
 
     #[test]
