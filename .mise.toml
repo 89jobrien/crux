@@ -1,5 +1,5 @@
 [tools]
-"cargo:baml-cli" = "0.222.0"
+"cargo:baml-cli" = "0.221.0"
 
 # Read-only crux pipelines — analysis, audit, and diagnostics.
 # Side-effect pipelines (deploy, approve, release) are excluded.

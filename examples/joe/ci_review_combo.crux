@@ -54,4 +54,5 @@ steps:
     handler: fs::write
     args:
       path: ".ctx/ci-review-report.json"
+      content: "{{ steps.decision.output }}"
     # Persist full findings for audit

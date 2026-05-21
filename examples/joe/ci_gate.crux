@@ -18,7 +18,7 @@ steps:
         # Fraction of violations that are auto-fixable as confidence
 
   - route_on_confidence: act
-    value: "{{ steps.score.confidence }}"
+    value: "{{ steps.assess.confidence }}"
     routes:
       - range: "[0.0, 0.4)"
         label: manual

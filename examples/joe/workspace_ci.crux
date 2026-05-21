@@ -56,7 +56,7 @@ steps:
         # Fraction auto-fixable as confidence
 
   - route_on_confidence: action
-    value: "{{ steps.score.confidence }}"
+    value: "{{ steps.classify_result.confidence }}"
     routes:
       - range: "[0.0, 0.4)"
         label: broken
