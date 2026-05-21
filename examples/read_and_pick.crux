@@ -12,15 +12,17 @@ steps:
   - step: read_file
     handler: shell::capture
     args:
-      cmd: "cat docs/plugins.md"
+      cmd: "cat docs/crux-plugins.md"
     # Output: { "exit_code": 0, "stdout": "...", "stderr": "" }
 
   - step: count_lines
     handler: shell::capture
     args:
-      cmd: "wc -l < docs/plugins.md"
+      cmd: "wc -l < docs/crux-plugins.md"
     # Output: { "exit_code": 0, "stdout": "N\n", "stderr": "" }
 
   - step: log_result
     handler: ctrl::log
-    # Logs the result to stderr and passes it through
+    args:
+      field: stdout
+      compact: true

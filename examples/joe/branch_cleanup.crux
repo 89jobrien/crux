@@ -8,8 +8,8 @@ steps:
       - step: merged_branches
         handler: shell::capture
         args:
-          cmd: "git branch --merged main | grep -v '\\* \\|main$\\|develop$' || true"
-        # Local branches already merged into main
+          cmd: "git branch --merged HEAD | grep -v '\\* \\|main$\\|develop$' || true"
+        # Local branches already merged into current branch
       - step: remote_stale
         handler: shell::capture
         args:
@@ -50,5 +50,5 @@ steps:
         label: full_cleanup
         handler: shell::capture
         args:
-          cmd: "git branch --merged main | grep -v '\\* \\|main$\\|develop$' | xargs -r git branch -d"
+          cmd: "git branch --merged HEAD | grep -v '\\* \\|main$\\|develop$' | xargs -r git branch -d"
         # Delete all merged local branches and prune remote

@@ -189,13 +189,8 @@ fn cmd_check(paths: &[String]) {
                 for diag in &report.diagnostics {
                     let (color, label) = match diag.severity {
                         crux_script::DiagnosticSeverity::Error => {
-                            if diag.message.contains("is not registered") {
-                                warnings += 1;
-                                ("\x1b[33m", "warning")
-                            } else {
-                                errors += 1;
-                                ("\x1b[31m", "error")
-                            }
+                            errors += 1;
+                            ("\x1b[31m", "error")
                         }
                         crux_script::DiagnosticSeverity::Warning => {
                             warnings += 1;
@@ -234,15 +229,8 @@ fn cmd_check(paths: &[String]) {
             for diag in &report.diagnostics {
                 let (color, label) = match diag.severity {
                     crux_script::DiagnosticSeverity::Error => {
-                        // Unregistered handlers are warnings — pipelines may
-                        // reference future/aspirational handlers.
-                        if diag.message.contains("is not registered") {
-                            warnings += 1;
-                            ("\x1b[33m", "warning")
-                        } else {
-                            errors += 1;
-                            ("\x1b[31m", "error")
-                        }
+                        errors += 1;
+                        ("\x1b[31m", "error")
                     }
                     crux_script::DiagnosticSeverity::Warning => {
                         warnings += 1;
@@ -515,10 +503,22 @@ fn cmd_run_cruxfile(
             eprintln!("[crux] running target: {target_name}");
         }
 
+        let target_start = Instant::now();
         let crux = rt.block_on(runner.run_target(target_def, target_name, budget));
+        let target_elapsed = target_start.elapsed();
+        let is_ok = crux.value().is_ok();
+        if !quiet {
+            let icon = if is_ok {
+                "\x1b[32mok\x1b[0m"
+            } else {
+                "\x1b[31mERR\x1b[0m"
+            };
+            let elapsed_ms = target_elapsed.as_millis();
+            eprintln!("  [{icon}] {target_name} ({elapsed_ms}ms)");
+        }
 
         if verbose {
-            let status = if crux.value().is_ok() { "OK" } else { "FAILED" };
+            let status = if is_ok { "OK" } else { "FAILED" };
             eprintln!(
                 "[crux]   {target_name}: {status} ({} steps)",
                 crux.steps.len()
@@ -542,9 +542,30 @@ fn cmd_run_cruxfile(
     }
 
     let elapsed = start.elapsed();
+    let total = order.len();
+    let skipped_count = skipped.len();
+    let failed_count = if failed { 1 } else { 0 };
+    let ok_count = total - skipped_count - failed_count;
 
     if !skipped.is_empty() && !quiet {
         eprintln!("[crux] skipped due to failure: {}", skipped.join(", "));
+    }
+
+    if !quiet {
+        let elapsed_str = if elapsed.as_secs() >= 1 {
+            format!("{:.1}s", elapsed.as_secs_f64())
+        } else {
+            format!("{}ms", elapsed.as_millis())
+        };
+        let status = if failed {
+            format!("{ok_count}/{total} targets OK, {failed_count} failed, {skipped_count} skipped")
+        } else {
+            format!("{ok_count}/{total} targets OK")
+        };
+        eprintln!(
+            "Cruxfile: {} [{target}] {status} ({elapsed_str})",
+            cruxfile.project
+        );
     }
 
     if verbose {

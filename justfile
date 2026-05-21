@@ -106,6 +106,24 @@ lint-crux:
     fi
     cargo run --quiet -p crux-agentic --bin crux -- check $files
 
+# Demo replay: fresh run vs cached replay with timing comparison
+replay-demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BIN="cargo run --quiet -p crux-agentic --bin crux --"
+    PIPE="examples/showcase.crux"
+    INPUT="examples/input_showcase.json"
+    TRACE="target/replay-demo-trace.json"
+    printf '\n=== 1. Fresh run (save trace) ===\n'
+    $BIN run "$PIPE" "$INPUT" --save-trace "$TRACE" -v
+    printf '\n=== 2. Replay (strict, from saved trace) ===\n'
+    $BIN run "$PIPE" "$INPUT" --replay "$TRACE" -v
+    printf '\n=== 3. Replay (strict, from committed fixture) ===\n'
+    $BIN run "$PIPE" "$INPUT" --replay examples/fixtures/showcase_trace.json -v
+    printf '\n=== 4. Replay (lenient, from committed fixture) ===\n'
+    $BIN run "$PIPE" "$INPUT" --replay examples/fixtures/showcase_trace.json --replay-mode lenient -v
+    rm -f "$TRACE"
+
 # Run hook bats tests
 test-hooks:
     bats scripts/tests/hooks.bats

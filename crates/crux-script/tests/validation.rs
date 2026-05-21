@@ -1,6 +1,5 @@
 use crux_script::{
-    ArgSchema, ArgType, DiagnosticSeverity, HandlerMetadata, HandlerRegistry, RiskLevel,
-    validate_pipeline,
+    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel, validate_pipeline,
 };
 use serde_json::Value;
 
@@ -68,9 +67,28 @@ steps:
     .unwrap();
 
     let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert_eq!(report.diagnostics[0].severity, DiagnosticSeverity::Error);
+    // Unknown namespace → warning (aspirational/plugin handler).
+    assert_eq!(report.error_count(), 0);
+    assert_eq!(report.warning_count(), 1);
     assert!(report.diagnostics[0].message.contains("not registered"));
+}
+
+#[test]
+fn validation_errors_on_known_namespace_unknown_handler() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: invalid
+steps:
+  - step: bad
+    handler: shell::nonexistent
+"#,
+    )
+    .unwrap();
+
+    let report = validate_pipeline(&pipeline, &registry());
+    // Known namespace (shell) → error.
+    assert_eq!(report.error_count(), 1);
+    assert!(report.diagnostics[0].message.contains("namespace exists"));
 }
 
 #[test]
@@ -145,7 +163,9 @@ steps:
     .unwrap();
 
     let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
+    // Unknown namespace → warning, not error.
+    assert_eq!(report.error_count(), 0);
+    assert_eq!(report.warning_count(), 1);
     assert!(report.diagnostics[0].location.contains("arms[1]"));
 }
 

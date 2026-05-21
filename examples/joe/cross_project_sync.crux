@@ -43,7 +43,7 @@ steps:
         # How many consumers are in sync?
 
   - route_on_confidence: action
-    value: "{{ steps.score.confidence }}"
+    value: "{{ steps.analyze_drift.confidence }}"
     routes:
       - range: "[0.0, 0.5)"
         label: breaking_drift

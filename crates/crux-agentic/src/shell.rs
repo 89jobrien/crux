@@ -17,6 +17,9 @@ use crate::error::{opt_str, require_str};
 /// Optional args:
 /// - `cwd`: working directory for the command
 /// - `env`: object of `{ "KEY": "VALUE" }` pairs injected as environment variables
+/// - `ignore_exit`: (bool, `shell::capture` only) when true, capture stdout/stderr
+///   without failing on non-zero exit. Unlike `shell::exec` (fire-and-forget),
+///   the output is still returned.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         shell_metadata("shell::exec", false),
@@ -42,7 +45,8 @@ fn shell_metadata(name: &str, fail_on_nonzero: bool) -> HandlerMetadata {
             ArgSchema::new()
                 .required("cmd", ArgType::String)
                 .optional("cwd", ArgType::String)
-                .optional("env", ArgType::Object),
+                .optional("env", ArgType::Object)
+                .optional("ignore_exit", ArgType::Boolean),
         )
         .risk(RiskLevel::High)
         .side_effects(vec![SideEffect::Shell, SideEffect::Process])
@@ -79,7 +83,13 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    if fail_on_nonzero && exit_code != 0 {
+    let ignore_exit = input
+        .get("args")
+        .and_then(|a| a.get("ignore_exit"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if fail_on_nonzero && !ignore_exit && exit_code != 0 {
         return Err(CruxErr::step_failed(
             "shell::capture",
             format!("command exited {exit_code}: {stderr}"),

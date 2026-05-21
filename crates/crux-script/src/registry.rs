@@ -45,6 +45,14 @@ impl HandlerRegistry {
         }
     }
 
+    /// Return the set of known handler namespaces (the prefix before `::`).
+    pub fn registered_namespaces(&self) -> std::collections::HashSet<&str> {
+        self.handlers
+            .keys()
+            .filter_map(|k| k.split_once("::").map(|(ns, _)| ns))
+            .collect()
+    }
+
     /// Register handler metadata for validation and introspection.
     pub fn register_metadata(&mut self, meta: HandlerMetadata) {
         self.metadata.insert(meta.name.clone(), meta);

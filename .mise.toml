@@ -55,3 +55,27 @@ run = "crux run examples/joe/todo_issue_sync.crux"
 [tasks.env-debug]
 description = "Debug secrets and environment variable resolution"
 run = "crux run examples/joe/secret_env_debug.crux"
+
+# Showcases — self-contained demos using fixture data, no API keys needed.
+
+[tasks.demo]
+description = "Run all showcase pipelines"
+run = """
+set -euo pipefail
+crux run examples/showcase.crux examples/input_showcase.json
+crux run examples/showcase_review.crux
+crux run examples/showcase_triage.crux
+crux run examples/showcase_ci.crux
+"""
+
+[tasks.demo-review]
+description = "Showcase: code review gate with fixture diff"
+run = "crux run examples/showcase_review.crux"
+
+[tasks.demo-triage]
+description = "Showcase: obfsck secret scan triage"
+run = "crux run examples/showcase_triage.crux"
+
+[tasks.demo-ci]
+description = "Showcase: CI deny gate with fixture output"
+run = "crux run examples/showcase_ci.crux"

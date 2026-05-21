@@ -15,7 +15,7 @@ steps:
       - step: find_handoffs
         handler: shell::capture
         args:
-          cmd: "find ~/dev -maxdepth 3 -name 'HANDOFF.yaml' -newer ~/dev/.ctx/last-session 2>/dev/null"
+          cmd: "find ~/dev -maxdepth 3 -name 'HANDOFF.yaml' -newer ~/dev/.ctx/last-session 2>/dev/null || true"
         # HANDOFF.yaml files modified since last session
       - step: pending_todos
         handler: shell::capture
