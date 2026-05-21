@@ -411,6 +411,7 @@ version = "0.2.6"
 dependencies = [
  "baml",
  "bollard",
+ "chrono",
  "clap",
  "cruxx-core",
  "cruxx-model",

@@ -1,0 +1,57 @@
+pipeline: ci_review_combo
+# Combined CI + review gate. Runs CI checks and code review in parallel,
+# merges findings, and produces a single go/no-go verdict.
+budget: { calls: 18, duration_ms: 120000 }
+
+steps:
+  - step: check_tree
+    handler: git::status
+    # Ensure working tree is clean before gating
+
+  - join_all: signals
+    arms:
+      - step: deny
+        handler: ci::deny_violations
+        # License and advisory violations
+      - step: ci_severity
+        handler: ci::classify_severity
+        # Classify any prior CI failures by tier
+      - step: arch
+        handler: review::arch_boundary_check
+        # Hexagonal boundary violations
+
+  - pipe: synthesize
+    stages:
+      - step: normalize
+        handler: review::normalize_findings
+        # Merge CI and review findings into Finding[]
+      - step: severity
+        handler: review::apply_severity
+        # Apply blocking/suggestion/observation tiers
+      - step: ci_fixability
+        handler: ci::score_fixability
+        # Score auto-fixable fraction
+      - step: review_score
+        handler: review::compute_score
+        # Score clean-line fraction
+
+  - speculate: decision
+    mode: pick_best
+    arms:
+      - step: ship
+        handler: review::approve
+        # Both CI and review pass -- approve
+      - step: fix_first
+        handler: shell::capture
+        args:
+          cmd: "cargo fix --allow-dirty && cargo fmt --all"
+        # CI fixable, review clean -- auto-fix and retry
+      - step: hold
+        handler: ctrl::log
+        # Blocking issues in review or unfixable CI -- hold for human
+
+  - step: write_report
+    handler: fs::write
+    args:
+      path: ".ctx/ci-review-report.json"
+    # Persist full findings for audit

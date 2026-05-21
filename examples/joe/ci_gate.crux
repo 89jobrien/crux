@@ -1,0 +1,36 @@
+pipeline: ci_gate
+# CI failure classifier. Runs deny check, classifies severity, and scores
+# fixability to decide whether to auto-fix or escalate.
+budget: { calls: 10 }
+
+steps:
+  - step: deny_check
+    handler: ci::deny_violations
+    # Parse cargo-deny output into structured violation list
+
+  - pipe: assess
+    stages:
+      - step: classify
+        handler: ci::classify_severity
+        # compile > deny > test > clippy
+      - step: score
+        handler: ci::score_fixability
+        # Fraction of violations that are auto-fixable as confidence
+
+  - route_on_confidence: act
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: manual
+        handler: ctrl::log
+        # Hard failures -- needs manual investigation
+      - range: "[0.4, 0.8)"
+        label: auto_fix
+        handler: shell::capture
+        args:
+          cmd: "cargo fix --allow-dirty && cargo fmt --all"
+        # Auto-fixable subset -- apply and re-run
+      - range: "[0.8, 1.0]"
+        label: clean
+        handler: ctrl::log
+        # All clear -- ready to merge

@@ -87,10 +87,9 @@ impl HookRegistry {
     pub async fn check_confidence(&self, confidence: f32) -> Option<Recovery<serde_json::Value>> {
         if let (Some(threshold), Some(handler)) =
             (self.confidence_threshold, &self.confidence_handler)
+            && confidence < threshold
         {
-            if confidence < threshold {
-                return Some(handler(confidence).await);
-            }
+            return Some(handler(confidence).await);
         }
         None
     }

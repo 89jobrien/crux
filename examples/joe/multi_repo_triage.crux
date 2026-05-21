@@ -1,0 +1,54 @@
+pipeline: multi_repo_triage
+# Triage issues across multiple repos. Parses tags, deduplicates,
+# scores urgency, and groups by repo for dispatch.
+budget: { calls: 15 }
+
+steps:
+  - join_all: collect
+    arms:
+      - step: crux_status
+        handler: git::status
+        # crux repo state
+      - step: minibox_status
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/minibox log --oneline -5"
+        # Recent minibox activity
+      - step: devloop_status
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/devloop log --oneline -5"
+        # Recent devloop activity
+
+  - pipe: classify
+    stages:
+      - step: parse_tags
+        handler: triage::parse_repo_tags
+        # Extract labels, milestones, priority markers from each repo
+      - step: dedup
+        handler: triage::deduplicate_intent
+        # Collapse duplicate issues across repos by semantic intent
+      - step: score
+        handler: triage::score_urgency
+        # Assign urgency 0.0-1.0 based on staleness, severity, blockers
+      - step: group
+        handler: triage::group_by_repo
+        # Bucket deduplicated issues back to owning repo
+
+  - route_on_confidence: dispatch
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: low_urgency
+        handler: ctrl::log
+        # Nothing pressing -- log summary for weekly review
+      - range: "[0.3, 0.7)"
+        label: moderate
+        handler: fs::write
+        args:
+          path: ".ctx/triage-report.json"
+        # Write structured report for manual review
+      - range: "[0.7, 1.0]"
+        label: critical
+        handler: ctrl::log
+        # Critical items found -- surface immediately

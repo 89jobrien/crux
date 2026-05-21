@@ -1,0 +1,72 @@
+pipeline: release_pipeline
+# Rust workspace release pipeline. Validates, bumps version, cross-compiles,
+# verifies binary architecture, tags, and publishes. Mirrors the pattern
+# from minibox/crux/doob release.yml workflows.
+budget: { calls: 25, duration_ms: 600000 }
+
+steps:
+  - pipe: pre_release_gate
+    stages:
+      - step: ensure_clean_tree
+        handler: git::status
+        # Fail if working tree is dirty -- no releasing uncommitted changes
+      - step: run_ci
+        handler: shell::capture
+        args:
+          cmd: "just ci"
+        # Full CI gate must pass before any release work
+      - step: check_changelog
+        handler: shell::capture
+        args:
+          cmd: "git log --oneline $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10)..HEAD"
+        # Show commits since last tag for changelog review
+
+  - join_all: cross_compile
+    arms:
+      - step: build_musl
+        handler: shell::capture
+        args:
+          cmd: "cross build --release --target x86_64-unknown-linux-musl"
+        # Linux deployment target (minibox VPS)
+      - step: build_macos
+        handler: shell::capture
+        args:
+          cmd: "cargo build --release --target aarch64-apple-darwin"
+        # Local macOS target
+
+  - join_all: verify_binaries
+    arms:
+      - step: verify_musl
+        handler: shell::capture
+        args:
+          cmd: "file target/x86_64-unknown-linux-musl/release/*"
+        # Assert ELF x86-64 statically linked
+      - step: verify_macos
+        handler: shell::capture
+        args:
+          cmd: "file target/aarch64-apple-darwin/release/*"
+        # Assert Mach-O arm64
+
+  - pipe: tag_and_publish
+    stages:
+      - step: read_version
+        handler: shell::capture
+        args:
+          cmd: "cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'"
+        # Extract version from workspace root Cargo.toml
+      - step: create_tag
+        handler: shell::capture
+        args:
+          cmd: "git tag -a v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version') -m 'release'"
+        # Create annotated tag from Cargo.toml version
+      - step: push_tag
+        handler: shell::capture
+        args:
+          cmd: "git push origin --tags"
+        # Push tag to trigger release workflow
+
+  - step: create_release
+    handler: shell::capture
+    args:
+      cmd: "gh release create --generate-notes"
+    # GitHub release with auto-generated notes from commits

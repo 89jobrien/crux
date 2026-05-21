@@ -1,0 +1,58 @@
+pipeline: worktree_task
+# Isolated feature branch workflow using git worktrees. Creates a worktree,
+# runs a task in isolation, validates, merges back to main, and cleans up.
+# Mirrors the subagent protocol from atelier/orca-strait.
+budget: { calls: 15, duration_ms: 180000 }
+
+steps:
+  - pipe: setup_worktree
+    stages:
+      - step: verify_clean_main
+        handler: git::status
+        # Ensure main is clean before branching
+      - step: create_branch
+        handler: shell::capture
+        args:
+          cmd: "git worktree add ../worktree-task feature/worktree-task"
+        # Create worktree with feature branch from HEAD
+      - step: verify_branch
+        handler: shell::capture
+        args:
+          cmd: "cd ../worktree-task && git branch --show-current"
+        # Confirm we're on the feature branch, not main
+
+  - step: run_task
+    handler: shell::capture
+    args:
+      cmd: "cd ../worktree-task && just ci"
+    # Execute the actual task in the isolated worktree.
+    # Replace this step's args.cmd with the real task command.
+
+  - pipe: validate_and_merge
+    stages:
+      - step: run_tests
+        handler: shell::capture
+        args:
+          cmd: "cd ../worktree-task && cargo nextest run"
+        # Full test suite in the worktree
+      - step: verify_commit_exists
+        handler: shell::capture
+        args:
+          cmd: "cd ../worktree-task && git log --oneline -1"
+        # Ensure the task actually committed something
+      - step: merge_to_main
+        handler: shell::capture
+        args:
+          cmd: "git merge feature/worktree-task"
+        # Merge feature branch back to main (no octopus)
+      - step: remove_worktree
+        handler: shell::capture
+        args:
+          cmd: "git worktree remove ../worktree-task"
+        # Clean up the worktree
+
+  - step: verify_merged
+    handler: shell::capture
+    args:
+      cmd: "git log --oneline main..feature/worktree-task"
+    # Empty output = fully merged. If non-empty, merge failed.

@@ -1,0 +1,74 @@
+pipeline: workspace_ci
+# Universal Rust workspace CI gate. Mirrors `just ci` across all projects:
+# fmt-check -> cargo-check -> build-locked -> clippy -> nextest -> cargo-deny.
+# Parallel where possible, sequential where order matters.
+budget: { calls: 20, duration_ms: 300000 }
+
+steps:
+  - join_all: static_checks
+    arms:
+      - step: fmt_check
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check"
+        # Hard gate: no point building if formatting is wrong
+      - step: cargo_check
+        handler: shell::capture
+        args:
+          cmd: "RUSTFLAGS='-D warnings' cargo check --workspace --all-targets"
+        # Fast type-check pass before full build
+
+  - join_all: build_and_lint
+    arms:
+      - step: build_locked
+        handler: shell::capture
+        args:
+          cmd: "RUSTFLAGS='-D warnings' cargo build --locked --all-targets"
+        # CI-parity build: locked deps + warnings-as-errors
+      - step: clippy
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --all-targets -- -D warnings"
+        # Lint pass runs in parallel with build
+
+  - step: nextest
+    handler: shell::capture
+    args:
+      cmd: "cargo nextest run"
+    # Full test suite via nextest (parallel, filtered output)
+
+  - step: cargo_deny
+    handler: shell::capture
+    args:
+      cmd: "cargo deny check"
+    # License + advisory audit via cargo-deny
+
+  - pipe: classify_result
+    stages:
+      - step: collect_failures
+        handler: ci::compile_errors
+        # Parse any compile errors from earlier steps
+      - step: rank_issues
+        handler: ci::classify_severity
+        # compile > deny > test > clippy
+      - step: score
+        handler: ci::score_fixability
+        # Fraction auto-fixable as confidence
+
+  - route_on_confidence: action
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: broken
+        handler: ctrl::log
+        # Multiple hard failures -- manual investigation needed
+      - range: "[0.4, 0.8)"
+        label: fixable
+        handler: shell::capture
+        args:
+          cmd: "cargo fix --allow-dirty && cargo fmt --all"
+        # Auto-fix what we can, re-run manually
+      - range: "[0.8, 1.0]"
+        label: clean
+        handler: ctrl::log
+        # All gates passed -- ready to commit

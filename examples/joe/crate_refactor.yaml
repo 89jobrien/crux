@@ -1,28 +1,4 @@
 pipeline: crate_refactor
-# ASPIRATIONAL TEMPLATE — not all steps are implemented.
-#
-# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
-# through unchanged so the pipeline can be traced end-to-end, but they do no
-# real domain work yet.
-#
-# Unimplemented arms and what they need:
-#   dep_graph_analysis    — query gkg (or `cargo metadata`) for dependency cycles
-#                           and over-coupled crates. Implement as shell::capture
-#                           wrapping a `gkg` CLI call, or a custom Rust handler.
-#   arch_boundary_check   — scan Cargo.toml files to detect domain crates that
-#                           import adapter crates (hexagonal violations). Could be
-#                           a `shell::capture` + `rg` one-liner or a dedicated handler.
-#   extract_trait_port    — generate a trait skeleton in the domain crate. Requires
-#                           LLM assistance (llm::invoke) or template expansion.
-#   split_crate           — generate a new Cargo.toml + src/lib.rs scaffold. Can be
-#                           implemented as a series of fs::write steps.
-#   add_adapter_layer     — create an adapter crate between two coupled crates. Same
-#                           approach as split_crate.
-#   generate_patch        — produce a unified diff for the winning strategy. Best
-#                           implemented via llm::invoke with the strategy + signal context.
-#
-# See docs/crux-capabilities.md — Known Gaps for current status.
-#
 # Assist a Rust workspace refactor. Gather all diagnostic signal in parallel,
 # then speculate on the best structural strategy. The winning strategy is
 # validated before any changes land.
@@ -33,7 +9,7 @@ steps:
     handler: shell::capture
     args:
       cmd: "cargo metadata --no-deps --format-version 1"
-    # `cargo metadata --no-deps --format-version 1` — crate graph baseline
+    # `cargo metadata --no-deps --format-version 1` -- crate graph baseline
 
   - join_all: gather_signal
     arms:
@@ -41,32 +17,52 @@ steps:
         handler: shell::capture
         args:
           cmd: "cargo clippy --all-targets -- -D warnings"
-        # `cargo clippy --all-targets -- -D warnings` — lint violations with spans
+        # `cargo clippy --all-targets -- -D warnings` -- lint violations with spans
       - step: nextest_failures
         handler: shell::capture
         args:
           cmd: "cargo nextest run --no-fail-fast"
-        # `cargo nextest run --no-fail-fast` — failing test names + spans
+        # `cargo nextest run --no-fail-fast` -- failing test names + spans
       - step: dep_graph_analysis
-        handler: ctrl::noop
-        # gkg query: find cycles, over-coupled crates, missing hexagonal boundaries
+        handler: review::arch_boundary_check
+        # query cargo metadata for cycles, over-coupled crates,
+        # missing hexagonal boundaries
       - step: arch_boundary_check
-        handler: ctrl::noop
+        handler: review::arch_boundary_check
         # scan for domain crates importing adapter crates (hexagonal violation)
 
   - speculate: strategy
     mode: pick_best
     arms:
       - step: extract_trait_port
-        handler: ctrl::noop
+        handler: llm::invoke
+        args:
+          prompt: >
+            Given the clippy and architecture violations in the workspace,
+            generate a trait definition that belongs in the domain crate.
+            Move the concrete impl to an adapter crate. Output the trait
+            skeleton as a Rust code block with a score field (0.0-1.0)
+            indicating confidence this is the right refactor.
         # Define a new trait in the domain crate, move impl to an adapter crate.
         # Best when: clippy flags concrete type leakage across crate boundary.
       - step: split_crate
-        handler: ctrl::noop
+        handler: llm::invoke
+        args:
+          prompt: >
+            The dependency graph shows an over-coupled crate with >8 dependents
+            and mixed concerns. Generate a Cargo.toml and src/lib.rs scaffold
+            for a new sub-crate that extracts the separable concern. Include a
+            score field (0.0-1.0) for confidence.
         # Carve out a sub-crate from an over-coupled crate.
         # Best when: dep graph shows a crate with >8 dependents and mixed concerns.
       - step: add_adapter_layer
-        handler: ctrl::noop
+        handler: llm::invoke
+        args:
+          prompt: >
+            Architecture check found domain->infra imports. Generate a thin
+            adapter crate scaffold (Cargo.toml + src/lib.rs) that sits between
+            the two coupled crates, exposing only trait-based interfaces.
+            Include a score field (0.0-1.0) for confidence.
         # Insert a thin adapter crate between two directly-coupled crates.
         # Best when: arch_boundary_check found domain->infra imports.
     # pick_best: score each strategy against signal weights from gather_signal
@@ -74,7 +70,12 @@ steps:
   - pipe: validate_winner
     stages:
       - step: generate_patch
-        handler: ctrl::noop
+        handler: llm::invoke
+        args:
+          prompt: >
+            Given the winning refactor strategy and workspace context,
+            produce a minimal unified diff that implements the change.
+            Output only the diff, no explanation.
         # produce the minimal diff for the chosen strategy
       - step: cargo_check_patch
         handler: shell::capture

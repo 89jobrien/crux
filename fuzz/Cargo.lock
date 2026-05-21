@@ -240,7 +240,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cruxx-agentic"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "clap",
  "cruxx-core",
@@ -259,9 +259,11 @@ dependencies = [
 
 [[package]]
 name = "cruxx-core"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
+ "anyhow",
  "chrono",
+ "cruxx-domain",
  "cruxx-types",
  "futures",
  "serde",
@@ -269,7 +271,15 @@ dependencies = [
  "slashcrux",
  "thiserror",
  "tokio",
- "ulid",
+]
+
+[[package]]
+name = "cruxx-domain"
+version = "0.2.6"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -287,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "cruxx-model"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -296,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "cruxx-plugin"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "cruxx-core",
  "cruxx-script",
@@ -309,10 +319,10 @@ dependencies = [
 
 [[package]]
 name = "cruxx-script"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
+ "anyhow",
  "cruxx-core",
- "futures",
  "serde",
  "serde-saphyr",
  "serde_json",
@@ -322,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "cruxx-types"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "chrono",
  "serde",
