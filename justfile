@@ -79,7 +79,13 @@ check-baml:
         | get capture0
         | first)
     if $gen_ver != $cargo_ver {
-        error make { msg: $"BAML version mismatch: generators.baml=($gen_ver) Cargo.toml=($cargo_ver)" }
+        print $"(ansi red_bold)BAML version mismatch(ansi reset)"
+        print $"  generators.baml  → ($gen_ver)"
+        print $"  Cargo.toml       → ($cargo_ver)"
+        print ""
+        print $"(ansi yellow)Fix: update the baml dep in crates/cruxx-agentic/Cargo.toml to match:(ansi reset)"
+        print $"  baml = \{ version = \"($gen_ver)\", optional = true \}"
+        error make { msg: "baml version mismatch" }
     }
     let lib = $"($env.HOME)/Library/Caches/baml/libs/($gen_ver)/libbaml_cffi-aarch64-apple-darwin.dylib"
     if not ($lib | path exists) {
