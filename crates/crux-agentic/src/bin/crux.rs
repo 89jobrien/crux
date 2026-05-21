@@ -67,6 +67,9 @@ enum Cli {
         /// Replay matching mode: "strict" (default) or "lenient"
         #[arg(long, default_value = "strict")]
         replay_mode: String,
+        /// Error on unregistered handlers instead of injecting stubs
+        #[arg(short = 'S', long)]
+        strict: bool,
         /// Save the execution trace to a JSON file (replayable)
         #[arg(long)]
         save_trace: Option<String>,
@@ -111,6 +114,7 @@ fn main() {
             replay,
             replay_mode,
             save_trace,
+            strict,
         } => cmd_run_dispatch(
             pipeline.as_deref(),
             target_or_input.as_deref(),
@@ -123,6 +127,7 @@ fn main() {
             replay.as_deref(),
             &replay_mode,
             save_trace.as_deref(),
+            strict,
         ),
         Cli::Plan {
             goal,
@@ -154,7 +159,7 @@ fn cmd_check(paths: &[String]) {
         budget: None,
         steps: vec![],
     };
-    let registry = rt.block_on(build_registry(&empty_pipeline, None));
+    let registry = rt.block_on(build_registry(&empty_pipeline, None, false));
 
     for path in paths {
         // Try as Cruxfile first if it looks like one.
@@ -275,6 +280,7 @@ fn cmd_run_dispatch(
     replay_path: Option<&str>,
     replay_mode_str: &str,
     save_trace_path: Option<&str>,
+    strict: bool,
 ) {
     // Resolve pipeline path: explicit arg, or discover Cruxfile in cwd.
     let pipeline_path = match pipeline_arg {
@@ -289,6 +295,7 @@ fn cmd_run_dispatch(
                 replay_path,
                 replay_mode_str,
                 save_trace_path,
+                strict,
             );
             return;
         }
@@ -324,6 +331,7 @@ fn cmd_run_dispatch(
                 quiet,
                 verbose,
                 save_trace_path,
+                strict,
             );
         }
     } else {
@@ -341,6 +349,7 @@ fn cmd_run_dispatch(
                 replay_path,
                 replay_mode_str,
                 save_trace_path,
+                strict,
             );
         }
     }
@@ -415,6 +424,7 @@ fn cmd_dry_run_pipeline(contents: &str, path: &str) {
 }
 
 /// Run a Cruxfile: resolve target, execute dependency chain.
+#[allow(clippy::too_many_arguments)]
 fn cmd_run_cruxfile(
     contents: &str,
     path: &str,
@@ -423,6 +433,7 @@ fn cmd_run_cruxfile(
     quiet: bool,
     verbose: bool,
     save_trace_path: Option<&str>,
+    strict: bool,
 ) {
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
         eprintln!("error: failed to parse {path}: {e}");
@@ -456,10 +467,11 @@ fn cmd_run_cruxfile(
         budget: None,
         steps: vec![],
     };
-    let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path));
+    let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path, false));
 
     // Also register any handlers referenced in all targets.
     let mut full_reg = registry;
+    let mut unregistered: Vec<String> = Vec::new();
     for (_, tgt) in &cruxfile.targets {
         let tmp_pipeline = PipelineDef {
             pipeline: String::new(),
@@ -468,20 +480,36 @@ fn cmd_run_cruxfile(
         };
         for name in collect_handler_names(&tmp_pipeline) {
             if full_reg.get_handler(&name).is_none() {
-                let n = name.clone();
-                full_reg.handler_value(name, move |_input: Value| {
-                    let handler_name = n.clone();
-                    async move {
-                        eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-                        Ok(json!({
-                            "_stub": handler_name,
-                            "confidence": 0.5,
-                            "score": 0.5,
-                        }))
+                if strict {
+                    if !unregistered.contains(&name) {
+                        unregistered.push(name);
                     }
-                });
+                } else {
+                    let n = name.clone();
+                    full_reg.handler_value(name, move |_input: Value| {
+                        let handler_name = n.clone();
+                        async move {
+                            eprintln!(
+                                "[crux] warning: no builtin for '{handler_name}', using stub"
+                            );
+                            Ok(json!({
+                                "_stub": handler_name,
+                                "confidence": 0.5,
+                                "score": 0.5,
+                            }))
+                        }
+                    });
+                }
             }
         }
+    }
+
+    if !unregistered.is_empty() {
+        eprintln!(
+            "[crux] error: --strict mode: unregistered handlers: {}",
+            unregistered.join(", ")
+        );
+        std::process::exit(1);
     }
 
     let runner = Runner::new(Arc::new(full_reg));
@@ -587,6 +615,7 @@ fn cmd_run(
     replay_path: Option<&str>,
     replay_mode_str: &str,
     save_trace_path: Option<&str>,
+    strict: bool,
 ) {
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
@@ -613,7 +642,7 @@ fn cmd_run(
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let registry = rt.block_on(build_registry(&pipeline, plugins_path));
+    let registry = rt.block_on(build_registry(&pipeline, plugins_path, strict));
     let runner = Runner::new(Arc::new(registry));
 
     let previous: Option<Crux<Value>> = replay_path.map(|path| {
@@ -959,7 +988,11 @@ fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
 }
 
 /// Build a registry seeded with all crux-agentic built-in handlers.
-async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> HandlerRegistry {
+async fn build_registry(
+    pipeline: &PipelineDef,
+    plugins_path: Option<&str>,
+    strict: bool,
+) -> HandlerRegistry {
     let disc = TomlFileDiscovery::new(resolve_plugins_path(plugins_path));
     let entries = disc.discover().unwrap_or_default();
     let manifest = crux_plugin::manifest::PluginManifest { plugin: entries };
@@ -979,22 +1012,36 @@ async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> H
         eprintln!("[crux] warning: failed to load plugins: {e}");
     }
 
+    let mut unregistered: Vec<String> = Vec::new();
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {
-            let n = name.clone();
-            reg.handler_value(name, move |_input: Value| {
-                let handler_name = n.clone();
-                async move {
-                    // TODO(#64): fail or warn loudly when a pipeline references an unregistered handler
-                    eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-                    Ok(json!({
-                        "_stub": handler_name,
-                        "confidence": 0.5,
-                        "score": 0.5,
-                    }))
+            if strict {
+                if !unregistered.contains(&name) {
+                    unregistered.push(name);
                 }
-            });
+            } else {
+                let n = name.clone();
+                reg.handler_value(name, move |_input: Value| {
+                    let handler_name = n.clone();
+                    async move {
+                        eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
+                        Ok(json!({
+                            "_stub": handler_name,
+                            "confidence": 0.5,
+                            "score": 0.5,
+                        }))
+                    }
+                });
+            }
         }
+    }
+
+    if !unregistered.is_empty() {
+        eprintln!(
+            "[crux] error: --strict mode: unregistered handlers: {}",
+            unregistered.join(", ")
+        );
+        std::process::exit(1);
     }
 
     reg
