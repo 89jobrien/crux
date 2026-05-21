@@ -3,6 +3,7 @@
 /// Subcommands:
 ///   run   Execute a YAML pipeline
 ///   plan  Generate a pipeline from a natural language goal
+use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::sync::Arc;
 use std::time::Instant;
@@ -31,6 +32,12 @@ enum OutputType {
 #[derive(Parser)]
 #[command(name = "crux", about = "crux pipeline runner and planner")]
 enum Cli {
+    /// List discovered .crux pipeline files under a directory
+    List {
+        /// Root directory to scan (default: current directory)
+        #[arg(default_value = ".")]
+        root: String,
+    },
     /// Validate a .crux pipeline file without executing it
     Check {
         /// Pipeline file(s) to validate
@@ -98,6 +105,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
+        Cli::List { root } => cmd_list(&root),
         Cli::Check { pipelines } => cmd_check(&pipelines),
         Cli::Run {
             pipeline,
@@ -140,6 +148,39 @@ fn main() {
             &planner,
         ),
     }
+}
+
+fn cmd_list(root: &str) {
+    let root_path = std::path::Path::new(root);
+    let pipelines = crux_agentic::discover::discover_pipelines(root_path);
+
+    if pipelines.is_empty() {
+        eprintln!("No .crux files found under {root}");
+        return;
+    }
+
+    // Group by parent directory for readability.
+    let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for path in &pipelines {
+        let dir = path
+            .parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| ".".to_string());
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        by_dir.entry(dir).or_default().push(name);
+    }
+
+    for (dir, files) in &by_dir {
+        println!("{dir}/");
+        for f in files {
+            println!("  {f}");
+        }
+    }
+
+    eprintln!("\n{} pipeline(s) found", pipelines.len());
 }
 
 fn cmd_check(paths: &[String]) {
