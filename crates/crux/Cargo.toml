@@ -10,10 +10,10 @@ repository.workspace = true
 homepage.workspace = true
 readme = "../../README.md"
 keywords.workspace = true
+categories.workspace = true
 
 [lib]
 name = "crux"
-categories.workspace = true
 
 [dependencies]
 crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
