@@ -1,7 +1,7 @@
 #![no_main]
 
-use cruxx_agentic::sqlite;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::sqlite;
+use crux_script::HandlerRegistry;
 use libfuzzer_sys::fuzz_target;
 use rusqlite::Connection;
 use tempfile::NamedTempFile;

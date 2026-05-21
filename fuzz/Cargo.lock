@@ -239,14 +239,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "cruxx-agentic"
+name = "crux-agentic"
 version = "0.2.6"
 dependencies = [
  "clap",
- "cruxx-core",
- "cruxx-model",
- "cruxx-plugin",
- "cruxx-script",
+ "crux-core",
+ "crux-model",
+ "crux-plugin",
+ "crux-script",
  "glob",
  "reqwest",
  "rusqlite",
@@ -258,13 +258,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-core"
+name = "crux-core"
 version = "0.2.6"
 dependencies = [
  "anyhow",
  "chrono",
- "cruxx-domain",
- "cruxx-types",
+ "crux-domain",
+ "crux-types",
  "futures",
  "serde",
  "serde_json",
@@ -274,7 +274,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-domain"
+name = "crux-domain"
 version = "0.2.6"
 dependencies = [
  "serde",
@@ -283,11 +283,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-fuzz"
+name = "crux-fuzz"
 version = "0.0.0"
 dependencies = [
- "cruxx-agentic",
- "cruxx-script",
+ "crux-agentic",
+ "crux-script",
  "libfuzzer-sys",
  "rusqlite",
  "serde_json",
@@ -296,7 +296,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-model"
+name = "crux-model"
 version = "0.2.6"
 dependencies = [
  "serde",
@@ -305,11 +305,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-plugin"
+name = "crux-plugin"
 version = "0.2.6"
 dependencies = [
- "cruxx-core",
- "cruxx-script",
+ "crux-core",
+ "crux-script",
  "serde",
  "serde_json",
  "thiserror",
@@ -318,11 +318,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-script"
+name = "crux-script"
 version = "0.2.6"
 dependencies = [
  "anyhow",
- "cruxx-core",
+ "crux-core",
  "serde",
  "serde-saphyr",
  "serde_json",
@@ -331,7 +331,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-types"
+name = "crux-types"
 version = "0.2.6"
 dependencies = [
  "chrono",

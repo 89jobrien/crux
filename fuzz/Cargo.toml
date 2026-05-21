@@ -1,7 +1,7 @@
 [workspace]
 
 [package]
-name = "cruxx-fuzz"
+name = "crux-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2024"
@@ -16,11 +16,11 @@ tempfile = "3"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 
-[dependencies.cruxx-agentic]
-path = "../crates/cruxx-agentic"
+[dependencies.crux-agentic]
+path = "../crates/crux-agentic"
 
-[dependencies.cruxx-script]
-path = "../crates/cruxx-script"
+[dependencies.crux-script]
+path = "../crates/crux-script"
 
 [[bin]]
 name = "fuzz_target_1"

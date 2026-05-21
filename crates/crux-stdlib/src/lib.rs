@@ -1,4 +1,4 @@
-//! crux-stdlib — standard library handlers for cruxx-script pipelines.
+//! crux-stdlib — standard library handlers for crux-script pipelines.
 //!
 //! Deterministic, non-agentic utilities: filesystem, git, JSON transforms,
 //! text parsing, and control flow primitives.
@@ -10,7 +10,7 @@ pub mod git;
 pub mod json;
 pub mod text;
 
-use cruxx_script::HandlerRegistry;
+use crux_script::HandlerRegistry;
 
 /// Register all stdlib handlers into the given registry.
 pub fn register_all(registry: &mut HandlerRegistry) {

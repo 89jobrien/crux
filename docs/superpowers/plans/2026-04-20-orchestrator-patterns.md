@@ -6,13 +6,13 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add self-evolving container orchestration primitives to cruxx — harness profiles,
+**Goal:** Add self-evolving container orchestration primitives to crux — harness profiles,
 safety policies, approval gates, container/harness handlers, deterministic planning, and
 macro support.
 
-**Architecture:** Domain types and traits (ports) go in `cruxx-core`. Step handlers (adapters)
-go in `cruxx-agentic`. Deterministic planner logic extends `cruxx-planner`. New proc macros
-`#[cruxx::harness]` and `#[cruxx::evolve]` live in `cruxx-macros`. All domain logic is generic
+**Architecture:** Domain types and traits (ports) go in `crux-runtime`. Step handlers (adapters)
+go in `crux-agentic`. Deterministic planner logic extends `crux-planner`. New proc macros
+`#[crux::harness]` and `#[crux::evolve]` live in `crux-macros`. All domain logic is generic
 over traits; no concrete adapters in core.
 
 **Tech Stack:** Rust 2024, serde, tokio, thiserror, chrono, proc-macro2/syn/quote
@@ -21,51 +21,52 @@ over traits; no concrete adapters in core.
 
 ## File Structure
 
-### cruxx-core (domain types + traits)
+### crux-runtime (domain types + traits)
 
-| File | Responsibility |
-|------|---------------|
-| `src/types/harness.rs` | `HarnessProfile`, `ResourceHints`, `HarnessDiff` |
-| `src/types/evolution.rs` | `EvolutionOutcome` enum |
-| `src/safety.rs` | `SafetyPolicy` trait, `SafetyViolation` error |
-| `src/approval.rs` | `ApprovalGate` trait, `ApprovalRequest`, `ApprovalDecision` |
+| File                     | Responsibility                                              |
+| ------------------------ | ----------------------------------------------------------- |
+| `src/types/harness.rs`   | `HarnessProfile`, `ResourceHints`, `HarnessDiff`            |
+| `src/types/evolution.rs` | `EvolutionOutcome` enum                                     |
+| `src/safety.rs`          | `SafetyPolicy` trait, `SafetyViolation` error               |
+| `src/approval.rs`        | `ApprovalGate` trait, `ApprovalRequest`, `ApprovalDecision` |
 
-### cruxx-agentic (handlers/adapters)
+### crux-agentic (handlers/adapters)
 
-| File | Responsibility |
-|------|---------------|
-| `src/container.rs` | `container::run`, `container::wait` step handlers |
-| `src/harness.rs` | `harness::evolve`, `harness::canary` step handlers |
-| `src/adapters/container_client.rs` | `ContainerClient` trait + mock impl |
-| `src/adapters/terminal_approval.rs` | Terminal stdin approval gate adapter |
+| File                                | Responsibility                                     |
+| ----------------------------------- | -------------------------------------------------- |
+| `src/container.rs`                  | `container::run`, `container::wait` step handlers  |
+| `src/harness.rs`                    | `harness::evolve`, `harness::canary` step handlers |
+| `src/adapters/container_client.rs`  | `ContainerClient` trait + mock impl                |
+| `src/adapters/terminal_approval.rs` | Terminal stdin approval gate adapter               |
 
-### cruxx-planner (deterministic planning)
+### crux-planner (deterministic planning)
 
-| File | Responsibility |
-|------|---------------|
+| File               | Responsibility                                           |
+| ------------------ | -------------------------------------------------------- |
 | `src/evolution.rs` | `EvolutionPlanner` — metrics-to-diff pipeline generation |
-| `src/metrics.rs` | `MetricsAggregator` trait, `RunMetrics` type |
+| `src/metrics.rs`   | `MetricsAggregator` trait, `RunMetrics` type             |
 
-### cruxx-macros (proc macros)
+### crux-macros (proc macros)
 
-| File | Responsibility |
-|------|---------------|
-| `src/harness.rs` | `#[cruxx::harness]` expansion |
-| `src/evolve.rs` | `#[cruxx::evolve]` expansion |
+| File             | Responsibility               |
+| ---------------- | ---------------------------- |
+| `src/harness.rs` | `#[crux::harness]` expansion |
+| `src/evolve.rs`  | `#[crux::evolve]` expansion  |
 
 ---
 
 ## Task 1: Domain Types — HarnessProfile and ResourceHints
 
 **Files:**
-- Create: `crates/cruxx-core/src/types/harness.rs`
-- Modify: `crates/cruxx-core/src/types/mod.rs`
-- Modify: `crates/cruxx-core/src/lib.rs` (re-export in prelude)
+
+- Create: `crates/crux-runtime/src/types/harness.rs`
+- Modify: `crates/crux-runtime/src/types/mod.rs`
+- Modify: `crates/crux-runtime/src/lib.rs` (re-export in prelude)
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-core/src/types/harness.rs (at bottom, #[cfg(test)] mod tests)
+// crates/crux-runtime/src/types/harness.rs (at bottom, #[cfg(test)] mod tests)
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,13 +113,13 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-core harness`
+Run: `cargo nextest run -p crux-runtime harness`
 Expected: compilation error — module not found
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-core/src/types/harness.rs
+// crates/crux-runtime/src/types/harness.rs
 use serde::{Deserialize, Serialize};
 
 /// Resource limits for a container execution environment.
@@ -190,25 +191,27 @@ impl HarnessDiff {
 
 - [ ] **Step 4: Wire up the module**
 
-Add to `crates/cruxx-core/src/types/mod.rs`:
+Add to `crates/crux-runtime/src/types/mod.rs`:
+
 ```rust
 pub mod harness;
 ```
 
-Add to `crates/cruxx-core/src/prelude` in `lib.rs`:
+Add to `crates/crux-runtime/src/prelude` in `lib.rs`:
+
 ```rust
 pub use crate::types::harness::{HarnessDiff, HarnessProfile, ResourceHints};
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-core harness`
+Run: `cargo nextest run -p crux-runtime harness`
 Expected: 3 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-core/src/types/harness.rs crates/cruxx-core/src/types/mod.rs crates/cruxx-core/src/lib.rs
+git add crates/crux-runtime/src/types/harness.rs crates/crux-runtime/src/types/mod.rs crates/crux-runtime/src/lib.rs
 git commit -m "feat(core): add HarnessProfile, ResourceHints, and HarnessDiff types"
 ```
 
@@ -217,13 +220,14 @@ git commit -m "feat(core): add HarnessProfile, ResourceHints, and HarnessDiff ty
 ## Task 2: Domain Types — EvolutionOutcome
 
 **Files:**
-- Create: `crates/cruxx-core/src/types/evolution.rs`
-- Modify: `crates/cruxx-core/src/types/mod.rs`
+
+- Create: `crates/crux-runtime/src/types/evolution.rs`
+- Modify: `crates/crux-runtime/src/types/mod.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-core/src/types/evolution.rs
+// crates/crux-runtime/src/types/evolution.rs
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,13 +267,13 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-core evolution`
+Run: `cargo nextest run -p crux-runtime evolution`
 Expected: compilation error
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-core/src/types/evolution.rs
+// crates/crux-runtime/src/types/evolution.rs
 use serde::{Deserialize, Serialize};
 
 /// The result of an evolution cycle — did the candidate get promoted?
@@ -292,20 +296,21 @@ pub enum EvolutionOutcome {
 
 - [ ] **Step 4: Wire module**
 
-Add to `crates/cruxx-core/src/types/mod.rs`:
+Add to `crates/crux-runtime/src/types/mod.rs`:
+
 ```rust
 pub mod evolution;
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-core evolution`
+Run: `cargo nextest run -p crux-runtime evolution`
 Expected: 3 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-core/src/types/evolution.rs crates/cruxx-core/src/types/mod.rs
+git add crates/crux-runtime/src/types/evolution.rs crates/crux-runtime/src/types/mod.rs
 git commit -m "feat(core): add EvolutionOutcome enum"
 ```
 
@@ -314,13 +319,14 @@ git commit -m "feat(core): add EvolutionOutcome enum"
 ## Task 3: SafetyPolicy Trait
 
 **Files:**
-- Create: `crates/cruxx-core/src/safety.rs`
-- Modify: `crates/cruxx-core/src/lib.rs`
+
+- Create: `crates/crux-runtime/src/safety.rs`
+- Modify: `crates/crux-runtime/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-core/src/safety.rs
+// crates/crux-runtime/src/safety.rs
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,13 +412,13 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-core safety`
+Run: `cargo nextest run -p crux-runtime safety`
 Expected: compilation error
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-core/src/safety.rs
+// crates/crux-runtime/src/safety.rs
 use crate::types::harness::{HarnessDiff, HarnessProfile};
 use thiserror::Error;
 
@@ -443,20 +449,21 @@ pub trait SafetyPolicy: Send + Sync {
 
 - [ ] **Step 4: Wire module**
 
-Add to `crates/cruxx-core/src/lib.rs`:
+Add to `crates/crux-runtime/src/lib.rs`:
+
 ```rust
 pub mod safety;
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-core safety`
+Run: `cargo nextest run -p crux-runtime safety`
 Expected: 4 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-core/src/safety.rs crates/cruxx-core/src/lib.rs
+git add crates/crux-runtime/src/safety.rs crates/crux-runtime/src/lib.rs
 git commit -m "feat(core): add SafetyPolicy trait and SafetyViolation error"
 ```
 
@@ -465,13 +472,14 @@ git commit -m "feat(core): add SafetyPolicy trait and SafetyViolation error"
 ## Task 4: ApprovalGate Trait
 
 **Files:**
-- Create: `crates/cruxx-core/src/approval.rs`
-- Modify: `crates/cruxx-core/src/lib.rs`
+
+- Create: `crates/crux-runtime/src/approval.rs`
+- Modify: `crates/crux-runtime/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-core/src/approval.rs
+// crates/crux-runtime/src/approval.rs
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,13 +529,13 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-core approval`
+Run: `cargo nextest run -p crux-runtime approval`
 Expected: compilation error
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-core/src/approval.rs
+// crates/crux-runtime/src/approval.rs
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -569,20 +577,21 @@ pub trait ApprovalGate: Send + Sync {
 
 - [ ] **Step 4: Wire module**
 
-Add to `crates/cruxx-core/src/lib.rs`:
+Add to `crates/crux-runtime/src/lib.rs`:
+
 ```rust
 pub mod approval;
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-core approval`
+Run: `cargo nextest run -p crux-runtime approval`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-core/src/approval.rs crates/cruxx-core/src/lib.rs
+git add crates/crux-runtime/src/approval.rs crates/crux-runtime/src/lib.rs
 git commit -m "feat(core): add ApprovalGate trait with RiskLevel and ApprovalDecision"
 ```
 
@@ -591,7 +600,8 @@ git commit -m "feat(core): add ApprovalGate trait with RiskLevel and ApprovalDec
 ## Task 5: Approval Hook in HookRegistry
 
 **Files:**
-- Modify: `crates/cruxx-core/src/hooks.rs`
+
+- Modify: `crates/crux-runtime/src/hooks.rs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -620,7 +630,7 @@ async fn approval_returns_none_without_handler() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-core approval_fires`
+Run: `cargo nextest run -p crux-runtime approval_fires`
 Expected: compilation error — no method `on_approval_required` / `check_approval`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -637,16 +647,19 @@ type ApprovalHandler = Box<
 ```
 
 Add field to `HookRegistry`:
+
 ```rust
 approval_handler: Option<ApprovalHandler>,
 ```
 
 Initialize in `new()`:
+
 ```rust
 approval_handler: None,
 ```
 
 Add methods:
+
 ```rust
 /// Register an approval-required handler. Fires when a step needs gate approval.
 pub fn on_approval_required<F, Fut>(&mut self, handler: F)
@@ -674,32 +687,33 @@ Update the `Debug` impl to include `has_approval_handler`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-core -- hooks`
+Run: `cargo nextest run -p crux-runtime -- hooks`
 Expected: all hooks tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-core/src/hooks.rs
+git add crates/crux-runtime/src/hooks.rs
 git commit -m "feat(core): add on_approval_required hook to HookRegistry"
 ```
 
 ---
 
-## Task 6: Container Handlers in cruxx-agentic
+## Task 6: Container Handlers in crux-agentic
 
 **Files:**
-- Create: `crates/cruxx-agentic/src/container.rs`
-- Create: `crates/cruxx-agentic/src/adapters/container_client.rs`
-- Modify: `crates/cruxx-agentic/src/adapters/mod.rs`
-- Modify: `crates/cruxx-agentic/src/lib.rs`
+
+- Create: `crates/crux-agentic/src/container.rs`
+- Create: `crates/crux-agentic/src/adapters/container_client.rs`
+- Modify: `crates/crux-agentic/src/adapters/mod.rs`
+- Modify: `crates/crux-agentic/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-agentic/tests/container.rs
-use cruxx_agentic::container;
-use cruxx_script::HandlerRegistry;
+// crates/crux-agentic/tests/container.rs
+use crux_agentic::container;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 
 #[tokio::test]
@@ -728,13 +742,13 @@ async fn container_run_returns_container_id() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-agentic container`
+Run: `cargo nextest run -p crux-agentic container`
 Expected: compilation error — module not found
 
 - [ ] **Step 3: Create ContainerClient trait (port)**
 
 ```rust
-// crates/cruxx-agentic/src/adapters/container_client.rs
+// crates/crux-agentic/src/adapters/container_client.rs
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -803,8 +817,8 @@ impl ContainerClient for MockContainerClient {
 - [ ] **Step 4: Create container handler module**
 
 ```rust
-// crates/cruxx-agentic/src/container.rs
-use cruxx_script::HandlerRegistry;
+// crates/crux-agentic/src/container.rs
+use crux_script::HandlerRegistry;
 use serde_json::{json, Value};
 
 use crate::adapters::container_client::MockContainerClient;
@@ -849,46 +863,50 @@ async fn handle_wait(input: Value) -> Result<Value, String> {
 
 - [ ] **Step 5: Wire modules**
 
-Add to `crates/cruxx-agentic/src/adapters/mod.rs`:
+Add to `crates/crux-agentic/src/adapters/mod.rs`:
+
 ```rust
 pub mod container_client;
 ```
 
-Add to `crates/cruxx-agentic/src/lib.rs`:
+Add to `crates/crux-agentic/src/lib.rs`:
+
 ```rust
 pub mod container;
 ```
 
 Add to `register_all_with_plugins`:
+
 ```rust
 container::register(registry);
 ```
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-agentic container`
+Run: `cargo nextest run -p crux-agentic container`
 Expected: 2 tests pass
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/container.rs crates/cruxx-agentic/src/adapters/container_client.rs crates/cruxx-agentic/src/adapters/mod.rs crates/cruxx-agentic/src/lib.rs
+git add crates/crux-agentic/src/container.rs crates/crux-agentic/src/adapters/container_client.rs crates/crux-agentic/src/adapters/mod.rs crates/crux-agentic/src/lib.rs
 git commit -m "feat(agentic): add container::run and container::wait step handlers"
 ```
 
 ---
 
-## Task 7: Harness Handlers in cruxx-agentic
+## Task 7: Harness Handlers in crux-agentic
 
 **Files:**
-- Create: `crates/cruxx-agentic/src/harness.rs`
+
+- Create: `crates/crux-agentic/src/harness.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-agentic/tests/harness.rs
-use cruxx_agentic::harness;
-use cruxx_script::HandlerRegistry;
+// crates/crux-agentic/tests/harness.rs
+use crux_agentic::harness;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 
 #[tokio::test]
@@ -928,16 +946,16 @@ async fn harness_canary_returns_outcome() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-agentic harness`
+Run: `cargo nextest run -p crux-agentic harness`
 Expected: compilation error
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-agentic/src/harness.rs
-use cruxx_core::types::evolution::EvolutionOutcome;
-use cruxx_core::types::harness::HarnessProfile;
-use cruxx_script::HandlerRegistry;
+// crates/crux-agentic/src/harness.rs
+use crux_runtime::types::evolution::EvolutionOutcome;
+use crux_runtime::types::harness::HarnessProfile;
+use crux_script::HandlerRegistry;
 use serde_json::Value;
 
 /// Register harness step handlers.
@@ -955,7 +973,7 @@ async fn handle_evolve(input: Value) -> Result<Value, String> {
     // For now, return a mock diff proposal.
     let base: HarnessProfile =
         serde_json::from_value(input["base_profile"].clone()).map_err(|e| e.to_string())?;
-    let diff = cruxx_core::types::harness::HarnessDiff {
+    let diff = crux_runtime::types::harness::HarnessDiff {
         memory_delta_mb: Some(256),
         ..Default::default()
     };
@@ -982,25 +1000,27 @@ async fn handle_canary(input: Value) -> Result<Value, String> {
 
 - [ ] **Step 4: Wire module**
 
-Add to `crates/cruxx-agentic/src/lib.rs`:
+Add to `crates/crux-agentic/src/lib.rs`:
+
 ```rust
 pub mod harness;
 ```
 
 Add to `register_all_with_plugins`:
+
 ```rust
 harness::register(registry);
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-agentic harness`
+Run: `cargo nextest run -p crux-agentic harness`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/harness.rs crates/cruxx-agentic/src/lib.rs
+git add crates/crux-agentic/src/harness.rs crates/crux-agentic/src/lib.rs
 git commit -m "feat(agentic): add harness::evolve and harness::canary step handlers"
 ```
 
@@ -1009,20 +1029,21 @@ git commit -m "feat(agentic): add harness::evolve and harness::canary step handl
 ## Task 8: Deterministic Planner — Metrics and Evolution
 
 **Files:**
-- Create: `crates/cruxx-planner/src/metrics.rs`
-- Create: `crates/cruxx-planner/src/evolution.rs`
-- Modify: `crates/cruxx-planner/src/lib.rs`
-- Modify: `crates/cruxx-planner/Cargo.toml`
+
+- Create: `crates/crux-planner/src/metrics.rs`
+- Create: `crates/crux-planner/src/evolution.rs`
+- Modify: `crates/crux-planner/src/lib.rs`
+- Modify: `crates/crux-planner/Cargo.toml`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-planner/src/evolution.rs
+// crates/crux-planner/src/evolution.rs
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::metrics::RunMetrics;
-    use cruxx_core::types::harness::{HarnessDiff, HarnessProfile, ResourceHints};
+    use crux_runtime::types::harness::{HarnessDiff, HarnessProfile, ResourceHints};
 
     fn base_profile() -> HarnessProfile {
         HarnessProfile {
@@ -1100,13 +1121,13 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-planner evolution`
+Run: `cargo nextest run -p crux-planner evolution`
 Expected: compilation error
 
 - [ ] **Step 3: Write metrics types**
 
 ```rust
-// crates/cruxx-planner/src/metrics.rs
+// crates/crux-planner/src/metrics.rs
 use serde::{Deserialize, Serialize};
 
 /// Metrics from a single container run.
@@ -1122,8 +1143,8 @@ pub struct RunMetrics {
 - [ ] **Step 4: Write evolution planner**
 
 ```rust
-// crates/cruxx-planner/src/evolution.rs
-use cruxx_core::types::harness::{HarnessDiff, HarnessProfile};
+// crates/crux-planner/src/evolution.rs
+use crux_runtime::types::harness::{HarnessDiff, HarnessProfile};
 
 use crate::metrics::RunMetrics;
 
@@ -1194,19 +1215,21 @@ impl EvolutionPlanner {
 
 - [ ] **Step 5: Wire modules and update Cargo.toml**
 
-Add to `crates/cruxx-planner/Cargo.toml` under `[dependencies]`:
+Add to `crates/crux-planner/Cargo.toml` under `[dependencies]`:
+
 ```toml
-cruxx-core = { path = "../cruxx-core", version = "0.2.5" }
+crux-runtime = { path = "../crux-runtime", version = "0.2.5" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 ```
 
-Update `crates/cruxx-planner/src/lib.rs`:
+Update `crates/crux-planner/src/lib.rs`:
+
 ```rust
-//! cruxx-planner — goal-to-pipeline generation for cruxx-script.
+//! crux-planner — goal-to-pipeline generation for crux-script.
 //!
 //! Two paths:
-//! - Path A (LLM): lives in `cruxx-agentic::planner`
+//! - Path A (LLM): lives in `crux-agentic::planner`
 //! - Path B (deterministic): `EvolutionPlanner` for metrics-driven profile changes
 
 use serde::{Deserialize, Serialize};
@@ -1242,33 +1265,34 @@ pub struct PlannerConfig {
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-planner evolution`
+Run: `cargo nextest run -p crux-planner evolution`
 Expected: 3 tests pass
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/cruxx-planner/
+git add crates/crux-planner/
 git commit -m "feat(planner): add EvolutionPlanner with metrics-driven profile diffs"
 ```
 
 ---
 
-## Task 9: Proc Macro — #[cruxx::harness]
+## Task 9: Proc Macro — #[crux::harness]
 
 **Files:**
-- Create: `crates/cruxx-macros/src/harness.rs`
-- Modify: `crates/cruxx-macros/src/lib.rs`
+
+- Create: `crates/crux-macros/src/harness.rs`
+- Modify: `crates/crux-macros/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test**
 
-Add integration test in `crates/cruxx/tests/harness_macro.rs`:
+Add integration test in `crates/crux/tests/harness_macro.rs`:
 
 ```rust
-// crates/cruxx/tests/harness_macro.rs
-use cruxx::prelude::*;
+// crates/crux/tests/harness_macro.rs
+use crux::prelude::*;
 
-#[cruxx::harness]
+#[crux::harness]
 pub struct MyHarness {
     pub memory_mb: u64,
     pub cpu_millicores: u64,
@@ -1301,13 +1325,13 @@ fn harness_generates_default() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx harness_macro`
+Run: `cargo nextest run -p crux harness_macro`
 Expected: compilation error — no `harness` attribute
 
 - [ ] **Step 3: Write the macro expansion**
 
 ```rust
-// crates/cruxx-macros/src/harness.rs
+// crates/crux-macros/src/harness.rs
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse2};
@@ -1324,14 +1348,14 @@ pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream>
             _ => {
                 return Err(syn::Error::new_spanned(
                     &input,
-                    "#[cruxx::harness] requires a struct with named fields",
+                    "#[crux::harness] requires a struct with named fields",
                 ))
             }
         },
         _ => {
             return Err(syn::Error::new_spanned(
                 &input,
-                "#[cruxx::harness] can only be applied to structs",
+                "#[crux::harness] can only be applied to structs",
             ))
         }
     };
@@ -1357,10 +1381,10 @@ pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream>
 
         impl #name {
             /// Convert this harness config into a `HarnessProfile`.
-            pub fn to_profile(&self, id: &str) -> ::cruxx_core::types::harness::HarnessProfile {
-                ::cruxx_core::types::harness::HarnessProfile {
+            pub fn to_profile(&self, id: &str) -> ::crux_runtime::types::harness::HarnessProfile {
+                ::crux_runtime::types::harness::HarnessProfile {
                     id: id.to_string(),
-                    resources: ::cruxx_core::types::harness::ResourceHints {
+                    resources: ::crux_runtime::types::harness::ResourceHints {
                         memory_mb: self.memory_mb,
                         cpu_millicores: self.cpu_millicores,
                         timeout_seconds: self.timeout_seconds,
@@ -1376,7 +1400,8 @@ pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream>
 
 - [ ] **Step 4: Register the macro**
 
-Add to `crates/cruxx-macros/src/lib.rs`:
+Add to `crates/crux-macros/src/lib.rs`:
+
 ```rust
 mod harness;
 
@@ -1393,32 +1418,33 @@ pub fn harness(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx harness_macro`
+Run: `cargo nextest run -p crux harness_macro`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-macros/src/harness.rs crates/cruxx-macros/src/lib.rs crates/cruxx/tests/harness_macro.rs
-git commit -m "feat(macros): add #[cruxx::harness] proc macro"
+git add crates/crux-macros/src/harness.rs crates/crux-macros/src/lib.rs crates/crux/tests/harness_macro.rs
+git commit -m "feat(macros): add #[crux::harness] proc macro"
 ```
 
 ---
 
-## Task 10: Proc Macro — #[cruxx::evolve]
+## Task 10: Proc Macro — #[crux::evolve]
 
 **Files:**
-- Create: `crates/cruxx-macros/src/evolve.rs`
-- Modify: `crates/cruxx-macros/src/lib.rs`
+
+- Create: `crates/crux-macros/src/evolve.rs`
+- Modify: `crates/crux-macros/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx/tests/evolve_macro.rs
-use cruxx::prelude::*;
+// crates/crux/tests/evolve_macro.rs
+use crux::prelude::*;
 
 /// An evolving agent wraps an inner agent with speculate(candidate vs baseline).
-#[cruxx::evolve]
+#[crux::evolve]
 async fn optimize_container(profile: HarnessProfile) -> Crux<HarnessProfile> {
     // The macro wraps this body in speculation logic:
     // 1. Call inner body to get candidate profile
@@ -1458,22 +1484,22 @@ async fn evolve_macro_runs_function() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx evolve_macro`
+Run: `cargo nextest run -p crux evolve_macro`
 Expected: compilation error — no `evolve` attribute
 
 - [ ] **Step 3: Write the macro expansion**
 
 ```rust
-// crates/cruxx-macros/src/evolve.rs
+// crates/crux-macros/src/evolve.rs
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{ItemFn, parse2};
 
-use crate::agent::{extract_cruxx_inner_type, to_pascal_case};
+use crate::agent::{extract_crux_inner_type, to_pascal_case};
 
-/// `#[cruxx::evolve]` is syntactic sugar over `#[cruxx::agent]` that additionally
+/// `#[crux::evolve]` is syntactic sugar over `#[crux::agent]` that additionally
 /// records the execution as an evolution step (StepKind::Speculation with
-/// "evolve" prefix). For now it generates the same output as `#[cruxx::agent]`
+/// "evolve" prefix). For now it generates the same output as `#[crux::agent]`
 /// with the agent struct suffixed as `Agent`.
 pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
     // Reuse the agent expansion — evolve is agent + semantic marker
@@ -1489,7 +1515,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
         #base
 
         impl #agent_struct {
-            /// Marker: this agent was generated with `#[cruxx::evolve]`.
+            /// Marker: this agent was generated with `#[crux::evolve]`.
             pub fn is_evolution_agent() -> bool {
                 true
             }
@@ -1500,18 +1526,19 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
 }
 ```
 
-Make `extract_cruxx_inner_type` and `to_pascal_case` `pub(crate)` in
-`crates/cruxx-macros/src/agent.rs`.
+Make `extract_crux_inner_type` and `to_pascal_case` `pub(crate)` in
+`crates/crux-macros/src/agent.rs`.
 
 - [ ] **Step 4: Register the macro**
 
-Add to `crates/cruxx-macros/src/lib.rs`:
+Add to `crates/crux-macros/src/lib.rs`:
+
 ```rust
 mod evolve;
 
 /// Marks an async function as an evolution agent.
 ///
-/// Same as `#[cruxx::agent]` but semantically marks the function as part of
+/// Same as `#[crux::agent]` but semantically marks the function as part of
 /// the harness evolution loop. Generates an `is_evolution_agent()` method.
 #[proc_macro_attribute]
 pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -1523,14 +1550,14 @@ pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx evolve_macro`
+Run: `cargo nextest run -p crux evolve_macro`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-macros/src/evolve.rs crates/cruxx-macros/src/lib.rs crates/cruxx-macros/src/agent.rs crates/cruxx/tests/evolve_macro.rs
-git commit -m "feat(macros): add #[cruxx::evolve] proc macro for evolution agents"
+git add crates/crux-macros/src/evolve.rs crates/crux-macros/src/lib.rs crates/crux-macros/src/agent.rs crates/crux/tests/evolve_macro.rs
+git commit -m "feat(macros): add #[crux::evolve] proc macro for evolution agents"
 ```
 
 ---
@@ -1538,15 +1565,16 @@ git commit -m "feat(macros): add #[cruxx::evolve] proc macro for evolution agent
 ## Task 11: Terminal Approval Gate Adapter
 
 **Files:**
-- Create: `crates/cruxx-agentic/src/adapters/terminal_approval.rs`
-- Modify: `crates/cruxx-agentic/src/adapters/mod.rs`
+
+- Create: `crates/crux-agentic/src/adapters/terminal_approval.rs`
+- Modify: `crates/crux-agentic/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
-// crates/cruxx-agentic/tests/terminal_approval.rs
-use cruxx_agentic::adapters::terminal_approval::AutoApproveGate;
-use cruxx_core::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
+// crates/crux-agentic/tests/terminal_approval.rs
+use crux_agentic::adapters::terminal_approval::AutoApproveGate;
+use crux_runtime::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 
 #[tokio::test]
 async fn auto_approve_gate_approves_low_risk() {
@@ -1575,14 +1603,14 @@ async fn auto_approve_gate_denies_above_threshold() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p cruxx-agentic terminal_approval`
+Run: `cargo nextest run -p crux-agentic terminal_approval`
 Expected: compilation error
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```rust
-// crates/cruxx-agentic/src/adapters/terminal_approval.rs
-use cruxx_core::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
+// crates/crux-agentic/src/adapters/terminal_approval.rs
+use crux_runtime::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 
 /// Auto-approve gate that approves anything at or below the configured risk threshold.
 /// For testing and non-interactive environments.
@@ -1655,20 +1683,21 @@ impl ApprovalGate for TerminalApprovalGate {
 
 - [ ] **Step 4: Wire module**
 
-Add to `crates/cruxx-agentic/src/adapters/mod.rs`:
+Add to `crates/crux-agentic/src/adapters/mod.rs`:
+
 ```rust
 pub mod terminal_approval;
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p cruxx-agentic terminal_approval`
+Run: `cargo nextest run -p crux-agentic terminal_approval`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/adapters/terminal_approval.rs crates/cruxx-agentic/src/adapters/mod.rs
+git add crates/crux-agentic/src/adapters/terminal_approval.rs crates/crux-agentic/src/adapters/mod.rs
 git commit -m "feat(agentic): add AutoApproveGate and TerminalApprovalGate adapters"
 ```
 
@@ -1677,12 +1706,14 @@ git commit -m "feat(agentic): add AutoApproveGate and TerminalApprovalGate adapt
 ## Task 12: Full Integration — Wire Everything and Verify
 
 **Files:**
-- Modify: `crates/cruxx-core/src/lib.rs` (final prelude exports)
+
+- Modify: `crates/crux-runtime/src/lib.rs` (final prelude exports)
 - No new files
 
 - [ ] **Step 1: Ensure all prelude exports are present**
 
-Verify `crates/cruxx-core/src/lib.rs` prelude includes:
+Verify `crates/crux-runtime/src/lib.rs` prelude includes:
+
 ```rust
 pub use crate::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 pub use crate::safety::{SafetyPolicy, SafetyViolation};
@@ -1716,17 +1747,17 @@ git commit -m "chore: wire orchestrator types into prelude, fix clippy"
 
 ## Summary
 
-| Task | Crate | What |
-|------|-------|------|
-| 1 | cruxx-core | `HarnessProfile`, `ResourceHints`, `HarnessDiff` |
-| 2 | cruxx-core | `EvolutionOutcome` |
-| 3 | cruxx-core | `SafetyPolicy` trait |
-| 4 | cruxx-core | `ApprovalGate` trait |
-| 5 | cruxx-core | `on_approval_required` hook |
-| 6 | cruxx-agentic | `container::run`, `container::wait` handlers |
-| 7 | cruxx-agentic | `harness::evolve`, `harness::canary` handlers |
-| 8 | cruxx-planner | `EvolutionPlanner`, `RunMetrics` |
-| 9 | cruxx-macros | `#[cruxx::harness]` |
-| 10 | cruxx-macros | `#[cruxx::evolve]` |
-| 11 | cruxx-agentic | `AutoApproveGate`, `TerminalApprovalGate` |
-| 12 | all | Integration verification |
+| Task | Crate        | What                                             |
+| ---- | ------------ | ------------------------------------------------ |
+| 1    | crux-runtime | `HarnessProfile`, `ResourceHints`, `HarnessDiff` |
+| 2    | crux-runtime | `EvolutionOutcome`                               |
+| 3    | crux-runtime | `SafetyPolicy` trait                             |
+| 4    | crux-runtime | `ApprovalGate` trait                             |
+| 5    | crux-runtime | `on_approval_required` hook                      |
+| 6    | crux-agentic | `container::run`, `container::wait` handlers     |
+| 7    | crux-agentic | `harness::evolve`, `harness::canary` handlers    |
+| 8    | crux-planner | `EvolutionPlanner`, `RunMetrics`                 |
+| 9    | crux-macros  | `#[crux::harness]`                               |
+| 10   | crux-macros  | `#[crux::evolve]`                                |
+| 11   | crux-agentic | `AutoApproveGate`, `TerminalApprovalGate`        |
+| 12   | all          | Integration verification                         |

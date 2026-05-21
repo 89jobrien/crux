@@ -3,7 +3,7 @@
 > Goal: understand `Task` and `TaskRegistry<B>`, wire them into an agent, and know exactly
 > what happens at replay time — including what fails and why.
 
-This is the chapter that makes cruxx more than a logging library. Every step, every delegation,
+This is the chapter that makes crux more than a logging library. Every step, every delegation,
 every rejected branch in a `Crux<T>` is serializable. Persist the trace, crash the process,
 and resume from exactly where you left off.
 
@@ -83,7 +83,7 @@ impl<B: RegistryBackend> TaskRegistry<B> {
     pub async fn checkpoint<T: Serialize>(
         &self,
         id: &TaskId,
-        cruxx: &Crux<T>,
+        crux: &Crux<T>,
     ) -> Result<(), RegistryErr>;
 
     pub async fn pending(&self, kind: &str) -> Result<Vec<Task>, RegistryErr>;
@@ -109,10 +109,10 @@ A few things worth calling out:
 
 `RegistryBackend` is a four-method trait (`get`, `put`, `list`, `cas`). Two adapters ship in-tree:
 
-| Backend           | When to use                                                      |
-| ----------------- | ---------------------------------------------------------------- |
-| `InMemoryBackend` | Tests, single-process agents, experiments — always available     |
-| `RedbBackend`     | Single-host crash-safe persistence — enable the `redb` feature  |
+| Backend           | When to use                                                    |
+| ----------------- | -------------------------------------------------------------- |
+| `InMemoryBackend` | Tests, single-process agents, experiments — always available   |
+| `RedbBackend`     | Single-host crash-safe persistence — enable the `redb` feature |
 
 There is no SQLite backend. Redb is a pure-Rust embedded key-value store with no C dependency and
 no schema. It is the right default for anything you would actually ship on a single host.
@@ -120,7 +120,7 @@ no schema. It is the right default for anything you would actually ship on a sin
 Constructing a registry:
 
 ```rust
-use cruxx::registry::{TaskRegistry, InMemoryBackend};
+use crux::registry::{TaskRegistry, InMemoryBackend};
 
 // Tests and in-process use:
 let reg = TaskRegistry::new(InMemoryBackend::new());
@@ -128,7 +128,7 @@ let reg = TaskRegistry::new(InMemoryBackend::new());
 
 ```rust
 // With the `redb` feature:
-use cruxx::registry::{TaskRegistry, RedbBackend};
+use crux::registry::{TaskRegistry, RedbBackend};
 use std::path::Path;
 
 let reg = TaskRegistry::new(RedbBackend::open(Path::new("./tasks.redb"))?);
@@ -142,8 +142,8 @@ pass it to `TaskRegistry::new`. You almost never need to do this.
 Here is a build-and-deploy agent that uses the registry for crash safety:
 
 ```rust
-use cruxx::prelude::*;
-use cruxx::registry::{TaskRegistry, InMemoryBackend, TaskId, TaskStatus};
+use crux::prelude::*;
+use crux::registry::{TaskRegistry, InMemoryBackend, TaskId, TaskStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -153,7 +153,7 @@ struct DeployInput {
     env: String,
 }
 
-#[cruxx::agent(registry = "reg", checkpoint_every_step)]
+#[crux::agent(registry = "reg", checkpoint_every_step)]
 async fn deploy(
     reg: &TaskRegistry<InMemoryBackend>,
     task_id: TaskId,
@@ -249,7 +249,7 @@ the trace, fix the mismatch, and decide explicitly whether to replay or start fr
 Ordinal shifts are the designed recovery path in this mode, not an error. Enable it per-agent:
 
 ```rust
-#[cruxx::agent(replay = "lenient")]
+#[crux::agent(replay = "lenient")]
 async fn my_agent(input: Input) -> Crux<Output> { ... }
 ```
 
@@ -266,12 +266,12 @@ debug than one that refuses to replay at all.
 
 Under strict mode, `CruxErr::ReplayMismatch` is raised in these cases:
 
-| Situation                       | Why it fails                                          |
-| ------------------------------- | ----------------------------------------------------- |
-| Step was renamed                | Ordinal + name lookup finds no matching cache entry   |
-| Steps were reordered            | Causal chain no longer aligns with the recorded trace |
-| Step's input changed            | Would return stale output for new input               |
-| Delegation target changed       | Child trace cannot be replayed against a new agent    |
+| Situation                 | Why it fails                                          |
+| ------------------------- | ----------------------------------------------------- |
+| Step was renamed          | Ordinal + name lookup finds no matching cache entry   |
+| Steps were reordered      | Causal chain no longer aligns with the recorded trace |
+| Step's input changed      | Would return stale output for new input               |
+| Delegation target changed | Child trace cannot be replayed against a new agent    |
 
 ## The full lifecycle
 
@@ -298,16 +298,16 @@ policy, SLO monitor, or human-in-the-loop approval queue on top of it with no ad
 
 ## Summary
 
-| Operation              | Method                                    | What it touches        |
-| ---------------------- | ----------------------------------------- | ---------------------- |
-| Create a task          | `reg.submit(kind, input)`                 | Persists new Task      |
-| Read a task            | `reg.get(&id)`                            | Returns full Task      |
-| Advance business state | `reg.update_status(&id, status)`          | Task::status field     |
-| Save execution trace   | `reg.checkpoint(&id, &crux)`             | Task::checkpoint field |
-| Load trace for replay  | `reg.load_checkpoint(&id)`               | Returns Crux<Value>    |
-| List pending tasks     | `reg.pending(kind)`                       | Filters by kind        |
-| Snapshot current trace | `ctx.snapshot()`                          | Returns Crux<Value>    |
-| Seed replay            | `ctx.replay_from(&trace)`                | Populates replay cache |
+| Operation              | Method                           | What it touches        |
+| ---------------------- | -------------------------------- | ---------------------- |
+| Create a task          | `reg.submit(kind, input)`        | Persists new Task      |
+| Read a task            | `reg.get(&id)`                   | Returns full Task      |
+| Advance business state | `reg.update_status(&id, status)` | Task::status field     |
+| Save execution trace   | `reg.checkpoint(&id, &crux)`     | Task::checkpoint field |
+| Load trace for replay  | `reg.load_checkpoint(&id)`       | Returns Crux<Value>    |
+| List pending tasks     | `reg.pending(kind)`              | Filters by kind        |
+| Snapshot current trace | `ctx.snapshot()`                 | Returns Crux<Value>    |
+| Seed replay            | `ctx.replay_from(&trace)`        | Populates replay cache |
 
 Chapter **05** covers lifecycle hooks — `on_low_confidence`, `on_step_failure`,
 `on_budget_exceeded` — and how to recover gracefully instead of driving straight into the registry

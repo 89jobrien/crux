@@ -1,0 +1,19 @@
+[package]
+name = "crux-improve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared vocabulary and bridge types for crux self-improvement"
+
+[dependencies]
+crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
+crux-types = { path = "../crux-types", version = "0.2.6" }
+crux-planner = { path = "../crux-planner", version = "0.2.6" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

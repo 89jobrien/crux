@@ -1,5 +1,5 @@
+use crux_script::HandlerRegistry;
 use crux_stdlib::fs as fs_handlers;
-use cruxx_script::HandlerRegistry;
 use serde_json::json;
 use tempfile::tempdir;
 

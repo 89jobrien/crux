@@ -1,5 +1,5 @@
 #![allow(clippy::large_enum_variant)] // generated BAML client types
-//! crux-baml — BAML-powered LLM handlers for cruxx-script pipelines.
+//! crux-baml — BAML-powered LLM handlers for crux-script pipelines.
 //!
 //! Provides `llm::extract`, `llm::decompose`, and `llm::plan` handlers
 //! backed by BAML structured output.
@@ -16,7 +16,7 @@ pub mod baml_client;
 pub mod extract;
 pub mod planner;
 
-use cruxx_script::HandlerRegistry;
+use crux_script::HandlerRegistry;
 
 /// Register all BAML-backed handlers.
 pub fn register_all(registry: &mut HandlerRegistry) {

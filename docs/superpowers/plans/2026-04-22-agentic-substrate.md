@@ -8,15 +8,16 @@
 
 **Goal:** Transform crux from a single-runtime library into a general-purpose agentic execution
 substrate by adding three orthogonal layers: a `Planner` port for abstract action dispatch,
-a pure-domain `cruxx-domain` crate (no tokio/LLM deps), and an EDDOS-style typed event pipeline.
+a pure-domain `crux-domain` crate (no tokio/LLM deps), and an EDDOS-style typed event pipeline.
 
 **Architecture:**
-- `cruxx-domain` — new crate, zero async/LLM deps, contains `Planner` trait + `Action` enum +
-  domain types. `cruxx-core` depends on it; external consumers (minibox, slash) can depend on
+
+- `crux-domain` — new crate, zero async/LLM deps, contains `Planner` trait + `Action` enum +
+  domain types. `crux-runtime` depends on it; external consumers (minibox, slash) can depend on
   it without pulling tokio.
 - `Planner` port sits between `CruxCtx` and execution — `ctx.step()` goes through
   `Planner::next_action()` before executing, enabling dry-run, simulation, and gating.
-- `EventPipeline` in `cruxx-core` — MPSC sender on `StepRecorder`, broadcast receiver for
+- `EventPipeline` in `crux-runtime` — MPSC sender on `StepRecorder`, broadcast receiver for
   consumers; replaces the ad-hoc `events: Vec<Value>` field with a live typed stream.
 
 **Tech Stack:** Rust 2024, tokio (broadcast/mpsc), serde, no new external deps.
@@ -27,7 +28,7 @@ a pure-domain `cruxx-domain` crate (no tokio/LLM deps), and an EDDOS-style typed
 
 Three independent subsystems. Each produces working, testable software on its own:
 
-1. **Task A–C**: `cruxx-domain` crate — pure domain split
+1. **Task A–C**: `crux-domain` crate — pure domain split
 2. **Task D–F**: `Planner` port — action dispatch abstraction
 3. **Task G–J**: EDDOS event pipeline — typed step event stream
 
@@ -40,42 +41,43 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `crates/cruxx-domain/Cargo.toml` | New crate, no tokio dep |
-| `crates/cruxx-domain/src/lib.rs` | Re-exports all domain items |
-| `crates/cruxx-domain/src/action.rs` | `Action` enum — abstract step intents |
-| `crates/cruxx-domain/src/planner.rs` | `Planner` trait (sync, no async) |
-| `crates/cruxx-domain/src/plan_result.rs` | `PlanResult` — verdict from planner |
-| `crates/cruxx-domain/src/event.rs` | `StepEvent` typed enum (replaces `Vec<Value>`) |
-| `crates/cruxx-domain/src/pipeline.rs` | `EventPipeline` — MPSC + broadcast wiring |
-| `crates/cruxx-core/src/planner_gate.rs` | `PlannerGate` adapter — wires Planner into CruxCtx |
-| `crates/cruxx-core/src/event_sink.rs` | `EventSink` port — `StepRecorder` emits to it |
+| File                                      | Responsibility                                     |
+| ----------------------------------------- | -------------------------------------------------- |
+| `crates/crux-domain/Cargo.toml`           | New crate, no tokio dep                            |
+| `crates/crux-domain/src/lib.rs`           | Re-exports all domain items                        |
+| `crates/crux-domain/src/action.rs`        | `Action` enum — abstract step intents              |
+| `crates/crux-domain/src/planner.rs`       | `Planner` trait (sync, no async)                   |
+| `crates/crux-domain/src/plan_result.rs`   | `PlanResult` — verdict from planner                |
+| `crates/crux-domain/src/event.rs`         | `StepEvent` typed enum (replaces `Vec<Value>`)     |
+| `crates/crux-domain/src/pipeline.rs`      | `EventPipeline` — MPSC + broadcast wiring          |
+| `crates/crux-runtime/src/planner_gate.rs` | `PlannerGate` adapter — wires Planner into CruxCtx |
+| `crates/crux-runtime/src/event_sink.rs`   | `EventSink` port — `StepRecorder` emits to it      |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `Cargo.toml` (workspace) | Add `cruxx-domain` to members |
-| `crates/cruxx-core/Cargo.toml` | Add `cruxx-domain` dep; add `event-pipeline` feature |
-| `crates/cruxx-core/src/recorder.rs` | Inject optional `EventSink`; emit on record |
-| `crates/cruxx-core/src/ctx.rs` | Accept optional `Planner`; call gate before step exec |
-| `crates/cruxx-core/src/lib.rs` | Re-export new modules from prelude |
-| `crates/cruxx/Cargo.toml` | Expose `cruxx-domain` dep + re-export |
-| `crates/cruxx-types/src/step.rs` | Add `metadata: IndexMap<String, Value>` field |
+| File                                  | Change                                                |
+| ------------------------------------- | ----------------------------------------------------- |
+| `Cargo.toml` (workspace)              | Add `crux-domain` to members                          |
+| `crates/crux-runtime/Cargo.toml`      | Add `crux-domain` dep; add `event-pipeline` feature   |
+| `crates/crux-runtime/src/recorder.rs` | Inject optional `EventSink`; emit on record           |
+| `crates/crux-runtime/src/ctx.rs`      | Accept optional `Planner`; call gate before step exec |
+| `crates/crux-runtime/src/lib.rs`      | Re-export new modules from prelude                    |
+| `crates/crux/Cargo.toml`              | Expose `crux-domain` dep + re-export                  |
+| `crates/crux-types/src/step.rs`       | Add `metadata: IndexMap<String, Value>` field         |
 
 ---
 
-## Task A: `cruxx-domain` crate scaffold
+## Task A: `crux-domain` crate scaffold
 
 **Files:**
-- Create: `crates/cruxx-domain/Cargo.toml`
-- Create: `crates/cruxx-domain/src/lib.rs`
+
+- Create: `crates/crux-domain/Cargo.toml`
+- Create: `crates/crux-domain/src/lib.rs`
 - Modify: `Cargo.toml` (workspace members)
 
 - [ ] **Step 1: Write failing test for crate compilation**
 
-  Create `crates/cruxx-domain/src/lib.rs` with just a marker test:
+  Create `crates/crux-domain/src/lib.rs` with just a marker test:
 
   ```rust
   #[cfg(test)]
@@ -85,12 +87,12 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
   }
   ```
 
-- [ ] **Step 2: Create `crates/cruxx-domain/Cargo.toml`**
+- [ ] **Step 2: Create `crates/crux-domain/Cargo.toml`**
 
   ```toml
   [package]
-  name = "cruxx-domain"
-  description = "Pure domain types for the cruxx agentic DSL — no async, no LLM deps"
+  name = "crux-domain"
+  description = "Pure domain types for the crux agentic DSL — no async, no LLM deps"
   version.workspace = true
   edition.workspace = true
   rust-version.workspace = true
@@ -105,7 +107,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
   serde = { workspace = true }
   serde_json = { workspace = true }
   thiserror = { workspace = true }
-  cruxx-types = { path = "../cruxx-types", version = "0.2.5" }
+  crux-types = { path = "../crux-types", version = "0.2.5" }
   ```
 
 - [ ] **Step 3: Register in workspace**
@@ -113,7 +115,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
   Edit `Cargo.toml` — `members = ["crates/*"]` already matches; verify with:
 
   ```bash
-  cargo build -p cruxx-domain
+  cargo build -p crux-domain
   ```
 
   Expected: compiles with zero warnings.
@@ -121,7 +123,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 4: Run test**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: 1 test passes.
@@ -129,8 +131,8 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add crates/cruxx-domain Cargo.toml
-  git commit -m "feat(domain): scaffold cruxx-domain crate"
+  git add crates/crux-domain Cargo.toml
+  git commit -m "feat(domain): scaffold crux-domain crate"
   ```
 
 ---
@@ -138,13 +140,14 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 ## Task B: `Action` enum and `PlanResult`
 
 **Files:**
-- Create: `crates/cruxx-domain/src/action.rs`
-- Create: `crates/cruxx-domain/src/plan_result.rs`
-- Modify: `crates/cruxx-domain/src/lib.rs`
+
+- Create: `crates/crux-domain/src/action.rs`
+- Create: `crates/crux-domain/src/plan_result.rs`
+- Modify: `crates/crux-domain/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests**
 
-  Add to `crates/cruxx-domain/src/lib.rs`:
+  Add to `crates/crux-domain/src/lib.rs`:
 
   ```rust
   pub mod action;
@@ -194,7 +197,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 2: Run test to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: compile error — `action` and `plan_result` modules not found.
@@ -260,7 +263,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 5: Run tests — expect pass**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: 4 tests pass.
@@ -268,8 +271,8 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add crates/cruxx-domain/src/action.rs crates/cruxx-domain/src/plan_result.rs \
-          crates/cruxx-domain/src/lib.rs
+  git add crates/crux-domain/src/action.rs crates/crux-domain/src/plan_result.rs \
+          crates/crux-domain/src/lib.rs
   git commit -m "feat(domain): add Action enum and PlanResult"
   ```
 
@@ -278,8 +281,9 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 ## Task C: `Planner` trait + `PassthroughPlanner`
 
 **Files:**
-- Create: `crates/cruxx-domain/src/planner.rs`
-- Modify: `crates/cruxx-domain/src/lib.rs`
+
+- Create: `crates/crux-domain/src/planner.rs`
+- Modify: `crates/crux-domain/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -310,7 +314,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 2: Run test to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: compile error — `planner` module not found.
@@ -375,7 +379,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 4: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: 6 tests pass.
@@ -383,7 +387,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add crates/cruxx-domain/src/planner.rs crates/cruxx-domain/src/lib.rs
+  git add crates/crux-domain/src/planner.rs crates/crux-domain/src/lib.rs
   git commit -m "feat(domain): add Planner trait with Passthrough/DenyAll/Simulate impls"
   ```
 
@@ -392,28 +396,29 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 ## Task D: Wire `Planner` into `CruxCtx`
 
 **Files:**
-- Create: `crates/cruxx-core/src/planner_gate.rs`
-- Modify: `crates/cruxx-core/Cargo.toml`
-- Modify: `crates/cruxx-core/src/ctx.rs`
-- Modify: `crates/cruxx-core/src/lib.rs`
 
-- [ ] **Step 1: Add `cruxx-domain` dep to `cruxx-core`**
+- Create: `crates/crux-runtime/src/planner_gate.rs`
+- Modify: `crates/crux-runtime/Cargo.toml`
+- Modify: `crates/crux-runtime/src/ctx.rs`
+- Modify: `crates/crux-runtime/src/lib.rs`
 
-  Edit `crates/cruxx-core/Cargo.toml`, add under `[dependencies]`:
+- [ ] **Step 1: Add `crux-domain` dep to `crux-runtime`**
+
+  Edit `crates/crux-runtime/Cargo.toml`, add under `[dependencies]`:
 
   ```toml
-  cruxx-domain = { path = "../cruxx-domain", version = "0.2.5" }
+  crux-domain = { path = "../crux-domain", version = "0.2.5" }
   ```
 
 - [ ] **Step 2: Write failing tests in a new file**
 
-  Create `crates/cruxx-core/src/planner_gate.rs`:
+  Create `crates/crux-runtime/src/planner_gate.rs`:
 
   ```rust
   //! PlannerGate — wires a Planner into step execution.
   #[cfg(test)]
   mod tests {
-      use cruxx_domain::planner::{DenyAllPlanner, PassthroughPlanner, SimulatePlanner};
+      use crux_domain::planner::{DenyAllPlanner, PassthroughPlanner, SimulatePlanner};
       use crate::ctx::CruxCtx;
       use crate::context::Context as _;
       use crate::types::error::CruxErr;
@@ -463,14 +468,14 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 3: Run tests to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-core -- planner_gate
+  cargo nextest run -p crux-runtime -- planner_gate
   ```
 
   Expected: compile error — `set_planner` not found on `CruxCtx`.
 
 - [ ] **Step 4: Add `CruxErr::Denied` variant**
 
-  Edit `crates/cruxx-types/src/error.rs`. Find the `CruxErr` enum and add:
+  Edit `crates/crux-types/src/error.rs`. Find the `CruxErr` enum and add:
 
   ```rust
   /// A planner denied this step.
@@ -480,25 +485,28 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 
 - [ ] **Step 5: Add `set_planner` and planner dispatch to `CruxCtx`**
 
-  In `crates/cruxx-core/src/ctx.rs`:
-
+  In `crates/crux-runtime/src/ctx.rs`:
   1. Add import at top:
+
      ```rust
-     use cruxx_domain::planner::{PassthroughPlanner, Planner};
-     use cruxx_domain::plan_result::PlanResult;
+     use crux_domain::planner::{PassthroughPlanner, Planner};
+     use crux_domain::plan_result::PlanResult;
      ```
 
   2. Add field to `CruxCtx` struct:
+
      ```rust
      planner: Box<dyn Planner>,
      ```
 
   3. In `CruxCtx::new`, initialise:
+
      ```rust
      planner: Box::new(PassthroughPlanner),
      ```
 
   4. Add method:
+
      ```rust
      pub fn set_planner(&mut self, planner: Box<dyn Planner>) {
          self.planner = planner;
@@ -531,7 +539,8 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 
 - [ ] **Step 6: Add `planner_gate` module to `lib.rs`**
 
-  In `crates/cruxx-core/src/lib.rs`, add:
+  In `crates/crux-runtime/src/lib.rs`, add:
+
   ```rust
   pub mod planner_gate;
   ```
@@ -539,7 +548,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 7: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-core
+  cargo nextest run -p crux-runtime
   ```
 
   Expected: all tests pass including the 3 new planner_gate tests.
@@ -547,7 +556,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 8: Verify no regressions**
 
   ```bash
-  cargo nextest run -p cruxx
+  cargo nextest run -p crux
   ```
 
   Expected: all integration tests pass.
@@ -555,9 +564,9 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - [ ] **Step 9: Commit**
 
   ```bash
-  git add crates/cruxx-domain crates/cruxx-core/src/planner_gate.rs \
-          crates/cruxx-core/src/ctx.rs crates/cruxx-core/Cargo.toml \
-          crates/cruxx-types/src/error.rs crates/cruxx-core/src/lib.rs
+  git add crates/crux-domain crates/crux-runtime/src/planner_gate.rs \
+          crates/crux-runtime/src/ctx.rs crates/crux-runtime/Cargo.toml \
+          crates/crux-types/src/error.rs crates/crux-runtime/src/lib.rs
   git commit -m "feat(planner): wire Planner port into CruxCtx step dispatch"
   ```
 
@@ -566,19 +575,20 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 ## Task E: `DelegationBuilder` + `SpeculationBuilder` planner propagation
 
 **Files:**
-- Modify: `crates/cruxx-core/src/delegation.rs`
-- Modify: `crates/cruxx-core/src/speculation.rs`
+
+- Modify: `crates/crux-runtime/src/delegation.rs`
+- Modify: `crates/crux-runtime/src/speculation.rs`
 
 Child contexts created by `delegate()` and `speculate()` should inherit the parent's planner.
 
 - [ ] **Step 1: Write failing tests**
 
-  Add to `crates/cruxx-core/src/delegation.rs` tests:
+  Add to `crates/crux-runtime/src/delegation.rs` tests:
 
   ```rust
   #[tokio::test]
   async fn deny_planner_propagates_to_child_delegation() {
-      use cruxx_domain::planner::DenyAllPlanner;
+      use crux_domain::planner::DenyAllPlanner;
 
       let mut ctx = CruxCtx::new("parent");
       ctx.set_planner(Box::new(DenyAllPlanner { reason: "no-exec".into() }));
@@ -594,17 +604,16 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
 - [ ] **Step 2: Run to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-core -- delegation
+  cargo nextest run -p crux-runtime -- delegation
   ```
 
   Expected: test fails — planner not propagated, child runs freely.
 
 - [ ] **Step 3: Propagate planner in `DelegationBuilder::run`**
 
-  In `crates/cruxx-core/src/delegation.rs`, after `let mut child_ctx = CruxCtx::new(A::name());`,
+  In `crates/crux-runtime/src/delegation.rs`, after `let mut child_ctx = CruxCtx::new(A::name());`,
   add planner propagation. This requires the child to receive a clone of the planner. The simplest
   approach is wrapping the planner in `Arc`:
-
   - Change `CruxCtx.planner` from `Box<dyn Planner>` to `Arc<dyn Planner>`.
   - Update `set_planner` to accept `Arc<dyn Planner>` (keep `Box` overload via `.into()`):
 
@@ -615,6 +624,7 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
     ```
 
   - In `DelegationBuilder::run`, after creating `child_ctx`:
+
     ```rust
     child_ctx.planner = Arc::clone(&self.ctx.planner);
     ```
@@ -624,7 +634,7 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
 - [ ] **Step 4: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-core && cargo nextest run -p cruxx
+  cargo nextest run -p crux-runtime && cargo nextest run -p crux
   ```
 
   Expected: all pass.
@@ -632,34 +642,35 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add crates/cruxx-core/src/delegation.rs crates/cruxx-core/src/speculation.rs \
-          crates/cruxx-core/src/ctx.rs
+  git add crates/crux-runtime/src/delegation.rs crates/crux-runtime/src/speculation.rs \
+          crates/crux-runtime/src/ctx.rs
   git commit -m "feat(planner): propagate planner Arc into child delegation/speculation contexts"
   ```
 
 ---
 
-## Task F: Re-export Planner from `cruxx` facade and update prelude
+## Task F: Re-export Planner from `crux` facade and update prelude
 
 **Files:**
-- Modify: `crates/cruxx/Cargo.toml`
-- Modify: `crates/cruxx-core/src/lib.rs` (prelude)
 
-- [ ] **Step 1: Add `cruxx-domain` to `cruxx` facade**
+- Modify: `crates/crux/Cargo.toml`
+- Modify: `crates/crux-runtime/src/lib.rs` (prelude)
 
-  Edit `crates/cruxx/Cargo.toml`:
+- [ ] **Step 1: Add `crux-domain` to `crux` facade**
+
+  Edit `crates/crux/Cargo.toml`:
 
   ```toml
   [dependencies]
-  cruxx-domain = { path = "../cruxx-domain", version = "0.2.5" }
+  crux-domain = { path = "../crux-domain", version = "0.2.5" }
   ```
 
-- [ ] **Step 2: Add to prelude in `cruxx-core/src/lib.rs`**
+- [ ] **Step 2: Add to prelude in `crux-runtime/src/lib.rs`**
 
   ```rust
-  pub use cruxx_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
-  pub use cruxx_domain::plan_result::PlanResult;
-  pub use cruxx_domain::action::{Action, StepIntent};
+  pub use crux_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
+  pub use crux_domain::plan_result::PlanResult;
+  pub use crux_domain::action::{Action, StepIntent};
   ```
 
 - [ ] **Step 3: Verify full workspace builds**
@@ -673,17 +684,18 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
 - [ ] **Step 4: Commit**
 
   ```bash
-  git add crates/cruxx/Cargo.toml crates/cruxx-core/src/lib.rs
-  git commit -m "feat(planner): re-export Planner types from cruxx facade and prelude"
+  git add crates/crux/Cargo.toml crates/crux-runtime/src/lib.rs
+  git commit -m "feat(planner): re-export Planner types from crux facade and prelude"
   ```
 
 ---
 
-## Task G: `StepEvent` typed enum in `cruxx-domain`
+## Task G: `StepEvent` typed enum in `crux-domain`
 
 **Files:**
-- Create: `crates/cruxx-domain/src/event.rs`
-- Modify: `crates/cruxx-domain/src/lib.rs`
+
+- Create: `crates/crux-domain/src/event.rs`
+- Modify: `crates/crux-domain/src/lib.rs`
 
 `Step.events: Vec<Value>` is currently untyped. Replace with a typed `StepEvent` enum that
 covers the standard step lifecycle and streaming payloads.
@@ -721,7 +733,7 @@ covers the standard step lifecycle and streaming payloads.
 - [ ] **Step 2: Run to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: compile error — `event` module not found.
@@ -760,7 +772,7 @@ covers the standard step lifecycle and streaming payloads.
 - [ ] **Step 4: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-domain
+  cargo nextest run -p crux-domain
   ```
 
   Expected: all tests pass.
@@ -768,8 +780,8 @@ covers the standard step lifecycle and streaming payloads.
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add crates/cruxx-domain/src/event.rs crates/cruxx-domain/src/lib.rs
-  git commit -m "feat(events): add typed StepEvent enum to cruxx-domain"
+  git add crates/crux-domain/src/event.rs crates/crux-domain/src/lib.rs
+  git commit -m "feat(events): add typed StepEvent enum to crux-domain"
   ```
 
 ---
@@ -777,16 +789,17 @@ covers the standard step lifecycle and streaming payloads.
 ## Task H: `EventPipeline` — MPSC + broadcast wiring
 
 **Files:**
-- Create: `crates/cruxx-domain/src/pipeline.rs`
-- Modify: `crates/cruxx-domain/Cargo.toml` (add tokio dep, behind feature flag)
-- Modify: `crates/cruxx-domain/src/lib.rs`
 
-The pipeline lives in `cruxx-domain` behind a `tokio-pipeline` feature flag so no-tokio
+- Create: `crates/crux-domain/src/pipeline.rs`
+- Modify: `crates/crux-domain/Cargo.toml` (add tokio dep, behind feature flag)
+- Modify: `crates/crux-domain/src/lib.rs`
+
+The pipeline lives in `crux-domain` behind a `tokio-pipeline` feature flag so no-tokio
 consumers are unaffected.
 
-- [ ] **Step 1: Add feature-gated tokio dep to `cruxx-domain`**
+- [ ] **Step 1: Add feature-gated tokio dep to `crux-domain`**
 
-  Edit `crates/cruxx-domain/Cargo.toml`:
+  Edit `crates/crux-domain/Cargo.toml`:
 
   ```toml
   [dependencies]
@@ -846,7 +859,7 @@ consumers are unaffected.
 - [ ] **Step 3: Run to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-domain --features tokio-pipeline
+  cargo nextest run -p crux-domain --features tokio-pipeline
   ```
 
   Expected: compile error — `pipeline` module not found.
@@ -903,7 +916,7 @@ consumers are unaffected.
 - [ ] **Step 5: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-domain --features tokio-pipeline
+  cargo nextest run -p crux-domain --features tokio-pipeline
   ```
 
   Expected: all tests pass.
@@ -911,9 +924,9 @@ consumers are unaffected.
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add crates/cruxx-domain/src/pipeline.rs crates/cruxx-domain/src/lib.rs \
-          crates/cruxx-domain/Cargo.toml
-  git commit -m "feat(pipeline): add EventPipeline with broadcast fan-out to cruxx-domain"
+  git add crates/crux-domain/src/pipeline.rs crates/crux-domain/src/lib.rs \
+          crates/crux-domain/Cargo.toml
+  git commit -m "feat(pipeline): add EventPipeline with broadcast fan-out to crux-domain"
   ```
 
 ---
@@ -921,31 +934,32 @@ consumers are unaffected.
 ## Task I: Wire `EventPipeline` into `StepRecorder` and `CruxCtx`
 
 **Files:**
-- Create: `crates/cruxx-core/src/event_sink.rs`
-- Modify: `crates/cruxx-core/src/recorder.rs`
-- Modify: `crates/cruxx-core/src/ctx.rs`
-- Modify: `crates/cruxx-core/Cargo.toml`
 
-- [ ] **Step 1: Enable `tokio-pipeline` feature in `cruxx-core`**
+- Create: `crates/crux-runtime/src/event_sink.rs`
+- Modify: `crates/crux-runtime/src/recorder.rs`
+- Modify: `crates/crux-runtime/src/ctx.rs`
+- Modify: `crates/crux-runtime/Cargo.toml`
 
-  Edit `crates/cruxx-core/Cargo.toml`:
+- [ ] **Step 1: Enable `tokio-pipeline` feature in `crux-runtime`**
+
+  Edit `crates/crux-runtime/Cargo.toml`:
 
   ```toml
   [dependencies]
-  cruxx-domain = { path = "../cruxx-domain", version = "0.2.5",
+  crux-domain = { path = "../crux-domain", version = "0.2.5",
                    features = ["tokio-pipeline"] }
   ```
 
 - [ ] **Step 2: Write failing tests**
 
-  Create `crates/cruxx-core/src/event_sink.rs`:
+  Create `crates/crux-runtime/src/event_sink.rs`:
 
   ```rust
   //! EventSink — port for emitting step events from the recorder.
   #[cfg(test)]
   mod tests {
-      use cruxx_domain::event::StepEvent;
-      use cruxx_domain::pipeline::EventPipeline;
+      use crux_domain::event::StepEvent;
+      use crux_domain::pipeline::EventPipeline;
       use crate::ctx::CruxCtx;
       use crate::context::Context as _;
       use crate::types::error::CruxErr;
@@ -1014,32 +1028,35 @@ consumers are unaffected.
 - [ ] **Step 3: Run to verify failure**
 
   ```bash
-  cargo nextest run -p cruxx-core -- event_sink
+  cargo nextest run -p crux-runtime -- event_sink
   ```
 
   Expected: compile error — `set_event_sender` not found.
 
 - [ ] **Step 4: Add `EventSender` field to `CruxCtx`**
 
-  In `crates/cruxx-core/src/ctx.rs`:
-
+  In `crates/crux-runtime/src/ctx.rs`:
   1. Import:
+
      ```rust
-     use cruxx_domain::pipeline::EventSender;
-     use cruxx_domain::event::StepEvent;
+     use crux_domain::pipeline::EventSender;
+     use crux_domain::event::StepEvent;
      ```
 
   2. Add field to `CruxCtx`:
+
      ```rust
      event_sender: Option<EventSender>,
      ```
 
   3. Initialise in `new`:
+
      ```rust
      event_sender: None,
      ```
 
   4. Add method:
+
      ```rust
      pub fn set_event_sender(&mut self, sender: EventSender) {
          self.event_sender = Some(sender);
@@ -1047,6 +1064,7 @@ consumers are unaffected.
      ```
 
   5. Add helper:
+
      ```rust
      fn emit(&self, event: StepEvent) {
          if let Some(ref tx) = self.event_sender {
@@ -1056,11 +1074,13 @@ consumers are unaffected.
      ```
 
   6. In `step()` implementation, at the start (after planner check), add:
+
      ```rust
      self.emit(StepEvent::Started { step_name: name.to_string() });
      ```
 
      After the closure result, before returning, add:
+
      ```rust
      match &result {
          Ok(_) => self.emit(StepEvent::Completed {
@@ -1085,7 +1105,7 @@ consumers are unaffected.
 - [ ] **Step 6: Run tests**
 
   ```bash
-  cargo nextest run -p cruxx-core
+  cargo nextest run -p crux-runtime
   ```
 
   Expected: all tests pass including the 3 new event_sink tests.
@@ -1101,8 +1121,8 @@ consumers are unaffected.
 - [ ] **Step 8: Commit**
 
   ```bash
-  git add crates/cruxx-core/src/event_sink.rs crates/cruxx-core/src/ctx.rs \
-          crates/cruxx-core/Cargo.toml crates/cruxx-core/src/lib.rs
+  git add crates/crux-runtime/src/event_sink.rs crates/crux-runtime/src/ctx.rs \
+          crates/crux-runtime/Cargo.toml crates/crux-runtime/src/lib.rs
   git commit -m "feat(pipeline): wire EventPipeline sender into CruxCtx step emission"
   ```
 
@@ -1111,19 +1131,21 @@ consumers are unaffected.
 ## Task J: Add `metadata` field to `Step` and final integration test
 
 **Files:**
-- Modify: `crates/cruxx-types/src/step.rs`
-- Create: `crates/cruxx/tests/substrate_integration.rs`
+
+- Modify: `crates/crux-types/src/step.rs`
+- Create: `crates/crux/tests/substrate_integration.rs`
 
 - [ ] **Step 1: Add `metadata` to `Step`**
 
-  Edit `crates/cruxx-types/src/step.rs`:
-
+  Edit `crates/crux-types/src/step.rs`:
   1. Add import:
+
      ```rust
      use std::collections::HashMap;
      ```
 
   2. Add field to `Step`:
+
      ```rust
      /// Arbitrary per-step metadata for extensibility.
      #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -1134,14 +1156,14 @@ consumers are unaffected.
 
 - [ ] **Step 2: Write integration test**
 
-  Create `crates/cruxx/tests/substrate_integration.rs`:
+  Create `crates/crux/tests/substrate_integration.rs`:
 
   ```rust
   //! End-to-end test: Planner + EventPipeline together as the agentic substrate.
-  use cruxx::prelude::*;
-  use cruxx_domain::pipeline::EventPipeline;
-  use cruxx_domain::event::StepEvent;
-  use cruxx_domain::planner::{DenyAllPlanner, SimulatePlanner};
+  use crux::prelude::*;
+  use crux_domain::pipeline::EventPipeline;
+  use crux_domain::event::StepEvent;
+  use crux_domain::planner::{DenyAllPlanner, SimulatePlanner};
 
   #[tokio::test]
   async fn deny_planner_blocks_all_steps_end_to_end() {
@@ -1216,7 +1238,7 @@ consumers are unaffected.
 - [ ] **Step 3: Run integration tests**
 
   ```bash
-  cargo nextest run -p cruxx -- substrate_integration
+  cargo nextest run -p crux -- substrate_integration
   ```
 
   Expected: all 4 tests pass.
@@ -1233,8 +1255,8 @@ consumers are unaffected.
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add crates/cruxx-types/src/step.rs crates/cruxx-core/src/recorder.rs \
-          crates/cruxx/tests/substrate_integration.rs
+  git add crates/crux-types/src/step.rs crates/crux-runtime/src/recorder.rs \
+          crates/crux/tests/substrate_integration.rs
   git commit -m "feat(substrate): add Step.metadata field and end-to-end substrate integration tests"
   ```
 
@@ -1244,21 +1266,21 @@ consumers are unaffected.
 
 ### Spec coverage
 
-| Feature | Tasks |
-|---------|-------|
-| Pure-domain `cruxx-domain` crate, no tokio/LLM | A |
-| `Action` enum — abstract step intents | B |
-| `PlanResult` — Allow/Deny/Simulate | B |
-| `Planner` trait + PassthroughPlanner | C |
-| DenyAllPlanner + SimulatePlanner | C |
-| Planner wired into `CruxCtx.step()` | D |
-| Planner propagates to child delegation/speculation | E |
-| Re-exported from facade + prelude | F |
-| Typed `StepEvent` enum | G |
-| `EventPipeline` MPSC+broadcast | H |
-| `CruxCtx` emits events on every step | I |
-| `Step.metadata` extensibility field | J |
-| End-to-end integration test | J |
+| Feature                                            | Tasks |
+| -------------------------------------------------- | ----- |
+| Pure-domain `crux-domain` crate, no tokio/LLM      | A     |
+| `Action` enum — abstract step intents              | B     |
+| `PlanResult` — Allow/Deny/Simulate                 | B     |
+| `Planner` trait + PassthroughPlanner               | C     |
+| DenyAllPlanner + SimulatePlanner                   | C     |
+| Planner wired into `CruxCtx.step()`                | D     |
+| Planner propagates to child delegation/speculation | E     |
+| Re-exported from facade + prelude                  | F     |
+| Typed `StepEvent` enum                             | G     |
+| `EventPipeline` MPSC+broadcast                     | H     |
+| `CruxCtx` emits events on every step               | I     |
+| `Step.metadata` extensibility field                | J     |
+| End-to-end integration test                        | J     |
 
 ### Placeholder scan
 

@@ -1,4 +1,4 @@
-use cruxx_core::prelude::CruxErr;
+use crux_runtime::prelude::CruxErr;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

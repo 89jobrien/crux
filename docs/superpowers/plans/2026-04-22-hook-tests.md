@@ -18,25 +18,26 @@ random inputs and exercises the filename classifier and git-ref parser independe
 
 ## File Map
 
-| Path | Role |
-|------|------|
-| `scripts/tests/hooks.bats` | Bats functional tests for both hooks |
-| `scripts/tests/fuzz.sh` | Fuzz runner (filename classifier + git ref inputs) |
-| `scripts/tests/helpers.bash` | Shared setup: temp git repo, stub PATH injection |
-| `scripts/tests/stubs/git` | Stub `git` binary (controlled output) |
-| `scripts/tests/stubs/cargo` | Stub `cargo` binary (exits 0, prints nothing) |
-| `scripts/tests/stubs/cargo-nextest` | Stub for `cargo nextest` |
-| `scripts/tests/stubs/jq` | Stub `jq` (returns empty package list) |
-| `scripts/tests/stubs/shellcheck` | Stub (exits 0) |
-| `scripts/tests/stubs/markdownlint-cli2` | Stub (exits 0) |
-| `scripts/tests/stubs/tflint` | Stub (exits 0) |
-| `scripts/tests/stubs/check-jsonschema` | Stub (exits 0) |
+| Path                                    | Role                                               |
+| --------------------------------------- | -------------------------------------------------- |
+| `scripts/tests/hooks.bats`              | Bats functional tests for both hooks               |
+| `scripts/tests/fuzz.sh`                 | Fuzz runner (filename classifier + git ref inputs) |
+| `scripts/tests/helpers.bash`            | Shared setup: temp git repo, stub PATH injection   |
+| `scripts/tests/stubs/git`               | Stub `git` binary (controlled output)              |
+| `scripts/tests/stubs/cargo`             | Stub `cargo` binary (exits 0, prints nothing)      |
+| `scripts/tests/stubs/cargo-nextest`     | Stub for `cargo nextest`                           |
+| `scripts/tests/stubs/jq`                | Stub `jq` (returns empty package list)             |
+| `scripts/tests/stubs/shellcheck`        | Stub (exits 0)                                     |
+| `scripts/tests/stubs/markdownlint-cli2` | Stub (exits 0)                                     |
+| `scripts/tests/stubs/tflint`            | Stub (exits 0)                                     |
+| `scripts/tests/stubs/check-jsonschema`  | Stub (exits 0)                                     |
 
 ---
 
 ### Task 1: Scaffold directory and helpers
 
 **Files:**
+
 - Create: `scripts/tests/helpers.bash`
 - Create: `scripts/tests/stubs/git`
 - Create: `scripts/tests/stubs/cargo`
@@ -61,7 +62,7 @@ STUBS_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)/stubs"
 # Prepends stubs to PATH so hooks use controlled binaries.
 setup_repo() {
     REPO="$BATS_TMPDIR/repo"
-    mkdir -p "$REPO/crates/cruxx-agentic/src"
+    mkdir -p "$REPO/crates/crux-agentic/src"
     cd "$REPO"
     git init -q
     git config user.email "test@test.com"
@@ -153,6 +154,7 @@ git commit -m "test: scaffold hook test helpers and stubs"
 ### Task 2: Bats tests — pre-commit
 
 **Files:**
+
 - Create: `scripts/tests/hooks.bats`
 
 - [ ] **Step 1: Write the pre-commit bats tests**
@@ -173,9 +175,9 @@ load helpers
 
 @test "pre-commit: creates baml stub if missing" {
     setup_repo
-    stage_file "crates/cruxx-agentic/src/lib.rs" "fn main(){}"
+    stage_file "crates/crux-agentic/src/lib.rs" "fn main(){}"
     run run_pre_commit
-    [ -f "$REPO/crates/cruxx-agentic/src/baml_client/mod.rs" ]
+    [ -f "$REPO/crates/crux-agentic/src/baml_client/mod.rs" ]
 }
 
 @test "pre-commit: staged .rs file invokes cargo fmt check" {
@@ -289,6 +291,7 @@ git commit -m "test(hooks): pre-commit bats tests"
 ### Task 3: Bats tests — pre-push
 
 **Files:**
+
 - Modify: `scripts/tests/hooks.bats` (append)
 
 - [ ] **Step 1: Append pre-push tests to `hooks.bats`**
@@ -450,6 +453,7 @@ git commit -m "test(hooks): pre-push bats tests"
 ### Task 4: Fuzz — filename classifier
 
 **Files:**
+
 - Create: `scripts/tests/fuzz.sh`
 
 - [ ] **Step 1: Extract the classifier logic into a sourceable snippet**
@@ -618,6 +622,7 @@ git commit -m "test(hooks): fuzz filename classifier and git ref inputs"
 ### Task 5: Wire into justfile
 
 **Files:**
+
 - Modify: `justfile`
 
 - [ ] **Step 1: Read current justfile**
@@ -660,6 +665,7 @@ git commit -m "chore: add test-hooks and fuzz-hooks just recipes"
 ## Self-Review
 
 **Spec coverage:**
+
 - bats for pre-commit: no staged, baml stub, fmt, clippy, tool-not-found skip, cross-dir guard, md, yaml — all covered
 - bats for pre-push: no lintable, new branch fallback, deleted branch, workspace compile, per-crate clippy, shared crate propagation, conformance disable, shellcheck, markdownlint — all covered
 - fuzz filename classifier: covered in Task 4

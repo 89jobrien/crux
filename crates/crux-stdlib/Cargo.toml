@@ -1,6 +1,6 @@
 [package]
 name = "crux-stdlib"
-description = "Standard library handlers for cruxx-script pipelines (fs, git, json, text, ctrl)"
+description = "Standard library handlers for crux-script pipelines (fs, git, json, text, ctrl)"
 version = "0.2.6"
 edition.workspace = true
 readme = "../../README.md"
@@ -13,8 +13,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-cruxx-core = { path = "../cruxx-core", version = "0.2.6" }
-cruxx-script = { path = "../cruxx-script", version = "0.2.6" }
+crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
+crux-script = { path = "../crux-script", version = "0.2.6" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

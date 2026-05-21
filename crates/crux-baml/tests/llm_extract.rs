@@ -4,7 +4,7 @@
 // Run with: cargo nextest run -p crux-baml
 
 use crux_baml::extract::register_extract;
-use cruxx_script::{HandlerRegistry, handler_output::HandlerOutput};
+use crux_script::{HandlerRegistry, handler_output::HandlerOutput};
 use serde_json::json;
 
 fn make_registry() -> HandlerRegistry {

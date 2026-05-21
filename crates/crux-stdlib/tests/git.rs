@@ -1,5 +1,5 @@
+use crux_script::HandlerRegistry;
 use crux_stdlib::git;
-use cruxx_script::HandlerRegistry;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {

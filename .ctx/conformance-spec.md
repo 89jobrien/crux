@@ -1,6 +1,6 @@
 # Crux Conformance Specification
 
-Port/adapter boundary contracts for the cruxx hexagonal architecture. Each section documents
+Port/adapter boundary contracts for the crux hexagonal architecture. Each section documents
 one trait (port), its method signatures, numbered contract clauses, and the adapters that must
 satisfy it.
 
@@ -8,7 +8,7 @@ satisfy it.
 
 ## 1. `RegistryBackend`
 
-**Source:** `crates/cruxx-core/src/registry/backend.rs`
+**Source:** `crates/crux-runtime/src/registry/backend.rs`
 
 ```rust
 pub trait RegistryBackend: Send + Sync {
@@ -41,14 +41,14 @@ pub trait RegistryBackend: Send + Sync {
 
 | Adapter | Location | Feature flag |
 |---|---|---|
-| `InMemoryBackend` | `cruxx-core/src/registry/in_memory.rs` | (default) |
-| `RedbBackend` | `cruxx-core/src/registry/redb.rs` | `redb` |
+| `InMemoryBackend` | `crux-runtime/src/registry/in_memory.rs` | (default) |
+| `RedbBackend` | `crux-runtime/src/registry/redb.rs` | `redb` |
 
 ---
 
 ## 2. `Context`
 
-**Source:** `crates/cruxx-core/src/context.rs`
+**Source:** `crates/crux-runtime/src/context.rs`
 
 ```rust
 pub trait Context: Send {
@@ -96,13 +96,13 @@ pub trait Context: Send {
 
 | Adapter | Location |
 |---|---|
-| `CruxCtx` (production) | `cruxx-core/src/ctx.rs` |
+| `CruxCtx` (production) | `crux-runtime/src/ctx.rs` |
 
 ---
 
 ## 3. `Agent`
 
-**Source:** `crates/cruxx-core/src/agent.rs`
+**Source:** `crates/crux-runtime/src/agent.rs`
 
 ```rust
 pub trait Agent: Send + Sync + 'static {
@@ -120,7 +120,7 @@ pub trait Agent: Send + Sync + 'static {
 
 ### Contract Clauses
 
-1. `name()` returns a stable, non-empty identifier for the agent. The `#[cruxx::agent]` macro
+1. `name()` returns a stable, non-empty identifier for the agent. The `#[crux::agent]` macro
    sets this to the decorated function name.
 2. `run` must record at least one step via the supplied `CruxCtx`.
 3. `run` returns `Ok(output)` on success; the output must be serde-serializable for trace storage.
@@ -134,14 +134,14 @@ pub trait Agent: Send + Sync + 'static {
 
 | Adapter | Source |
 |---|---|
-| Macro-generated `FooAgent` structs | `#[cruxx::agent]` proc macro in `cruxx-macros` |
+| Macro-generated `FooAgent` structs | `#[crux::agent]` proc macro in `crux-macros` |
 | Hand-written `Agent` impls | any downstream crate |
 
 ---
 
 ## 4. `LlmProvider`
 
-**Source:** `crates/cruxx-agentic/src/provider.rs`
+**Source:** `crates/crux-agentic/src/provider.rs`
 
 ```rust
 pub trait LlmProvider: Send + Sync + 'static {
@@ -170,14 +170,14 @@ pub struct LlmResponse { pub text: String, pub provider: String,
 
 | Adapter | Location | Notes |
 |---|---|---|
-| `StubLlmProvider` | `cruxx-agentic/src/handlers/llm.rs` | Always returns canned text |
-| Anthropic adapter | `cruxx-agentic/src/handlers/llm.rs` | Live; requires `ANTHROPIC_API_KEY` |
+| `StubLlmProvider` | `crux-agentic/src/handlers/llm.rs` | Always returns canned text |
+| Anthropic adapter | `crux-agentic/src/handlers/llm.rs` | Live; requires `ANTHROPIC_API_KEY` |
 
 ---
 
 ## 5. `SafetyPolicy`
 
-**Source:** `crates/cruxx-core/src/safety.rs`
+**Source:** `crates/crux-runtime/src/safety.rs`
 
 ```rust
 pub trait SafetyPolicy: Send + Sync {
@@ -215,14 +215,14 @@ pub enum SafetyViolation {
 
 | Adapter | Location |
 |---|---|
-| `StrictPolicy` (unit tests) | `cruxx-core/src/safety.rs` inline tests |
-| `BoundedPolicy` (conformance) | `cruxx/tests/conformance/safety_policy.rs` |
+| `StrictPolicy` (unit tests) | `crux-runtime/src/safety.rs` inline tests |
+| `BoundedPolicy` (conformance) | `crux/tests/conformance/safety_policy.rs` |
 
 ---
 
 ## 6. `ApprovalGate`
 
-**Source:** `crates/cruxx-core/src/approval.rs`
+**Source:** `crates/crux-runtime/src/approval.rs`
 
 ```rust
 pub trait ApprovalGate: Send + Sync {
@@ -265,16 +265,16 @@ pub enum RiskLevel { Low, Medium, High, Critical }
 
 | Adapter | Location | Purpose |
 |---|---|---|
-| `AutoApproveGate` | `cruxx-agentic/src/adapters/` | Approves all requests unconditionally |
-| `TerminalApprovalGate` | `cruxx-agentic/src/adapters/` | Interactive TTY prompt |
-| `AlwaysApprove` (test) | `cruxx/tests/conformance/approval_gate.rs` | Conformance only |
-| `AlwaysDeny` (test) | `cruxx/tests/conformance/approval_gate.rs` | Conformance only |
+| `AutoApproveGate` | `crux-agentic/src/adapters/` | Approves all requests unconditionally |
+| `TerminalApprovalGate` | `crux-agentic/src/adapters/` | Interactive TTY prompt |
+| `AlwaysApprove` (test) | `crux/tests/conformance/approval_gate.rs` | Conformance only |
+| `AlwaysDeny` (test) | `crux/tests/conformance/approval_gate.rs` | Conformance only |
 
 ---
 
 ## 7. `ContainerClient`
 
-**Source:** `crates/cruxx-agentic/src/adapters/container_client.rs`
+**Source:** `crates/crux-agentic/src/adapters/container_client.rs`
 
 ```rust
 pub trait ContainerClient: Send + Sync {
@@ -313,5 +313,5 @@ pub enum ContainerState {
 
 | Adapter | Location | Feature flag |
 |---|---|---|
-| `MockContainerClient` | `cruxx-agentic/src/adapters/container_client.rs` | (default) |
+| `MockContainerClient` | `crux-agentic/src/adapters/container_client.rs` | (default) |
 | `DockerContainerClient` | same file | `docker` |

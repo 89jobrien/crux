@@ -1,0 +1,358 @@
+use crux_runtime::prelude::CruxErr;
+/// Integration tests for YAML-driven pipeline execution.
+use crux_script::{HandlerOutput, HandlerRegistry, Runner, load};
+use serde_json::{Value, json};
+use std::sync::Arc;
+
+fn test_registry() -> Arc<HandlerRegistry> {
+    let mut reg = HandlerRegistry::new();
+
+    // Echo handler: returns args.msg as output value (used for template expansion tests)
+    reg.handler_value("echo_msg", |input: Value| async move {
+        let msg = input
+            .get("args")
+            .and_then(|a| a.get("msg"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok::<Value, CruxErr>(Value::String(msg))
+    });
+
+    // Uses `handler` (not `handler_value`) so that a real confidence score of 0.85
+    // is emitted, making `{{ steps.analyze.confidence }}` resolvable in routing tests.
+    reg.handler("analyzer", |_input: Value| async {
+        Ok::<HandlerOutput, crux_runtime::prelude::CruxErr>(HandlerOutput::with_confidence(
+            json!({ "result": "analyzed" }),
+            0.85,
+        ))
+    });
+
+    reg.handler_value("normalize", |v: Value| async move {
+        let s = v.as_str().unwrap_or("unknown");
+        Ok(Value::String(s.to_uppercase()))
+    });
+
+    reg.handler_value("enrich", |v: Value| async move {
+        let s = v.as_str().unwrap_or("");
+        Ok(Value::String(format!("{s}_enriched")))
+    });
+
+    reg.handler_value("validate", |v: Value| async move { Ok(v) });
+
+    reg.handler_value("web_search", |_v: Value| async { Ok(json!("web_result")) });
+
+    reg.handler_value("local_cache", |_v: Value| async {
+        Ok(json!("cache_result"))
+    });
+
+    reg.handler_value("database", |_v: Value| async { Ok(json!("db_result")) });
+
+    reg.handler_value("fallback", |_v: Value| async { Ok(json!("fallback_out")) });
+    reg.handler_value("standard", |_v: Value| async { Ok(json!("standard_out")) });
+    reg.handler_value("fast_path", |_v: Value| async { Ok(json!("fast_out")) });
+
+    reg.handler_value("conservative", |_v: Value| async {
+        Ok(json!({ "strategy": "conservative", "score": 0.6 }))
+    });
+    reg.handler_value("aggressive", |_v: Value| async {
+        Ok(json!({ "strategy": "aggressive", "score": 0.9 }))
+    });
+    reg.handler_value("balanced", |_v: Value| async {
+        Ok(json!({ "strategy": "balanced", "score": 0.75 }))
+    });
+
+    Arc::new(reg)
+}
+
+#[tokio::test]
+async fn simple_step() {
+    let yaml = r#"
+pipeline: simple
+steps:
+  - step: analyze
+    handler: analyzer
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!("hello")).await;
+
+    assert_eq!(crux.value().unwrap(), &json!({ "result": "analyzed" }));
+    assert_eq!(crux.steps.len(), 1);
+    assert_eq!(crux.steps[0].name, "analyze");
+}
+
+#[tokio::test]
+async fn pipe_stages() {
+    let yaml = r#"
+pipeline: transform
+steps:
+  - pipe: transform
+    stages:
+      - normalize
+      - enrich
+      - validate
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!("hello")).await;
+
+    assert_eq!(crux.value().unwrap(), &json!("HELLO_enriched"));
+    assert_eq!(crux.steps.len(), 3);
+    assert_eq!(crux.steps[0].name, "transform::normalize");
+    assert_eq!(crux.steps[1].name, "transform::enrich");
+    assert_eq!(crux.steps[2].name, "transform::validate");
+}
+
+#[tokio::test]
+async fn join_all_parallel() {
+    let yaml = r#"
+pipeline: fetch
+steps:
+  - join_all: fetch_sources
+    arms:
+      - web_search
+      - local_cache
+      - database
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    let results = crux.value().unwrap();
+    assert_eq!(results, &json!(["web_result", "cache_result", "db_result"]));
+    assert_eq!(crux.steps.len(), 3);
+}
+
+#[tokio::test]
+async fn route_on_confidence_routes_correctly() {
+    let yaml = r#"
+pipeline: classify
+steps:
+  - step: analyze
+    handler: analyzer
+  - route_on_confidence: classify
+    value: "{{ steps.analyze.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: low
+        handler: fallback
+      - range: "[0.5, 0.8)"
+        label: medium
+        handler: standard
+      - range: "[0.8, 1.0]"
+        label: high
+        handler: fast_path
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!("input")).await;
+
+    // analyzer returns confidence 0.85 -> high route
+    assert_eq!(crux.value().unwrap(), &json!("fast_out"));
+}
+
+#[tokio::test]
+async fn speculate_pick_best() {
+    let yaml = r#"
+pipeline: speculate_test
+steps:
+  - speculate: strategies
+    mode: pick_best
+    arms:
+      - conservative
+      - aggressive
+      - balanced
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    // aggressive has highest score (0.9)
+    let result = crux.value().unwrap();
+    assert_eq!(result["strategy"], "aggressive");
+}
+
+#[tokio::test]
+async fn speculate_first_ok() {
+    let yaml = r#"
+pipeline: first_ok_test
+steps:
+  - speculate: strategies
+    mode: first_ok
+    arms:
+      - conservative
+      - aggressive
+      - balanced
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    // first_ok returns the first successful one (conservative)
+    let result = crux.value().unwrap();
+    assert_eq!(result["strategy"], "conservative");
+}
+
+#[tokio::test]
+async fn budget_is_applied() {
+    let yaml = r#"
+pipeline: budgeted
+budget:
+  tokens: 5000
+steps:
+  - step: analyze
+    handler: analyzer
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    assert!(crux.value().is_ok());
+}
+
+#[tokio::test]
+async fn multi_step_pipeline() {
+    let yaml = r#"
+pipeline: full
+steps:
+  - step: analyze
+    handler: analyzer
+  - join_all: fetch_sources
+    arms:
+      - web_search
+      - database
+  - pipe: transform
+    stages:
+      - normalize
+      - enrich
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!("start")).await;
+
+    // Pipeline runs sequentially: analyze -> join_all -> pipe
+    // Last output is from pipe (normalize + enrich on the join_all array output)
+    assert!(crux.value().is_ok());
+    // Steps: 1 (analyze) + 2 (join arms) + 2 (pipe stages) = 5
+    assert_eq!(crux.steps.len(), 5);
+}
+
+#[tokio::test]
+async fn handler_not_found_error() {
+    let yaml = r#"
+pipeline: missing
+steps:
+  - step: bad_step
+    handler: nonexistent
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    assert!(crux.value().is_err());
+}
+
+#[tokio::test]
+async fn args_template_expands_input_field() {
+    // `{{ input.greeting }}` in args.msg should resolve to the pipeline input value
+    let yaml = r#"
+pipeline: template_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ input.greeting }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner
+        .run(&pipeline, json!({ "greeting": "hello crux" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("hello crux"));
+}
+
+#[tokio::test]
+async fn args_template_expands_step_output() {
+    // `{{ steps.analyze.output.result }}` should resolve to a prior step's output field
+    let yaml = r#"
+pipeline: step_ref_test
+steps:
+  - step: analyze
+    handler: analyzer
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ steps.analyze.output.result }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!("input")).await;
+    assert_eq!(crux.value().unwrap(), &json!("analyzed"));
+}
+
+#[tokio::test]
+async fn args_non_template_string_unchanged() {
+    // A plain string with no `{{ }}` should pass through as-is
+    let yaml = r#"
+pipeline: static_args_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "static value"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+    assert_eq!(crux.value().unwrap(), &json!("static value"));
+}
+
+#[tokio::test]
+async fn args_unknown_template_preserved() {
+    // An unresolvable `{{ steps.missing.output }}` should not crash — string preserved
+    let yaml = r#"
+pipeline: unknown_ref_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "{{ steps.missing.output }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+    // Should still run; unknown ref preserved as literal string
+    assert_eq!(crux.value().unwrap(), &json!("{{ steps.missing.output }}"));
+}
+
+#[tokio::test]
+async fn args_interpolated_string() {
+    // A string with `{{ }}` embedded mid-string should be interpolated, not replaced wholesale
+    let yaml = r#"
+pipeline: interp_test
+steps:
+  - step: say
+    handler: echo_msg
+    args:
+      msg: "hello {{ input.name }}!"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!({"name": "crux"})).await;
+    assert_eq!(crux.value().unwrap(), &json!("hello crux!"));
+}
+
+#[tokio::test]
+async fn expression_input_passthrough() {
+    let yaml = r#"
+pipeline: expr_test
+steps:
+  - step: analyze
+    handler: analyzer
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    // The handler ignores input, but we verify the pipeline runs with arbitrary input
+    let crux = runner.run(&pipeline, json!({"data": [1,2,3]})).await;
+    assert!(crux.value().is_ok());
+}

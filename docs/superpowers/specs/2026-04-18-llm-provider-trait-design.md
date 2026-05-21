@@ -2,13 +2,13 @@
 
 **Date:** 2026-04-18
 **Status:** Approved
-**Repos:** cruxx, minibox
+**Repos:** crux, minibox
 
 ---
 
 ## Goal
 
-Replace the hand-rolled HTTP code in `cruxx-agentic/src/llm.rs` with a proper `LlmProvider`
+Replace the hand-rolled HTTP code in `crux-agentic/src/llm.rs` with a proper `LlmProvider`
 port and concrete adapters. Add a generic `LlmStep<P>` for use in typed `#[agent]` code.
 Implement `LlmProvider` for minibox-llm's `FallbackChain` in `minibox-agent`, making that
 crate a thin adapter layer rather than a self-contained HTTP client.
@@ -18,20 +18,20 @@ crate a thin adapter layer rather than a self-contained HTTP client.
 ## Architecture
 
 ```
-cruxx-core          — unchanged (Agent, Context, CruxErr, Budget)
-cruxx-agentic 0.2.3   — gains: LlmProvider trait, LlmRequest/LlmResponse types,
+crux-runtime          — unchanged (Agent, Context, CruxErr, Budget)
+crux-agentic 0.2.3   — gains: LlmProvider trait, LlmRequest/LlmResponse types,
                                AnthropicAdapter, OpenAiAdapter, LlmStep<P>
                        changes: llm.rs handler rewired through trait adapters
 minibox-agent        — implements LlmProvider for FallbackChain; re-exports LlmStep
 minibox-llm          — unchanged
 ```
 
-Dependencies point inward. `cruxx-agentic` has no knowledge of minibox. `minibox-agent`
-depends on both `cruxx-agentic` and `minibox-llm`.
+Dependencies point inward. `crux-agentic` has no knowledge of minibox. `minibox-agent`
+depends on both `crux-agentic` and `minibox-llm`.
 
 ---
 
-## cruxx-agentic Changes
+## crux-agentic Changes
 
 ### New file: `src/provider.rs`
 
@@ -64,7 +64,7 @@ through `ctx.step`'s replay boundary.
 
 ### New file: `src/llm_step.rs`
 
-Generic adapter that drives any `LlmProvider` through the cruxx `Context`:
+Generic adapter that drives any `LlmProvider` through the crux `Context`:
 
 ```rust
 pub struct LlmStep<P: LlmProvider> {
@@ -118,7 +118,7 @@ impl LlmProvider for OpenAiAdapter { ... }
 
 The `llm::invoke` and `llm::extract` script handlers are **rewired** to use the adapter
 structs. The raw reqwest calls are removed. External behavior (input JSON shape, output JSON
-shape) is unchanged — existing cruxx-script pipelines continue to work without modification.
+shape) is unchanged — existing crux-script pipelines continue to work without modification.
 
 ```rust
 // llm::invoke handler: instantiate adapter from "provider" field, call .complete()
@@ -147,8 +147,8 @@ pub use llm_step::LlmStep;
 
 ### Version bump
 
-`cruxx-agentic`: 0.2.2 → 0.2.3
-`cruxx-core`, `cruxx`, `cruxx-script`, `cruxx-macros`: remain 0.2.1 (no changes)
+`crux-agentic`: 0.2.2 → 0.2.3
+`crux-runtime`, `crux`, `crux-script`, `crux-macros`: remain 0.2.1 (no changes)
 
 ---
 
@@ -156,17 +156,17 @@ pub use llm_step::LlmStep;
 
 ### `Cargo.toml`
 
-Replace the current `cruxx` + `cruxx-core` deps with:
+Replace the current `crux` + `crux-runtime` deps with:
 
 ```toml
-cruxx-agentic = "0.2.3"
-cruxx-core = "0.2.1"
+crux-agentic = "0.2.3"
+crux-runtime = "0.2.1"
 minibox-llm = { path = "../minibox-llm" }
 ```
 
 ### New file: `src/provider.rs`
 
-Newtype adapter implementing cruxx's `LlmProvider` for minibox-llm's `FallbackChain`:
+Newtype adapter implementing crux's `LlmProvider` for minibox-llm's `FallbackChain`:
 
 ```rust
 pub struct FallbackChainAdapter(Arc<FallbackChain>);
@@ -176,7 +176,7 @@ impl FallbackChainAdapter {
     pub fn new(chain: Arc<FallbackChain>) -> Self { Self(chain) }
 }
 
-impl cruxx_agentic::LlmProvider for FallbackChainAdapter {
+impl crux_agentic::LlmProvider for FallbackChainAdapter {
     async fn complete(&self, req: LlmRequest) -> Result<LlmResponse, CruxErr> {
         self.0
             .complete(&CompletionRequest {
@@ -198,11 +198,11 @@ Delete `CruxLlmStep` struct. Replace with a newtype (type aliases cannot have in
 methods in stable Rust):
 
 ```rust
-pub struct CruxLlmStep(cruxx_agentic::LlmStep<FallbackChainAdapter>);
+pub struct CruxLlmStep(crux_agentic::LlmStep<FallbackChainAdapter>);
 
 impl CruxLlmStep {
     pub fn from_env() -> Self {
-        Self(cruxx_agentic::LlmStep::new(FallbackChainAdapter::from_env()))
+        Self(crux_agentic::LlmStep::new(FallbackChainAdapter::from_env()))
     }
 
     pub async fn invoke(
@@ -223,36 +223,38 @@ pub mod error;
 pub mod provider;
 pub mod step;
 
-pub use cruxx_agentic::{LlmProvider, LlmRequest, LlmResponse, LlmStep};
+pub use crux_agentic::{LlmProvider, LlmRequest, LlmResponse, LlmStep};
 pub use error::AgentError;
 pub use provider::FallbackChainAdapter;
 pub use step::CruxLlmStep;
 
-// Re-export cruxx agent macro for one-dep convenience
-pub use cruxx_core::{agent::Agent, ctx::CruxCtx, types::error::CruxErr};
+// Re-export crux agent macro for one-dep convenience
+pub use crux_runtime::{agent::Agent, ctx::CruxCtx, types::error::CruxErr};
 ```
 
 ---
 
 ## Error Mapping
 
-| Source error          | Mapped to                                       |
-|-----------------------|-------------------------------------------------|
-| `LlmError` (minibox)  | `CruxErr::step_failed("minibox_llm", msg)`      |
-| `CruxErr` (cruxx)      | `AgentError::Step(msg)` (in minibox-agent)      |
+| Source error         | Mapped to                                  |
+| -------------------- | ------------------------------------------ |
+| `LlmError` (minibox) | `CruxErr::step_failed("minibox_llm", msg)` |
+| `CruxErr` (crux)     | `AgentError::Step(msg)` (in minibox-agent) |
 
 ---
 
 ## Testing
 
-**cruxx-agentic:**
+**crux-agentic:**
+
 - Unit test `AnthropicAdapter` and `OpenAiAdapter` with `wiremock` (already a dev-dep in minibox;
-  add to cruxx dev-deps)
+  add to crux dev-deps)
 - Unit test `LlmStep` with a `MockLlmProvider` that returns a fixed `LlmResponse`
 - Verify `llm::invoke` handler output shape is unchanged (regression test against existing
-  cruxx-script pipeline tests)
+  crux-script pipeline tests)
 
 **minibox-agent:**
+
 - Unit test `FallbackChainAdapter::complete` with a mock `FallbackChain` (or a test-doubles
   `LlmProvider` impl)
 - Verify `CruxLlmStep::from_env()` constructs without panic in a test env with dummy API keys
@@ -261,11 +263,11 @@ pub use cruxx_core::{agent::Agent, ctx::CruxCtx, types::error::CruxErr};
 
 ## Publish Sequence
 
-1. Implement all cruxx-agentic changes in the cruxx repo
-2. Run `cargo test -p cruxx-agentic` — all green
-3. Bump cruxx-agentic version to 0.2.3 in `Cargo.toml`
-4. `cargo publish -p cruxx-agentic`
-5. Update minibox-agent `Cargo.toml`: `cruxx-agentic = "0.2.3"`
+1. Implement all crux-agentic changes in the crux repo
+2. Run `cargo test -p crux-agentic` — all green
+3. Bump crux-agentic version to 0.2.3 in `Cargo.toml`
+4. `cargo publish -p crux-agentic`
+5. Update minibox-agent `Cargo.toml`: `crux-agentic = "0.2.3"`
 6. Implement `FallbackChainAdapter` and update `step.rs` / `lib.rs`
 7. `cargo check -p minibox-agent` — green
 8. Commit both repos
@@ -274,7 +276,7 @@ pub use cruxx_core::{agent::Agent, ctx::CruxCtx, types::error::CruxErr};
 
 ## Out of Scope
 
-- Gemini adapter in cruxx-agentic (minibox-llm handles Gemini; cruxx stays focused on
+- Gemini adapter in crux-agentic (minibox-llm handles Gemini; crux stays focused on
   Anthropic + OpenAI for now)
 - Streaming LLM responses through `ctx.step_stream` (future work)
 - Publishing minibox-agent to crates.io (it is a workspace-internal crate for now)

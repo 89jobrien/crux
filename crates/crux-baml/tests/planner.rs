@@ -4,8 +4,8 @@ async fn generate_pipeline_returns_valid_yaml() {
         .await
         .unwrap();
     // Parse as PipelineDef to validate structure
-    let pipeline: cruxx_script::schema::PipelineDef =
-        cruxx_script::load(&yaml).expect("generated YAML should parse as PipelineDef");
+    let pipeline: crux_script::schema::PipelineDef =
+        crux_script::load(&yaml).expect("generated YAML should parse as PipelineDef");
     assert!(
         !pipeline.steps.is_empty(),
         "pipeline should have at least one step"

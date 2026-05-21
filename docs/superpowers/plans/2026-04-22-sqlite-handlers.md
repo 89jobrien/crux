@@ -1,4 +1,4 @@
-# sqlite Handlers for cruxx-agentic — Implementation Plan
+# sqlite Handlers for crux-agentic — Implementation Plan
 
 **status: done**
 
@@ -6,7 +6,7 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a `sqlite` handler module to `cruxx-agentic` exposing seven CRUD operations as
+**Goal:** Add a `sqlite` handler module to `crux-agentic` exposing seven CRUD operations as
 named pipeline step handlers, tested with unit tests, property tests, conformance tests, and
 fuzz targets.
 
@@ -22,27 +22,28 @@ isolated SQLite databases.
 
 ## File Map
 
-| Path | Action | Purpose |
-|---|---|---|
-| `crates/cruxx-agentic/Cargo.toml` | Modify | Add `rusqlite` dep + `sqlite` feature |
-| `crates/cruxx-agentic/src/sqlite.rs` | Create | All 7 handler implementations |
-| `crates/cruxx-agentic/src/handlers.rs` | Modify | Add `sqlite::*` name constants |
-| `crates/cruxx-agentic/src/lib.rs` | Modify | Register sqlite handlers in `register_all` |
-| `crates/cruxx-agentic/tests/sqlite.rs` | Create | Unit + integration + conformance tests |
-| `crates/cruxx-agentic/tests/sqlite_prop.rs` | Create | Property tests (proptest) |
-| `fuzz/fuzz_targets/sqlite_args.rs` | Create | Fuzz target for handler arg parsing |
-| `fuzz/Cargo.toml` | Modify (or create) | Add sqlite fuzz target |
+| Path                                       | Action             | Purpose                                    |
+| ------------------------------------------ | ------------------ | ------------------------------------------ |
+| `crates/crux-agentic/Cargo.toml`           | Modify             | Add `rusqlite` dep + `sqlite` feature      |
+| `crates/crux-agentic/src/sqlite.rs`        | Create             | All 7 handler implementations              |
+| `crates/crux-agentic/src/handlers.rs`      | Modify             | Add `sqlite::*` name constants             |
+| `crates/crux-agentic/src/lib.rs`           | Modify             | Register sqlite handlers in `register_all` |
+| `crates/crux-agentic/tests/sqlite.rs`      | Create             | Unit + integration + conformance tests     |
+| `crates/crux-agentic/tests/sqlite_prop.rs` | Create             | Property tests (proptest)                  |
+| `fuzz/fuzz_targets/sqlite_args.rs`         | Create             | Fuzz target for handler arg parsing        |
+| `fuzz/Cargo.toml`                          | Modify (or create) | Add sqlite fuzz target                     |
 
 ---
 
 ## Task 1: Add `rusqlite` dependency
 
 **Files:**
-- Modify: `crates/cruxx-agentic/Cargo.toml`
+
+- Modify: `crates/crux-agentic/Cargo.toml`
 
 - [ ] **Step 1: Add the dependency**
 
-Add to `[dependencies]` in `crates/cruxx-agentic/Cargo.toml`:
+Add to `[dependencies]` in `crates/crux-agentic/Cargo.toml`:
 
 ```toml
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -54,7 +55,7 @@ The `bundled` feature compiles sqlite3 from source — no system lib required, n
 
 ```bash
 cd /Users/joe/dev/crux
-cargo check -p cruxx-agentic
+cargo check -p crux-agentic
 ```
 
 Expected: no errors. Warnings about unused deps are fine at this stage.
@@ -62,7 +63,7 @@ Expected: no errors. Warnings about unused deps are fine at this stage.
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/Cargo.toml Cargo.lock
+git -C /Users/joe/dev/crux add crates/crux-agentic/Cargo.toml Cargo.lock
 git -C /Users/joe/dev/crux commit -m "chore(agentic): add rusqlite bundled dep"
 ```
 
@@ -71,16 +72,17 @@ git -C /Users/joe/dev/crux commit -m "chore(agentic): add rusqlite bundled dep"
 ## Task 2: Add handler name constants
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/handlers.rs`
+
+- Modify: `crates/crux-agentic/src/handlers.rs`
 
 - [ ] **Step 1: Write the failing test (constants exist)**
 
-Add to `crates/cruxx-agentic/tests/handler_constants.rs` (file already exists — append):
+Add to `crates/crux-agentic/tests/handler_constants.rs` (file already exists — append):
 
 ```rust
 #[test]
 fn sqlite_constants_defined() {
-    use cruxx_agentic::handlers::{
+    use crux_agentic::handlers::{
         SQLITE_DELETE, SQLITE_EXEC, SQLITE_INSERT, SQLITE_QUERY_MANY, SQLITE_QUERY_ONE,
         SQLITE_UPDATE, SQLITE_UPSERT,
     };
@@ -98,14 +100,14 @@ fn sqlite_constants_defined() {
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic sqlite_constants_defined
+cargo nextest run -p crux-agentic sqlite_constants_defined
 ```
 
 Expected: compile error — constants not defined.
 
 - [ ] **Step 3: Add the constants**
 
-Append to `crates/cruxx-agentic/src/handlers.rs`:
+Append to `crates/crux-agentic/src/handlers.rs`:
 
 ```rust
 // sqlite
@@ -121,7 +123,7 @@ pub const SQLITE_UPSERT: &str = "sqlite::upsert";
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cargo nextest run -p cruxx-agentic sqlite_constants_defined
+cargo nextest run -p crux-agentic sqlite_constants_defined
 ```
 
 Expected: PASS.
@@ -129,8 +131,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/src/handlers.rs \
-  crates/cruxx-agentic/tests/handler_constants.rs
+git -C /Users/joe/dev/crux add crates/crux-agentic/src/handlers.rs \
+  crates/crux-agentic/tests/handler_constants.rs
 git -C /Users/joe/dev/crux commit -m "feat(agentic): add sqlite handler name constants"
 ```
 
@@ -139,15 +141,16 @@ git -C /Users/joe/dev/crux commit -m "feat(agentic): add sqlite handler name con
 ## Task 3: Implement `sqlite.rs` — core helpers
 
 **Files:**
-- Create: `crates/cruxx-agentic/src/sqlite.rs`
+
+- Create: `crates/crux-agentic/src/sqlite.rs`
 
 - [ ] **Step 1: Write failing tests for helpers**
 
-Create `crates/cruxx-agentic/tests/sqlite.rs`:
+Create `crates/crux-agentic/tests/sqlite.rs`:
 
 ```rust
-use cruxx_agentic::sqlite;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::sqlite;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 use tempfile::NamedTempFile;
 
@@ -210,23 +213,23 @@ async fn exec_missing_sql_returns_error() {
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic exec_creates_table
+cargo nextest run -p crux-agentic exec_creates_table
 ```
 
 Expected: compile error — `sqlite` module not found.
 
 - [ ] **Step 3: Implement `sqlite.rs` skeleton + `exec`**
 
-Create `crates/cruxx-agentic/src/sqlite.rs`:
+Create `crates/crux-agentic/src/sqlite.rs`:
 
 ```rust
-//! SQLite step handlers for cruxx-script pipelines.
+//! SQLite step handlers for crux-script pipelines.
 //!
 //! All handlers share the arg shape:
 //! `{ "db": "<path>", "sql": "<query>", "params": { ":name": "value" } }`
 
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use rusqlite::{Connection, named_params, types::Value as SqlValue};
 use serde_json::{Map, Value, json};
 
@@ -439,7 +442,7 @@ pub fn register(registry: &mut HandlerRegistry) {
 
 - [ ] **Step 4: Register the module in `lib.rs`**
 
-In `crates/cruxx-agentic/src/lib.rs`, add:
+In `crates/crux-agentic/src/lib.rs`, add:
 
 ```rust
 pub mod sqlite;
@@ -457,7 +460,7 @@ sqlite::register(registry);
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic exec_creates_table exec_missing_db_returns_error exec_missing_sql_returns_error
+cargo nextest run -p crux-agentic exec_creates_table exec_missing_db_returns_error exec_missing_sql_returns_error
 ```
 
 Expected: all PASS.
@@ -465,9 +468,9 @@ Expected: all PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/src/sqlite.rs \
-  crates/cruxx-agentic/src/lib.rs \
-  crates/cruxx-agentic/tests/sqlite.rs
+git -C /Users/joe/dev/crux add crates/crux-agentic/src/sqlite.rs \
+  crates/crux-agentic/src/lib.rs \
+  crates/crux-agentic/tests/sqlite.rs
 git -C /Users/joe/dev/crux commit -m "feat(agentic): implement sqlite handler module with exec"
 ```
 
@@ -476,11 +479,12 @@ git -C /Users/joe/dev/crux commit -m "feat(agentic): implement sqlite handler mo
 ## Task 4: Full CRUD integration tests (red/green)
 
 **Files:**
-- Modify: `crates/cruxx-agentic/tests/sqlite.rs`
+
+- Modify: `crates/crux-agentic/tests/sqlite.rs`
 
 - [ ] **Step 1: Write all remaining failing tests**
 
-Append to `crates/cruxx-agentic/tests/sqlite.rs`:
+Append to `crates/crux-agentic/tests/sqlite.rs`:
 
 ```rust
 #[tokio::test]
@@ -803,7 +807,7 @@ async fn all_handlers_registered() {
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic --test sqlite
+cargo nextest run -p crux-agentic --test sqlite
 ```
 
 Expected: multiple failures — impls missing or incomplete.
@@ -811,7 +815,7 @@ Expected: multiple failures — impls missing or incomplete.
 - [ ] **Step 3: Run after Task 3 implementation is in place**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test sqlite
+cargo nextest run -p crux-agentic --test sqlite
 ```
 
 Expected: all PASS.
@@ -819,7 +823,7 @@ Expected: all PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/tests/sqlite.rs
+git -C /Users/joe/dev/crux add crates/crux-agentic/tests/sqlite.rs
 git -C /Users/joe/dev/crux commit -m "test(agentic): full CRUD integration tests for sqlite handlers"
 ```
 
@@ -828,11 +832,12 @@ git -C /Users/joe/dev/crux commit -m "test(agentic): full CRUD integration tests
 ## Task 5: Property tests
 
 **Files:**
-- Create: `crates/cruxx-agentic/tests/sqlite_prop.rs`
+
+- Create: `crates/crux-agentic/tests/sqlite_prop.rs`
 
 - [ ] **Step 1: Create property test file**
 
-Create `crates/cruxx-agentic/tests/sqlite_prop.rs`:
+Create `crates/crux-agentic/tests/sqlite_prop.rs`:
 
 ```rust
 //! Property-based tests for sqlite handlers using proptest.
@@ -843,8 +848,8 @@ Create `crates/cruxx-agentic/tests/sqlite_prop.rs`:
 //! 3. insert→delete→query_many: table is always empty after delete of inserted row
 //! 4. query_many count: N inserts → query_many returns exactly N rows
 
-use cruxx_agentic::sqlite;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::sqlite;
+use crux_script::HandlerRegistry;
 use proptest::prelude::*;
 use serde_json::json;
 use tempfile::NamedTempFile;
@@ -1023,7 +1028,7 @@ proptest! {
 
 - [ ] **Step 2: Add `proptest` to dev-dependencies if not already present**
 
-Check `crates/cruxx-agentic/Cargo.toml` `[dev-dependencies]`. If `proptest` is missing, add:
+Check `crates/crux-agentic/Cargo.toml` `[dev-dependencies]`. If `proptest` is missing, add:
 
 ```toml
 proptest = { workspace = true }
@@ -1035,7 +1040,7 @@ proptest = { workspace = true }
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic --test sqlite_prop
+cargo nextest run -p crux-agentic --test sqlite_prop
 ```
 
 Expected: all 4 property test cases PASS (64 cases each).
@@ -1043,8 +1048,8 @@ Expected: all 4 property test cases PASS (64 cases each).
 - [ ] **Step 4: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/tests/sqlite_prop.rs \
-  crates/cruxx-agentic/Cargo.toml
+git -C /Users/joe/dev/crux add crates/crux-agentic/tests/sqlite_prop.rs \
+  crates/crux-agentic/Cargo.toml
 git -C /Users/joe/dev/crux commit -m "test(agentic): property tests for sqlite handler CRUD invariants"
 ```
 
@@ -1053,17 +1058,18 @@ git -C /Users/joe/dev/crux commit -m "test(agentic): property tests for sqlite h
 ## Task 6: Conformance test — handlers match registered constants
 
 **Files:**
-- Modify: `crates/cruxx-agentic/tests/sqlite.rs`
+
+- Modify: `crates/crux-agentic/tests/sqlite.rs`
 
 - [ ] **Step 1: Add conformance tests**
 
-Append to `crates/cruxx-agentic/tests/sqlite.rs`:
+Append to `crates/crux-agentic/tests/sqlite.rs`:
 
 ```rust
 /// Conformance: every constant in handlers.rs must resolve to a registered handler.
 #[test]
 fn constants_match_registered_handlers() {
-    use cruxx_agentic::handlers::{
+    use crux_agentic::handlers::{
         SQLITE_DELETE, SQLITE_EXEC, SQLITE_INSERT, SQLITE_QUERY_MANY, SQLITE_QUERY_ONE,
         SQLITE_UPDATE, SQLITE_UPSERT,
     };
@@ -1087,9 +1093,9 @@ fn constants_match_registered_handlers() {
 /// Conformance: register_all includes sqlite handlers.
 #[test]
 fn register_all_includes_sqlite() {
-    use cruxx_agentic::handlers::SQLITE_EXEC;
+    use crux_agentic::handlers::SQLITE_EXEC;
     let mut reg = HandlerRegistry::new();
-    cruxx_agentic::register_all(&mut reg);
+    crux_agentic::register_all(&mut reg);
     assert!(
         reg.get_handler(SQLITE_EXEC).is_some(),
         "register_all must include sqlite::exec"
@@ -1101,7 +1107,7 @@ fn register_all_includes_sqlite() {
 
 ```bash
 cd /Users/joe/dev/crux
-cargo nextest run -p cruxx-agentic constants_match_registered_handlers register_all_includes_sqlite
+cargo nextest run -p crux-agentic constants_match_registered_handlers register_all_includes_sqlite
 ```
 
 Expected: PASS.
@@ -1109,7 +1115,7 @@ Expected: PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/joe/dev/crux add crates/cruxx-agentic/tests/sqlite.rs
+git -C /Users/joe/dev/crux add crates/crux-agentic/tests/sqlite.rs
 git -C /Users/joe/dev/crux commit -m "test(agentic): conformance tests for sqlite constants and register_all"
 ```
 
@@ -1118,6 +1124,7 @@ git -C /Users/joe/dev/crux commit -m "test(agentic): conformance tests for sqlit
 ## Task 7: Fuzz target for handler arg parsing
 
 **Files:**
+
 - Create or modify: `fuzz/Cargo.toml`
 - Create: `fuzz/fuzz_targets/sqlite_args.rs`
 
@@ -1146,11 +1153,11 @@ test = false
 doc = false
 ```
 
-Also ensure `cruxx-agentic` is a dependency:
+Also ensure `crux-agentic` is a dependency:
 
 ```toml
 [dependencies]
-cruxx-agentic = { path = "../crates/cruxx-agentic" }
+crux-agentic = { path = "../crates/crux-agentic" }
 libfuzzer-sys = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tempfile = "3"
@@ -1163,8 +1170,8 @@ Create `fuzz/fuzz_targets/sqlite_args.rs`:
 ```rust
 #![no_main]
 
-use cruxx_agentic::sqlite;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::sqlite;
+use crux_script::HandlerRegistry;
 use libfuzzer_sys::fuzz_target;
 use rusqlite::Connection;
 use tempfile::NamedTempFile;
@@ -1259,7 +1266,7 @@ git -C /Users/joe/dev/crux commit -m "test(agentic): fuzz target for sqlite hand
 
 ```bash
 cd /Users/joe/dev/crux
-cargo clippy -p cruxx-agentic -- -D warnings
+cargo clippy -p crux-agentic -- -D warnings
 ```
 
 Fix any warnings before continuing.
@@ -1267,7 +1274,7 @@ Fix any warnings before continuing.
 - [ ] **Step 2: Run full test suite**
 
 ```bash
-cargo nextest run -p cruxx-agentic
+cargo nextest run -p crux-agentic
 ```
 
 Expected: all tests PASS.

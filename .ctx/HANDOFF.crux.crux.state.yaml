@@ -1,4 +1,4 @@
-project: cruxx
+project: crux
 branch: main
 build: passing (cargo check clean)
 tests: unknown (no test run this session)

@@ -1,0 +1,34 @@
+[package]
+name = "crux"
+description = "An agentic DSL for Rust — inspectable, serializable, replayable agent execution"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
+crux-macros = { path = "../crux-macros", version = "0.2.6" }
+crux-domain = { path = "../crux-domain", version = "0.2.6" }
+crux-script = { path = "../crux-script", version = "0.2.6", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+futures = { workspace = true }
+crux-agentic = { path = "../crux-agentic", version = "0.2.6" }
+crux-domain = { path = "../crux-domain", version = "0.2.6", features = ["tokio-pipeline"] }
+
+[features]
+default = ["tokio-runtime"]
+tokio-runtime = ["crux-runtime/tokio-runtime"]
+redb = ["crux-runtime/redb"]
+tracing = ["crux-runtime/tracing"]
+script = ["dep:crux-script"]

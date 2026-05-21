@@ -1,5 +1,5 @@
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry};
+use crux_runtime::prelude::CruxErr;
+use crux_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry};
 use serde_json::Value;
 
 pub fn register(registry: &mut HandlerRegistry) {
@@ -14,7 +14,7 @@ pub fn register(registry: &mut HandlerRegistry) {
             .deterministic(false),
         |input: Value| async move {
             eprintln!(
-                "[cruxx::ctrl::log] {}",
+                "[crux::ctrl::log] {}",
                 serde_json::to_string(&input).unwrap_or_default()
             );
             Ok(input)

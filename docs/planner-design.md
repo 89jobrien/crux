@@ -1,23 +1,23 @@
-# cruxx-planner Design
+# crux-planner Design
 
 ## Overview
 
-`cruxx-planner` is a goal-to-pipeline generation system that translates natural language goals or
-structured intent specifications into executable `.cruxx` pipelines. It sits between human intent and
-`cruxx-script` execution, automating the composition of steps from the `cruxx-agentic` handler
+`crux-planner` is a goal-to-pipeline generation system that translates natural language goals or
+structured intent specifications into executable `.crux` pipelines. It sits between human intent and
+`crux-script` execution, automating the composition of steps from the `crux-agentic` handler
 registry.
 
 ### Goals
 
 1. **Natural Language to Pipeline**: Accept unstructured goals ("Summarize and extract entities
-   from this document") and generate valid `cruxx-script` `.cruxx` pipelines.
+   from this document") and generate valid `crux-script` `.crux` pipelines.
 2. **Intent Modeling**: Support structured input (goal object with constraints, preferences, budget
    allocation) for repeatability and testing.
 3. **Static vs Dynamic Output**: Design both modes:
-   - **Static**: Planner generates a fixed `.cruxx` file, user executes via `cruxx-run`.
+   - **Static**: Planner generates a fixed `.crux` file, user executes via `crux-run`.
    - **Dynamic**: Planner generates pipelines at runtime, executed immediately without disk
      artifacts.
-4. **Handler Integration**: Understand the `cruxx-agentic` handler registry (shell, fs, git, json,
+4. **Handler Integration**: Understand the `crux-agentic` handler registry (shell, fs, git, json,
    llm modules) and compose them correctly.
 5. **Composition Rules**: Model how handlers chain (output of one as input to next), budget
    allocation, and error recovery.
@@ -30,10 +30,10 @@ registry.
 
 #### Path A: Spec + BAML Function (Recommended)
 
-Define a schema for planner input and use BAML to generate executable `.cruxx` pipelines:
+Define a schema for planner input and use BAML to generate executable `.crux` pipelines:
 
 ```yaml
-# planner-input.cruxx
+# planner-input.crux
 goal: "Summarize a text file and extract key entities"
 input_path: "document.txt"
 constraints:
@@ -52,59 +52,64 @@ BAML function (e.g., `GeneratePipeline`):
 function GeneratePipeline(goal: string, input: PlannerIntent) -> PipelineCrux {
   client: "openai"
   prompt: #"
-    Given the user goal and constraints, generate a cruxx-script pipeline.
+    Given the user goal and constraints, generate a crux-script pipeline.
 
     Goal: {{ goal }}
     Constraints: {{ input.constraints }}
     Handler Registry: [fs::read, fs::write, llm::invoke, llm::extract,
                        json::parse, json::write, shell::capture, ...]
 
-    Output: Valid BAML-generated pipeline following cruxx-script schema.
+    Output: Valid BAML-generated pipeline following crux-script schema.
   "#
 }
 ```
 
 **Pros:**
-- Reuses existing BAML infrastructure (cruxx-agentic already integrated).
-- Familiar to users (YAML-based `.cruxx` format in, `.cruxx` out).
+
+- Reuses existing BAML infrastructure (crux-agentic already integrated).
+- Familiar to users (YAML-based `.crux` format in, `.crux` out).
 - Easy testing: golden pipeline snapshots.
 
 **Cons:**
+
 - Requires LLM call for every plan generation (latency, cost).
 - Less control over composition rules (LLM may hallucinate handlers).
 
-#### Path B: New Crate (`cruxx-planner`)
+#### Path B: New Crate (`crux-planner`)
 
 Implement a Rust crate with:
+
 - Goal/Intent AST
 - Handler registry query interface
 - Composition rules engine
-- Code generation to `.cruxx` pipelines
+- Code generation to `.crux` pipelines
 
 ```rust
-use cruxx_planner::{Goal, Planner, PlannerConfig};
+use crux_planner::{Goal, Planner, PlannerConfig};
 
 let goal = Goal::new("Summarize document and extract entities");
 let planner = Planner::new(PlannerConfig::default());
 let pipeline = planner.plan(&goal)?;
 
-// Write to .cruxx file or execute directly
-cruxx_script::execute(&pipeline, input).await?
+// Write to .crux file or execute directly
+crux_script::execute(&pipeline, input).await?
 ```
 
 **Pros:**
+
 - Deterministic (no LLM, no latency).
 - Composable (rules expressed as Rust code).
 - Replayable (same input always produces same pipeline).
 
 **Cons:**
+
 - New crate to maintain.
 - Harder to extend (requires code changes vs. prompt tuning).
 - Less flexible for novel compositions.
 
 ---
 
-## Interaction with cruxx-script
+## Interaction with crux-script
 
 ### ArmDef and StepNode Schema
 
@@ -115,7 +120,7 @@ node). Planner must respect:
 2. **Step Ordering**: Steps execute sequentially or fan-out via `join_all`.
 3. **Data Flow**: Output of step N becomes input to step N+1, unless explicitly routed.
 4. **Pipe Stages**: Multi-stage transforms within a single step (e.g., `pipe([extract, validate,
-   format])`).
+format])`).
 5. **Speculate Arms**: Alternative paths picked by `pick_best_by` or `first_ok`.
 
 ### Integration Points
@@ -148,7 +153,7 @@ intent:
   # Input specification
   input_source:
     type: file
-    path: "research_paper.pdf"  # Planner may infer fs::read, pdf::extract
+    path: "research_paper.pdf" # Planner may infer fs::read, pdf::extract
 
   # Output specification
   output_destination:
@@ -176,7 +181,7 @@ intent:
 ```yaml
 hints:
   handler_sequence: [fs::read, llm::extract, json::write]
-  prefer_speculate_on: [extract]  # Offer multiple extraction styles
+  prefer_speculate_on: [extract] # Offer multiple extraction styles
   error_recovery: escalate_to_human
 ```
 
@@ -184,7 +189,7 @@ hints:
 
 ## Output Schema
 
-Generated pipeline follows cruxx-script structure:
+Generated pipeline follows crux-script structure:
 
 ```yaml
 pipeline: my_pipeline_name
@@ -199,7 +204,7 @@ steps:
     handler: llm::extract
     function: Summarize
     input:
-      text: "$step:read"  # Reference previous step output
+      text: "$step:read" # Reference previous step output
       max_sentences: 3
 
   - step: output
@@ -217,21 +222,21 @@ steps:
 ### Static Mode
 
 **Input:** NL goal or structured intent
-**Output:** `.cruxx` file on disk
-**Execution:** User runs `cruxx-run <generated>.cruxx <input>.json`
+**Output:** `.crux` file on disk
+**Execution:** User runs `crux-run <generated>.crux <input>.json`
 
 ```bash
-cruxx-planner plan --goal "summarize and extract" --output my_pipeline.cruxx
-cruxx-run my_pipeline.cruxx input.json
+crux-planner plan --goal "summarize and extract" --output my_pipeline.crux
+crux-run my_pipeline.crux input.json
 ```
 
 **Use case:** One-off scripts, reusable templates, version control.
 
 ### Dynamic Mode
 
-**Input:** Intent object (struct or `.cruxx` file)
+**Input:** Intent object (struct or `.crux` file)
 **Output:** In-memory `Pipeline` value
-**Execution:** Planner calls `cruxx_script::execute()` directly, or returns pipeline for caller to
+**Execution:** Planner calls `crux_script::execute()` directly, or returns pipeline for caller to
 execute
 
 ```rust
@@ -278,7 +283,7 @@ steps:
     handler: git::diff
     base_ref: origin/main
 
-  - step: summarize_changes    # speculate: try 2 summarization approaches
+  - step: summarize_changes # speculate: try 2 summarization approaches
     handler: llm::extract
     speculate:
       - name: by_file
@@ -302,38 +307,44 @@ steps:
 ## Implementation Roadmap
 
 ### Phase 1: Design & Spec (Now)
-- [ ] Finalize input/output schemas (`.cruxx` format + Rust enums)
+
+- [ ] Finalize input/output schemas (`.crux` format + Rust enums)
 - [ ] Model handler registry interface
 - [ ] Define composition rules
 - [ ] Snapshot golden pipeline examples (10-15 test cases)
 
 ### Phase 2: Path A (BAML-based, Low Effort)
+
 - [x] Write BAML function schema for pipeline generation (`baml_src/planner.baml`)
-- [x] Wire to `cruxx-agentic` planner module (`crates/cruxx-agentic/src/planner.rs`)
-- [x] Implement `planner::generate_pipeline(goal) -> String` (returns `.cruxx` pipeline YAML)
-- [x] `LlmPlanner` type in `cruxx-planner` delegates to `cruxx-agentic::planner` (feature `baml`)
-- [ ] CLI: `cruxx-planner plan --goal "..." --output plan.cruxx`
+- [x] Wire to `crux-agentic` planner module (`crates/crux-agentic/src/planner.rs`)
+- [x] Implement `planner::generate_pipeline(goal) -> String` (returns `.crux` pipeline YAML)
+- [x] `LlmPlanner` type in `crux-planner` delegates to `crux-agentic::planner` (feature `baml`)
+- [ ] CLI: `crux-planner plan --goal "..." --output plan.crux`
 - [ ] Integration tests with OPENAI_API_KEY (test exists, gated `#[ignore]`)
 
 ### Phase 3: Path B (Rust Crate, High Effort, Future)
-- [ ] New crate `cruxx-planner` with AST + codegen
+
+- [ ] New crate `crux-planner` with AST + codegen
 - [ ] Handler registry manifest (JSON or Rust derive)
 - [ ] Composition rules engine (type checker + optimizer)
 - [ ] `Planner::plan(&goal) -> Pipeline` (deterministic)
 
 ### Phase 4: Refinement
+
 - [ ] Performance tuning (caching, parallelization)
 - [ ] User feedback loops (plan explanation, debugging)
-- [ ] Dynamic mode integration with `cruxx_script::execute`
+- [ ] Dynamic mode integration with `crux_script::execute`
 
 ---
 
 ## Example Use Cases
 
 ### 1. Data Processing Pipeline
+
 **Goal:** "Read CSV, parse rows, extract email addresses, write to JSON"
 
 Generated pipeline:
+
 ```yaml
 steps:
   - step: read
@@ -353,9 +364,11 @@ steps:
 ```
 
 ### 2. Code Review Assistant
+
 **Goal:** "Review a git commit, summarize changes, flag issues, generate suggestions"
 
 Generated pipeline:
+
 ```yaml
 steps:
   - step: diff
@@ -376,15 +389,17 @@ steps:
 ```
 
 ### 3. Interactive Chat
-**Goal:** "Have a conversation with a cruxx agent about this document"
+
+**Goal:** "Have a conversation with a crux agent about this document"
 
 Dynamic mode:
+
 ```rust
 let intent = Intent::new("Chat: answer questions about document.txt");
 let planner = Planner::new();
 let pipeline = planner.plan(&intent).await?;
 // Execute interactively, collect user input per step
-cruxx_script::execute_interactive(&pipeline, user_input).await?
+crux_script::execute_interactive(&pipeline, user_input).await?
 ```
 
 ---
@@ -405,7 +420,7 @@ cruxx_script::execute_interactive(&pipeline, user_input).await?
 
 ## References
 
-- `cruxx-script`: Pipeline schema in `crates/cruxx-script/src/schema.rs`
-- `cruxx-agentic`: Handler registry in `crates/cruxx-agentic/src/lib.rs`
-- BAML integration: `crates/cruxx-agentic/baml_src/`
-- ArmDef and StepNode: `crates/cruxx-core/src/types/step.rs`
+- `crux-script`: Pipeline schema in `crates/crux-script/src/schema.rs`
+- `crux-agentic`: Handler registry in `crates/crux-agentic/src/lib.rs`
+- BAML integration: `crates/crux-agentic/baml_src/`
+- ArmDef and StepNode: `crates/crux-runtime/src/types/step.rs`

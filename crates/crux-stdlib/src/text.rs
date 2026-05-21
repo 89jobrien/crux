@@ -1,4 +1,4 @@
-use cruxx_script::{HandlerMetadata, HandlerRegistry, RiskLevel};
+use crux_script::{HandlerMetadata, HandlerRegistry, RiskLevel};
 use serde_json::{Value, json};
 
 pub fn register(registry: &mut HandlerRegistry) {

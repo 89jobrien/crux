@@ -1,5 +1,5 @@
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel};
+use crux_runtime::prelude::CruxErr;
+use crux_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel};
 use serde_json::{Map, Value, json};
 
 use crate::error::require_str;

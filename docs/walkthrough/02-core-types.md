@@ -5,13 +5,13 @@
 
 ## The five types that matter
 
-| Type      | Analogue you already know              | What it adds                             |
-| --------- | -------------------------------------- | ---------------------------------------- |
-| `Crux<T>` | `Result<T, E>` + `tracing::Span` fused | Records every step as part of the value  |
-| `Step`    | A span event or log line               | First-class, typed, serializable         |
-| `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope          |
-| `Agent`   | A struct with an `async fn run`        | Declarative, type-level lifecycle hooks  |
-| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[cruxx::agent]` function |
+| Type      | Analogue you already know              | What it adds                            |
+| --------- | -------------------------------------- | --------------------------------------- |
+| `Crux<T>` | `Result<T, E>` + `tracing::Span` fused | Records every step as part of the value |
+| `Step`    | A span event or log line               | First-class, typed, serializable        |
+| `CruxErr` | `anyhow::Error`                        | Keeps the failing step in scope         |
+| `Agent`   | A struct with an `async fn run`        | Declarative, type-level lifecycle hooks |
+| `CruxCtx` | `tokio::task_local!` context           | Scoped to the `#[crux::agent]` function |
 
 The rest of this chapter walks through each one.
 
@@ -63,7 +63,7 @@ match result.value() {
 }
 ```
 
-The `?` operator works _inside_ an `#[cruxx::agent]` function because the macro rewrites it
+The `?` operator works _inside_ an `#[crux::agent]` function because the macro rewrites it
 to propagate through the context. Outside an agent, call `.value()` or `.into_value()` to
 extract the inner `Result`.
 
@@ -141,7 +141,7 @@ pub enum StepStatus {
 ### Why `confidence` is a built-in field
 
 This is the most significant departure from `tracing` / OpenTelemetry. Those libraries treat a
-span as a timing primitive — it happened, here is how long it took. `cruxx::` treats a step as
+span as a timing primitive — it happened, here is how long it took. `crux::` treats a step as
 an _epistemic_ primitive: it happened, here is how sure we are the output is correct.
 
 That score drives three independent mechanisms:
@@ -178,7 +178,7 @@ Three things to notice:
 2. **`Delegation` nests.** When an agent you delegated to failed, the error is
    `Delegation { to: "drafter", source: Box::new(StepFailed { ... }) }`. Unwrap as deep as
    needed to locate the root fault.
-3. **`ReplayMismatch` is a first-class variant.** Replay is a language feature in `cruxx::`,
+3. **`ReplayMismatch` is a first-class variant.** Replay is a language feature in `crux::`,
    not a library concern. It fails loudly when your code changes in a way that invalidates a
    saved trace.
 
@@ -227,25 +227,25 @@ pub trait Agent: Send + Sync + 'static {
 }
 ```
 
-You almost never write this impl by hand. The `#[cruxx::agent]` attribute generates the impl
+You almost never write this impl by hand. The `#[crux::agent]` attribute generates the impl
 from a free `async fn`. You implement it directly only when you need to override the lifecycle
 hooks at the _type_ level — typically for an agent delegated to from many callers that requires
 consistent recovery behavior everywhere.
 
 ### When to use a free function vs. an `Agent` impl
 
-| Use a free function             | Use an `impl Agent`                             |
-| ------------------------------- | ----------------------------------------------- |
-| Called from one place           | Many callers delegate to it                     |
-| Lifecycle hooks differ per call | Lifecycle hooks are stable per agent type       |
-| Rapid iteration                 | You want a registered `AgentId` (chapter 04)    |
-| No registry involvement         | Agent appears in `TaskRegistry` submissions     |
+| Use a free function             | Use an `impl Agent`                          |
+| ------------------------------- | -------------------------------------------- |
+| Called from one place           | Many callers delegate to it                  |
+| Lifecycle hooks differ per call | Lifecycle hooks are stable per agent type    |
+| Rapid iteration                 | You want a registered `AgentId` (chapter 04) |
+| No registry involvement         | Agent appears in `TaskRegistry` submissions  |
 
 ---
 
 ## `CruxCtx`
 
-The `ctx` binding inside `#[cruxx::agent]` functions is of type `&mut CruxCtx`. You do not
+The `ctx` binding inside `#[crux::agent]` functions is of type `&mut CruxCtx`. You do not
 construct it yourself — the macro does, then calls `finalize()` to produce the `Crux<T>`.
 
 `CruxCtx` implements the `Context` trait, which is the DIP abstraction used in tests to inject
@@ -353,5 +353,5 @@ enforces limits through `BudgetTracker` and raises `CruxErr::BudgetExceeded` on 
 
 ---
 
-Chapter **03** puts these types to work on branching and delegation — where `cruxx::` diverges
+Chapter **03** puts these types to work on branching and delegation — where `crux::` diverges
 most from regular Rust.

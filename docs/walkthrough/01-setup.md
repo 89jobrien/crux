@@ -15,7 +15,7 @@ The two key language features that make the programming model work are:
   uses `async fn run(...)` directly. There is no `#[async_trait]` macro in this codebase and none
   is needed in yours.
 - **Edition 2024 resolver semantics**. Feature unification behaves differently in edition 2024.
-  Use it in every crate that depends on `cruxx`.
+  Use it in every crate that depends on `crux`.
 
 Check your toolchain:
 
@@ -35,20 +35,20 @@ rustup update stable
 ## Scaffolding a Project
 
 ```bash
-cargo new hello-cruxx
-cd hello-cruxx
+cargo new hello-crux
+cd hello-crux
 ```
 
 Open `Cargo.toml` and add the dependencies:
 
 ```toml
 [package]
-name    = "hello-cruxx"
+name    = "hello-crux"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cruxx      = { version = "0.2", features = ["tokio-runtime"] }
+crux      = { version = "0.2", features = ["tokio-runtime"] }
 tokio      = { version = "1", features = ["full"] }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -76,9 +76,9 @@ all you need to serialize traces to JSON.
 Replace the contents of `src/main.rs`:
 
 ```rust
-use cruxx::prelude::*;
+use crux::prelude::*;
 
-#[cruxx::agent]
+#[crux::agent]
 async fn hello(name: String) -> Crux<String> {
     let greeting = x.step("greet", || async {
         Ok(format!("hello, {}", name))
@@ -132,7 +132,7 @@ There are three things worth understanding before moving forward.
 
 ### 1. The macro injects `x`
 
-`#[cruxx::agent]` transforms the async function. It injects a `&mut CruxCtx` variable named `x`
+`#[crux::agent]` transforms the async function. It injects a `&mut CruxCtx` variable named `x`
 into the function body and wraps the whole thing in glue that creates the context, drives
 execution, and calls `finalize()` to produce the `Crux<T>`.
 

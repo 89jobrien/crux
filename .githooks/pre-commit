@@ -14,8 +14,8 @@ fmt() {
 }
 
 # Ensure generated baml_client stub exists so cargo fmt doesn't fail
-mkdir -p crates/cruxx-agentic/src/baml_client
-[[ -f crates/cruxx-agentic/src/baml_client/mod.rs ]] || touch crates/cruxx-agentic/src/baml_client/mod.rs
+mkdir -p crates/crux-agentic/src/baml_client
+[[ -f crates/crux-agentic/src/baml_client/mod.rs ]] || touch crates/crux-agentic/src/baml_client/mod.rs
 
 # Guard against accidental cross-directory staging
 if [[ -n "$GIT_PREFIX" ]]; then

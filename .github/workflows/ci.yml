@@ -20,7 +20,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: stub generated modules for fmt
-        run: mkdir -p crates/cruxx-agentic/src/baml_client && touch crates/cruxx-agentic/src/baml_client/mod.rs
+        run: mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy

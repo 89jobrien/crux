@@ -3,14 +3,14 @@
 ## Goal
 
 Replace all 31 `ctrl::noop` placeholders across 5 example pipelines with real
-handler implementations in `cruxx-agentic`, organized into 4 new modules.
+handler implementations in `crux-agentic`, organized into 4 new modules.
 
 ## Architecture
 
-- **Crate**: `cruxx-agentic` (all new code lives here)
+- **Crate**: `crux-agentic` (all new code lives here)
 - **New modules**: `analysis.rs`, `ci.rs`, `review.rs`, `triage.rs`
 - **No new dependencies**: all handlers use `serde_json`, `tokio::process::Command`,
-  and existing `cruxx_core::prelude::CruxErr` / `cruxx_script` types
+  and existing `crux_runtime::prelude::CruxErr` / `crux_script` types
 - **Data flow**: pipeline YAML `args` -> handler `input: Value` -> pure JSON transform
   or `shell::capture`-style subprocess -> `Result<Value, CruxErr>`
 - **Confidence**: handlers that feed `route_on_confidence` or `speculate: pick_best`
@@ -19,30 +19,30 @@ handler implementations in `cruxx-agentic`, organized into 4 new modules.
 
 ## Files to Create
 
-| File                                        | Purpose                     |
-| ------------------------------------------- | --------------------------- |
-| `crates/cruxx-agentic/src/analysis.rs`      | Trace analysis handlers (9) |
-| `crates/cruxx-agentic/src/ci.rs`            | CI log parsing handlers (8) |
-| `crates/cruxx-agentic/src/review.rs`        | PR review handlers (5)      |
-| `crates/cruxx-agentic/src/triage.rs`        | Doob triage handlers (4)    |
-| `crates/cruxx-agentic/tests/analysis.rs`    | Tests for analysis handlers |
-| `crates/cruxx-agentic/tests/ci_handlers.rs` | Tests for CI handlers       |
-| `crates/cruxx-agentic/tests/review.rs`      | Tests for review handlers   |
-| `crates/cruxx-agentic/tests/triage.rs`      | Tests for triage handlers   |
+| File                                       | Purpose                     |
+| ------------------------------------------ | --------------------------- |
+| `crates/crux-agentic/src/analysis.rs`      | Trace analysis handlers (9) |
+| `crates/crux-agentic/src/ci.rs`            | CI log parsing handlers (8) |
+| `crates/crux-agentic/src/review.rs`        | PR review handlers (5)      |
+| `crates/crux-agentic/src/triage.rs`        | Doob triage handlers (4)    |
+| `crates/crux-agentic/tests/analysis.rs`    | Tests for analysis handlers |
+| `crates/crux-agentic/tests/ci_handlers.rs` | Tests for CI handlers       |
+| `crates/crux-agentic/tests/review.rs`      | Tests for review handlers   |
+| `crates/crux-agentic/tests/triage.rs`      | Tests for triage handlers   |
 
 ## Files to Modify
 
-| File                                         | Change                                 |
-| -------------------------------------------- | -------------------------------------- |
-| `crates/cruxx-agentic/src/lib.rs`            | Add `pub mod` + `register()` calls     |
-| `crates/cruxx-agentic/src/handlers.rs`       | Add 26 handler name constants          |
-| `crates/cruxx-agentic/tests/register_all.rs` | Add new handlers to expected list      |
-| `examples/joe/agent_meta_eval.crux`          | Replace 9 noops                        |
-| `examples/joe/ci_triage.yaml`                | Replace 8 noops                        |
-| `examples/joe/crate_refactor.yaml`           | Replace 6 noops                        |
-| `examples/joe/pr_review.crux`                | Replace 5 noops                        |
-| `examples/joe/doob_triage.yaml`              | Replace 4 noops                        |
-| `docs/crux-capabilities.md`                  | Add new handlers, remove resolved gaps |
+| File                                        | Change                                 |
+| ------------------------------------------- | -------------------------------------- |
+| `crates/crux-agentic/src/lib.rs`            | Add `pub mod` + `register()` calls     |
+| `crates/crux-agentic/src/handlers.rs`       | Add 26 handler name constants          |
+| `crates/crux-agentic/tests/register_all.rs` | Add new handlers to expected list      |
+| `examples/joe/agent_meta_eval.crux`         | Replace 9 noops                        |
+| `examples/joe/ci_triage.yaml`               | Replace 8 noops                        |
+| `examples/joe/crate_refactor.yaml`          | Replace 6 noops                        |
+| `examples/joe/pr_review.crux`               | Replace 5 noops                        |
+| `examples/joe/doob_triage.yaml`             | Replace 4 noops                        |
+| `docs/crux-capabilities.md`                 | Add new handlers, remove resolved gaps |
 
 ## Handler Inventory
 
@@ -59,8 +59,8 @@ All operate on a JSON array of Step objects (trace input).
 | `analysis::tighten_budget`     | `handler`       | `{ token_spend, budget }` merged from prior steps | `HandlerOutput::with_confidence(patch, score)` where score = spend/budget ratio |
 | `analysis::compress_stages`    | `handler_value` | `{ latency_profile, token_spend }`                | `{ suggestions: [{stage, reason, action}] }`                                    |
 | `analysis::tune_retry`         | `handler_value` | `{ failure_clusters }`                            | `{ suggestions: [{step_name, retry_count, backoff_ms}] }`                       |
-| `analysis::patch_schema_check` | `handler_value` | `{ patch }` (YAML string)                         | `{ valid: bool, errors: [] }` via `cruxx check` subprocess                      |
-| `analysis::replay_dry_run`     | `handler_value` | `{ patch, trace_path }`                           | `{ ok: bool, mismatches: [] }` via `cruxx replay` subprocess                    |
+| `analysis::patch_schema_check` | `handler_value` | `{ patch }` (YAML string)                         | `{ valid: bool, errors: [] }` via `crux check` subprocess                       |
+| `analysis::replay_dry_run`     | `handler_value` | `{ patch, trace_path }`                           | `{ ok: bool, mismatches: [] }` via `crux replay` subprocess                     |
 
 ### ci.rs (8 handlers)
 
@@ -114,19 +114,19 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 ### Task 1: Create `analysis.rs` module
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/src/analysis.rs`
-**Run**: `cargo nextest run -p cruxx-agentic -- analysis`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/src/analysis.rs`
+**Run**: `cargo nextest run -p crux-agentic -- analysis`
 
-1. Write failing test in `crates/cruxx-agentic/tests/analysis.rs`:
+1. Write failing test in `crates/crux-agentic/tests/analysis.rs`:
 
    ```rust
-   use cruxx_script::HandlerRegistry;
+   use crux_script::HandlerRegistry;
    use serde_json::json;
 
    fn registry() -> HandlerRegistry {
        let mut r = HandlerRegistry::new();
-       cruxx_agentic::analysis::register(&mut r);
+       crux_agentic::analysis::register(&mut r);
        r
    }
 
@@ -274,15 +274,15 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-agentic -- analysis`
+   Run: `cargo nextest run -p crux-agentic -- analysis`
    Expected: FAIL (module doesn't exist)
 
-2. Implement `crates/cruxx-agentic/src/analysis.rs`:
+2. Implement `crates/crux-agentic/src/analysis.rs`:
 
    ```rust
    use chrono::{DateTime, Utc};
-   use cruxx_core::prelude::CruxErr;
-   use cruxx_script::{HandlerOutput, HandlerRegistry};
+   use crux_runtime::prelude::CruxErr;
+   use crux_script::{HandlerOutput, HandlerRegistry};
    use serde_json::{Map, Value, json};
    use std::collections::HashMap;
 
@@ -657,8 +657,8 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
                    }));
                }
 
-               // Write patch to temp file, run cruxx replay in lenient mode
-               let tmp = std::env::temp_dir().join("cruxx-replay-patch.yaml");
+               // Write patch to temp file, run crux replay in lenient mode
+               let tmp = std::env::temp_dir().join("crux-replay-patch.yaml");
                tokio::fs::write(&tmp, patch)
                    .await
                    .map_err(|e| {
@@ -668,7 +668,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
                        )
                    })?;
 
-               let output = tokio::process::Command::new("cruxx")
+               let output = tokio::process::Command::new("crux")
                    .args(["replay", "--lenient", trace_path,
                           tmp.to_str().unwrap_or("")])
                    .output()
@@ -698,27 +698,27 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 3. Verify:
 
    ```bash
-   cargo nextest run -p cruxx-agentic -- analysis  -> all green
-   cargo clippy -p cruxx-agentic -- -D warnings    -> zero warnings
+   cargo nextest run -p crux-agentic -- analysis  -> all green
+   cargo clippy -p crux-agentic -- -D warnings    -> zero warnings
    ```
 
 4. Commit: `git commit -m "feat(agentic): add analysis handler module (9 handlers)"`
 
 ### Task 2: Create `ci.rs` module
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/src/ci.rs`
-**Run**: `cargo nextest run -p cruxx-agentic -- ci`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/src/ci.rs`
+**Run**: `cargo nextest run -p crux-agentic -- ci`
 
-1. Write failing test in `crates/cruxx-agentic/tests/ci_handlers.rs`:
+1. Write failing test in `crates/crux-agentic/tests/ci_handlers.rs`:
 
    ```rust
-   use cruxx_script::HandlerRegistry;
+   use crux_script::HandlerRegistry;
    use serde_json::json;
 
    fn registry() -> HandlerRegistry {
        let mut r = HandlerRegistry::new();
-       cruxx_agentic::ci::register(&mut r);
+       crux_agentic::ci::register(&mut r);
        r
    }
 
@@ -831,14 +831,14 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-agentic -- ci`
+   Run: `cargo nextest run -p crux-agentic -- ci`
    Expected: FAIL
 
-2. Implement `crates/cruxx-agentic/src/ci.rs`:
+2. Implement `crates/crux-agentic/src/ci.rs`:
 
    ```rust
-   use cruxx_core::prelude::CruxErr;
-   use cruxx_script::{HandlerOutput, HandlerRegistry};
+   use crux_runtime::prelude::CruxErr;
+   use crux_script::{HandlerOutput, HandlerRegistry};
    use serde_json::{Value, json};
    use std::collections::{HashMap, HashSet};
 
@@ -1231,27 +1231,27 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 3. Verify:
 
    ```bash
-   cargo nextest run -p cruxx-agentic -- ci  -> all green
-   cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
+   cargo nextest run -p crux-agentic -- ci  -> all green
+   cargo clippy -p crux-agentic -- -D warnings  -> zero warnings
    ```
 
 4. Commit: `git commit -m "feat(agentic): add ci handler module (8 handlers)"`
 
 ### Task 3: Create `review.rs` module
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/src/review.rs`
-**Run**: `cargo nextest run -p cruxx-agentic -- review`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/src/review.rs`
+**Run**: `cargo nextest run -p crux-agentic -- review`
 
-1. Write failing test in `crates/cruxx-agentic/tests/review.rs`:
+1. Write failing test in `crates/crux-agentic/tests/review.rs`:
 
    ```rust
-   use cruxx_script::HandlerRegistry;
+   use crux_script::HandlerRegistry;
    use serde_json::json;
 
    fn registry() -> HandlerRegistry {
        let mut r = HandlerRegistry::new();
-       cruxx_agentic::review::register(&mut r);
+       crux_agentic::review::register(&mut r);
        r
    }
 
@@ -1327,14 +1327,14 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-agentic -- review`
+   Run: `cargo nextest run -p crux-agentic -- review`
    Expected: FAIL
 
-2. Implement `crates/cruxx-agentic/src/review.rs`:
+2. Implement `crates/crux-agentic/src/review.rs`:
 
    ```rust
-   use cruxx_core::prelude::CruxErr;
-   use cruxx_script::{HandlerOutput, HandlerRegistry};
+   use crux_runtime::prelude::CruxErr;
+   use crux_script::{HandlerOutput, HandlerRegistry};
    use serde_json::{Value, json};
 
    pub fn register(registry: &mut HandlerRegistry) {
@@ -1575,27 +1575,27 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 3. Verify:
 
    ```bash
-   cargo nextest run -p cruxx-agentic -- review  -> all green
-   cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
+   cargo nextest run -p crux-agentic -- review  -> all green
+   cargo clippy -p crux-agentic -- -D warnings  -> zero warnings
    ```
 
 4. Commit: `git commit -m "feat(agentic): add review handler module (5 handlers)"`
 
 ### Task 4: Create `triage.rs` module
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/src/triage.rs`
-**Run**: `cargo nextest run -p cruxx-agentic -- triage`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/src/triage.rs`
+**Run**: `cargo nextest run -p crux-agentic -- triage`
 
-1. Write failing test in `crates/cruxx-agentic/tests/triage.rs`:
+1. Write failing test in `crates/crux-agentic/tests/triage.rs`:
 
    ```rust
-   use cruxx_script::HandlerRegistry;
+   use crux_script::HandlerRegistry;
    use serde_json::json;
 
    fn registry() -> HandlerRegistry {
        let mut r = HandlerRegistry::new();
-       cruxx_agentic::triage::register(&mut r);
+       crux_agentic::triage::register(&mut r);
        r
    }
 
@@ -1672,14 +1672,14 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-agentic -- triage`
+   Run: `cargo nextest run -p crux-agentic -- triage`
    Expected: FAIL
 
-2. Implement `crates/cruxx-agentic/src/triage.rs`:
+2. Implement `crates/crux-agentic/src/triage.rs`:
 
    ```rust
    use chrono::{DateTime, Utc};
-   use cruxx_script::HandlerRegistry;
+   use crux_script::HandlerRegistry;
    use serde_json::{Value, json};
    use std::collections::HashMap;
 
@@ -1885,17 +1885,17 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 3. Verify:
 
    ```bash
-   cargo nextest run -p cruxx-agentic -- triage  -> all green
-   cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
+   cargo nextest run -p crux-agentic -- triage  -> all green
+   cargo clippy -p crux-agentic -- -D warnings  -> zero warnings
    ```
 
 4. Commit: `git commit -m "feat(agentic): add triage handler module (4 handlers)"`
 
 ### Task 5: Wire modules into `lib.rs` and `register_all`
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/src/lib.rs`, `crates/cruxx-agentic/src/handlers.rs`
-**Run**: `cargo nextest run -p cruxx-agentic`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/src/lib.rs`, `crates/crux-agentic/src/handlers.rs`
+**Run**: `cargo nextest run -p crux-agentic`
 
 1. Add to `lib.rs` after `pub mod sqlite;`:
 
@@ -1958,17 +1958,17 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 5. Verify:
 
    ```bash
-   cargo nextest run -p cruxx-agentic  -> all green
-   cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
+   cargo nextest run -p crux-agentic  -> all green
+   cargo clippy -p crux-agentic -- -D warnings  -> zero warnings
    ```
 
 6. Commit: `git commit -m "feat(agentic): wire analysis/ci/review/triage into register_all"`
 
 ### Task 6: Check `serde_yaml` and `chrono` dependencies
 
-**Crate**: `cruxx-agentic`
-**File(s)**: `crates/cruxx-agentic/Cargo.toml`
-**Run**: `cargo check -p cruxx-agentic`
+**Crate**: `crux-agentic`
+**File(s)**: `crates/crux-agentic/Cargo.toml`
+**Run**: `cargo check -p crux-agentic`
 
 1. Verify `chrono` and `serde_yaml` are in `Cargo.toml`. If missing, add:
 
@@ -1977,7 +1977,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
    serde_yaml = "0.9"
    ```
 
-2. Run: `cargo check -p cruxx-agentic`
+2. Run: `cargo check -p crux-agentic`
 
 3. Commit (if changed):
    `git commit -m "chore(agentic): add chrono and serde_yaml deps"`

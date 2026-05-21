@@ -1,8 +1,8 @@
 //! BAML-backed structured extraction and decomposition handlers.
 
 use crate::baml_client::async_client::B;
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::{HandlerOutput, HandlerRegistry};
+use crux_runtime::prelude::CruxErr;
+use crux_script::{HandlerOutput, HandlerRegistry};
 use serde_json::{Value, json};
 
 /// Register the `llm::extract` handler.

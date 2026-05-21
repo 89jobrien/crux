@@ -11,9 +11,9 @@ agents to improve their own behavior across sessions.
 
 Two projects, two responsibilities:
 
-1. **`cruxx-improve`** (new crate in `~/dev/crux` workspace) — shared
+1. **`crux-improve`** (new crate in `~/dev/crux` workspace) — shared
    vocabulary + bridge layer between crux and any improvement consumer.
-   Like `slashcrux` is for slash/crux, `cruxx-improve` is for
+   Like `slashcrux` is for slash/crux, `crux-improve` is for
    crux/praxis. Owns:
    - **`TraceMetrics`** — extracted from a `Crux<T>`: success rate, avg
      confidence, duration, step count, delegation depth, speculation hit
@@ -30,7 +30,7 @@ Two projects, two responsibilities:
      `HarnessDiff`, `RunMetrics`.
 
 2. **`~/dev/praxis`** (new standalone workspace) — the improvement loop.
-   Depends on `cruxx-improve` as its single crux dependency. Owns:
+   Depends on `crux-improve` as its single crux dependency. Owns:
    - Port traits: `Evaluator`, `StrategyPlanner`, `StrategyStore`,
      `RewardAccumulator`
    - Adapters: `StubEvaluator`, `DeterministicStrategyPlanner`,
@@ -39,7 +39,7 @@ Two projects, two responsibilities:
 
 ```
 ~/dev/crux/crates/
-  cruxx-improve/
+  crux-improve/
     src/
       lib.rs               # re-exports + module declarations
       metrics.rs           # TraceMetrics extraction from Crux<T>
@@ -57,19 +57,20 @@ Two projects, two responsibilities:
 ```
 
 **Dependency direction:**
+
 ```
-praxis -> cruxx-improve -> cruxx-core, cruxx-types, cruxx-planner
+praxis -> crux-improve -> crux-runtime, crux-types, crux-planner
 ```
 
-Praxis never imports `cruxx-core`, `cruxx-types`, or `cruxx-planner`
-directly — `cruxx-improve` is the single entry point.
+Praxis never imports `crux-runtime`, `crux-types`, or `crux-planner`
+directly — `crux-improve` is the single entry point.
 
 ## Tech Stack
 
 - Rust edition 2024, MSRV 1.85 (matching crux)
-- `cruxx-improve`: depends on `cruxx-core`, `cruxx-types`,
-  `cruxx-planner` (workspace path deps inside crux)
-- `praxis`: depends on `cruxx-improve` (git dep from `~/dev/crux`)
+- `crux-improve`: depends on `crux-runtime`, `crux-types`,
+  `crux-planner` (workspace path deps inside crux)
+- `praxis`: depends on `crux-improve` (git dep from `~/dev/crux`)
 - Shared: `serde`, `serde_json`, `chrono`, `thiserror`, `async-trait`
 - `praxis-store`: `rusqlite` (bundled) for `SqliteRewardStore`
 - `praxis`: `tokio`, `clap` for CLI
@@ -78,24 +79,25 @@ directly — `cruxx-improve` is the single entry point.
 
 ## Tasks
 
-### Task 0: cruxx-improve — TraceMetrics and comparison (in crux workspace)
+### Task 0: crux-improve — TraceMetrics and comparison (in crux workspace)
 
-**Crate**: `cruxx-improve`
-**File(s)**: `crates/cruxx-improve/Cargo.toml`,
-`crates/cruxx-improve/src/lib.rs`,
-`crates/cruxx-improve/src/metrics.rs`,
-`crates/cruxx-improve/src/comparison.rs`
-**Run**: `cargo nextest run -p cruxx-improve`
+**Crate**: `crux-improve`
+**File(s)**: `crates/crux-improve/Cargo.toml`,
+`crates/crux-improve/src/lib.rs`,
+`crates/crux-improve/src/metrics.rs`,
+`crates/crux-improve/src/comparison.rs`
+**Run**: `cargo nextest run -p crux-improve`
 
 1. Write failing test:
+
    ```rust
-   // crates/cruxx-improve/src/metrics.rs
+   // crates/crux-improve/src/metrics.rs
    #[cfg(test)]
    mod tests {
        use super::*;
-       use cruxx_types::crux_value::Crux;
-       use cruxx_types::id::CruxId;
-       use cruxx_types::step::{Step, StepKind, StepStatus};
+       use crux_types::crux_value::Crux;
+       use crux_types::id::CruxId;
+       use crux_types::step::{Step, StepKind, StepStatus};
        use chrono::Utc;
 
        fn step(name: &str, status: StepStatus, confidence: f32, kind: StepKind) -> Step {
@@ -185,12 +187,12 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
    ```rust
-   // crates/cruxx-improve/src/comparison.rs
+   // crates/crux-improve/src/comparison.rs
    #[cfg(test)]
    mod tests {
        use super::*;
        use crate::metrics::tests::{step, trace};
-       use cruxx_types::step::{StepKind, StepStatus};
+       use crux_types::step::{StepKind, StepStatus};
 
        #[test]
        fn detects_improvement() {
@@ -246,13 +248,14 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-improve`
+   Run: `cargo nextest run -p crux-improve`
    Expected: FAIL
 
-2. Create `crates/cruxx-improve/Cargo.toml`:
+2. Create `crates/crux-improve/Cargo.toml`:
+
    ```toml
    [package]
-   name = "cruxx-improve"
+   name = "crux-improve"
    version.workspace = true
    edition.workspace = true
    rust-version.workspace = true
@@ -260,9 +263,9 @@ directly — `cruxx-improve` is the single entry point.
    description = "Shared vocabulary and bridge types for crux self-improvement"
 
    [dependencies]
-   cruxx-core = { path = "../cruxx-core", version = "0.2.5" }
-   cruxx-types = { path = "../cruxx-types", version = "0.2.5" }
-   cruxx-planner = { path = "../cruxx-planner", version = "0.2.5" }
+   crux-runtime = { path = "../crux-runtime", version = "0.2.5" }
+   crux-types = { path = "../crux-types", version = "0.2.5" }
+   crux-planner = { path = "../crux-planner", version = "0.2.5" }
    serde = { workspace = true }
    serde_json = { workspace = true }
    chrono = { workspace = true }
@@ -272,13 +275,14 @@ directly — `cruxx-improve` is the single entry point.
    tokio = { workspace = true }
    ```
 
-3. Add `"crates/cruxx-improve"` to workspace members in crux root
+3. Add `"crates/crux-improve"` to workspace members in crux root
    `Cargo.toml`.
 
-4. Implement `crates/cruxx-improve/src/metrics.rs`:
+4. Implement `crates/crux-improve/src/metrics.rs`:
+
    ```rust
-   use cruxx_types::crux_value::Crux;
-   use cruxx_types::step::{StepKind, StepStatus};
+   use crux_types::crux_value::Crux;
+   use crux_types::step::{StepKind, StepStatus};
    use serde::{Deserialize, Serialize};
 
    #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -383,9 +387,9 @@ directly — `cruxx-improve` is the single entry point.
    #[cfg(test)]
    pub(crate) mod tests {
        use super::*;
-       use cruxx_types::crux_value::Crux;
-       use cruxx_types::id::CruxId;
-       use cruxx_types::step::{Step, StepKind, StepStatus};
+       use crux_types::crux_value::Crux;
+       use crux_types::id::CruxId;
+       use crux_types::step::{Step, StepKind, StepStatus};
        use chrono::Utc;
 
        pub fn step(name: &str, status: StepStatus, confidence: f32, kind: StepKind) -> Step {
@@ -422,10 +426,11 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-5. Implement `crates/cruxx-improve/src/comparison.rs`:
+5. Implement `crates/crux-improve/src/comparison.rs`:
+
    ```rust
    use crate::metrics::TraceMetrics;
-   use cruxx_types::crux_value::Crux;
+   use crux_types::crux_value::Crux;
    use serde::{Deserialize, Serialize};
 
    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -465,27 +470,29 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 6. Verify:
+
    ```
-   cargo nextest run -p cruxx-improve           -> all green
-   cargo clippy -p cruxx-improve -- -D warnings -> zero warnings
+   cargo nextest run -p crux-improve           -> all green
+   cargo clippy -p crux-improve -- -D warnings -> zero warnings
    ```
 
-7. Commit: `git commit -m "feat(cruxx-improve): add TraceMetrics extraction and replay comparison"`
+7. Commit: `git commit -m "feat(crux-improve): add TraceMetrics extraction and replay comparison"`
 
 ---
 
-### Task 1: cruxx-improve — shared improvement vocabulary + StrategyPolicy
+### Task 1: crux-improve — shared improvement vocabulary + StrategyPolicy
 
-**Crate**: `cruxx-improve`
-**File(s)**: `crates/cruxx-improve/src/improvement.rs`,
-`crates/cruxx-improve/src/policy.rs`,
-`crates/cruxx-improve/src/evolution_adapter.rs`,
-`crates/cruxx-improve/src/lib.rs`
-**Run**: `cargo nextest run -p cruxx-improve`
+**Crate**: `crux-improve`
+**File(s)**: `crates/crux-improve/src/improvement.rs`,
+`crates/crux-improve/src/policy.rs`,
+`crates/crux-improve/src/evolution_adapter.rs`,
+`crates/crux-improve/src/lib.rs`
+**Run**: `cargo nextest run -p crux-improve`
 
 1. Write failing test:
+
    ```rust
-   // crates/cruxx-improve/src/improvement.rs
+   // crates/crux-improve/src/improvement.rs
    #[cfg(test)]
    mod tests {
        use super::*;
@@ -528,7 +535,7 @@ directly — `cruxx-improve` is the single entry point.
        #[test]
        fn improvement_is_serializable() {
            let imp = Improvement {
-               id: cruxx_types::id::CruxId::new(),
+               id: crux_types::id::CruxId::new(),
                kind: ImprovementKind::ConfidenceThreshold,
                target: "agent-a".into(),
                diff: StrategyDiff::default(),
@@ -544,7 +551,7 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
    ```rust
-   // crates/cruxx-improve/src/policy.rs
+   // crates/crux-improve/src/policy.rs
    #[cfg(test)]
    mod tests {
        use super::*;
@@ -586,16 +593,17 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-improve`
+   Run: `cargo nextest run -p crux-improve`
    Expected: FAIL
 
-2. Implement `crates/cruxx-improve/src/improvement.rs`:
+2. Implement `crates/crux-improve/src/improvement.rs`:
+
    ```rust
    use std::collections::HashMap;
    use chrono::{DateTime, Utc};
    use serde::{Deserialize, Serialize};
-   use cruxx_types::id::CruxId;
-   use cruxx_core::types::harness::HarnessDiff;
+   use crux_types::id::CruxId;
+   use crux_runtime::types::harness::HarnessDiff;
 
    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
    #[serde(rename_all = "snake_case")]
@@ -688,7 +696,8 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-3. Implement `crates/cruxx-improve/src/policy.rs`:
+3. Implement `crates/crux-improve/src/policy.rs`:
+
    ```rust
    use crate::improvement::StrategyDiff;
    use thiserror::Error;
@@ -739,15 +748,16 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-4. Implement `crates/cruxx-improve/src/evolution_adapter.rs`:
+4. Implement `crates/crux-improve/src/evolution_adapter.rs`:
+
    ```rust
    //! Adapter: wraps EvolutionPlanner for the improvement protocol.
 
-   pub use cruxx_planner::evolution::EvolutionPlanner;
-   pub use cruxx_planner::metrics::RunMetrics;
+   pub use crux_planner::evolution::EvolutionPlanner;
+   pub use crux_planner::metrics::RunMetrics;
 
    use crate::improvement::{ImprovementKind, StrategyDiff};
-   use cruxx_core::types::harness::HarnessProfile;
+   use crux_runtime::types::harness::HarnessProfile;
 
    /// Convert an EvolutionPlanner proposal into a StrategyDiff.
    pub fn evolution_to_strategy_diff(
@@ -767,7 +777,8 @@ directly — `cruxx-improve` is the single entry point.
    }
    ```
 
-5. Update `crates/cruxx-improve/src/lib.rs`:
+5. Update `crates/crux-improve/src/lib.rs`:
+
    ```rust
    pub mod comparison;
    pub mod evolution_adapter;
@@ -776,14 +787,14 @@ directly — `cruxx-improve` is the single entry point.
    pub mod policy;
 
    // Re-export crux types that praxis needs
-   pub use cruxx_types::crux_value::Crux;
-   pub use cruxx_types::id::CruxId;
-   pub use cruxx_types::step::{Step, StepKind, StepStatus};
-   pub use cruxx_types::budget::Budget;
-   pub use cruxx_types::error::CruxErr;
+   pub use crux_types::crux_value::Crux;
+   pub use crux_types::id::CruxId;
+   pub use crux_types::step::{Step, StepKind, StepStatus};
+   pub use crux_types::budget::Budget;
+   pub use crux_types::error::CruxErr;
 
-   pub use cruxx_core::safety::{SafetyPolicy, SafetyViolation};
-   pub use cruxx_core::types::harness::{HarnessDiff, HarnessProfile};
+   pub use crux_runtime::safety::{SafetyPolicy, SafetyViolation};
+   pub use crux_runtime::types::harness::{HarnessDiff, HarnessProfile};
 
    // Public API
    pub use comparison::{replay_compare, Comparison, Verdict};
@@ -799,12 +810,13 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 6. Verify:
+
    ```
-   cargo nextest run -p cruxx-improve           -> all green
-   cargo clippy -p cruxx-improve -- -D warnings -> zero warnings
+   cargo nextest run -p crux-improve           -> all green
+   cargo clippy -p crux-improve -- -D warnings -> zero warnings
    ```
 
-7. Commit: `git commit -m "feat(cruxx-improve): add improvement types, StrategyPolicy, and evolution adapter"`
+7. Commit: `git commit -m "feat(crux-improve): add improvement types, StrategyPolicy, and evolution adapter"`
 
 ---
 
@@ -818,12 +830,13 @@ directly — `cruxx-improve` is the single entry point.
 **Run**: `cargo nextest run -p praxis-core`
 
 1. Write failing test:
+
    ```rust
    // crates/praxis-core/src/evaluator.rs
    #[cfg(test)]
    mod tests {
        use super::*;
-       use cruxx_improve::CruxId;
+       use crux_improve::CruxId;
 
        #[test]
        fn evaluation_roundtrips_json() {
@@ -845,6 +858,7 @@ directly — `cruxx-improve` is the single entry point.
    Expected: FAIL
 
 2. Create root `~/dev/praxis/Cargo.toml`:
+
    ```toml
    [workspace]
    members = ["crates/*"]
@@ -863,10 +877,11 @@ directly — `cruxx-improve` is the single entry point.
    thiserror = "2"
    async-trait = "0.1"
    tokio = { version = "1", features = ["full"] }
-   cruxx-improve = { git = "https://github.com/89jobrien/cruxx", version = "0.2.5" }
+   crux-improve = { git = "https://github.com/89jobrien/crux", version = "0.2.5" }
    ```
 
 3. Create `crates/praxis-core/Cargo.toml`:
+
    ```toml
    [package]
    name = "praxis-core"
@@ -877,7 +892,7 @@ directly — `cruxx-improve` is the single entry point.
    description = "Port traits for the praxis self-improving runtime"
 
    [dependencies]
-   cruxx-improve = { workspace = true }
+   crux-improve = { workspace = true }
    serde = { workspace = true }
    serde_json = { workspace = true }
    chrono = { workspace = true }
@@ -889,11 +904,12 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 4. Implement `evaluator.rs` — `Evaluation` struct + `Evaluator` trait:
+
    ```rust
    use async_trait::async_trait;
    use chrono::{DateTime, Utc};
    use serde::{Deserialize, Serialize};
-   use cruxx_improve::{Crux, CruxId, TraceMetrics};
+   use crux_improve::{Crux, CruxId, TraceMetrics};
 
    #[derive(Debug, Clone, Serialize, Deserialize)]
    pub struct Evaluation {
@@ -921,11 +937,12 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 5. Implement `reward.rs`:
+
    ```rust
    use async_trait::async_trait;
    use chrono::{DateTime, Duration, Utc};
    use serde::{Deserialize, Serialize};
-   use cruxx_improve::CruxId;
+   use crux_improve::CruxId;
 
    #[derive(Debug, Clone, Serialize, Deserialize)]
    pub struct Reward {
@@ -964,9 +981,10 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 6. Implement `strategy.rs`:
+
    ```rust
    use async_trait::async_trait;
-   use cruxx_improve::{Improvement, Strategy};
+   use crux_improve::{Improvement, Strategy};
    use crate::evaluator::Evaluation;
    use crate::reward::Trend;
 
@@ -988,8 +1006,9 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 7. Implement `store.rs`:
+
    ```rust
-   use cruxx_improve::{Strategy, StrategyDiff};
+   use crux_improve::{Strategy, StrategyDiff};
 
    pub trait StrategyStore: Send + Sync {
        fn current(&self) -> Strategy;
@@ -1000,6 +1019,7 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 8. Create `lib.rs`:
+
    ```rust
    pub mod evaluator;
    pub mod reward;
@@ -1013,6 +1033,7 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 9. Verify:
+
    ```
    cargo nextest run -p praxis-core    -> all green
    cargo clippy -p praxis-core -- -D warnings  -> zero warnings
@@ -1031,12 +1052,13 @@ directly — `cruxx-improve` is the single entry point.
 **Run**: `cargo nextest run -p praxis-eval`
 
 1. Write failing test:
+
    ```rust
    // crates/praxis-eval/src/stub.rs
    #[cfg(test)]
    mod tests {
        use super::*;
-       use cruxx_improve::{Crux, CruxId};
+       use crux_improve::{Crux, CruxId};
        use chrono::Utc;
        use praxis_core::Evaluator;
 
@@ -1063,7 +1085,7 @@ directly — `cruxx-improve` is the single entry point.
    #[cfg(test)]
    mod tests {
        use super::*;
-       use cruxx_improve::{CruxId, Strategy, TraceMetrics};
+       use crux_improve::{CruxId, Strategy, TraceMetrics};
        use praxis_core::{Evaluation, StrategyPlanner, Trend, TrendDirection};
        use chrono::Utc;
 
@@ -1119,6 +1141,7 @@ directly — `cruxx-improve` is the single entry point.
    Expected: FAIL
 
 2. Create `crates/praxis-eval/Cargo.toml`:
+
    ```toml
    [package]
    name = "praxis-eval"
@@ -1130,7 +1153,7 @@ directly — `cruxx-improve` is the single entry point.
 
    [dependencies]
    praxis-core = { path = "../praxis-core" }
-   cruxx-improve = { workspace = true }
+   crux-improve = { workspace = true }
    async-trait = { workspace = true }
    chrono = { workspace = true }
    serde_json = { workspace = true }
@@ -1144,6 +1167,7 @@ directly — `cruxx-improve` is the single entry point.
    threshold changes when score < threshold and findings present).
 
 4. Create `lib.rs`:
+
    ```rust
    pub mod deterministic;
    pub mod stub;
@@ -1152,6 +1176,7 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 5. Verify:
+
    ```
    cargo nextest run -p praxis-eval    -> all green
    cargo clippy -p praxis-eval -- -D warnings  -> zero warnings
@@ -1175,6 +1200,7 @@ directly — `cruxx-improve` is the single entry point.
    file, rollback, and history.
 
 2. Create `crates/praxis-store/Cargo.toml`:
+
    ```toml
    [package]
    name = "praxis-store"
@@ -1186,7 +1212,7 @@ directly — `cruxx-improve` is the single entry point.
 
    [dependencies]
    praxis-core = { path = "../praxis-core" }
-   cruxx-improve = { workspace = true }
+   crux-improve = { workspace = true }
    async-trait = { workspace = true }
    chrono = { workspace = true }
    serde = { workspace = true }
@@ -1205,6 +1231,7 @@ directly — `cruxx-improve` is the single entry point.
    `Vec<Strategy>` as JSON, with rollback via truncation.
 
 5. Verify:
+
    ```
    cargo nextest run -p praxis-store    -> all green
    cargo clippy -p praxis-store -- -D warnings  -> zero warnings
@@ -1225,6 +1252,7 @@ directly — `cruxx-improve` is the single entry point.
    cycle produces a Comparison; rollback works.
 
 2. Create `crates/praxis/Cargo.toml`:
+
    ```toml
    [package]
    name = "praxis"
@@ -1238,7 +1266,7 @@ directly — `cruxx-improve` is the single entry point.
    praxis-core = { path = "../praxis-core" }
    praxis-eval = { path = "../praxis-eval" }
    praxis-store = { path = "../praxis-store" }
-   cruxx-improve = { workspace = true }
+   crux-improve = { workspace = true }
    serde_json = { workspace = true }
    thiserror = { workspace = true }
 
@@ -1265,12 +1293,14 @@ directly — `cruxx-improve` is the single entry point.
    decides).
 
 4. Create `lib.rs`:
+
    ```rust
    pub mod loop_runner;
    pub use loop_runner::{CycleResult, ImprovementLoop, LoopError};
    ```
 
 5. Verify:
+
    ```
    cargo nextest run -p praxis           -> all green
    cargo clippy -p praxis -- -D warnings -> zero warnings
@@ -1288,6 +1318,7 @@ directly — `cruxx-improve` is the single entry point.
 **Run**: `just ci`
 
 1. Create `Justfile`:
+
    ```just
    default:
        @just --list
@@ -1311,7 +1342,7 @@ directly — `cruxx-improve` is the single entry point.
    ```
 
 2. Create `CLAUDE.md` with build commands, workspace structure, and
-   architecture overview. Reference the dependency on `cruxx-improve`
+   architecture overview. Reference the dependency on `crux-improve`
    and the relationship to the crux ecosystem.
 
 3. Create `README.md` with project description, the improvement loop
@@ -1322,6 +1353,7 @@ directly — `cruxx-improve` is the single entry point.
 5. Create `.ctx/HANDOFF.yaml` stub.
 
 6. Verify:
+
    ```
    just ci  -> all green
    ```

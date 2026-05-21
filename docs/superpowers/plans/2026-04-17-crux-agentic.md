@@ -1,4 +1,4 @@
-# cruxx-agentic Implementation Plan
+# crux-agentic Implementation Plan
 
 **status: done**
 
@@ -6,53 +6,53 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a `cruxx-agentic` crate that provides built-in, locally-executable step handlers
+**Goal:** Add a `crux-agentic` crate that provides built-in, locally-executable step handlers
 (shell, fs, git, json, ctrl, llm) which register into `HandlerRegistry` so YAML pipelines are
 runnable without custom Rust code.
 
-**Architecture:** `cruxx-agentic` is a pure handler library — no new types, no new traits. Each
+**Architecture:** `crux-agentic` is a pure handler library — no new types, no new traits. Each
 module exposes a `register(registry: &mut HandlerRegistry)` function that installs its handlers
 under namespaced keys (e.g. `shell::capture`, `git::staged_files`). A top-level
-`cruxx_agentic::register_all(registry)` call wires everything. The `llm` module speaks raw HTTP:
+`crux_agentic::register_all(registry)` call wires everything. The `llm` module speaks raw HTTP:
 OpenAI-compat path for Ollama/LM Studio/vLLM/Gemini/OpenAI, Anthropic Messages API path for
 `provider: anthropic` — both via `reqwest`, no AI SDK dependency. The joe/ YAML examples are
 updated last to use the canonical builtin handler names with embedded `args`.
 
 **Tech Stack:** Rust 2024, `reqwest` (HTTP client, `json` + `rustls-tls` features),
-`serde_json`, `tokio::process` (subprocess), `cruxx-script` (HandlerRegistry), `cruxx-core`
+`serde_json`, `tokio::process` (subprocess), `crux-script` (HandlerRegistry), `crux-runtime`
 (CruxErr). No `anthropic` crate, no `async-openai` crate.
 
 ---
 
 ## File Map
 
-### New files (cruxx-agentic crate)
+### New files (crux-agentic crate)
 
-| File | Responsibility |
-|------|---------------|
-| `crates/cruxx-agentic/Cargo.toml` | Crate manifest, deps |
-| `crates/cruxx-agentic/src/lib.rs` | `register_all()`, re-exports each module |
-| `crates/cruxx-agentic/src/shell.rs` | `shell::exec`, `shell::capture` |
-| `crates/cruxx-agentic/src/fs.rs` | `fs::read`, `fs::write`, `fs::glob`, `fs::exists` |
-| `crates/cruxx-agentic/src/git.rs` | `git::staged_files`, `git::diff`, `git::log`, `git::status` |
-| `crates/cruxx-agentic/src/json.rs` | `json::pick`, `json::merge`, `json::jq` |
-| `crates/cruxx-agentic/src/ctrl.rs` | `ctrl::log`, `ctrl::noop`, `ctrl::assert` |
-| `crates/cruxx-agentic/src/llm.rs` | `llm::invoke` (OpenAI-compat + Anthropic paths) |
-| `crates/cruxx-agentic/src/error.rs` | `AgenticError` → `CruxErr` conversion |
-| `crates/cruxx-agentic/tests/shell.rs` | Integration tests for shell module |
-| `crates/cruxx-agentic/tests/fs.rs` | Integration tests for fs module |
-| `crates/cruxx-agentic/tests/git.rs` | Integration tests for git module |
-| `crates/cruxx-agentic/tests/json_handlers.rs` | Integration tests for json module |
-| `crates/cruxx-agentic/tests/ctrl.rs` | Integration tests for ctrl module |
-| `crates/cruxx-agentic/tests/llm.rs` | Integration tests for llm module (mock server) |
+| File                                         | Responsibility                                              |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| `crates/crux-agentic/Cargo.toml`             | Crate manifest, deps                                        |
+| `crates/crux-agentic/src/lib.rs`             | `register_all()`, re-exports each module                    |
+| `crates/crux-agentic/src/shell.rs`           | `shell::exec`, `shell::capture`                             |
+| `crates/crux-agentic/src/fs.rs`              | `fs::read`, `fs::write`, `fs::glob`, `fs::exists`           |
+| `crates/crux-agentic/src/git.rs`             | `git::staged_files`, `git::diff`, `git::log`, `git::status` |
+| `crates/crux-agentic/src/json.rs`            | `json::pick`, `json::merge`, `json::jq`                     |
+| `crates/crux-agentic/src/ctrl.rs`            | `ctrl::log`, `ctrl::noop`, `ctrl::assert`                   |
+| `crates/crux-agentic/src/llm.rs`             | `llm::invoke` (OpenAI-compat + Anthropic paths)             |
+| `crates/crux-agentic/src/error.rs`           | `AgenticError` → `CruxErr` conversion                       |
+| `crates/crux-agentic/tests/shell.rs`         | Integration tests for shell module                          |
+| `crates/crux-agentic/tests/fs.rs`            | Integration tests for fs module                             |
+| `crates/crux-agentic/tests/git.rs`           | Integration tests for git module                            |
+| `crates/crux-agentic/tests/json_handlers.rs` | Integration tests for json module                           |
+| `crates/crux-agentic/tests/ctrl.rs`          | Integration tests for ctrl module                           |
+| `crates/crux-agentic/tests/llm.rs`           | Integration tests for llm module (mock server)              |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `Cargo.toml` (workspace root) | Add `reqwest` to `[workspace.dependencies]` |
-| `crates/cruxx-script/src/registry.rs` | No change needed — HandlerRegistry already public |
-| `examples/joe/*.crux` | Update handler names to canonical `module::handler` form |
+| File                                 | Change                                                   |
+| ------------------------------------ | -------------------------------------------------------- |
+| `Cargo.toml` (workspace root)        | Add `reqwest` to `[workspace.dependencies]`              |
+| `crates/crux-script/src/registry.rs` | No change needed — HandlerRegistry already public        |
+| `examples/joe/*.crux`                | Update handler names to canonical `module::handler` form |
 
 ---
 
@@ -69,7 +69,7 @@ Arguments that are not derived from pipeline data flow are embedded in the input
 ```
 
 The runner passes `current_input` to each handler. For step handlers that need static config,
-the YAML step can set `input` explicitly (this is a `cruxx-script` schema extension added in
+the YAML step can set `input` explicitly (this is a `crux-script` schema extension added in
 Task 1). For now, args are passed via the pipeline input or from a previous step's output.
 
 ---
@@ -77,25 +77,26 @@ Task 1). For now, args are passed via the pipeline input or from a previous step
 ## Task 1: Workspace setup — add crate skeleton and reqwest dep
 
 **Files:**
-- Create: `crates/cruxx-agentic/Cargo.toml`
-- Create: `crates/cruxx-agentic/src/lib.rs`
-- Create: `crates/cruxx-agentic/src/error.rs`
+
+- Create: `crates/crux-agentic/Cargo.toml`
+- Create: `crates/crux-agentic/src/lib.rs`
+- Create: `crates/crux-agentic/src/error.rs`
 - Modify: `Cargo.toml` (workspace root)
 
 - [ ] **Step 1: Add `reqwest` to workspace deps**
 
-In `/Users/joe/dev/cruxx/Cargo.toml`, add to `[workspace.dependencies]`:
+In `/Users/joe/dev/crux/Cargo.toml`, add to `[workspace.dependencies]`:
 
 ```toml
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 ```
 
-- [ ] **Step 2: Create `crates/cruxx-agentic/Cargo.toml`**
+- [ ] **Step 2: Create `crates/crux-agentic/Cargo.toml`**
 
 ```toml
 [package]
-name = "cruxx-agentic"
-description = "Built-in step handlers for cruxx-script pipelines"
+name = "crux-agentic"
+description = "Built-in step handlers for crux-script pipelines"
 version.workspace = true
 edition.workspace = true
 readme = "../../README.md"
@@ -108,8 +109,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-cruxx-core = { path = "../cruxx-core", version = "0.1.0" }
-cruxx-script = { path = "../cruxx-script", version = "0.1.0" }
+crux-runtime = { path = "../crux-runtime", version = "0.1.0" }
+crux-script = { path = "../crux-script", version = "0.1.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -122,10 +123,10 @@ tokio = { workspace = true }
 tempfile = { workspace = true }
 ```
 
-- [ ] **Step 3: Create `crates/cruxx-agentic/src/error.rs`**
+- [ ] **Step 3: Create `crates/crux-agentic/src/error.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
+use crux_runtime::prelude::CruxErr;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -166,10 +167,10 @@ pub fn opt_str<'a>(input: &'a serde_json::Value, key: &'static str) -> Option<&'
 }
 ```
 
-- [ ] **Step 4: Create `crates/cruxx-agentic/src/lib.rs`** (stubs only — modules filled in later tasks)
+- [ ] **Step 4: Create `crates/crux-agentic/src/lib.rs`** (stubs only — modules filled in later tasks)
 
 ```rust
-//! cruxx-agentic — built-in step handlers for cruxx-script pipelines.
+//! crux-agentic — built-in step handlers for crux-script pipelines.
 //!
 //! Call `register_all(&mut registry)` to install all handlers, or call each
 //! module's `register` function individually to pick only what you need.
@@ -182,7 +183,7 @@ pub mod json;
 pub mod llm;
 pub mod shell;
 
-use cruxx_script::HandlerRegistry;
+use crux_script::HandlerRegistry;
 
 /// Register all built-in handlers into the given registry.
 ///
@@ -203,14 +204,14 @@ Create each of `shell.rs`, `fs.rs`, `git.rs`, `json.rs`, `ctrl.rs`, `llm.rs` wit
 
 ```rust
 // placeholder
-use cruxx_script::HandlerRegistry;
+use crux_script::HandlerRegistry;
 pub fn register(_registry: &mut HandlerRegistry) {}
 ```
 
 - [ ] **Step 6: Verify crate compiles**
 
 ```bash
-cargo check -p cruxx-agentic
+cargo check -p crux-agentic
 ```
 
 Expected: no errors.
@@ -218,8 +219,8 @@ Expected: no errors.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/cruxx-agentic/ Cargo.toml Cargo.lock
-git commit -m "feat(cruxx-agentic): add crate skeleton with module stubs"
+git add crates/crux-agentic/ Cargo.toml Cargo.lock
+git commit -m "feat(crux-agentic): add crate skeleton with module stubs"
 ```
 
 ---
@@ -229,16 +230,17 @@ git commit -m "feat(cruxx-agentic): add crate skeleton with module stubs"
 Start with `ctrl` because it has no I/O and makes a clean baseline for the test harness.
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/ctrl.rs`
-- Create: `crates/cruxx-agentic/tests/ctrl.rs`
+
+- Modify: `crates/crux-agentic/src/ctrl.rs`
+- Create: `crates/crux-agentic/tests/ctrl.rs`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/ctrl.rs`:
+Create `crates/crux-agentic/tests/ctrl.rs`:
 
 ```rust
-use cruxx_agentic::ctrl;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::ctrl;
+use crux_script::HandlerRegistry;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -289,7 +291,7 @@ async fn assert_fails_when_condition_false() {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test ctrl
+cargo nextest run -p crux-agentic --test ctrl
 ```
 
 Expected: compile error or test failures (handlers not implemented yet).
@@ -297,15 +299,15 @@ Expected: compile error or test failures (handlers not implemented yet).
 - [ ] **Step 3: Implement `ctrl.rs`**
 
 ```rust
-use cruxx_script::HandlerRegistry;
+use crux_script::HandlerRegistry;
 use serde_json::Value;
-use cruxx_core::prelude::CruxErr;
+use crux_runtime::prelude::CruxErr;
 
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler("ctrl::noop", |input: Value| async move { Ok(input) });
 
     registry.handler("ctrl::log", |input: Value| async move {
-        eprintln!("[cruxx::ctrl::log] {}", serde_json::to_string(&input).unwrap_or_default());
+        eprintln!("[crux::ctrl::log] {}", serde_json::to_string(&input).unwrap_or_default());
         Ok(input)
     });
 
@@ -339,7 +341,7 @@ pub fn register(registry: &mut HandlerRegistry) {
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test ctrl
+cargo nextest run -p crux-agentic --test ctrl
 ```
 
 Expected: 4 tests pass.
@@ -347,8 +349,8 @@ Expected: 4 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/ctrl.rs crates/cruxx-agentic/tests/ctrl.rs
-git commit -m "feat(cruxx-agentic): implement ctrl module (log, noop, assert)"
+git add crates/crux-agentic/src/ctrl.rs crates/crux-agentic/tests/ctrl.rs
+git commit -m "feat(crux-agentic): implement ctrl module (log, noop, assert)"
 ```
 
 ---
@@ -356,10 +358,12 @@ git commit -m "feat(cruxx-agentic): implement ctrl module (log, noop, assert)"
 ## Task 3: `shell` module — exec, capture
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/shell.rs`
-- Create: `crates/cruxx-agentic/tests/shell.rs`
+
+- Modify: `crates/crux-agentic/src/shell.rs`
+- Create: `crates/crux-agentic/tests/shell.rs`
 
 Handler input contract:
+
 ```json
 { "args": { "cmd": "echo hello", "cwd": "/optional/path" } }
 ```
@@ -369,11 +373,11 @@ Handler input contract:
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/shell.rs`:
+Create `crates/crux-agentic/tests/shell.rs`:
 
 ```rust
-use cruxx_agentic::shell;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::shell;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {
@@ -428,14 +432,14 @@ async fn exec_missing_cmd_returns_error() {
 - [ ] **Step 2: Run to confirm failures**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test shell
+cargo nextest run -p crux-agentic --test shell
 ```
 
 - [ ] **Step 3: Implement `shell.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
 use tokio::process::Command;
 use crate::error::require_str;
@@ -486,7 +490,7 @@ async fn run_shell(input: &Value, fail_on_nonzero: bool) -> Result<Value, CruxEr
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test shell
+cargo nextest run -p crux-agentic --test shell
 ```
 
 Expected: 5 tests pass.
@@ -494,8 +498,8 @@ Expected: 5 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/shell.rs crates/cruxx-agentic/tests/shell.rs
-git commit -m "feat(cruxx-agentic): implement shell module (exec, capture)"
+git add crates/crux-agentic/src/shell.rs crates/crux-agentic/tests/shell.rs
+git commit -m "feat(crux-agentic): implement shell module (exec, capture)"
 ```
 
 ---
@@ -503,10 +507,12 @@ git commit -m "feat(cruxx-agentic): implement shell module (exec, capture)"
 ## Task 4: `fs` module — read, write, glob, exists
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/fs.rs`
-- Create: `crates/cruxx-agentic/tests/fs.rs`
+
+- Modify: `crates/crux-agentic/src/fs.rs`
+- Create: `crates/crux-agentic/tests/fs.rs`
 
 Input contracts:
+
 - `fs::read` — `{ "args": { "path": "/path/to/file" } }` → `{ "content": "..." }`
 - `fs::write` — `{ "args": { "path": "...", "content": "..." } }` → `{ "written": true }`
 - `fs::glob` — `{ "args": { "pattern": "src/**/*.rs" } }` → `{ "paths": ["..."] }`
@@ -514,11 +520,11 @@ Input contracts:
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/fs.rs`:
+Create `crates/crux-agentic/tests/fs.rs`:
 
 ```rust
-use cruxx_agentic::fs as fs_handlers;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::fs as fs_handlers;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 use tempfile::tempdir;
 
@@ -601,14 +607,14 @@ async fn exists_false_for_missing_file() {
 - [ ] **Step 2: Run to confirm failures**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test fs
+cargo nextest run -p crux-agentic --test fs
 ```
 
 - [ ] **Step 3: Implement `fs.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
 use crate::error::require_str;
 
@@ -651,7 +657,7 @@ pub fn register(registry: &mut HandlerRegistry) {
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test fs
+cargo nextest run -p crux-agentic --test fs
 ```
 
 Expected: 6 tests pass.
@@ -659,8 +665,8 @@ Expected: 6 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/fs.rs crates/cruxx-agentic/tests/fs.rs
-git commit -m "feat(cruxx-agentic): implement fs module (read, write, glob, exists)"
+git add crates/crux-agentic/src/fs.rs crates/crux-agentic/tests/fs.rs
+git commit -m "feat(crux-agentic): implement fs module (read, write, glob, exists)"
 ```
 
 ---
@@ -668,8 +674,9 @@ git commit -m "feat(cruxx-agentic): implement fs module (read, write, glob, exis
 ## Task 5: `git` module — staged_files, diff, log, status
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/git.rs`
-- Create: `crates/cruxx-agentic/tests/git.rs`
+
+- Modify: `crates/crux-agentic/src/git.rs`
+- Create: `crates/crux-agentic/tests/git.rs`
 
 All handlers run `git` subprocesses via `sh -c`. They accept an optional `{ "args": { "cwd": "..." } }`.
 
@@ -680,11 +687,11 @@ All handlers run `git` subprocesses via `sh -c`. They accept an optional `{ "arg
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/git.rs`:
+Create `crates/crux-agentic/tests/git.rs`:
 
 ```rust
-use cruxx_agentic::git;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::git;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {
@@ -693,7 +700,7 @@ fn registry() -> HandlerRegistry {
     r
 }
 
-// All tests run against the cruxx repo itself (cwd defaults to process cwd)
+// All tests run against the crux repo itself (cwd defaults to process cwd)
 
 #[tokio::test]
 async fn staged_files_returns_array() {
@@ -739,14 +746,14 @@ async fn diff_returns_string() {
 - [ ] **Step 2: Run to confirm failures**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test git
+cargo nextest run -p crux-agentic --test git
 ```
 
 - [ ] **Step 3: Implement `git.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
 use tokio::process::Command;
 use crate::error::opt_str;
@@ -823,7 +830,7 @@ async fn git_cmd(args: &[&str], cwd: Option<&str>) -> Result<String, CruxErr> {
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test git
+cargo nextest run -p crux-agentic --test git
 ```
 
 Expected: 4 tests pass.
@@ -831,8 +838,8 @@ Expected: 4 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/git.rs crates/cruxx-agentic/tests/git.rs
-git commit -m "feat(cruxx-agentic): implement git module (staged_files, diff, log, status)"
+git add crates/crux-agentic/src/git.rs crates/crux-agentic/tests/git.rs
+git commit -m "feat(crux-agentic): implement git module (staged_files, diff, log, status)"
 ```
 
 ---
@@ -840,10 +847,12 @@ git commit -m "feat(cruxx-agentic): implement git module (staged_files, diff, lo
 ## Task 6: `json` module — pick, merge, jq
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/json.rs`
-- Create: `crates/cruxx-agentic/tests/json_handlers.rs`
+
+- Modify: `crates/crux-agentic/src/json.rs`
+- Create: `crates/crux-agentic/tests/json_handlers.rs`
 
 Input contracts:
+
 - `json::pick` — `{ "args": { "fields": ["a", "b"] }, ...rest }` → object with only those keys
 - `json::merge` — `{ "args": { "with": {...} } }` + top-level input → merged object
 - `json::jq` — `{ "args": { "expr": ".foo" } }` → apply simple path expression to input
@@ -853,11 +862,11 @@ No full jq binary dependency — pure Rust path traversal.
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/json_handlers.rs`:
+Create `crates/crux-agentic/tests/json_handlers.rs`:
 
 ```rust
-use cruxx_agentic::json as json_handlers;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::json as json_handlers;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {
@@ -936,14 +945,14 @@ async fn jq_missing_path_returns_null() {
 - [ ] **Step 2: Run to confirm failures**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test json_handlers
+cargo nextest run -p crux-agentic --test json_handlers
 ```
 
 - [ ] **Step 3: Implement `json.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use serde_json::{Value, Map};
 use crate::error::require_str;
 
@@ -1019,7 +1028,7 @@ fn traverse(value: &Value, path: &str) -> Value {
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test json_handlers
+cargo nextest run -p crux-agentic --test json_handlers
 ```
 
 Expected: 6 tests pass.
@@ -1027,8 +1036,8 @@ Expected: 6 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/json.rs crates/cruxx-agentic/tests/json_handlers.rs
-git commit -m "feat(cruxx-agentic): implement json module (pick, merge, jq)"
+git add crates/crux-agentic/src/json.rs crates/crux-agentic/tests/json_handlers.rs
+git commit -m "feat(crux-agentic): implement json module (pick, merge, jq)"
 ```
 
 ---
@@ -1036,12 +1045,14 @@ git commit -m "feat(cruxx-agentic): implement json module (pick, merge, jq)"
 ## Task 7: `llm` module — complete (OpenAI-compat + Anthropic paths)
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/llm.rs`
-- Create: `crates/cruxx-agentic/tests/llm.rs`
+
+- Modify: `crates/crux-agentic/src/llm.rs`
+- Create: `crates/crux-agentic/tests/llm.rs`
 
 Handler: `llm::invoke`
 
 Input contract:
+
 ```json
 {
   "args": {
@@ -1064,11 +1075,11 @@ OpenAI-compat or Anthropic response — no real API calls in CI.
 
 - [ ] **Step 1: Write failing tests**
 
-Create `crates/cruxx-agentic/tests/llm.rs`:
+Create `crates/crux-agentic/tests/llm.rs`:
 
 ```rust
-use cruxx_agentic::llm;
-use cruxx_script::HandlerRegistry;
+use crux_agentic::llm;
+use crux_script::HandlerRegistry;
 use serde_json::json;
 use std::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -1172,14 +1183,14 @@ async fn complete_missing_prompt_errors() {
 - [ ] **Step 2: Run to confirm failures**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test llm
+cargo nextest run -p crux-agentic --test llm
 ```
 
 - [ ] **Step 3: Implement `llm.rs`**
 
 ```rust
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::HandlerRegistry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
 use crate::error::{opt_str, require_str};
 
@@ -1315,7 +1326,7 @@ async fn complete_anthropic(
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test llm
+cargo nextest run -p crux-agentic --test llm
 ```
 
 Expected: 3 tests pass.
@@ -1323,8 +1334,8 @@ Expected: 3 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/src/llm.rs crates/cruxx-agentic/tests/llm.rs
-git commit -m "feat(cruxx-agentic): implement llm module (openai-compat + anthropic via reqwest)"
+git add crates/crux-agentic/src/llm.rs crates/crux-agentic/tests/llm.rs
+git commit -m "feat(crux-agentic): implement llm module (openai-compat + anthropic via reqwest)"
 ```
 
 ---
@@ -1332,21 +1343,22 @@ git commit -m "feat(cruxx-agentic): implement llm module (openai-compat + anthro
 ## Task 8: Wire `register_all` and add integration smoke test
 
 **Files:**
-- Modify: `crates/cruxx-agentic/src/lib.rs` (remove stubs from Task 1, confirm real modules)
-- Create: `crates/cruxx-agentic/tests/register_all.rs`
+
+- Modify: `crates/crux-agentic/src/lib.rs` (remove stubs from Task 1, confirm real modules)
+- Create: `crates/crux-agentic/tests/register_all.rs`
 
 - [ ] **Step 1: Write smoke test**
 
-Create `crates/cruxx-agentic/tests/register_all.rs`:
+Create `crates/crux-agentic/tests/register_all.rs`:
 
 ```rust
-use cruxx_agentic;
-use cruxx_script::HandlerRegistry;
+use crux_agentic;
+use crux_script::HandlerRegistry;
 
 #[test]
 fn register_all_installs_expected_handlers() {
     let mut reg = HandlerRegistry::new();
-    cruxx_agentic::register_all(&mut reg);
+    crux_agentic::register_all(&mut reg);
 
     let expected = [
         "ctrl::log", "ctrl::noop", "ctrl::assert",
@@ -1369,7 +1381,7 @@ fn register_all_installs_expected_handlers() {
 - [ ] **Step 2: Run to verify**
 
 ```bash
-cargo nextest run -p cruxx-agentic --test register_all
+cargo nextest run -p crux-agentic --test register_all
 ```
 
 Expected: 1 test passes.
@@ -1377,7 +1389,7 @@ Expected: 1 test passes.
 - [ ] **Step 3: Run full test suite**
 
 ```bash
-cargo nextest run -p cruxx-agentic
+cargo nextest run -p crux-agentic
 ```
 
 Expected: all tests pass.
@@ -1385,7 +1397,7 @@ Expected: all tests pass.
 - [ ] **Step 4: Run clippy**
 
 ```bash
-cargo clippy -p cruxx-agentic -- -D warnings
+cargo clippy -p crux-agentic -- -D warnings
 ```
 
 Fix any warnings before committing.
@@ -1393,8 +1405,8 @@ Fix any warnings before committing.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-agentic/
-git commit -m "feat(cruxx-agentic): wire register_all, add handler inventory smoke test"
+git add crates/crux-agentic/
+git commit -m "feat(crux-agentic): wire register_all, add handler inventory smoke test"
 ```
 
 ---
@@ -1403,10 +1415,11 @@ git commit -m "feat(cruxx-agentic): wire register_all, add handler inventory smo
 
 The joe/ examples currently reference custom handler names like `gh_run_fetch`,
 `git_staged_files`, `cargo_fmt_check`. Update each file so every handler name maps to a
-`cruxx-agentic` builtin, using `args` fields for configuration. Where a step requires a custom
+`crux-agentic` builtin, using `args` fields for configuration. Where a step requires a custom
 shell command (e.g. `cargo nextest run`), map it to `shell::capture` with the command in args.
 
 **Files:**
+
 - Modify: `examples/joe/ci_triage.crux`
 - Modify: `examples/joe/obfsck_audit.crux`
 - Modify: `examples/joe/container_deploy.crux`
@@ -1417,34 +1430,34 @@ shell command (e.g. `cargo nextest run`), map it to `shell::capture` with the co
 
 **Handler mapping table:**
 
-| Old handler | New handler | Args |
-|-------------|-------------|------|
-| `gh_run_fetch` | `shell::capture` | `cmd: "gh run view --log-failed"` |
-| `git_staged_files` | `git::staged_files` | — |
-| `cargo_fmt_check` | `shell::capture` | `cmd: "cargo fmt --all -- --check"` |
-| `cargo_clippy_release` | `shell::capture` | `cmd: "cargo clippy --release -- -D warnings"` |
-| `cross_compile` | `shell::capture` | `cmd: "cross build --release --target x86_64-unknown-linux-musl -p miniboxd"` |
-| `verify_target_triple` | `shell::capture` | `cmd: "file target/x86_64-unknown-linux-musl/release/miniboxd"` |
-| `rsync_binary` | `shell::capture` | `cmd: "rsync -az --checksum target/x86_64-unknown-linux-musl/release/miniboxd minibox:/usr/local/bin/miniboxd"` |
-| `systemd_restart` | `shell::capture` | `cmd: "ssh minibox 'sudo systemctl restart miniboxd'"` |
-| `obfsck_high_entropy` | `shell::capture` | `cmd: "obfsck --detector entropy"` |
-| `obfsck_pattern_match` | `shell::capture` | `cmd: "obfsck --detector pattern"` |
-| `obfsck_url_credentials` | `shell::capture` | `cmd: "obfsck --detector url-credentials"` |
-| `git_history_scan` | `shell::capture` | `cmd: "obfsck --history HEAD~5..HEAD"` |
-| `gh_pr_diff_fetch` | `shell::capture` | `cmd: "gh pr diff"` |
-| `escalate_to_human` | `ctrl::log` | — |
-| `doob_task_create` | `shell::capture` | `cmd: "doob todo add --priority high"` |
-| `apply_patch_and_rerun` | `shell::capture` | `cmd: "cargo fix --allow-dirty && cargo nextest run"` |
-| `tag_release` | `shell::capture` | `cmd: "gh release create --generate-notes"` |
-| `flag_for_human_review` | `ctrl::log` | — |
-| `ctrl::noop` | `ctrl::noop` | — |
+| Old handler              | New handler         | Args                                                                                                            |
+| ------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `gh_run_fetch`           | `shell::capture`    | `cmd: "gh run view --log-failed"`                                                                               |
+| `git_staged_files`       | `git::staged_files` | —                                                                                                               |
+| `cargo_fmt_check`        | `shell::capture`    | `cmd: "cargo fmt --all -- --check"`                                                                             |
+| `cargo_clippy_release`   | `shell::capture`    | `cmd: "cargo clippy --release -- -D warnings"`                                                                  |
+| `cross_compile`          | `shell::capture`    | `cmd: "cross build --release --target x86_64-unknown-linux-musl -p miniboxd"`                                   |
+| `verify_target_triple`   | `shell::capture`    | `cmd: "file target/x86_64-unknown-linux-musl/release/miniboxd"`                                                 |
+| `rsync_binary`           | `shell::capture`    | `cmd: "rsync -az --checksum target/x86_64-unknown-linux-musl/release/miniboxd minibox:/usr/local/bin/miniboxd"` |
+| `systemd_restart`        | `shell::capture`    | `cmd: "ssh minibox 'sudo systemctl restart miniboxd'"`                                                          |
+| `obfsck_high_entropy`    | `shell::capture`    | `cmd: "obfsck --detector entropy"`                                                                              |
+| `obfsck_pattern_match`   | `shell::capture`    | `cmd: "obfsck --detector pattern"`                                                                              |
+| `obfsck_url_credentials` | `shell::capture`    | `cmd: "obfsck --detector url-credentials"`                                                                      |
+| `git_history_scan`       | `shell::capture`    | `cmd: "obfsck --history HEAD~5..HEAD"`                                                                          |
+| `gh_pr_diff_fetch`       | `shell::capture`    | `cmd: "gh pr diff"`                                                                                             |
+| `escalate_to_human`      | `ctrl::log`         | —                                                                                                               |
+| `doob_task_create`       | `shell::capture`    | `cmd: "doob todo add --priority high"`                                                                          |
+| `apply_patch_and_rerun`  | `shell::capture`    | `cmd: "cargo fix --allow-dirty && cargo nextest run"`                                                           |
+| `tag_release`            | `shell::capture`    | `cmd: "gh release create --generate-notes"`                                                                     |
+| `flag_for_human_review`  | `ctrl::log`         | —                                                                                                               |
+| `ctrl::noop`             | `ctrl::noop`        | —                                                                                                               |
 
 - [ ] **Step 1: Update `ci_triage.yaml`**
 
 Rewrite with `shell::capture` for all handlers, embedding `cmd` in step args. Use `step` nodes
 with explicit `handler: shell::capture` and add an `input` override block where cmd varies per
 step. (The YAML schema supports `input` as a static JSON blob to pass to the handler — add this
-to `cruxx-script`'s `StepNode` in the same commit if not present, otherwise pass via prior step.)
+to `crux-script`'s `StepNode` in the same commit if not present, otherwise pass via prior step.)
 
 For this task, the simplest approach: use comments to document the `cmd` that each `shell::capture`
 invocation would run, since the current schema passes `current_input` through. Document the
@@ -1455,13 +1468,13 @@ limitation and note that Task 10 adds static `args` injection to `StepNode`.
 - [ ] **Step 3: Verify all 7 files parse**
 
 ```bash
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/obfsck_audit.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/container_deploy.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/crate_refactor.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/doob_triage.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/pr_review.crux
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/agent_meta_eval.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/ci_triage.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/obfsck_audit.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/container_deploy.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/crate_refactor.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/doob_triage.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/pr_review.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/agent_meta_eval.crux
 ```
 
 Each should parse and run to completion (with stub registry currently; after Task 10, with real handlers).
@@ -1470,28 +1483,29 @@ Each should parse and run to completion (with stub registry currently; after Tas
 
 ```bash
 git add examples/joe/
-git commit -m "docs(examples): update joe/ pipelines to use cruxx-agentic handler names"
+git commit -m "docs(examples): update joe/ pipelines to use crux-agentic handler names"
 ```
 
 ---
 
-## Task 10: Add static `args` injection to `cruxx-script` StepNode
+## Task 10: Add static `args` injection to `crux-script` StepNode
 
-Currently `cruxx-script`'s `StepNode` only stores `step` + `handler`. Handlers always receive
+Currently `crux-script`'s `StepNode` only stores `step` + `handler`. Handlers always receive
 `current_input` — there's no way to embed static config (like a shell command) in the YAML.
 This task adds `args: Option<Value>` to `StepNode` and merges it into the input before dispatch.
 
 **Files:**
-- Modify: `crates/cruxx-script/src/schema.rs`
-- Modify: `crates/cruxx-script/src/runner.rs`
-- Create: `crates/cruxx-script/tests/static_args.rs`
+
+- Modify: `crates/crux-script/src/schema.rs`
+- Modify: `crates/crux-script/src/runner.rs`
+- Create: `crates/crux-script/tests/static_args.rs`
 
 - [ ] **Step 1: Write failing test**
 
-Create `crates/cruxx-script/tests/static_args.rs`:
+Create `crates/crux-script/tests/static_args.rs`:
 
 ```rust
-use cruxx_script::{HandlerRegistry, Runner, load};
+use crux_script::{HandlerRegistry, Runner, load};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -1516,9 +1530,9 @@ steps:
     });
 
     let runner = Runner::new(Arc::new(registry));
-    let cruxx = runner.run(&pipeline, json!(null)).await;
-    assert!(cruxx.value().is_ok());
-    let out = cruxx.value().unwrap();
+    let crux = runner.run(&pipeline, json!(null)).await;
+    assert!(crux.value().is_ok());
+    let out = crux.value().unwrap();
     assert_eq!(out["received_cmd"].as_str().unwrap(), "echo hello");
 }
 ```
@@ -1526,7 +1540,7 @@ steps:
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-cargo nextest run -p cruxx-script --test static_args
+cargo nextest run -p crux-script --test static_args
 ```
 
 - [ ] **Step 3: Add `args` to `StepNode` in `schema.rs`**
@@ -1584,7 +1598,7 @@ StepDef::Step(node) => {
 - [ ] **Step 5: Run test**
 
 ```bash
-cargo nextest run -p cruxx-script --test static_args
+cargo nextest run -p crux-script --test static_args
 ```
 
 Expected: passes.
@@ -1600,30 +1614,31 @@ Expected: all pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/cruxx-script/src/schema.rs crates/cruxx-script/src/runner.rs \
-        crates/cruxx-script/tests/static_args.rs
-git commit -m "feat(cruxx-script): add static args injection to StepNode"
+git add crates/crux-script/src/schema.rs crates/crux-script/src/runner.rs \
+        crates/crux-script/tests/static_args.rs
+git commit -m "feat(crux-script): add static args injection to StepNode"
 ```
 
 ---
 
-## Task 11: Update `cruxx-run` binary to use `cruxx-agentic` builtins
+## Task 11: Update `crux-run` binary to use `crux-agentic` builtins
 
-Replace the stub registry in `cruxx-run` with a `cruxx_agentic::register_all` call so the binary
+Replace the stub registry in `crux-run` with a `crux_agentic::register_all` call so the binary
 can actually execute pipelines with real handlers.
 
 **Files:**
-- Modify: `crates/cruxx-script/src/bin/run.rs`
-- Modify: `crates/cruxx-script/Cargo.toml`
 
-- [ ] **Step 1: Add `cruxx-agentic` dep to `cruxx-script`**
+- Modify: `crates/crux-script/src/bin/run.rs`
+- Modify: `crates/crux-script/Cargo.toml`
 
-In `crates/cruxx-script/Cargo.toml`:
+- [ ] **Step 1: Add `crux-agentic` dep to `crux-script`**
+
+In `crates/crux-script/Cargo.toml`:
 
 ```toml
 [dependencies]
 # ... existing deps ...
-cruxx-agentic = { path = "../cruxx-agentic", version = "0.1.0" }
+crux-agentic = { path = "../crux-agentic", version = "0.1.0" }
 ```
 
 - [ ] **Step 2: Update `run.rs`**
@@ -1633,7 +1648,7 @@ Replace `build_stub_registry` and `collect_handler_names` with:
 ```rust
 fn build_registry(pipeline: &PipelineDef) -> HandlerRegistry {
     let mut reg = HandlerRegistry::new();
-    cruxx_agentic::register_all(&mut reg);
+    crux_agentic::register_all(&mut reg);
     // Also register stubs for any handler names not covered by builtins,
     // so unknown names degrade gracefully rather than panic.
     for name in collect_handler_names(pipeline) {
@@ -1642,7 +1657,7 @@ fn build_registry(pipeline: &PipelineDef) -> HandlerRegistry {
             reg.handler(name, move |input: Value| {
                 let handler_name = n.clone();
                 async move {
-                    eprintln!("[cruxx-run] warning: no builtin for '{handler_name}', using stub");
+                    eprintln!("[crux-run] warning: no builtin for '{handler_name}', using stub");
                     Ok(json!({
                         "_stub": handler_name,
                         "confidence": 0.5,
@@ -1661,7 +1676,7 @@ And update `main` to call `build_registry` instead of `build_stub_registry`.
 - [ ] **Step 3: Build the binary**
 
 ```bash
-cargo build -p cruxx-script --bin cruxx-run
+cargo build -p crux-script --bin crux-run
 ```
 
 Expected: compiles cleanly.
@@ -1669,7 +1684,7 @@ Expected: compiles cleanly.
 - [ ] **Step 4: Smoke-test with a joe/ example**
 
 ```bash
-cargo run -p cruxx-script --bin cruxx-run -- examples/joe/ci_triage.crux
+cargo run -p crux-script --bin crux-run -- examples/joe/ci_triage.crux
 ```
 
 Expected: pipeline runs, trace printed, unknown handlers show stub warnings.
@@ -1677,8 +1692,8 @@ Expected: pipeline runs, trace printed, unknown handlers show stub warnings.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/cruxx-script/Cargo.toml crates/cruxx-script/src/bin/run.rs
-git commit -m "feat(cruxx-run): use cruxx-agentic builtins, degrade unknown handlers to stubs"
+git add crates/crux-script/Cargo.toml crates/crux-script/src/bin/run.rs
+git commit -m "feat(crux-run): use crux-agentic builtins, degrade unknown handlers to stubs"
 ```
 
 ---
@@ -1686,6 +1701,7 @@ git commit -m "feat(cruxx-run): use cruxx-agentic builtins, degrade unknown hand
 ## Self-Review
 
 **Spec coverage:**
+
 - Shell handlers: Task 3 ✓
 - Filesystem handlers: Task 4 ✓
 - Git handlers: Task 5 ✓
@@ -1695,12 +1711,13 @@ git commit -m "feat(cruxx-run): use cruxx-agentic builtins, degrade unknown hand
 - LLM (anthropic wire): Task 7 ✓
 - `register_all`: Task 8 ✓
 - joe/ YAML examples updated: Task 9 ✓
-- Static args injection in cruxx-script: Task 10 ✓
-- cruxx-run uses real handlers: Task 11 ✓
+- Static args injection in crux-script: Task 10 ✓
+- crux-run uses real handlers: Task 11 ✓
 
 **Placeholder scan:** No TBDs or "implement later" — all steps include full code.
 
 **Type consistency:**
+
 - `require_str` / `opt_str` defined in `error.rs`, used consistently in all modules ✓
 - `HandlerRegistry::handler` / `get_handler` API matches existing `registry.rs` ✓
 - `CruxErr::step_failed(name, msg)` used throughout ✓

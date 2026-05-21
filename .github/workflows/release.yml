@@ -21,7 +21,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
       - name: stub generated modules for fmt
-        run: mkdir -p crates/cruxx-agentic/src/baml_client && touch crates/cruxx-agentic/src/baml_client/mod.rs
+        run: mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo nextest run
@@ -35,23 +35,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: publish cruxx-core
-        run: cargo publish -p cruxx-core
+      - name: publish crux-runtime
+        run: cargo publish -p crux-runtime
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: publish cruxx-macros
-        run: cargo publish -p cruxx-macros
+      - name: publish crux-macros
+        run: cargo publish -p crux-macros
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: publish cruxx
-        run: cargo publish -p cruxx
+      - name: publish crux
+        run: cargo publish -p crux
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: publish cruxx-agentic
-        run: cargo publish -p cruxx-agentic
+      - name: publish crux-agentic
+        run: cargo publish -p crux-agentic
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: publish cruxx-script
-        run: cargo publish -p cruxx-script
+      - name: publish crux-script
+        run: cargo publish -p crux-script
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

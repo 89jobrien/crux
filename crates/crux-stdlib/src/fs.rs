@@ -1,6 +1,6 @@
 /// File-system handlers: read, write, glob, exists.
-use cruxx_core::prelude::CruxErr;
-use cruxx_script::{
+use crux_runtime::prelude::CruxErr;
+use crux_script::{
     ArgSchema, ArgType, Capability, HandlerMetadata, HandlerRegistry, RiskLevel, SideEffect,
 };
 use serde_json::{Value, json};

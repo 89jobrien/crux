@@ -1,0 +1,27 @@
+[package]
+name = "crux-planner"
+description = "Goal-to-pipeline planner for crux-script"
+version = "0.2.6"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+baml = ["dep:crux-agentic"]
+
+[dependencies]
+crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+crux-agentic = { path = "../crux-agentic", version = "0.2.6", optional = true, features = ["baml"] }
+
+[dev-dependencies]
+indoc = "2.0.7"
+insta = "1.47.2"
+tokio = { workspace = true }

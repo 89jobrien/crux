@@ -20,7 +20,7 @@ just fix                             # cargo fmt --all (in-place)
 just build                           # cargo build --all-targets
 just hooks                           # Install git hooks from .githooks/
 
-cargo nextest run -p cruxx-core       # Test a single crate
+cargo nextest run -p crux-runtime       # Test a single crate
 cargo nextest run test_name          # Run a single test
 cargo nextest run --features redb    # Include redb adapter tests
 ```
@@ -31,23 +31,23 @@ Always use `cargo nextest run` instead of `cargo test`.
 
 Crates in `crates/`:
 
-- **`cruxx`** -- Facade crate. Re-exports `cruxx-core` + `cruxx-macros`. Integration tests live here
+- **`crux`** -- Facade crate. Re-exports `crux-runtime` + `crux-macros`. Integration tests live here
   (`tests/agent_macro.rs`, `combinators.rs`, `delegation.rs`, `speculation.rs`, `task_registry.rs`).
-- **`cruxx-core`** -- All domain logic: types, traits, runtime. Includes orchestrator types
+- **`crux-runtime`** -- All domain logic: types, traits, runtime. Includes orchestrator types
   (`HarnessProfile`, `ResourceHints`, `HarnessDiff`, `EvolutionOutcome`) and ports
   (`SafetyPolicy`, `ApprovalGate`).
-- **`cruxx-macros`** -- `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` proc macros.
-- **`cruxx-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
+- **`crux-macros`** -- `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
+- **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
-- **`cruxx-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
+- **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
   harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
-- **`cruxx-script`** -- YAML-driven pipeline scripting.
-- **`cruxx-types`** -- Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxId`, `CruxErr`) with
-  minimal deps (serde, chrono, ulid). `cruxx-core` re-exports everything — no breaking change.
+- **`crux-script`** -- YAML-driven pipeline scripting.
+- **`crux-types`** -- Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxId`, `CruxErr`) with
+  minimal deps (serde, chrono, ulid). `crux-runtime` re-exports everything — no breaking change.
   External consumers (minibox) depend on this to avoid pulling the full runtime. `RecoveryKind`
   is the serializable subset of `Recovery<T>` (closure variants stay in core).
-- **`cruxx-model`** -- Canonical model ID types and provider-specific parsers.
-- **`cruxx-plugin`** -- Subprocess plugin host for pipelines.
+- **`crux-model`** -- Canonical model ID types and provider-specific parsers.
+- **`crux-plugin`** -- Subprocess plugin host for pipelines.
 
 ## Feature Flags
 
@@ -77,7 +77,7 @@ The `RegistryBackend` trait is the persistence port. Two adapters exist:
 
 ### Key Types
 
-- `Crux<T>` (`types/cruxx_value.rs`) -- execution trace fused with result
+- `Crux<T>` (`types/crux_value.rs`) -- execution trace fused with result
 - `Step` (`types/step.rs`) -- recorded unit of work (kind, status, confidence, output, children)
 - `CruxCtx` (`ctx.rs`) -- runtime: `step()`, `delegate()`, `speculate()`, `pipe()`, `join_all()`,
   `route_on_confidence()`
@@ -100,23 +100,23 @@ recovery path, not a fallback.
 
 ### Proc Macros
 
-`#[cruxx::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
+`#[crux::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
 
 1. Inner function with `CruxCtx` injected as `t`
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
 
-`#[cruxx::harness]` on a struct marks it as a managed container/process harness. The struct
+`#[crux::harness]` on a struct marks it as a managed container/process harness. The struct
 must have `image: String` and any additional fields mapped to `HarnessProfile`.
 
-`#[cruxx::evolve]` on `async fn f(metrics: RunMetrics) -> Crux<EvolutionOutcome>` injects
+`#[crux::evolve]` on `async fn f(metrics: RunMetrics) -> Crux<EvolutionOutcome>` injects
 an `EvolutionPlanner` (as `planner`) and a `CruxCtx` (as `x`) into the function body.
 
 ## Pipeline Files
 
-Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.yaml` and `.cruxx`.
+Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.yaml` and `.crux`.
 
-## BAML (cruxx-agentic)
+## BAML (crux-agentic)
 
 - `just check-baml` — validates `generators.baml` version matches `Cargo.toml` baml dep;
   auto-downloads native lib if missing. Run after any baml version bump.
@@ -124,10 +124,10 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   or bumping the baml version. The `baml` crate version in `Cargo.toml` must match `version` in
   `generators.baml` exactly. When bumping baml, update both files together.
 - `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
-  `crates/cruxx-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
-- Build `cruxx-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
-- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/cruxx-run
-examples/<pipeline>.cruxx examples/input_<name>.json`
+  `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
+- Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
+- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
+examples/<pipeline>.crux examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
   for the exact injection commands (machine-local, gitignored).
 

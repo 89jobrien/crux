@@ -1,6 +1,6 @@
 pipeline: cross_project_sync
 # Detect and propagate shared dependency updates across workspace projects.
-# When a library crate (devkit, cruxx-types) bumps its version, find all
+# When a library crate (devkit, crux-types) bumps its version, find all
 # downstream consumers and update their Cargo.toml references.
 budget: { calls: 15 }
 
@@ -22,7 +22,7 @@ steps:
       - step: scan_cargo_tomls
         handler: shell::capture
         args:
-          cmd: "rg --no-heading -l 'devkit|cruxx-types|cruxx-core' ~/dev/*/Cargo.toml ~/dev/*/crates/*/Cargo.toml 2>/dev/null"
+          cmd: "rg --no-heading -l 'devkit|crux-types|crux-runtime' ~/dev/*/Cargo.toml ~/dev/*/crates/*/Cargo.toml 2>/dev/null"
         # Find all Cargo.toml files that depend on shared crates
       - step: check_lockfile_drift
         handler: shell::capture

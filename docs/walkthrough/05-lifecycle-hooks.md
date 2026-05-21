@@ -4,7 +4,7 @@
 > the error site" into "escalate, retry, or degrade gracefully" — without scattering recovery
 > logic across business code.
 
-Lifecycle hooks are the reason cruxx treats recovery as a language feature instead of a pattern.
+Lifecycle hooks are the reason crux treats recovery as a language feature instead of a pattern.
 In a regular Rust agent you write:
 
 ```rust
@@ -28,11 +28,11 @@ Hooks solve all three.
 
 ## The three hooks
 
-| Hook                                    | Fires when                                    | Default behaviour              |
-| --------------------------------------- | --------------------------------------------- | ------------------------------ |
-| `on_low_confidence(threshold, handler)` | Step confidence < threshold                   | `Recovery::Continue` (kept)    |
-| `on_step_failure(handler)`              | Step returns `Err(CruxErr)`                   | `Recovery::Propagate` (bubble) |
-| `on_budget_exceeded(handler)`           | A step or delegation would push over budget   | no-op (error propagates)       |
+| Hook                                    | Fires when                                  | Default behaviour              |
+| --------------------------------------- | ------------------------------------------- | ------------------------------ |
+| `on_low_confidence(threshold, handler)` | Step confidence < threshold                 | `Recovery::Continue` (kept)    |
+| `on_step_failure(handler)`              | Step returns `Err(CruxErr)`                 | `Recovery::Propagate` (bubble) |
+| `on_budget_exceeded(handler)`           | A step or delegation would push over budget | no-op (error propagates)       |
 
 All three handlers return `Recovery<serde_json::Value>`. The type parameter is erased at the
 handler boundary because the same hook machinery handles steps of varying output types. The
@@ -135,7 +135,7 @@ Call-site hooks override per-agent hooks when both are set.
 ### 3. Scoped — on CruxCtx / Context
 
 ```rust
-#[cruxx::agent]
+#[crux::agent]
 async fn session(input: Input) -> Crux<Output> {
     x.on_low_confidence(0.8, |score| async move {
         Recovery::Propagate
@@ -165,7 +165,7 @@ ceiling for `Recovery::Retry` on any step in scope.
 Classic three-tier escalation (cheap model -> expensive model -> human):
 
 ```rust
-#[cruxx::agent]
+#[crux::agent]
 async fn answer(question: String) -> Crux<Answer> {
     let answer = x
         .delegate::<CheapModel>("draft", question.clone())
@@ -178,7 +178,7 @@ async fn answer(question: String) -> Crux<Answer> {
                 Recovery::Escalate(Box::pin(async move {
                     // In practice, this delegates into a separate CruxCtx.
                     // Here we show the intent; see the full example in
-                    // examples/escalation_ladder.cruxx.
+                    // examples/escalation_ladder.crux.
                     let refined = expensive_model_call(&q).await?;
                     serde_json::to_value(refined).map_err(CruxErr::serialization)
                 }))
@@ -190,14 +190,14 @@ async fn answer(question: String) -> Crux<Answer> {
 }
 ```
 
-The cruxx records every tier that fired, which confidence scores triggered each escalation, and
+The crux records every tier that fired, which confidence scores triggered each escalation, and
 which tier produced the final answer. Two weeks later you can replay the trace and know exactly
 why a human answered instead of the cheap model.
 
 A realistic three-tier version uses nested delegations:
 
 ```rust
-#[cruxx::agent]
+#[crux::agent]
 async fn answer(question: String) -> Crux<Answer> {
     // Tier 1: cheap model
     let result = x
@@ -238,7 +238,7 @@ agent does not need to know how many tiers exist.
 `Recovery::Retry` and `Recovery::RetryWith` give you retry logic without a manual retry loop:
 
 ```rust
-#[cruxx::agent]
+#[crux::agent]
 async fn fetch_data(url: String) -> Crux<Vec<Record>> {
     // Scoped failure handler: exponential backoff, max 3 attempts.
     x.set_max_retries(3);
@@ -276,7 +276,7 @@ The full retry history is in the trace without any extra instrumentation.
 ## Worked example 3: budget-aware degradation
 
 ```rust
-#[cruxx::agent]
+#[crux::agent]
 async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
     // When the polishing step would exceed budget, fall back to a template.
     x.on_budget_exceeded(|_budget| async move {
@@ -297,7 +297,7 @@ async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
 ```
 
 `Recovery::Substitute` replaces the step output with the given value and continues execution.
-The cruxx records both the budget-exceeded event and the substitution, so you can tell per
+The crux records both the budget-exceeded event and the substitution, so you can tell per
 request whether the polished output or the template fallback was returned.
 
 `Recovery::Skip` is an alternative: it marks the step as `Skipped` and yields `None` (or
@@ -312,7 +312,7 @@ Hooks and the task registry (chapter 04) compose naturally:
 
 - `Recovery::Retry` increments the task's attempt counter in the registry.
 - `Recovery::Escalate` to a human-review agent typically leaves the task in `AwaitingApproval`.
-  The registry holds the full cruxx so the reviewer can see exactly what the agent tried.
+  The registry holds the full crux so the reviewer can see exactly what the agent tried.
 - `Recovery::Propagate` causes the registry to mark the task `Failed` with the full error chain.
 
 Hooks are not just control flow — they are how a long-running agent transitions between registry
@@ -332,7 +332,7 @@ side effects in a hook makes the trace incomplete.
 
 **2. Hooks that silently succeed.**
 `Recovery::Substitute(default_value)` makes every failure look like success to downstream code.
-The cruxx records the substitution, but callers further down the chain have no idea the real
+The crux records the substitution, but callers further down the chain have no idea the real
 step failed. Use it sparingly; prefer `Escalate` so the trace shows a deliberate recovery path
 rather than a silent override.
 
@@ -340,18 +340,18 @@ rather than a silent override.
 
 ## Summary
 
-| Situation                                     | Reach for                                        |
-| --------------------------------------------- | ------------------------------------------------ |
-| One call site needs different recovery        | `.on_low_confidence` / `.on_step_failure` on the builder |
-| All callers should get the same recovery      | Override `on_low_confidence` / `on_step_failure` on `Agent` |
-| All steps in a function share recovery logic  | `x.on_low_confidence` / `x.on_step_failure` / `x.on_budget_exceeded` |
-| Re-run the same step                          | `Recovery::Retry`                                |
-| Re-run with different parameters              | `Recovery::RetryWith(...)`                       |
-| Use a known-good fallback value               | `Recovery::Substitute(value)`                    |
-| Delegate to a richer agent                    | `Recovery::Escalate(future)`                     |
-| Step is optional; continue without it         | `Recovery::Skip`                                 |
-| No recovery available                         | `Recovery::Propagate`                            |
-| Below threshold but keep the value            | `Recovery::Continue` (on_low_confidence only)    |
+| Situation                                    | Reach for                                                            |
+| -------------------------------------------- | -------------------------------------------------------------------- |
+| One call site needs different recovery       | `.on_low_confidence` / `.on_step_failure` on the builder             |
+| All callers should get the same recovery     | Override `on_low_confidence` / `on_step_failure` on `Agent`          |
+| All steps in a function share recovery logic | `x.on_low_confidence` / `x.on_step_failure` / `x.on_budget_exceeded` |
+| Re-run the same step                         | `Recovery::Retry`                                                    |
+| Re-run with different parameters             | `Recovery::RetryWith(...)`                                           |
+| Use a known-good fallback value              | `Recovery::Substitute(value)`                                        |
+| Delegate to a richer agent                   | `Recovery::Escalate(future)`                                         |
+| Step is optional; continue without it        | `Recovery::Skip`                                                     |
+| No recovery available                        | `Recovery::Propagate`                                                |
+| Below threshold but keep the value           | `Recovery::Continue` (on_low_confidence only)                        |
 
 Chapter **06** puts all five chapters together into the hands-on project: a decomposer and
 executor for task planning.

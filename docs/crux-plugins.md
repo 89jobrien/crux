@@ -1,30 +1,30 @@
-# cruxx Plugins
+# crux Plugins
 
-Plugins extend cruxx pipelines with handlers for third-party
-services. A plugin is any executable that speaks the cruxx plugin
+Plugins extend crux pipelines with handlers for third-party
+services. A plugin is any executable that speaks the crux plugin
 protocol over stdin/stdout.
 
 ## Quick Start
 
-1. Create a `~/.cruxx/plugins.toml`:
+1. Create a `~/.crux/plugins.toml`:
 
    ```toml
    [[plugin]]
    name = "github"
-   path = "/usr/local/bin/cruxx-github"
+   path = "/usr/local/bin/crux-github"
    env = { GITHUB_TOKEN = "ghp_..." }
    ```
 
 2. Run a pipeline that uses plugin handlers:
 
    ```bash
-   cruxx run my-pipeline.cruxx
+   crux run my-pipeline.crux
    ```
 
 3. Or generate a pipeline that uses plugins:
 
    ```bash
-   cruxx plan --goal "create a GitHub issue for each TODO"
+   crux plan --goal "create a GitHub issue for each TODO"
    ```
 
 ## Plugin Protocol
@@ -34,11 +34,13 @@ Plugins communicate via newline-delimited JSON on stdin/stdout.
 ### Declare (host -> plugin)
 
 Request:
+
 ```json
-{"method":"Declare"}
+{ "method": "Declare" }
 ```
 
 Response:
+
 ```json
 {
   "status": "Declare",
@@ -56,42 +58,47 @@ Response:
 ### Invoke (host -> plugin)
 
 Request:
+
 ```json
 {
   "method": "Invoke",
   "params": {
     "handler": "github::create_issue",
-    "input": {"title": "Bug report", "body": "..."}
+    "input": { "title": "Bug report", "body": "..." }
   }
 }
 ```
 
 Success response:
+
 ```json
 {
   "status": "InvokeOk",
-  "data": {"output": {"id": 42, "url": "..."}}
+  "data": { "output": { "id": 42, "url": "..." } }
 }
 ```
 
 Error response:
+
 ```json
 {
   "status": "InvokeErr",
-  "data": {"error": "authentication failed"}
+  "data": { "error": "authentication failed" }
 }
 ```
 
 ### Shutdown (host -> plugin)
 
 Request:
+
 ```json
-{"method":"Shutdown"}
+{ "method": "Shutdown" }
 ```
 
 Response:
+
 ```json
-{"status":"ShutdownAck"}
+{ "status": "ShutdownAck" }
 ```
 
 ## Writing a Plugin
@@ -102,12 +109,13 @@ A plugin is any binary that:
 2. Writes newline-delimited JSON to stdout
 3. Handles `Declare`, `Invoke`, and `Shutdown` methods
 
-See `crates/cruxx-plugin/tests/host.rs` and `crates/cruxx-plugin/tests/bridge.rs`
+See `crates/crux-plugin/tests/host.rs` and `crates/crux-plugin/tests/bridge.rs`
 for working examples.
 
 ## Handler Naming
 
 Plugin handlers use `namespace::action` format:
+
 - `github::create_issue`
 - `slack::post_message`
 - `linear::create_ticket`

@@ -1,0 +1,43 @@
+[package]
+name = "crux-runtime"
+description = "Core types, traits, and runtime for the crux agentic DSL"
+version.workspace = true
+edition.workspace = true
+readme = "../../README.md"
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Always required — Step.output is Option<Value>, children are type-erased
+anyhow = { workspace = true }
+crux-types = { path = "../crux-types", version = "0.2.6" }
+crux-domain = { path = "../crux-domain", version = "0.2.6", features = ["tokio-pipeline"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+slashcrux = { workspace = true }
+
+# Optional
+tokio = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+futures = { workspace = true }
+proptest = { workspace = true }
+crux-types = { path = "../crux-types", version = "0.2.6", features = ["test-utils"] }
+
+[features]
+default = ["tokio-runtime"]
+tokio-runtime = ["dep:tokio", "dep:futures"]
+redb = ["dep:redb", "dep:tempfile"]
+tracing = ["dep:tracing"]
