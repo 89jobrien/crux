@@ -6,7 +6,8 @@ use serde_json::Value;
 
 use crate::metadata::ArgType;
 use crate::registry::HandlerRegistry;
-use crate::schema::{ArmDef, PipelineDef, RouteBranch, StepDef};
+use crate::resolve::TargetResolver;
+use crate::schema::{ArmDef, CruxfileDef, PipelineDef, RouteBranch, StepDef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticSeverity {
@@ -144,6 +145,43 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
                     );
                 }
             }
+        }
+    }
+
+    report
+}
+
+/// Validate a Cruxfile: each target's steps, dependency references, cycles, and default target.
+pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> ValidationReport {
+    let mut report = ValidationReport::default();
+
+    // Check default target exists.
+    if !cruxfile.targets.contains_key(&cruxfile.default) {
+        report.push(ValidationDiagnostic::error(
+            "default",
+            format!(
+                "default target '{}' is not defined in targets",
+                cruxfile.default
+            ),
+        ));
+    }
+
+    // Check dependency graph (unknown deps + cycles).
+    if let Err(e) = TargetResolver::new(cruxfile) {
+        report.push(ValidationDiagnostic::error("targets", e.to_string()));
+    }
+
+    // Validate each target's steps as if it were a pipeline.
+    for (name, target) in &cruxfile.targets {
+        let pipeline = PipelineDef {
+            pipeline: name.clone(),
+            budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
+            steps: target.steps.clone(),
+        };
+        let target_report = validate_pipeline(&pipeline, registry);
+        for mut diag in target_report.diagnostics {
+            diag.location = format!("targets.{name}.{}", diag.location);
+            report.push(diag);
         }
     }
 

@@ -1,4 +1,5 @@
 /// YAML schema types for pipeline definitions.
+use indexmap::IndexMap;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -136,4 +137,27 @@ pub enum SpeculateMode {
 
 fn default_speculate_mode() -> SpeculateMode {
     SpeculateMode::PickBest
+}
+
+// ---------------------------------------------------------------------------
+// Cruxfile (multi-target) schema
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CruxfileDef {
+    pub project: String,
+    pub default: String,
+    #[serde(default)]
+    pub budget: Option<BudgetDef>,
+    pub targets: IndexMap<String, TargetDef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TargetDef {
+    #[serde(default)]
+    pub depends: Vec<String>,
+    #[serde(default)]
+    pub budget: Option<BudgetDef>,
+    #[serde(default)]
+    pub steps: Vec<StepDef>,
 }

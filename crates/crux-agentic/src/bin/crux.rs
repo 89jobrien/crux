@@ -11,7 +11,7 @@ use clap::{Parser, ValueEnum};
 use crux_plugin::bridge::register_plugins;
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, Runner, schema::PipelineDef};
+use crux_script::{HandlerRegistry, Runner, TargetResolver, schema::PipelineDef};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -37,15 +37,36 @@ enum Cli {
         #[arg(required = true)]
         pipelines: Vec<String>,
     },
-    /// Execute a .crux pipeline ("-" reads from stdin)
+    /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
-        /// Pipeline file ("-" for stdin)
-        pipeline: String,
-        /// Optional input JSON file
+        /// Pipeline/Cruxfile path ("-" for stdin). If omitted, discovers Cruxfile in cwd.
+        pipeline: Option<String>,
+        /// Optional: target name (for Cruxfile) or input JSON file (for pipeline)
+        target_or_input: Option<String>,
+        /// Target to run from a Cruxfile (alternative to positional)
+        #[arg(long)]
+        target: Option<String>,
+        /// Input JSON file (use this when both target and input are needed)
+        #[arg(long)]
         input: Option<String>,
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Suppress all output except errors
+        #[arg(short, long)]
+        quiet: bool,
+        /// Show full trace envelope (pipeline info, steps, timing)
+        #[arg(short, long)]
+        verbose: bool,
+        /// Replay from a previous trace JSON file (skip cached steps)
+        #[arg(long)]
+        replay: Option<String>,
+        /// Replay matching mode: "strict" (default) or "lenient"
+        #[arg(long, default_value = "strict")]
+        replay_mode: String,
+        /// Save the execution trace to a JSON file (replayable)
+        #[arg(long)]
+        save_trace: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
     Plan {
@@ -77,9 +98,27 @@ fn main() {
         Cli::Check { pipelines } => cmd_check(&pipelines),
         Cli::Run {
             pipeline,
+            target_or_input,
+            target,
             input,
             plugins,
-        } => cmd_run(&pipeline, input.as_deref(), plugins.as_deref()),
+            quiet,
+            verbose,
+            replay,
+            replay_mode,
+            save_trace,
+        } => cmd_run_dispatch(
+            pipeline.as_deref(),
+            target_or_input.as_deref(),
+            target.as_deref(),
+            input.as_deref(),
+            plugins.as_deref(),
+            quiet,
+            verbose,
+            replay.as_deref(),
+            &replay_mode,
+            save_trace.as_deref(),
+        ),
         Cli::Plan {
             goal,
             output,
@@ -113,7 +152,61 @@ fn cmd_check(paths: &[String]) {
     let registry = rt.block_on(build_registry(&empty_pipeline, None));
 
     for path in paths {
-        let pipeline = match crux_script::load_file(path) {
+        // Try as Cruxfile first if it looks like one.
+        let contents = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("\x1b[31merror\x1b[0m: {path}: {e}");
+                parse_errors += 1;
+                continue;
+            }
+        };
+
+        if crux_script::is_cruxfile(&contents) {
+            let cruxfile = match crux_script::load_cruxfile(&contents) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("\x1b[31merror\x1b[0m: {path}: {e}");
+                    parse_errors += 1;
+                    continue;
+                }
+            };
+
+            let report = crux_script::validate_cruxfile(&cruxfile, &registry);
+            let target_count = cruxfile.targets.len();
+
+            if report.is_ok() && report.warning_count() == 0 {
+                println!(
+                    "\x1b[32mok\x1b[0m: {path} (Cruxfile, {target_count} targets, default: {})",
+                    cruxfile.default
+                );
+            } else {
+                for diag in &report.diagnostics {
+                    let (color, label) = match diag.severity {
+                        crux_script::DiagnosticSeverity::Error => {
+                            if diag.message.contains("is not registered") {
+                                warnings += 1;
+                                ("\x1b[33m", "warning")
+                            } else {
+                                errors += 1;
+                                ("\x1b[31m", "error")
+                            }
+                        }
+                        crux_script::DiagnosticSeverity::Warning => {
+                            warnings += 1;
+                            ("\x1b[33m", "warning")
+                        }
+                    };
+                    eprintln!(
+                        "{color}{label}\x1b[0m: {path} [{}]: {}",
+                        diag.location, diag.message
+                    );
+                }
+            }
+            continue;
+        }
+
+        let pipeline = match crux_script::load(&contents) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("\x1b[31merror\x1b[0m: {path}: {e}");
@@ -175,7 +268,222 @@ fn cmd_check(paths: &[String]) {
     }
 }
 
-fn cmd_run(pipeline_path: &str, input_path: Option<&str>, plugins_path: Option<&str>) {
+/// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
+#[allow(clippy::too_many_arguments)]
+fn cmd_run_dispatch(
+    pipeline_arg: Option<&str>,
+    target_or_input: Option<&str>,
+    target_flag: Option<&str>,
+    input_flag: Option<&str>,
+    plugins_path: Option<&str>,
+    quiet: bool,
+    verbose: bool,
+    replay_path: Option<&str>,
+    replay_mode_str: &str,
+    save_trace_path: Option<&str>,
+) {
+    // Resolve pipeline path: explicit arg, or discover Cruxfile in cwd.
+    let pipeline_path = match pipeline_arg {
+        Some("-") => {
+            // stdin -- always a regular pipeline
+            cmd_run(
+                "-",
+                target_or_input.or(input_flag),
+                plugins_path,
+                quiet,
+                verbose,
+                replay_path,
+                replay_mode_str,
+                save_trace_path,
+            );
+            return;
+        }
+        Some(p) => p.to_string(),
+        None => {
+            // Discovery: look for Cruxfile in cwd
+            if std::path::Path::new("Cruxfile").exists() {
+                "Cruxfile".to_string()
+            } else {
+                eprintln!("error: no pipeline file specified and no Cruxfile found in cwd");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    // Try to detect if this is a Cruxfile.
+    let contents = std::fs::read_to_string(&pipeline_path).unwrap_or_else(|e| {
+        eprintln!("error: cannot read {pipeline_path}: {e}");
+        std::process::exit(1);
+    });
+
+    if crux_script::is_cruxfile(&contents) {
+        let target_name = target_flag.or(target_or_input).map(String::from);
+        cmd_run_cruxfile(
+            &contents,
+            &pipeline_path,
+            target_name.as_deref(),
+            plugins_path,
+            quiet,
+            verbose,
+            save_trace_path,
+        );
+    } else {
+        // Regular pipeline. target_or_input is actually an input file.
+        let input_path = input_flag.or(target_or_input);
+        cmd_run(
+            &pipeline_path,
+            input_path,
+            plugins_path,
+            quiet,
+            verbose,
+            replay_path,
+            replay_mode_str,
+            save_trace_path,
+        );
+    }
+}
+
+/// Run a Cruxfile: resolve target, execute dependency chain.
+fn cmd_run_cruxfile(
+    contents: &str,
+    path: &str,
+    target_name: Option<&str>,
+    plugins_path: Option<&str>,
+    quiet: bool,
+    verbose: bool,
+    save_trace_path: Option<&str>,
+) {
+    let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
+        eprintln!("error: failed to parse {path}: {e}");
+        std::process::exit(1);
+    });
+
+    let target = target_name.unwrap_or(&cruxfile.default);
+
+    let resolver = TargetResolver::new(&cruxfile).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    });
+
+    let order = resolver.execution_order(target).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    });
+
+    if verbose {
+        eprintln!(
+            "[crux] Cruxfile: project={}, target={target}, plan: {}",
+            cruxfile.project,
+            order.join(" -> ")
+        );
+    }
+
+    // Build registry once using an empty pipeline (all handlers registered).
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let empty_pipeline = PipelineDef {
+        pipeline: String::new(),
+        budget: None,
+        steps: vec![],
+    };
+    let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path));
+
+    // Also register any handlers referenced in all targets.
+    let mut full_reg = registry;
+    for (_, tgt) in &cruxfile.targets {
+        let tmp_pipeline = PipelineDef {
+            pipeline: String::new(),
+            budget: None,
+            steps: tgt.steps.clone(),
+        };
+        for name in collect_handler_names(&tmp_pipeline) {
+            if full_reg.get_handler(&name).is_none() {
+                let n = name.clone();
+                full_reg.handler_value(name, move |_input: Value| {
+                    let handler_name = n.clone();
+                    async move {
+                        eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
+                        Ok(json!({
+                            "_stub": handler_name,
+                            "confidence": 0.5,
+                            "score": 0.5,
+                        }))
+                    }
+                });
+            }
+        }
+    }
+
+    let runner = Runner::new(Arc::new(full_reg));
+    let mut failed = false;
+    let mut skipped: Vec<&str> = Vec::new();
+
+    let start = Instant::now();
+
+    for &target_name in &order {
+        if failed {
+            skipped.push(target_name);
+            continue;
+        }
+
+        let target_def = &cruxfile.targets[target_name];
+        let budget = target_def.budget.as_ref().or(cruxfile.budget.as_ref());
+
+        if verbose {
+            eprintln!("[crux] running target: {target_name}");
+        }
+
+        let crux = rt.block_on(runner.run_target(target_def, target_name, budget));
+
+        if verbose {
+            let status = if crux.value().is_ok() { "OK" } else { "FAILED" };
+            eprintln!(
+                "[crux]   {target_name}: {status} ({} steps)",
+                crux.steps.len()
+            );
+        }
+
+        if let Err(e) = crux.value() {
+            eprintln!("[crux] target '{target_name}' failed: {e}");
+            failed = true;
+        }
+
+        if let Some(trace_dir) = save_trace_path {
+            let trace_file = format!("{trace_dir}.{target_name}.json");
+            let trace_json =
+                serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
+            std::fs::write(&trace_file, trace_json).expect("failed to write trace file");
+            if !quiet {
+                eprintln!("[crux] trace saved to {trace_file}");
+            }
+        }
+    }
+
+    let elapsed = start.elapsed();
+
+    if !skipped.is_empty() && !quiet {
+        eprintln!("[crux] skipped due to failure: {}", skipped.join(", "));
+    }
+
+    if verbose {
+        eprintln!("[crux] total: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
+    }
+
+    if failed {
+        std::process::exit(1);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_run(
+    pipeline_path: &str,
+    input_path: Option<&str>,
+    plugins_path: Option<&str>,
+    quiet: bool,
+    verbose: bool,
+    replay_path: Option<&str>,
+    replay_mode_str: &str,
+    save_trace_path: Option<&str>,
+) {
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")
@@ -195,15 +503,50 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, plugins_path: Option<&
 
     warn_missing_env(&pipeline);
 
+    let replay_mode = match replay_mode_str {
+        "lenient" => ReplayMode::Lenient,
+        _ => ReplayMode::Strict,
+    };
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     let registry = rt.block_on(build_registry(&pipeline, plugins_path));
     let runner = Runner::new(Arc::new(registry));
 
+    let previous: Option<Crux<Value>> = replay_path.map(|path| {
+        let contents = std::fs::read_to_string(path).expect("failed to read replay trace");
+        serde_json::from_str(&contents).expect("invalid replay trace JSON")
+    });
+
     let start = Instant::now();
-    let crux = rt.block_on(runner.run(&pipeline, input));
+    let crux = if let Some(ref prev) = previous {
+        rt.block_on(runner.run_with_replay(&pipeline, input, prev, replay_mode))
+    } else {
+        rt.block_on(runner.run(&pipeline, input))
+    };
     let elapsed = start.elapsed();
 
-    print_trace(&crux, elapsed);
+    if let Some(path) = save_trace_path {
+        let trace_json = serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
+        std::fs::write(path, trace_json).expect("failed to write trace file");
+        if !quiet {
+            eprintln!("[crux] trace saved to {path}");
+        }
+    }
+
+    if verbose {
+        print_trace(&crux, elapsed);
+    } else if !quiet {
+        match crux.value() {
+            Ok(v) => println!("{}", serde_json::to_string(v).unwrap_or_default()),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    } else if let Err(e) = crux.value() {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
 }
 
 // ---------------------------------------------------------------------------

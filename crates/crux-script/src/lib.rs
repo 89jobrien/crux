@@ -6,12 +6,13 @@ pub mod expr;
 pub mod handler_output;
 pub mod metadata;
 pub mod registry;
+pub mod resolve;
 pub mod runner;
 pub mod schema;
 pub mod step_runner;
 pub mod validator;
 
-use schema::PipelineDef;
+use schema::{CruxfileDef, PipelineDef};
 
 /// Load a pipeline definition from a YAML string.
 pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
@@ -20,6 +21,24 @@ pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
 
 /// Load a pipeline definition from a file path.
 pub fn load_file(path: impl AsRef<std::path::Path>) -> Result<PipelineDef, LoadError> {
+    let contents = std::fs::read_to_string(path)?;
+    Ok(serde_saphyr::from_str(&contents)?)
+}
+
+/// Detect whether a YAML string is a Cruxfile (multi-target) rather than a pipeline.
+pub fn is_cruxfile(yaml: &str) -> bool {
+    // Quick heuristic: Cruxfile has `targets:` key, pipelines have `pipeline:`.
+    yaml.lines()
+        .any(|line| line.starts_with("targets:") || line.starts_with("targets :"))
+}
+
+/// Load a Cruxfile definition from a YAML string.
+pub fn load_cruxfile(yaml: &str) -> Result<CruxfileDef, serde_saphyr::Error> {
+    serde_saphyr::from_str(yaml)
+}
+
+/// Load a Cruxfile definition from a file path.
+pub fn load_cruxfile_file(path: impl AsRef<std::path::Path>) -> Result<CruxfileDef, LoadError> {
     let contents = std::fs::read_to_string(path)?;
     Ok(serde_saphyr::from_str(&contents)?)
 }
@@ -37,8 +56,10 @@ pub use metadata::{
     ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect,
 };
 pub use registry::HandlerRegistry;
+pub use resolve::{ResolveError, TargetResolver};
 pub use runner::Runner;
 pub use step_runner::{RunnerCapability, StepContext, StepOutput, StepRunner, StepRunnerRegistry};
 pub use validator::{
-    DiagnosticSeverity, ValidationDiagnostic, ValidationReport, validate_pipeline,
+    DiagnosticSeverity, ValidationDiagnostic, ValidationReport, validate_cruxfile,
+    validate_pipeline,
 };

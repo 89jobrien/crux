@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
-use crate::schema::{BudgetDef, PipelineDef, SpeculateMode, StepDef};
+use crate::schema::{BudgetDef, PipelineDef, SpeculateMode, StepDef, TargetDef};
 
 /// Executes parsed pipelines against a handler registry.
 pub struct Runner {
@@ -20,10 +20,59 @@ impl Runner {
 
     /// Run a pipeline definition with the given input, producing a full Crux trace.
     pub async fn run(&self, pipeline: &PipelineDef, input: Value) -> Crux<Value> {
+        self.run_inner(pipeline, input, None, ReplayMode::Strict)
+            .await
+    }
+
+    /// Run a pipeline with replay from a previous trace.
+    ///
+    /// Steps whose name + input hash match the previous trace are served from
+    /// cache instead of re-executing. `mode` controls matching strictness.
+    pub async fn run_with_replay(
+        &self,
+        pipeline: &PipelineDef,
+        input: Value,
+        previous: &Crux<Value>,
+        mode: ReplayMode,
+    ) -> Crux<Value> {
+        self.run_inner(pipeline, input, Some(previous), mode).await
+    }
+
+    /// Run a single Cruxfile target with the given name and optional budget override.
+    pub async fn run_target(
+        &self,
+        target: &TargetDef,
+        name: &str,
+        budget_override: Option<&BudgetDef>,
+    ) -> Crux<Value> {
+        let mut ctx = CruxCtx::new(name);
+
+        if let Some(budget_def) = budget_override.or(target.budget.as_ref()) {
+            ctx.set_budget(budget_from_def(budget_def));
+        }
+
+        let result = self
+            .execute_steps(&mut ctx, &target.steps, Value::Null)
+            .await;
+        ctx.finalize(result)
+    }
+
+    async fn run_inner(
+        &self,
+        pipeline: &PipelineDef,
+        input: Value,
+        previous: Option<&Crux<Value>>,
+        mode: ReplayMode,
+    ) -> Crux<Value> {
         let mut ctx = CruxCtx::new(&pipeline.pipeline);
 
         if let Some(budget_def) = &pipeline.budget {
             ctx.set_budget(budget_from_def(budget_def));
+        }
+
+        if let Some(prev) = previous {
+            ctx.set_replay_mode(mode);
+            ctx.replay_from(prev);
         }
 
         let result = self.execute_steps(&mut ctx, &pipeline.steps, input).await;
@@ -83,21 +132,20 @@ impl Runner {
                 } else {
                     current_input.clone()
                 };
-                // Invoke the handler once, capturing both value and confidence.
-                // Preserve `None` so that `route_on_confidence` can distinguish "no score"
-                // (handler_value steps) from an explicit 1.0 — see ExprError::NoConfidence.
-                let raw = handler(input.clone()).await?;
-                let confidence = raw.confidence;
-                let value = raw.value;
-
-                // Record the step in the trace (closure returns the pre-computed value).
+                // Run the handler inside ctx.step() so replay can skip it entirely.
+                // Confidence is captured via a shared cell since ctx.step() only
+                // returns the value.
+                let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+                let cc = confidence_cell.clone();
                 let handler_out = ctx
-                    .step(&node.step, || {
-                        let v = value.clone();
-                        async move { Ok::<Value, CruxErr>(v) }
+                    .step(&node.step, move || async move {
+                        let raw = handler(input).await?;
+                        *cc.lock().unwrap() = raw.confidence;
+                        Ok::<Value, CruxErr>(raw.value)
                     })
                     .await?;
 
+                let confidence = *confidence_cell.lock().unwrap();
                 expr_ctx.steps.insert(
                     node.step.clone(),
                     StepResult {
@@ -404,5 +452,171 @@ fn parse_range(s: &str) -> ConfidenceRange {
         ConfidenceRange::inclusive(lo, hi)
     } else {
         ConfidenceRange::exclusive(lo, hi)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// Build a minimal pipeline with a single step that calls a counting handler.
+    fn counting_pipeline() -> (PipelineDef, HandlerRegistry, Arc<AtomicU32>) {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value("test::count", move |input: Value| {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+
+        let pipeline = crate::load(
+            "pipeline: replay_test\nsteps:\n  - step: count_step\n    handler: test::count\n",
+        )
+        .expect("valid pipeline");
+
+        (pipeline, reg, counter)
+    }
+
+    #[tokio::test]
+    async fn run_without_replay_executes_handler() {
+        let (pipeline, reg, counter) = counting_pipeline();
+        let runner = Runner::new(Arc::new(reg));
+
+        let crux = runner.run(&pipeline, serde_json::json!({})).await;
+        assert!(crux.value().is_ok());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn run_with_replay_skips_cached_steps() {
+        let (pipeline, reg, counter) = counting_pipeline();
+        let runner = Runner::new(Arc::new(reg));
+
+        // First run — handler executes, produces trace.
+        let trace = runner.run(&pipeline, serde_json::json!({})).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Second run — replay from first trace, handler should NOT execute again.
+        let replayed = runner
+            .run_with_replay(&pipeline, serde_json::json!({}), &trace, ReplayMode::Strict)
+            .await;
+        assert!(replayed.value().is_ok());
+        // Counter stays at 1 — the handler was not called during replay.
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "handler should not re-execute during replay"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_strict_errors_on_step_name_mismatch() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value("test::count", move |input: Value| {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+
+        // First pipeline has step named "alpha".
+        let pipeline_a = crate::load(
+            "pipeline: replay_test\nsteps:\n  - step: alpha\n    handler: test::count\n",
+        )
+        .expect("valid pipeline");
+
+        // Second pipeline has step named "beta" at the same ordinal.
+        let pipeline_b = crate::load(
+            "pipeline: replay_test\nsteps:\n  - step: beta\n    handler: test::count\n",
+        )
+        .expect("valid pipeline");
+
+        let runner = Runner::new(Arc::new(reg));
+        let trace = runner.run(&pipeline_a, serde_json::json!({})).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Replay pipeline_b against pipeline_a's trace — name mismatch at ordinal 0.
+        let replayed = runner
+            .run_with_replay(
+                &pipeline_b,
+                serde_json::json!({}),
+                &trace,
+                ReplayMode::Strict,
+            )
+            .await;
+        assert!(
+            replayed.value().is_err(),
+            "strict replay with different step name should fail with mismatch"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_lenient_reexecutes_on_step_name_mismatch() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value("test::count", move |input: Value| {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+
+        let pipeline_a = crate::load(
+            "pipeline: replay_test\nsteps:\n  - step: alpha\n    handler: test::count\n",
+        )
+        .expect("valid pipeline");
+
+        let pipeline_b = crate::load(
+            "pipeline: replay_test\nsteps:\n  - step: beta\n    handler: test::count\n",
+        )
+        .expect("valid pipeline");
+
+        let runner = Runner::new(Arc::new(reg));
+        let trace = runner.run(&pipeline_a, serde_json::json!({})).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+        // Lenient mode: name mismatch returns Miss, so handler re-executes.
+        let replayed = runner
+            .run_with_replay(
+                &pipeline_b,
+                serde_json::json!({}),
+                &trace,
+                ReplayMode::Lenient,
+            )
+            .await;
+        assert!(replayed.value().is_ok());
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            2,
+            "lenient replay should re-execute on step name mismatch"
+        );
+    }
+
+    #[tokio::test]
+    async fn trace_roundtrips_through_json() {
+        let (pipeline, reg, _) = counting_pipeline();
+        let runner = Runner::new(Arc::new(reg));
+
+        let trace = runner.run(&pipeline, serde_json::json!({"x": 1})).await;
+
+        // Serialize and deserialize — simulates --save-trace / --replay.
+        let json = serde_json::to_string(&trace).expect("serialize trace");
+        let restored: Crux<Value> = serde_json::from_str(&json).expect("deserialize trace");
+
+        assert_eq!(trace.steps.len(), restored.steps.len());
+        assert_eq!(trace.steps[0].name, restored.steps[0].name);
+        assert_eq!(trace.steps[0].input_hash, restored.steps[0].input_hash);
     }
 }
