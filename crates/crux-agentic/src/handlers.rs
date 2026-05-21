@@ -46,6 +46,7 @@ pub const HARNESS_CANARY: &str = "harness::canary";
 // rx
 pub const RX_RUN: &str = "rx::run";
 pub const RX_LIST: &str = "rx::list";
+pub const RX_INSTALL: &str = "rx::install";
 
 // analysis
 pub const ANALYSIS_LATENCY_PROFILE: &str = "analysis::latency_profile";

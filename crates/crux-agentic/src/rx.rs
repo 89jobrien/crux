@@ -7,11 +7,9 @@ use tokio::process::Command;
 
 use crate::error::opt_str;
 
-// TODO(#66): implement rx::install handler to install scripts into local registry
-/// Register rx handlers: `rx::run` (invoke a registered script by name) and
-/// `rx::list` (enumerate the rx registry).
+/// Register rx handlers: `rx::run`, `rx::list`, and `rx::install`.
 ///
-/// Neither handler depends on the `rx` crate — they read `registry.json` directly.
+/// Neither handler depends on the `rx` crate — they read/write `registry.json` directly.
 ///
 /// ## `rx::run`
 ///
@@ -30,6 +28,19 @@ use crate::error::opt_str;
 /// - `registry`: override path to `registry.json`
 ///
 /// Returns `{commands: [{name, runtime, source, install_path, description}]}`.
+///
+/// ## `rx::install`
+///
+/// Required args:
+/// - `name`: command name to register
+/// - `source`: path to the script file to install
+///
+/// Optional args:
+/// - `registry`: override path to `registry.json`
+/// - `runtime`: runtime identifier (default: `"sh"`)
+/// - `description`: human-readable description
+///
+/// Returns `{"installed": "<name>", "path": "<dest>"}`.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("rx::run", |input: Value| async move {
         let name = input
@@ -105,11 +116,93 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         Ok(json!({ "commands": commands }))
     });
+
+    registry.handler_value("rx::install", |input: Value| async move {
+        let args = input
+            .get("args")
+            .ok_or_else(|| CruxErr::step_failed("rx::install", "missing args"))?;
+
+        let name = args
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CruxErr::step_failed("rx::install", "missing arg: name"))?
+            .to_owned();
+
+        let source = args
+            .get("source")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CruxErr::step_failed("rx::install", "missing arg: source"))?;
+
+        let source_path = PathBuf::from(source);
+        if !source_path.exists() {
+            return Err(CruxErr::step_failed(
+                "rx::install",
+                format!("source file does not exist: {source}"),
+            ));
+        }
+
+        let registry_path = opt_str(&input, "registry")
+            .map(PathBuf::from)
+            .unwrap_or_else(default_registry_path);
+
+        let runtime = args
+            .get("runtime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("sh")
+            .to_owned();
+
+        let description = args
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        // Ensure registry directory and bin directory exist
+        let registry_dir = registry_path
+            .parent()
+            .ok_or_else(|| CruxErr::step_failed("rx::install", "invalid registry path"))?;
+        let bin_dir = registry_dir.join("bin");
+        std::fs::create_dir_all(&bin_dir).map_err(|e| {
+            CruxErr::step_failed("rx::install", format!("failed to create bin dir: {e}"))
+        })?;
+
+        // Copy script into bin directory
+        let dest = bin_dir.join(&name);
+        std::fs::copy(&source_path, &dest).map_err(|e| {
+            CruxErr::step_failed("rx::install", format!("failed to copy script: {e}"))
+        })?;
+
+        // Make executable (unix)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o755);
+            std::fs::set_permissions(&dest, perms).map_err(|e| {
+                CruxErr::step_failed("rx::install", format!("failed to set permissions: {e}"))
+            })?;
+        }
+
+        // Update registry
+        let mut reg = load_registry(&registry_path)?;
+        reg.commands.retain(|e| e.name != name);
+        reg.commands.push(RegistryEntry {
+            name: name.clone(),
+            source: source.to_owned(),
+            install_path: dest.clone(),
+            runtime,
+            description,
+        });
+        save_registry(&registry_path, &reg)?;
+
+        Ok(json!({
+            "installed": name,
+            "path": dest.to_string_lossy(),
+        }))
+    });
 }
 
 // --- Registry types (mirrors rx-registry-json without depending on it) ---
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RegistryFile {
     commands: Vec<RegistryEntry>,
 }
@@ -134,6 +227,19 @@ fn default_registry_path() -> PathBuf {
             .join("registry.json");
     }
     PathBuf::from(".config/rx/registry.json")
+}
+
+fn save_registry(path: &PathBuf, reg: &RegistryFile) -> Result<(), CruxErr> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            CruxErr::step_failed("rx", format!("failed to create registry dir: {e}"))
+        })?;
+    }
+    let contents = serde_json::to_string_pretty(reg)
+        .map_err(|e| CruxErr::step_failed("rx", format!("failed to serialize registry: {e}")))?;
+    std::fs::write(path, contents)
+        .map_err(|e| CruxErr::step_failed("rx", format!("failed to write registry: {e}")))?;
+    Ok(())
 }
 
 fn load_registry(path: &PathBuf) -> Result<RegistryFile, CruxErr> {
