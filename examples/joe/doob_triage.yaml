@@ -1,27 +1,7 @@
 pipeline: doob_triage
-# ASPIRATIONAL TEMPLATE — not all steps are implemented.
-#
-# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
-# through unchanged so the pipeline traces end-to-end but do no real work yet.
-#
-# Unimplemented arms and what they need:
-#   parse_repo_tags       — extract the `repo` field from each doob JSON item.
-#                           Implement as json::jq (dot-path) or a shell::capture
-#                           wrapping `jq '.[] | .repo'`.
-#   score_urgency         — compute age * priority weight per item. Can be a
-#                           shell::capture + `jq` expression, or a Rust handler_value.
-#   deduplicate_intent    — cluster semantically equivalent titles. Requires
-#                           llm::invoke with a clustering prompt, or edit-distance
-#                           heuristic in a Rust handler.
-#   group_by_repo         — partition the scored list into per-repo buckets.
-#                           Implement as json::jq grouping once filter support lands,
-#                           or as a shell::capture + `jq 'group_by(.repo)'`.
-#
-# See docs/crux-capabilities.md — Known Gaps for current status.
-#
 # Process the pending doob backlog: score, deduplicate, and cluster by repo,
-# then replace the delegate with a direct shell step for per-repo prioritization
-# so each repo gets independent reasoning without bleeding token spend.
+# then run per-repo prioritization so each repo gets independent reasoning
+# without bleeding token spend.
 budget: { tokens: 8000 }
 
 steps:
@@ -29,26 +9,24 @@ steps:
     handler: shell::capture
     args:
       cmd: "doob todo list --status pending"
-    # `doob todo list --status pending --json` — full pending list across repos
+    # `doob todo list --status pending --json` -- full pending list across repos
 
   - pipe: normalize
     stages:
       - step: parse_repo_tags
-        handler: ctrl::noop
+        handler: triage::parse_repo_tags
         # extract repo field from each todo's metadata
       - step: score_urgency
-        handler: ctrl::noop
-        # age * priority weight — older high-pri items score highest
+        handler: triage::score_urgency
+        # age * priority weight -- older high-pri items score highest
       - step: deduplicate_intent
-        handler: ctrl::noop
+        handler: triage::deduplicate_intent
         # cluster todos whose titles are semantically equivalent
       - step: group_by_repo
-        handler: ctrl::noop
+        handler: triage::group_by_repo
         # partition into per-repo buckets for delegation
 
-  # Replaced delegate(DoobRepoAgent) with a direct shell step.
   # Re-ranks within each repo bucket using doob todo update / git log recency signal.
-  # Original budget was { tokens: 2000, calls: 10 } per repo bucket.
   - step: per_repo_prioritize
     handler: shell::capture
     args:

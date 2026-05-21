@@ -18,7 +18,7 @@ test:
     cargo nextest run
 
 # Run full CI suite locally (mirrors GH Actions - DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
-ci: check build-locked fmt lint test deny
+ci: check build-locked fmt lint test deny lint-crux
 
 # Build all targets
 build:
@@ -79,7 +79,13 @@ check-baml:
         | get capture0
         | first)
     if $gen_ver != $cargo_ver {
-        error make { msg: $"BAML version mismatch: generators.baml=($gen_ver) Cargo.toml=($cargo_ver)" }
+        print $"(ansi red_bold)BAML version mismatch(ansi reset)"
+        print $"  generators.baml  → ($gen_ver)"
+        print $"  Cargo.toml       → ($cargo_ver)"
+        print ""
+        print $"(ansi yellow)Fix: update the baml dep in crates/cruxx-agentic/Cargo.toml to match:(ansi reset)"
+        print $"  baml = \{ version = \"($gen_ver)\", optional = true \}"
+        error make { msg: "baml version mismatch" }
     }
     let lib = $"($env.HOME)/Library/Caches/baml/libs/($gen_ver)/libbaml_cffi-aarch64-apple-darwin.dylib"
     if not ($lib | path exists) {
@@ -89,6 +95,16 @@ check-baml:
         http get $url | save --force $lib
     }
     print $"BAML versions match: ($gen_ver)"
+
+# Lint all .crux pipeline files (parse + handler/arg validation)
+lint-crux:
+    #!/usr/bin/env bash
+    files=$(find examples -name '*.crux' | sort)
+    if [ -z "$files" ]; then
+        echo "No .crux files found"
+        exit 0
+    fi
+    cargo run --quiet -p cruxx-agentic --bin crux -- check $files
 
 # Run hook bats tests
 test-hooks:

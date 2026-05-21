@@ -5,7 +5,7 @@
 
 #![cfg(feature = "baml")]
 
-use cruxx_agentic::llm::register_extract;
+use crux_baml::extract::register_extract;
 use cruxx_script::{HandlerRegistry, handler_output::HandlerOutput};
 use serde_json::json;
 

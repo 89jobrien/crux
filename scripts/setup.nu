@@ -33,10 +33,10 @@ if $rustc_found {
     let parts = ($rust_ver | split row ".")
     let major = ($parts | get 0 | into int)
     let minor = ($parts | get 1 | into int)
-    if $major >= 1 and $minor >= 85 {
-        ok $"rustc ($rust_ver) \(>= 1.85\)"
+    if $major >= 1 and $minor >= 88 {
+        ok $"rustc ($rust_ver) \(>= 1.88\)"
     } else {
-        fail $"rustc ($rust_ver) is below MSRV 1.85 — run: rustup update stable"
+        fail $"rustc ($rust_ver) is below MSRV 1.88 — run: rustup update stable"
         $errors = $errors + 1
     }
 } else {

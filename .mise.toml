@@ -1,2 +1,57 @@
 [tools]
 "cargo:baml-cli" = "0.221.0"
+
+# Read-only crux pipelines — analysis, audit, and diagnostics.
+# Side-effect pipelines (deploy, approve, release) are excluded.
+
+[tasks.ci-gate]
+description = "Classify CI failures (deny, clippy, test)"
+run = "crux run examples/joe/ci_gate.crux"
+
+[tasks.dep-audit]
+description = "Dependency health: advisories, licenses, bans, duplicates"
+run = "crux run examples/joe/dep_audit.crux"
+
+[tasks.sentinel]
+description = "Review staged diff for antipatterns and severity"
+run = "crux run examples/joe/sentinel_review.crux"
+
+[tasks.stale-plans]
+description = "Cross-check plan docs against git log for status mismatches"
+run = "crux run examples/joe/stale_plan_audit.crux"
+
+[tasks.herald]
+description = "Daily commit summary across repos"
+run = "crux run examples/joe/herald_daily.crux"
+
+[tasks.hook-diag]
+description = "Debug slow or failing pre-commit/pre-push hooks"
+run = "crux run examples/joe/hook_diagnostics.crux"
+
+[tasks.obfsck]
+description = "Triage obfsck secret scan findings"
+run = "crux run examples/joe/obfsck_triage.crux"
+
+[tasks.session]
+description = "Survey outstanding work for session handoff"
+run = "crux run examples/joe/session_handoff.crux"
+
+[tasks.workspace-ci]
+description = "Local CI gate: fmt, clippy, deny, test"
+run = "crux run examples/joe/workspace_ci.crux"
+
+[tasks.eod]
+description = "End-of-day ritual: check for uncommitted work, stale branches"
+run = "crux run examples/joe/eod_ritual.crux"
+
+[tasks.meta-eval]
+description = "Analyze agent trace quality and step patterns"
+run = "crux run examples/joe/agent_meta_eval.crux"
+
+[tasks.todo-sync]
+description = "Audit inline TODOs against GitHub issues"
+run = "crux run examples/joe/todo_issue_sync.crux"
+
+[tasks.env-debug]
+description = "Debug secrets and environment variable resolution"
+run = "crux run examples/joe/secret_env_debug.crux"

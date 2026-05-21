@@ -1,6 +1,8 @@
 target/
+
 # BAML generated client — regenerate with `baml-cli generate`
 **/baml_client/
+
 .ctx/*
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.md
@@ -8,6 +10,9 @@ target/
 *.local.md
 *.local.json
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+.venv/
 .claude/worktrees/
 
 # handoff-begin
@@ -19,8 +24,9 @@ target/
 .ctx/HANDOFF.hj.hj.state.json
 .ctx/.initialized
 # handoff-end
-#
+
 .envrc
 .env
 crates/.env
 .claude/settings.local.json
+.idea/

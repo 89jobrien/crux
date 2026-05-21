@@ -35,3 +35,31 @@ path = "fuzz_targets/sqlite_args.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "text_parse_vimgrep"
+path = "fuzz_targets/text_parse_vimgrep.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "text_parse_jsonl"
+path = "fuzz_targets/text_parse_jsonl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "text_parse_frontmatter"
+path = "fuzz_targets/text_parse_frontmatter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "text_parse_diff"
+path = "fuzz_targets/text_parse_diff.rs"
+test = false
+doc = false
+bench = false

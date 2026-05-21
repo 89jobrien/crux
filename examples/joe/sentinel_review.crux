@@ -1,0 +1,58 @@
+pipeline: sentinel_review
+# Structured diff review: gather diff, normalize findings, classify severity,
+# and emit fixes. Models the sentinel code review workflow.
+budget: { tokens: 15000 }
+
+steps:
+  - step: gather_diff
+    handler: shell::capture
+    args:
+      cmd: "git diff --staged"
+    # Staged changes to review -- empty means nothing to review
+
+  - join_all: analyze
+    arms:
+      - step: parse_hunks
+        handler: text::parse_diff
+        # Split unified diff into per-file, per-hunk structs
+      - step: detect_patterns
+        handler: review::detect_antipatterns
+        # Scan for known antipatterns (unwrap chains, bare panics, TODO without issue)
+      - step: check_test_coverage
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run --no-fail-fast 2>&1 || true"
+        # Do existing tests still pass after the diff?
+
+  - pipe: classify
+    stages:
+      - step: normalize_findings
+        handler: review::normalize_findings
+        # Merge hunk analysis and pattern detection into Finding[]
+      - step: apply_severity
+        handler: review::apply_severity
+        # Tag each finding: blocking / suggestion / nitpick
+      - step: group_by_file
+        handler: json::group_by
+        args:
+          key: "file"
+        # Organize findings by file path for structured output
+      - step: score
+        handler: review::compute_score
+        # Reduce findings to 0.0-1.0 confidence -- last stage, drives route_on_confidence
+
+  - route_on_confidence: emit
+    value: "{{ steps.classify.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: blocking_issues
+        handler: ctrl::log
+        # Blocking findings exist -- must fix before commit
+      - range: "[0.3, 0.7)"
+        label: suggestions_only
+        handler: ctrl::log
+        # No blockers but improvements recommended
+      - range: "[0.7, 1.0]"
+        label: clean
+        handler: ctrl::log
+        # Diff is clean -- no findings worth reporting

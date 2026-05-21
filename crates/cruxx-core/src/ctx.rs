@@ -432,17 +432,15 @@ impl CruxCtx {
                 // If the handler output is a JSON object with a "confidence" field
                 // (finite f32 in [0.0, 1.0]), propagate it to the recorded step so
                 // that route_on_confidence can act on meaningful handler-reported scores.
-                if let Ok(json) = serde_json::to_value(&val) {
-                    if let Some(handler_conf) = json
+                if let Ok(json) = serde_json::to_value(&val)
+                    && let Some(handler_conf) = json
                         .get("confidence")
                         .and_then(|v| v.as_f64())
                         .map(|f| f as f32)
                         .filter(|f| f.is_finite() && (0.0..=1.0).contains(f))
-                    {
-                        if let Some(step) = self.recorder.steps_mut().last_mut() {
-                            step.confidence = handler_conf;
-                        }
-                    }
+                    && let Some(step) = self.recorder.steps_mut().last_mut()
+                {
+                    step.confidence = handler_conf;
                 }
                 return Ok(val);
             }

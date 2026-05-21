@@ -1,0 +1,62 @@
+pipeline: dep_audit
+# Dependency health audit across a Rust workspace. Checks for outdated deps,
+# security advisories, license violations, and duplicate transitive deps.
+# Produces a prioritized remediation plan.
+budget: { calls: 12 }
+
+steps:
+  - join_all: gather_signals
+    arms:
+      - step: cargo_deny_advisories
+        handler: shell::capture
+        args:
+          cmd: "cargo deny check advisories 2>&1 || true"
+        # RUSTSEC advisories -- security vulnerabilities in deps
+      - step: cargo_deny_licenses
+        handler: shell::capture
+        args:
+          cmd: "cargo deny check licenses 2>&1 || true"
+        # License violations (GPL in MIT workspace, etc.)
+      - step: cargo_deny_bans
+        handler: shell::capture
+        args:
+          cmd: "cargo deny check bans 2>&1 || true"
+        # Banned crates (openssl when ring preferred, etc.)
+      - step: cargo_outdated
+        handler: shell::capture
+        args:
+          cmd: "cargo outdated --root-deps-only 2>&1 || true"
+        # Direct deps with newer versions available
+      - step: duplicate_deps
+        handler: shell::capture
+        args:
+          cmd: "cargo tree --duplicates 2>&1 || true"
+        # Multiple versions of same crate in dep tree
+
+  - pipe: analyze
+    stages:
+      - step: parse_deny
+        handler: ci::deny_violations
+        # Parse cargo-deny output into structured findings
+      - step: classify
+        handler: ci::classify_severity
+        # advisories > bans > licenses > outdated
+      - step: score
+        handler: ci::score_fixability
+        # Are these simple version bumps or breaking changes?
+
+  - route_on_confidence: action
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: critical
+        handler: ctrl::log
+        # Active RUSTSEC advisory -- must patch immediately
+      - range: "[0.3, 0.7)"
+        label: maintenance
+        handler: ctrl::log
+        # Outdated deps or license issues -- schedule for next sprint
+      - range: "[0.7, 1.0]"
+        label: healthy
+        handler: ctrl::log
+        # Dep tree is clean -- no action needed

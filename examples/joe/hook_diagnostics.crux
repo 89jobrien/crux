@@ -1,0 +1,51 @@
+pipeline: hook_diagnostics
+# List active hooks, measure overhead, and find recent failures.
+# Useful for debugging slow commits or unexpected hook rejections.
+budget: { calls: 8 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: list_hooks
+        handler: shell::capture
+        args:
+          cmd: "ls -1 ~/.claude/hooks/nu/{pre,post,session,doob}/ 2>/dev/null || true"
+        # Enumerate all registered hook scripts by category
+      - step: recent_failures
+        handler: shell::capture
+        args:
+          cmd: "grep -r 'BLOCKED\\|FAILED\\|error' ~/.claude/logs/ 2>/dev/null | tail -20 || true"
+        # Last 20 hook failure log lines
+      - step: hook_timing
+        handler: shell::capture
+        args:
+          cmd: "cat ~/.ctx/tmp-metrics.jsonl 2>/dev/null | tail -50 || true"
+        # Recent timing metrics from post-tool hooks
+
+  - pipe: analyze
+    stages:
+      - step: parse_hook_inventory
+        handler: text::parse_jsonl
+        # Parse JSONL timing metrics into structured items
+      - step: correlate_failures
+        handler: triage::correlate_failures
+        # Match failure log entries to specific hook scripts
+      - step: measure_overhead
+        handler: triage::measure_overhead
+        # Compute p50/p95 latency per hook from timing metrics
+
+  - route_on_confidence: report
+    value: "{{ steps.analyze.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: unhealthy
+        handler: ctrl::log
+        # Hooks are slow or failing frequently -- needs attention
+      - range: "[0.4, 0.8)"
+        label: degraded
+        handler: ctrl::log
+        # Some hooks slow or occasionally failing
+      - range: "[0.8, 1.0]"
+        label: healthy
+        handler: ctrl::log
+        # All hooks fast and passing -- no issues

@@ -1,0 +1,57 @@
+pipeline: session_handoff
+# Session start orientation pipeline. Scans all active repos under ~/dev
+# for outstanding work: HANDOFF.yaml files, pending doob todos, dirty git
+# trees, and stale worktrees. Produces a prioritized session briefing.
+budget: { tokens: 6000, calls: 15 }
+
+steps:
+  - join_all: scan_workspace
+    arms:
+      - step: find_dirty_repos
+        handler: shell::capture
+        args:
+          cmd: "for dir in ~/dev/*/; do cd \"$dir\" && [ -d .git ] && [ -n \"$(git status --porcelain 2>/dev/null)\" ] && basename \"$dir\"; cd ~/dev; done"
+        # List repos with uncommitted changes
+      - step: find_handoffs
+        handler: shell::capture
+        args:
+          cmd: "find ~/dev -maxdepth 3 -name 'HANDOFF.yaml' -newer ~/dev/.ctx/last-session 2>/dev/null"
+        # HANDOFF.yaml files modified since last session
+      - step: pending_todos
+        handler: shell::capture
+        args:
+          cmd: "doob todo list --status pending"
+        # All pending doob items across repos
+      - step: stale_worktrees
+        handler: shell::capture
+        args:
+          cmd: "for dir in ~/dev/*/; do cd \"$dir\" && git worktree list 2>/dev/null | grep -v '(bare)' | tail -n +2; cd ~/dev; done"
+        # Orphaned worktrees from previous subagent work
+      - step: recent_activity
+        handler: shell::capture
+        args:
+          cmd: "for dir in ~/dev/*/; do cd \"$dir\" && [ -d .git ] && log=$(git log --since='24 hours ago' --oneline -1 2>/dev/null) && [ -n \"$log\" ] && echo \"$(basename $dir): $log\"; cd ~/dev; done"
+        # Repos with commits in the last 24h
+
+  - pipe: prioritize
+    stages:
+      - step: parse_todos
+        handler: triage::parse_repo_tags
+        # Extract repo field from each todo
+      - step: score
+        handler: triage::score_urgency
+        # Rank by age * priority weight
+      - step: dedup
+        handler: triage::deduplicate_intent
+        # Cluster duplicate/similar items
+      - step: group
+        handler: triage::group_by_repo
+        # Partition into per-repo buckets
+
+  - step: emit_briefing
+    handler: fs::write
+    # Write session briefing to .ctx/session-briefing.md:
+    # - dirty repos needing attention
+    # - stale worktrees to clean up
+    # - top-priority pending items per repo
+    # - recent 24h activity summary

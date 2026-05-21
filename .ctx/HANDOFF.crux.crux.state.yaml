@@ -1,0 +1,5 @@
+project: cruxx
+branch: main
+build: passing (cargo check clean)
+tests: unknown (no test run this session)
+updated: "20260504:224027"

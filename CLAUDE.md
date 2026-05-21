@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Crux is an agentic DSL for Rust -- macros, traits, and types that make agentic control flow
 explicit in the type system. Every step, delegation, speculation, and failure is a first-class
-value (`Crux<T>`) that is inspectable, serializable, and replayable. Rust edition 2024, MSRV 1.85.
+value (`Crux<T>`) that is inspectable, serializable, and replayable. Rust edition 2024, MSRV 1.88.
 
 ## Build Commands
 

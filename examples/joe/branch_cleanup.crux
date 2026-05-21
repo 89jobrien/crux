@@ -1,0 +1,54 @@
+pipeline: branch_cleanup
+# Find merged branches, prune local and remote refs, flag orphaned worktrees.
+budget: { calls: 8 }
+
+steps:
+  - join_all: scan
+    arms:
+      - step: merged_branches
+        handler: shell::capture
+        args:
+          cmd: "git branch --merged main | grep -v '\\* \\|main$\\|develop$' || true"
+        # Local branches already merged into main
+      - step: remote_stale
+        handler: shell::capture
+        args:
+          cmd: "git remote prune origin --dry-run 2>&1 || true"
+        # Remote refs that no longer exist upstream
+      - step: worktree_list
+        handler: shell::capture
+        args:
+          cmd: "git worktree list 2>&1 || true"
+        # Active worktrees -- any orphaned from past subagent runs?
+
+  - pipe: classify
+    stages:
+      - step: parse_branches
+        handler: text::parse_branch_list
+        # Structured list: branch name, current flag
+      - step: detect_orphans
+        handler: triage::detect_orphaned_worktrees
+        # Worktrees whose branch is ahead of main with no recent commits
+      - step: build_cleanup_plan
+        handler: triage::build_cleanup_plan
+        # Safe-to-delete vs needs-review classification
+
+  - route_on_confidence: act
+    value: "{{ steps.classify.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: needs_review
+        handler: ctrl::log
+        # Orphaned worktrees or unmerged branches -- show diff before deleting
+      - range: "[0.5, 0.8)"
+        label: safe_prune
+        handler: shell::capture
+        args:
+          cmd: "git remote prune origin 2>&1 || true"
+        # Prune stale remote refs only
+      - range: "[0.8, 1.0]"
+        label: full_cleanup
+        handler: shell::capture
+        args:
+          cmd: "git branch --merged main | grep -v '\\* \\|main$\\|develop$' | xargs -r git branch -d"
+        # Delete all merged local branches and prune remote

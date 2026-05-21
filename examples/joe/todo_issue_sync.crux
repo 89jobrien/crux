@@ -1,0 +1,46 @@
+pipeline: todo_issue_sync
+# Scan TODO/FIXME comments in source, match against GitHub issues, and
+# create missing issues for untracked items.
+budget: { calls: 12, tokens: 8000 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: scan_todos
+        handler: shell::capture
+        args:
+          cmd: "rg --vimgrep 'TODO|FIXME|HACK|XXX' --type rust --type yaml 2>&1 || true"
+        # All inline markers across Rust and YAML files
+      - step: fetch_issues
+        handler: shell::capture
+        args:
+          cmd: "gh issue list --state open --limit 100 --json number,title,body 2>&1 || true"
+        # Current open GitHub issues for this repo
+
+  - pipe: reconcile
+    stages:
+      - step: parse_todos
+        handler: text::parse_vimgrep
+        # Parse rg --vimgrep output into [{file, line, col, text}]
+      - step: match_to_issues
+        handler: triage::match_todos_to_issues
+        # Fuzzy-match TODO text against issue titles/bodies
+      - step: identify_gaps
+        handler: triage::identify_untracked
+        # TODOs with no matching issue -- candidates for creation
+
+  - route_on_confidence: act
+    value: "{{ steps.reconcile.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: many_untracked
+        handler: ctrl::log
+        # >60% of TODOs have no issue -- bulk creation recommended
+      - range: "[0.4, 0.8)"
+        label: some_untracked
+        handler: ctrl::log
+        # A few TODOs need issues -- list them for review
+      - range: "[0.8, 1.0]"
+        label: synced
+        handler: ctrl::log
+        # All TODOs tracked by issues -- nothing to do

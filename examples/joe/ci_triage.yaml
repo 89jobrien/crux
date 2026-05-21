@@ -1,19 +1,4 @@
 pipeline: ci_triage
-# ASPIRATIONAL TEMPLATE — not all steps are implemented but close.
-#
-# Steps marked `handler: ctrl::noop` are design placeholders. They pass their
-# input through unchanged so the pipeline runs end-to-end against real data,
-# but they do no domain-specific work yet.
-#
-# How to implement a noop arm:
-#   1. Write a Rust function `fn my_handler(input: Value) -> Result<Value, CruxErr>`
-#      in your crate (e.g. `src/handlers/ci.rs`).
-#   2. Register it: `registry.handler_value("my_module::my_handler", my_handler);`
-#   3. Replace `handler: ctrl::noop` with `handler: my_module::my_handler`.
-#   Alternatively, use `handler: shell::capture` with a shell command (see examples below).
-#
-# See docs/crux-capabilities.md — Known Gaps for current status.
-#
 # Triage a failed CI run across a Rust workspace. Fan out to all failure
 # categories in parallel, rank by severity, then route to the right action.
 budget: { calls: 12 }
@@ -28,35 +13,34 @@ steps:
   - join_all: diagnose
     arms:
       - step: compile_errors
-        handler: ctrl::noop
+        handler: ci::compile_errors
         # rustc E-codes, missing impls, type mismatches
       - step: clippy_violations
-        handler: ctrl::noop
-        # `-D warnings` hits — lint category + file:line
+        handler: ci::clippy_violations
+        # `-D warnings` hits -- lint category + file:line
       - step: nextest_failures
-        handler: ctrl::noop
-        # cargo nextest JSON output — test name + panic msg
+        handler: ci::nextest_failures
+        # cargo nextest JSON output -- test name + panic msg
       - step: deny_violations
-        handler: ctrl::noop
+        handler: ci::deny_violations
         # cargo-deny: banned crates, license conflicts, advisories
 
   - pipe: rank
     stages:
       - step: deduplicate_spans
-        handler: ctrl::noop
+        handler: ci::deduplicate_spans
         # collapse rustc errors sharing the same root cause
       - step: classify_severity
-        handler: ctrl::noop
+        handler: ci::classify_severity
         # compile > deny > test > clippy
       - step: attach_owners
-        handler: ctrl::noop
+        handler: ci::attach_owners
         # map file paths to crate names in workspace
       - step: score_fixability
-        handler: ctrl::noop
+        handler: ci::score_fixability
         # heuristic: is there an obvious one-line fix?
 
   # Classify ranked diagnostics into a confidence score.
-  # This is a template placeholder — in production, replace with an llm::extract step.
   - step: confidence_from_rank
     handler: llm::extract
     args:
@@ -69,7 +53,7 @@ steps:
       - range: "[0.0, 0.4)"
         label: unclear
         handler: ctrl::log
-        # confidence too low — open a doob task with raw diagnostics attached
+        # confidence too low -- open a doob task with raw diagnostics attached
       - range: "[0.4, 0.75)"
         label: actionable
         handler: shell::capture
@@ -81,4 +65,4 @@ steps:
         handler: shell::capture
         args:
           cmd: "cargo fix --allow-dirty && cargo nextest run"
-        # fmt fix or trivial clippy allow — commit, re-trigger CI
+        # fmt fix or trivial clippy allow -- commit, re-trigger CI

@@ -1,0 +1,89 @@
+pipeline: minibox_deploy
+# Full minibox deployment with canary and rollback support.
+# Extends container_deploy.crux with pre-deploy snapshot, canary traffic
+# splitting, and automatic rollback on health failure.
+budget: { calls: 20, duration_ms: 300000 }
+
+steps:
+  - pipe: pre_deploy
+    stages:
+      - step: snapshot_current
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'cp /usr/local/bin/miniboxd /usr/local/bin/miniboxd.bak'"
+        # Backup current binary for rollback
+      - step: capture_version
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'minibox-cli version 2>/dev/null || echo unknown'"
+        # Record current deployed version
+
+  - pipe: build_and_verify
+    stages:
+      - step: fmt_check
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check"
+      - step: clippy
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy -p minibox -p miniboxd -- -D warnings"
+      - step: nextest
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run -p minibox"
+      - step: cross_compile
+        handler: shell::capture
+        args:
+          cmd: "cross build --release --target x86_64-unknown-linux-musl -p miniboxd"
+      - step: verify_elf
+        handler: shell::capture
+        args:
+          cmd: "file target/x86_64-unknown-linux-musl/release/miniboxd | grep 'ELF 64-bit'"
+
+  - pipe: deploy
+    stages:
+      - step: rsync
+        handler: shell::capture
+        args:
+          cmd: "rsync -az --checksum target/x86_64-unknown-linux-musl/release/miniboxd minibox:/usr/local/bin/miniboxd"
+      - step: restart
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'sudo systemctl restart miniboxd'"
+      - step: wait_for_startup
+        handler: shell::capture
+        args:
+          cmd: "sleep 3 && ssh minibox 'minibox-cli status --json'"
+        # Give service 3s to initialize before health check
+
+  - step: health_check
+    handler: shell::capture
+    args:
+      cmd: "ssh minibox 'minibox-cli status --json'"
+
+  - step: classify_health
+    handler: llm::extract
+    args:
+      input: "{{ steps.health_check.output }}"
+      function: Classify
+
+  - route_on_confidence: outcome
+    value: "{{ steps.classify_health.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: rollback
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'cp /usr/local/bin/miniboxd.bak /usr/local/bin/miniboxd && sudo systemctl restart miniboxd'"
+        # Restore backup binary and restart
+      - range: "[0.5, 0.85)"
+        label: degraded
+        handler: ctrl::log
+        # Service running but not fully healthy -- monitor
+      - range: "[0.85, 1.0]"
+        label: healthy
+        handler: shell::capture
+        args:
+          cmd: "ssh minibox 'rm -f /usr/local/bin/miniboxd.bak'"
+        # Deploy successful -- clean up backup

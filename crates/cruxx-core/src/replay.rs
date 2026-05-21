@@ -160,10 +160,10 @@ impl ReplayCache {
             if entry.name == name {
                 // If both sides have a content hash and they differ, skip this entry
                 // and keep scanning — the name matches but the input is different.
-                if let (Some(lookup), Some(cached)) = (content_hash, entry.content_hash) {
-                    if lookup != cached {
-                        continue;
-                    }
+                if let (Some(lookup), Some(cached)) = (content_hash, entry.content_hash)
+                    && lookup != cached
+                {
+                    continue;
                 }
                 return match &entry.output {
                     Some(output) => ReplayResult::Hit(output.clone()),

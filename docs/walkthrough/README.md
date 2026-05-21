@@ -5,7 +5,7 @@ that makes agentic control flow explicit in the type system. Every step, delegat
 and failure is a first-class value (`Crux<T>`) that is inspectable, serializable, and replayable.
 
 If you have written Rust agents with `tokio` + `tracing` + a hand-rolled task queue, `cruxx::` is
-what happens when you bake those patterns into the language itself. Rust edition 2024, MSRV 1.85.
+what happens when you bake those patterns into the language itself. Rust edition 2024, MSRV 1.88.
 
 ## Who this tutorial is for
 

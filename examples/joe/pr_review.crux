@@ -1,26 +1,4 @@
 pipeline: pr_review
-# ASPIRATIONAL TEMPLATE — not all steps are implemented.
-#
-# Steps marked `handler: ctrl::noop` are design placeholders. They pass input
-# through unchanged so the pipeline traces end-to-end but do no real work yet.
-#
-# Unimplemented arms and what they need:
-#   arch_boundary_check   — same as crate_refactor: detect domain→infra imports in
-#                           changed files. Implement as shell::capture + rg, or a
-#                           dedicated Rust handler using the gix crate.
-#   normalize_findings    — merge clippy JSON, arch findings, and nextest output into
-#                           a unified Finding[] schema. Implement as a Rust handler or
-#                           json::jq chain once jq gains filter support.
-#   apply_severity_matrix — score each Finding as blocking/suggestion/observation.
-#                           Can be implemented as shell::capture or an llm::invoke call.
-#   compute_review_score  — reduce Finding[] to a single 0.0–1.0 confidence score.
-#                           Implement as a Rust handler_value that reads the merged input.
-#   approve               — call `gh pr review --approve`. Currently a noop because the
-#                           speculate arm needs to win before this fires; wire up once
-#                           pipeline templating supports dynamic arg injection.
-#
-# See docs/crux-capabilities.md — Known Gaps for current status.
-#
 # Full PR review pipeline (sentinel-style). Fan out to all signal sources in
 # parallel, weight the signals, then speculate on the verdict before routing
 # to the appropriate GitHub action.
@@ -31,7 +9,7 @@ steps:
     handler: shell::capture
     args:
       cmd: "gh pr diff"
-    # `gh pr diff <number>` — raw unified diff for changed files
+    # `gh pr diff <number>` -- raw unified diff for changed files
 
   - join_all: analyze
     arms:
@@ -46,7 +24,7 @@ steps:
           cmd: "cargo clippy -- -D warnings"
         # `cargo clippy` restricted to changed crate paths
       - step: arch_boundary_check
-        handler: ctrl::noop
+        handler: review::arch_boundary_check
         # domain crates: do changed files cross hexagonal boundaries?
       - step: test_coverage_delta
         handler: shell::capture
@@ -55,25 +33,25 @@ steps:
         # nextest: are new code paths covered by tests?
       - step: devkit_review
         handler: ctrl::log
-        # `devkit review` — AI diff review pass (sentinel role)
+        # `devkit review` -- AI diff review pass (sentinel role)
 
   - pipe: weight_signals
     stages:
       - step: normalize_findings
-        handler: ctrl::noop
+        handler: review::normalize_findings
         # unify clippy, arch, and coverage findings into Finding[]
       - step: apply_severity_matrix
-        handler: ctrl::noop
+        handler: review::apply_severity
         # blocking / suggestion / observation tiers
       - step: compute_review_score
-        handler: ctrl::noop
-        # 0.0–1.0: fraction of changed lines with no blocking finding
+        handler: review::compute_score
+        # 0.0-1.0: fraction of changed lines with no blocking finding
 
   - speculate: verdict
     mode: pick_best
     arms:
       - step: approve
-        handler: ctrl::noop
+        handler: review::approve
         # All changed paths covered, no clippy violations, no arch leaks.
       - step: request_changes
         handler: ctrl::log
@@ -88,17 +66,15 @@ steps:
       - range: "[0.0, 0.5)"
         label: uncertain
         handler: ctrl::log
-        # Confidence too low to act — post a neutral comment summarizing uncertainty
+        # Confidence too low to act -- post a neutral comment summarizing uncertainty
       - range: "[0.5, 0.8)"
         label: post_review
         handler: ctrl::log
-        # TODO: thread the speculate::verdict arm output here to drive the correct
+        # Route the speculate::verdict arm output to drive the correct
         # `gh pr review` flag (--approve / --request-changes / --comment).
-        # Until pipeline templating supports dynamic arg injection from speculation
-        # output, this step logs the verdict for manual follow-up.
       - range: "[0.8, 1.0]"
         label: auto_merge_eligible
         handler: shell::capture
         args:
           cmd: "gh pr merge --auto"
-        # High confidence clean — add to merge queue if CI is green
+        # High confidence clean -- add to merge queue if CI is green

@@ -209,10 +209,10 @@ pub(crate) fn extract_cruxx_inner_type(output: &syn::ReturnType) -> syn::Result<
                     ));
                 }
 
-                if let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                        return Ok(quote! { #inner });
-                    }
+                if let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments
+                    && let Some(syn::GenericArgument::Type(inner)) = args.args.first()
+                {
+                    return Ok(quote! { #inner });
                 }
             }
 

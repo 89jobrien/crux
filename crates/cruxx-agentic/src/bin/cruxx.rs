@@ -99,26 +99,78 @@ fn main() {
 }
 
 fn cmd_check(paths: &[String]) {
-    let mut failures = 0u32;
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut parse_errors = 0u32;
+    let mut errors = 0u32;
+    let mut warnings = 0u32;
+
+    // Build a registry once with all built-in handlers for validation.
+    let empty_pipeline = cruxx_script::schema::PipelineDef {
+        pipeline: String::new(),
+        budget: None,
+        steps: vec![],
+    };
+    let registry = rt.block_on(build_registry(&empty_pipeline, None));
 
     for path in paths {
-        match cruxx_script::load_file(path) {
-            Ok(pipeline) => {
-                let handlers = collect_handler_names(&pipeline);
-                let step_count = pipeline.steps.len();
-                println!(
-                    "{path}: valid ({step_count} steps, handlers: {})",
-                    handlers.join(", ")
-                );
-            }
+        let pipeline = match cruxx_script::load_file(path) {
+            Ok(p) => p,
             Err(e) => {
-                eprintln!("{path}: {e}");
-                failures += 1;
+                eprintln!("\x1b[31merror\x1b[0m: {path}: {e}");
+                parse_errors += 1;
+                continue;
+            }
+        };
+
+        let report = cruxx_script::validate_pipeline(&pipeline, &registry);
+
+        let step_count = pipeline.steps.len();
+        let handlers = collect_handler_names(&pipeline);
+
+        if report.is_ok() && report.warning_count() == 0 {
+            println!(
+                "\x1b[32mok\x1b[0m: {path} ({step_count} steps, handlers: {})",
+                handlers.join(", ")
+            );
+        } else {
+            for diag in &report.diagnostics {
+                let (color, label) = match diag.severity {
+                    cruxx_script::DiagnosticSeverity::Error => {
+                        // Unregistered handlers are warnings — pipelines may
+                        // reference future/aspirational handlers.
+                        if diag.message.contains("is not registered") {
+                            warnings += 1;
+                            ("\x1b[33m", "warning")
+                        } else {
+                            errors += 1;
+                            ("\x1b[31m", "error")
+                        }
+                    }
+                    cruxx_script::DiagnosticSeverity::Warning => {
+                        warnings += 1;
+                        ("\x1b[33m", "warning")
+                    }
+                };
+                eprintln!(
+                    "{color}{label}\x1b[0m: {path} [{}]: {}",
+                    diag.location, diag.message
+                );
             }
         }
     }
 
-    if failures > 0 {
+    let total_errors = parse_errors + errors;
+    if total_errors > 0 || warnings > 0 {
+        eprintln!();
+        eprintln!(
+            "Summary: {} file(s) checked, {} error(s), {} warning(s)",
+            paths.len(),
+            total_errors,
+            warnings
+        );
+    }
+
+    if total_errors > 0 {
         std::process::exit(1);
     }
 }
@@ -478,10 +530,10 @@ async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> H
     let mut reg = HandlerRegistry::new();
     cruxx_agentic::register_all_with_plugins(&mut reg, plugin_handler_descs);
 
-    if !manifest.plugin.is_empty() {
-        if let Err(e) = register_plugins(&mut reg, &manifest.plugin).await {
-            eprintln!("[cruxx] warning: failed to load plugins: {e}");
-        }
+    if !manifest.plugin.is_empty()
+        && let Err(e) = register_plugins(&mut reg, &manifest.plugin).await
+    {
+        eprintln!("[cruxx] warning: failed to load plugins: {e}");
     }
 
     for name in collect_handler_names(pipeline) {

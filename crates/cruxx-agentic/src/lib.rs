@@ -1,40 +1,26 @@
-//! cruxx-agentic — built-in step handlers for cruxx-script pipelines.
+//! cruxx-agentic — agentic step handlers for cruxx-script pipelines.
 //!
-//! Call `register_all(&mut registry)` to install all handlers, or call each
-//! module's `register` function individually to pick only what you need.
+//! Call `register_all(&mut registry)` to install all handlers (including stdlib
+//! and optionally BAML), or call each module's `register` function individually.
 
 pub mod adapters;
+pub mod analysis;
+pub mod ci;
 pub mod container;
-pub mod ctrl;
 pub mod error;
-pub mod fs;
-pub mod git;
 pub mod handlers;
 pub mod harness;
-pub mod json;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
+pub mod review;
 pub mod rx;
 pub mod shell;
 pub mod sqlite;
-
-#[cfg(feature = "baml")]
-pub mod planner;
+pub mod triage;
 
 pub use llm_step::LlmStep;
 pub use provider::{LlmProvider, LlmRequest, LlmResponse};
-
-#[cfg(feature = "baml")]
-#[allow(
-    clippy::derivable_impls,
-    clippy::empty_line_after_doc_comments,
-    clippy::map_clone,
-    clippy::new_without_default,
-    clippy::unwrap_or_default
-)]
-#[cfg(feature = "baml")]
-pub(crate) mod baml_client;
 
 use cruxx_core::prelude::CruxErr;
 use cruxx_script::HandlerRegistry;
@@ -42,10 +28,6 @@ use serde_json::Value;
 use std::future::Future;
 
 /// Register a named agent closure so that `delegate:` pipeline steps can invoke it.
-///
-/// This is the public API for pre-registering agents without requiring a concrete
-/// [`cruxx_core::prelude::Agent`] impl.  Accepts any `async Fn(Value) -> Result<Value,
-/// CruxErr>`.
 pub fn register_agent<F, Fut>(registry: &mut HandlerRegistry, name: impl Into<String>, f: F)
 where
     F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -56,7 +38,7 @@ where
 
 /// Register all built-in handlers into the given registry.
 ///
-/// Handler names follow the pattern `module::handler`, e.g. `shell::capture`.
+/// This includes stdlib, agentic, and (with `baml` feature) BAML handlers.
 pub fn register_all(registry: &mut HandlerRegistry) {
     register_all_with_plugins(registry, Vec::new());
 }
@@ -64,23 +46,25 @@ pub fn register_all(registry: &mut HandlerRegistry) {
 /// Register all built-in handlers, including plugin handler descriptions
 /// for the planner.
 pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers: Vec<String>) {
+    // Stdlib handlers
+    crux_stdlib::register_all(registry);
+
+    // Agentic handlers
+    analysis::register(registry);
+    ci::register(registry);
     container::register(registry);
     harness::register(registry);
     shell::register(registry);
-    fs::register(registry);
-    git::register(registry);
-    json::register(registry);
-    ctrl::register(registry);
+    review::register(registry);
     rx::register(registry);
     sqlite::register(registry);
+    triage::register(registry);
     llm::register(registry);
     llm::register_stream(registry);
+
+    // BAML handlers
     #[cfg(feature = "baml")]
-    llm::register_extract(registry);
-    #[cfg(feature = "baml")]
-    llm::register_decompose(registry);
-    #[cfg(feature = "baml")]
-    planner::register_plan(registry, plugin_handlers);
+    crux_baml::register_all_with_plugins(registry, plugin_handlers);
     #[cfg(not(feature = "baml"))]
     let _ = plugin_handlers;
 }

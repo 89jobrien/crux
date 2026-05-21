@@ -1,0 +1,59 @@
+pipeline: cross_project_sync
+# Detect and propagate shared dependency updates across workspace projects.
+# When a library crate (devkit, cruxx-types) bumps its version, find all
+# downstream consumers and update their Cargo.toml references.
+budget: { calls: 15 }
+
+steps:
+  - step: detect_changed_crates
+    handler: shell::capture
+    args:
+      cmd: "git diff HEAD~1 --name-only -- '*/Cargo.toml' | xargs grep -l 'version' 2>/dev/null"
+    # Find Cargo.toml files changed in the last commit
+
+  - step: extract_versions
+    handler: shell::capture
+    args:
+      cmd: "cargo metadata --no-deps --format-version 1"
+    # Get current version of every workspace crate
+
+  - join_all: find_consumers
+    arms:
+      - step: scan_cargo_tomls
+        handler: shell::capture
+        args:
+          cmd: "rg --no-heading -l 'devkit|cruxx-types|cruxx-core' ~/dev/*/Cargo.toml ~/dev/*/crates/*/Cargo.toml 2>/dev/null"
+        # Find all Cargo.toml files that depend on shared crates
+      - step: check_lockfile_drift
+        handler: shell::capture
+        args:
+          cmd: "cargo update --dry-run 2>&1 || true"
+        # Detect if lockfile is out of sync with Cargo.toml
+
+  - pipe: analyze_drift
+    stages:
+      - step: normalize
+        handler: review::normalize_findings
+        # Merge scan results into a unified finding list
+      - step: classify
+        handler: review::apply_severity
+        # Version mismatch = blocking, lockfile drift = suggestion
+      - step: score
+        handler: review::compute_score
+        # How many consumers are in sync?
+
+  - route_on_confidence: action
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: breaking_drift
+        handler: ctrl::log
+        # Multiple consumers on stale versions -- needs coordinated bump
+      - range: "[0.5, 0.9)"
+        label: minor_drift
+        handler: ctrl::log
+        # A few consumers behind -- schedule updates
+      - range: "[0.9, 1.0]"
+        label: in_sync
+        handler: ctrl::log
+        # All consumers on latest -- no action needed

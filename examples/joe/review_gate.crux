@@ -1,0 +1,45 @@
+pipeline: review_gate
+# Lightweight review gate. Normalizes findings from multiple sources,
+# applies severity, computes a score, and decides approve vs block.
+budget: { calls: 12 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: diff
+        handler: shell::capture
+        args:
+          cmd: "git diff --stat HEAD~1"
+        # Summary of changed files and line counts
+      - step: arch_check
+        handler: review::arch_boundary_check
+        # Flag cross-boundary imports between domain crates
+      - step: repo_state
+        handler: git::status
+        # Current branch, dirty files, ahead/behind
+
+  - pipe: evaluate
+    stages:
+      - step: normalize
+        handler: review::normalize_findings
+        # Unify arch and diff findings into Finding[]
+      - step: severity
+        handler: review::apply_severity
+        # Blocking / suggestion / observation tiers
+      - step: score
+        handler: review::compute_score
+        # 0.0-1.0 clean-line fraction
+
+  - speculate: verdict
+    mode: pick_best
+    arms:
+      - step: approve
+        handler: review::approve
+        # No blocking findings -- approve the change
+      - step: block
+        handler: ctrl::log
+        # Blocking findings exist -- request changes
+
+  - step: log_outcome
+    handler: ctrl::log
+    # Record final verdict for audit trail

@@ -1,4 +1,4 @@
-use cruxx_agentic::json as json_handlers;
+use crux_stdlib::json as json_handlers;
 use cruxx_script::HandlerRegistry;
 use serde_json::json;
 
@@ -80,7 +80,6 @@ async fn jq_keys_returns_sorted_keys() {
     let handler = reg.get_handler("json::jq").unwrap();
     let input = json!({"args": {"expr": "keys"}, "b": 2, "a": 1});
     let result = handler(input).await.unwrap();
-    // keys of the payload (args key excluded)
     assert!(result.is_array());
     let arr: Vec<&str> = result
         .as_array()

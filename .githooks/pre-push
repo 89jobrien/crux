@@ -27,7 +27,7 @@ done
 HAS_RS=false HAS_TF=false SH=() MD=() DC=() DIRS=()
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
-    case "$f" in *.rs) HAS_RS=true;; *.tf) HAS_TF=true;; *.sh) SH+=("$f");; *.md) MD+=("$f");; *devcontainer*.json) DC+=("$f");; esac
+    case "$f" in *.rs) HAS_RS=true;; *.tf) HAS_TF=true;; *.sh) SH+=("$f");; *.md) [[ "$f" != .ctx/* ]] && MD+=("$f");; *devcontainer*.json) DC+=("$f");; esac
     DIRS+=("${f%%/*}")
 done <<< "$CHANGED"
 mapfile -t DIRS < <(printf '%s\n' "${DIRS[@]}" | sort -u)
@@ -46,7 +46,7 @@ if [[ "$HAS_RS" == true ]]; then
         for sc in "${SHARED[@]}"; do [[ "$d" == "$sc" ]] && CLIPPY_ALL=true; done
         name=$(cargo metadata --no-deps --format-version 1 2>/dev/null \
             | jq -r --arg d "$d" '.packages[]|select(.manifest_path|contains($d+"/Cargo.toml"))|.name' 2>/dev/null | head -1)
-        CLIPPY_PKGS+=("${name:-$d}")
+        [[ -n "$name" ]] && CLIPPY_PKGS+=("$name")
     done
 
     if [[ "$CLIPPY_ALL" == true ]]; then
