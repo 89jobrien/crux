@@ -16,7 +16,15 @@ pub fn register(registry: &mut HandlerRegistry) {
 
     registry.handler_value("fs::write", |input: Value| async move {
         let path = require_str(&input, "path")?.to_string();
-        let content = require_str(&input, "content")?.to_string();
+        let content_val = input
+            .get("args")
+            .and_then(|a| a.get("content"))
+            .ok_or_else(|| CruxErr::step_failed("fs::write", "missing arg: content"))?;
+        let content = match content_val {
+            Value::String(s) => s.clone(),
+            other => serde_json::to_string_pretty(other)
+                .map_err(|e| CruxErr::step_failed("fs::write", format!("serialize: {e}")))?,
+        };
         tokio::fs::write(&path, &content)
             .await
             .map_err(|e| CruxErr::step_failed("fs::write", format!("cannot write {path}: {e}")))?;

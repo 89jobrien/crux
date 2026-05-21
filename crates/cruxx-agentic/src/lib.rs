@@ -39,7 +39,7 @@ pub use provider::{LlmProvider, LlmRequest, LlmResponse};
     clippy::unwrap_or_default
 )]
 #[cfg(feature = "baml")]
-pub(crate) mod baml_client;
+pub mod baml_client;
 
 use cruxx_core::prelude::CruxErr;
 use cruxx_script::HandlerRegistry;
