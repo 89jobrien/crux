@@ -7,6 +7,7 @@ pub mod adapters;
 pub mod analysis;
 pub mod ci;
 pub mod container;
+pub mod discover;
 pub mod error;
 pub mod handlers;
 pub mod harness;
