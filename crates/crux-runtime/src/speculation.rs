@@ -149,6 +149,7 @@ where
     ///    use that value.
     /// 2. Otherwise, fall back to the byte-length of the serialized output so that arms
     ///    with more content win over arms with no score field (avoiding arbitrary first-wins).
+    // TODO(#68): arms without a score field tie at 0.0 — require score or use a better default
     pub async fn pick_best(self) -> Result<T, CruxErr> {
         self.pick_best_by(|val| {
             let json = serde_json::to_value(val).unwrap_or(serde_json::Value::Null);

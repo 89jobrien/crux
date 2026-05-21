@@ -17,7 +17,7 @@ crate a thin adapter layer rather than a self-contained HTTP client.
 
 ## Architecture
 
-```
+```text
 crux-runtime          — unchanged (Agent, Context, CruxErr, Budget)
 crux-agentic 0.2.3   — gains: LlmProvider trait, LlmRequest/LlmResponse types,
                                AnthropicAdapter, OpenAiAdapter, LlmStep<P>
@@ -164,7 +164,7 @@ crux-runtime = "0.2.1"
 minibox-llm = { path = "../minibox-llm" }
 ```
 
-### New file: `src/provider.rs`
+### New file: `src/provider.rs` (minibox-agent)
 
 Newtype adapter implementing crux's `LlmProvider` for minibox-llm's `FallbackChain`:
 

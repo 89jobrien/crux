@@ -37,7 +37,7 @@ Two projects, two responsibilities:
      `FileStrategyStore`, `InMemoryRewardStore`
    - Orchestrator: `ImprovementLoop`
 
-```
+```text
 ~/dev/crux/crates/
   crux-improve/
     src/
@@ -58,7 +58,7 @@ Two projects, two responsibilities:
 
 **Dependency direction:**
 
-```
+```text
 praxis -> crux-improve -> crux-runtime, crux-types, crux-planner
 ```
 
@@ -471,7 +471,7 @@ directly — `crux-improve` is the single entry point.
 
 6. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-improve           -> all green
    cargo clippy -p crux-improve -- -D warnings -> zero warnings
    ```
@@ -811,12 +811,13 @@ directly — `crux-improve` is the single entry point.
 
 6. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-improve           -> all green
    cargo clippy -p crux-improve -- -D warnings -> zero warnings
    ```
 
-7. Commit: `git commit -m "feat(crux-improve): add improvement types, StrategyPolicy, and evolution adapter"`
+7. Commit:
+   `git commit -m "feat(crux-improve): add improvement types, StrategyPolicy, and evolution adapter"`
 
 ---
 
@@ -1034,7 +1035,7 @@ directly — `crux-improve` is the single entry point.
 
 9. Verify:
 
-   ```
+   ```text
    cargo nextest run -p praxis-core    -> all green
    cargo clippy -p praxis-core -- -D warnings  -> zero warnings
    ```
@@ -1177,7 +1178,7 @@ directly — `crux-improve` is the single entry point.
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run -p praxis-eval    -> all green
    cargo clippy -p praxis-eval -- -D warnings  -> zero warnings
    ```
@@ -1232,7 +1233,7 @@ directly — `crux-improve` is the single entry point.
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run -p praxis-store    -> all green
    cargo clippy -p praxis-store -- -D warnings  -> zero warnings
    ```
@@ -1301,7 +1302,7 @@ directly — `crux-improve` is the single entry point.
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run -p praxis           -> all green
    cargo clippy -p praxis -- -D warnings -> zero warnings
    ```
@@ -1354,7 +1355,7 @@ directly — `crux-improve` is the single entry point.
 
 6. Verify:
 
-   ```
+   ```text
    just ci  -> all green
    ```
 

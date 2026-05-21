@@ -286,6 +286,7 @@ const UNSUPPORTED_PREFIXES: &[&str] = &[
     "include ",
 ];
 
+// TODO(#70): extend json::jq beyond dot-path — add filters, pipes, select(), map()
 fn is_unsupported(expr: &str) -> bool {
     if expr.starts_with('[') || expr.starts_with('{') {
         return true;

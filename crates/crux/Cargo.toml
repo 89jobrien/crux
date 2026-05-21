@@ -1,5 +1,5 @@
 [package]
-name = "crux"
+name = "cruxx"
 description = "An agentic DSL for Rust — inspectable, serializable, replayable agent execution"
 version.workspace = true
 edition.workspace = true
@@ -10,6 +10,9 @@ repository.workspace = true
 homepage.workspace = true
 readme = "../../README.md"
 keywords.workspace = true
+
+[lib]
+name = "crux"
 categories.workspace = true
 
 [dependencies]

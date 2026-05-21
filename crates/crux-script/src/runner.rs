@@ -108,6 +108,7 @@ impl Runner {
                 Ok(handler_out)
             }
 
+            // TODO(#67): no agents are pre-registered — delegate: always fails at runtime
             StepDef::Delegate(node) => {
                 let step_name = node.name.as_deref().unwrap_or(&node.delegate);
                 let agent_runner = self

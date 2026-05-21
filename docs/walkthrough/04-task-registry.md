@@ -11,7 +11,7 @@ and resume from exactly where you left off.
 
 A long-running agent does this:
 
-```
+```text
 plan  ->  step 1  ->  step 2  ->  [crash]
 ```
 
@@ -275,7 +275,7 @@ Under strict mode, `CruxErr::ReplayMismatch` is raised in these cases:
 
 ## The full lifecycle
 
-```
+```text
 submit()
     |
     v
@@ -304,9 +304,9 @@ policy, SLO monitor, or human-in-the-loop approval queue on top of it with no ad
 | Read a task            | `reg.get(&id)`                   | Returns full Task      |
 | Advance business state | `reg.update_status(&id, status)` | Task::status field     |
 | Save execution trace   | `reg.checkpoint(&id, &crux)`     | Task::checkpoint field |
-| Load trace for replay  | `reg.load_checkpoint(&id)`       | Returns Crux<Value>    |
+| Load trace for replay  | `reg.load_checkpoint(&id)`       | Returns `Crux<Value>`  |
 | List pending tasks     | `reg.pending(kind)`              | Filters by kind        |
-| Snapshot current trace | `ctx.snapshot()`                 | Returns Crux<Value>    |
+| Snapshot current trace | `ctx.snapshot()`                 | Returns `Crux<Value>`  |
 | Seed replay            | `ctx.replay_from(&trace)`        | Populates replay cache |
 
 Chapter **05** covers lifecycle hooks — `on_low_confidence`, `on_step_failure`,

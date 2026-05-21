@@ -10,7 +10,7 @@ concrete API shapes — no invented types, no phantom methods.
 
 ## The system we're building
 
-```
+```text
       goal: "Ship v2 of the checkout API"
                     |
                     v
@@ -37,7 +37,7 @@ the task type string ("plan", "build", "test", "docs") and the `input` field car
 
 ## Scaffold
 
-```
+```text
 project-planner/
 |- Cargo.toml
 |- src/

@@ -391,21 +391,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
-name = "crux"
-version = "0.2.6"
-dependencies = [
- "crux-agentic",
- "crux-domain",
- "crux-macros",
- "crux-runtime",
- "crux-script",
- "futures",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "crux-agentic"
 version = "0.2.6"
 dependencies = [
@@ -571,6 +556,21 @@ dependencies = [
  "serde",
  "serde_json",
  "ulid",
+]
+
+[[package]]
+name = "cruxx"
+version = "0.2.6"
+dependencies = [
+ "crux-agentic",
+ "crux-domain",
+ "crux-macros",
+ "crux-runtime",
+ "crux-script",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

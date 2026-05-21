@@ -1,6 +1,6 @@
 # crux-agentic Implementation Plan
 
-**status: done**
+status: done
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -678,7 +678,8 @@ git commit -m "feat(crux-agentic): implement fs module (read, write, glob, exist
 - Modify: `crates/crux-agentic/src/git.rs`
 - Create: `crates/crux-agentic/tests/git.rs`
 
-All handlers run `git` subprocesses via `sh -c`. They accept an optional `{ "args": { "cwd": "..." } }`.
+All handlers run `git` subprocesses via `sh -c`. They accept an optional
+`{ "args": { "cwd": "..." } }`.
 
 - `git::staged_files` → `{ "files": ["path/a.rs", ...] }`
 - `git::diff` → `{ "diff": "<unified diff text>", "args": { "ref": "HEAD" } }`

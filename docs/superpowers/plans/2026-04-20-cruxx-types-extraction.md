@@ -1,6 +1,6 @@
 # crux-types Extraction Plan
 
-**status: done**
+status: done
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
@@ -240,7 +240,7 @@ crux-types = { git = "<crux-repo-url>", rev = "<sha>" }
 
 ## Dependency Graph
 
-```
+```text
 Task 1 (scaffold) → Task 2 (move types) → Task 3 (update consumers) → Task 4 (publish/pin)
 ```
 
@@ -249,9 +249,9 @@ changed, potential import breakage).
 
 ## Risk Register
 
-| Risk                                              | Impact                      | Mitigation                                             |
-| ------------------------------------------------- | --------------------------- | ------------------------------------------------------ |
-| Type has hidden dep on crux-runtime runtime       | Compile error in crux-types | Audit imports before move; stub or remove              |
-| Recovery<T> closure variants leak into wire types | Serde fails on closures     | Explicit RecoveryKind subset, keep Recovery<T> in core |
-| Re-export path change breaks downstream           | Semver violation            | Re-export preserves all existing paths                 |
-| crux-plugin/crux-script need types too            | Additional dep updates      | They already depend on crux-runtime which re-exports   |
+| Risk                                                | Impact                      | Mitigation                                               |
+| --------------------------------------------------- | --------------------------- | -------------------------------------------------------- |
+| Type has hidden dep on crux-runtime runtime         | Compile error in crux-types | Audit imports before move; stub or remove                |
+| `Recovery<T>` closure variants leak into wire types | Serde fails on closures     | Explicit RecoveryKind subset, keep `Recovery<T>` in core |
+| Re-export path change breaks downstream             | Semver violation            | Re-export preserves all existing paths                   |
+| crux-plugin/crux-script need types too              | Additional dep updates      | They already depend on crux-runtime which re-exports     |

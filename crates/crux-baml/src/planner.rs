@@ -64,6 +64,7 @@ fn handler_manifest() -> Vec<String> {
         "llm::invoke -- raw LLM completion".into(),
         "llm::extract -- BAML structured extraction".into(),
         "llm::decompose -- decompose spec into tasks".into(),
+        // TODO(#65): implement real streaming — currently buffers full response
         "llm::stream -- buffered LLM completion (streaming stub)".into(),
     ]
 }

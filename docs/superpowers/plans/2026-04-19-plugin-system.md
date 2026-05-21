@@ -1,6 +1,6 @@
 # crux Plugin System Implementation Plan
 
-**status: done**
+status: done
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
@@ -1309,13 +1309,13 @@ protocol over stdin/stdout.
    ```
 ````
 
-2. Run a pipeline that uses plugin handlers:
+1. Run a pipeline that uses plugin handlers:
 
    ```bash
    crux run my-pipeline.crux
    ```
 
-3. Or generate a pipeline that uses plugins:
+1. Or generate a pipeline that uses plugins:
 
    ```bash
    crux plan --goal "create a GitHub issue for each TODO"
@@ -1417,7 +1417,7 @@ Plugin handlers use `namespace::action` format:
 
 The namespace comes from the `name` field in `plugins.toml`.
 
-````
+````text
 
 - [ ] **Step 2: Full verification**
 

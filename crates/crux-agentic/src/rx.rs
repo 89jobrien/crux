@@ -7,6 +7,7 @@ use tokio::process::Command;
 
 use crate::error::opt_str;
 
+// TODO(#66): implement rx::install handler to install scripts into local registry
 /// Register rx handlers: `rx::run` (invoke a registered script by name) and
 /// `rx::list` (enumerate the rx registry).
 ///

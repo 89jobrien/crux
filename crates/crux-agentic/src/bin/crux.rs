@@ -538,6 +538,7 @@ async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> H
             reg.handler_value(name, move |_input: Value| {
                 let handler_name = n.clone();
                 async move {
+                    // TODO(#64): fail or warn loudly when a pipeline references an unregistered handler
                     eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
                     Ok(json!({
                         "_stub": handler_name,

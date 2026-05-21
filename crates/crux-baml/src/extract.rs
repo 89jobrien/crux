@@ -33,6 +33,7 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
             B.clone()
         };
 
+        // TODO(#69): only 3 BAML functions wired — add more or make dynamic
         match function.as_str() {
             "ExtractEntities" => {
                 let text = input_map

@@ -1,6 +1,6 @@
 # Hook Tests Implementation Plan
 
-**status: done**
+status: done
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -277,7 +277,8 @@ cd /Users/joe/dev/crux
 bats scripts/tests/hooks.bats --filter "pre-commit"
 ```
 
-Expected: all tests run; most fail or error until hooks are in place. If bats itself errors, fix load path.
+Expected: all tests run; most fail or error until hooks are in place. If bats itself errors,
+fix load path.
 
 - [ ] **Step 3: Commit**
 
@@ -666,12 +667,16 @@ git commit -m "chore: add test-hooks and fuzz-hooks just recipes"
 
 **Spec coverage:**
 
-- bats for pre-commit: no staged, baml stub, fmt, clippy, tool-not-found skip, cross-dir guard, md, yaml — all covered
-- bats for pre-push: no lintable, new branch fallback, deleted branch, workspace compile, per-crate clippy, shared crate propagation, conformance disable, shellcheck, markdownlint — all covered
+- bats for pre-commit: no staged, baml stub, fmt, clippy, tool-not-found skip, cross-dir guard,
+  md, yaml — all covered
+- bats for pre-push: no lintable, new branch fallback, deleted branch, workspace compile,
+  per-crate clippy, shared crate propagation, conformance disable, shellcheck,
+  markdownlint — all covered
 - fuzz filename classifier: covered in Task 4
 - fuzz git ref inputs: covered in Task 4
 - justfile wiring: Task 5
 
 **Placeholder scan:** None found.
 
-**Type consistency:** `setup_repo`, `stage_file`, `run_pre_commit`, `run_pre_push` defined in Task 1 and used consistently in Tasks 2–3. `classify` defined and used in Task 4 only.
+**Type consistency:** `setup_repo`, `stage_file`, `run_pre_commit`, `run_pre_push` defined in
+Task 1 and used consistently in Tasks 2–3. `classify` defined and used in Task 4 only.

@@ -86,6 +86,7 @@ impl Default for StepRunnerRegistry {
 }
 
 // ── Built-in runner stubs ──────────────────────────────────────────────────
+// TODO(#63): implement real step runners — all return Value::Null today
 
 pub struct ShellRunner;
 impl StepRunner for ShellRunner {
