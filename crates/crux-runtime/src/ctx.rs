@@ -6,9 +6,6 @@
 //   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
 //   simulation, and side-effect-free testing
 
-// TODO(#77): error ergonomics — step closures require verbose error handling; explore
-//   a TryStep trait or `ctx.try_step()` that auto-wraps `?` into CruxErr::StepFailed
-
 /// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
 /// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
@@ -164,6 +161,21 @@ impl CruxCtx {
             event_sender: None,
             state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Register a pre-step safety gate. If the gate returns `Deny`, the step
+    /// is recorded as skipped and a `CruxErr::Denied` is returned.
+    pub fn on_pre_step<F>(&mut self, gate: F)
+    where
+        F: Fn(&str) -> crate::hooks::HookVerdict + Send + Sync + 'static,
+    {
+        self.hooks.on_pre_step(gate);
+    }
+
+    /// Attach a redactor that scrubs output/error fields before they enter the
+    /// trace. Applies to all subsequent steps.
+    pub fn set_redactor(&mut self, redactor: Box<dyn crate::recorder::Redactor>) {
+        self.recorder.set_redactor(redactor);
     }
 
     /// Store the output of a named pipe stage so later stages can read it.
@@ -861,6 +873,16 @@ impl CruxCtx {
             PlanResult::Allow(_) => {} // proceed normally
         }
 
+        // Pre-step safety gate
+        if let crate::hooks::HookVerdict::Deny(reason) = self.hooks.check_pre_step(name) {
+            let (_, input_hash) = self.recorder.next_ordinal(name);
+            self.recorder.record_skipped(name, input_hash, confidence);
+            return Err(CruxErr::Denied {
+                step: name.to_string(),
+                reason,
+            });
+        }
+
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check (by-name for better matching in both modes).
@@ -1203,6 +1225,21 @@ impl Context for CruxCtx {
             }
         }
     }
+
+    async fn try_step<F, Fut, T, E>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, E>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+        E: std::fmt::Display + Send,
+    {
+        let step_name = name.to_string();
+        self.step(name, || async move {
+            f().await
+                .map_err(|e| CruxErr::step_failed(&step_name, e.to_string()))
+        })
+        .await
+    }
 }
 
 /// Determines the worst-case outcome across all steps.
@@ -1249,6 +1286,53 @@ mod tests {
             ctx.snapshot_steps()[0].error.as_deref(),
             Some("step 'fail' failed: boom")
         );
+    }
+
+    #[tokio::test]
+    async fn try_step_converts_arbitrary_error() {
+        let mut ctx = CruxCtx::new("test_agent");
+        let result: Result<i32, _> = ctx
+            .try_step("parse", || async {
+                "not_a_number".parse::<i32>() // returns Result<i32, ParseIntError>
+            })
+            .await;
+        assert!(result.is_err());
+        assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Err);
+        let err_msg = ctx.snapshot_steps()[0].error.as_deref().unwrap();
+        assert!(err_msg.contains("parse"), "error: {err_msg}");
+    }
+
+    #[tokio::test]
+    async fn try_step_success_records_normally() {
+        let mut ctx = CruxCtx::new("test_agent");
+        let val: i32 = ctx
+            .try_step("double", || async { Ok::<_, std::fmt::Error>(42) })
+            .await
+            .unwrap();
+        assert_eq!(val, 42);
+        assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn pre_step_gate_blocks_denied_step() {
+        use crate::hooks::HookVerdict;
+        let mut ctx = CruxCtx::new("test_agent");
+        ctx.on_pre_step(|name| {
+            if name == "forbidden" {
+                HookVerdict::Deny("not allowed".into())
+            } else {
+                HookVerdict::Allow
+            }
+        });
+        // Allowed step succeeds
+        let val: i32 = ctx.step("ok_step", || async { Ok(42) }).await.unwrap();
+        assert_eq!(val, 42);
+        // Denied step fails with Denied error and is recorded as Skipped
+        let result: Result<i32, _> = ctx.step("forbidden", || async { Ok(99) }).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CruxErr::Denied { .. }));
+        assert_eq!(ctx.snapshot_steps()[1].status, StepStatus::Skipped);
     }
 
     #[tokio::test]

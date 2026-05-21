@@ -114,4 +114,19 @@ pub trait Context: Send {
         F: FnOnce() -> S + Send,
         S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
         T: serde::Serialize + serde::de::DeserializeOwned + Send;
+
+    /// Execute a named step whose closure returns an arbitrary error type.
+    ///
+    /// The error is converted to `CruxErr::StepFailed` via `Display`. This
+    /// allows natural `?` usage inside step closures without manual wrapping.
+    fn try_step<F, Fut, T, E>(
+        &mut self,
+        name: &str,
+        f: F,
+    ) -> impl Future<Output = Result<T, CruxErr>> + Send
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, E>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+        E: std::fmt::Display + Send;
 }

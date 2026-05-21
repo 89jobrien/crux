@@ -2,13 +2,22 @@
 ///
 /// Single responsibility: step construction and trace accumulation.
 /// No hook invocation, no replay, no budget logic.
-// TODO(#73): redaction before persist — apply a Redactor port before appending
-//   output/error fields so sensitive data never enters the trace (cf. braid-redact)
 use chrono::{DateTime, Utc};
 
 use std::collections::HashMap;
 
 use crate::types::step::{Step, StepKind, StepStatus};
+
+/// Port for redacting sensitive data before it enters the trace.
+///
+/// Implementors can scrub API keys, PII, or other sensitive content from
+/// step outputs and error messages before they are persisted.
+pub trait Redactor: Send + Sync {
+    /// Redact a JSON output value. Return the redacted version.
+    fn redact_output(&self, output: serde_json::Value) -> serde_json::Value;
+    /// Redact an error message string. Return the redacted version.
+    fn redact_error(&self, error: &str) -> String;
+}
 
 /// Parameters for recording a step outcome.
 pub struct StepRecord<'a> {
@@ -21,15 +30,41 @@ pub struct StepRecord<'a> {
     pub attempt: u32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Default)]
 pub struct StepRecorder {
     steps: Vec<Step>,
     ordinal: u32,
+    redactor: Option<Box<dyn Redactor>>,
+}
+
+impl Clone for StepRecorder {
+    fn clone(&self) -> Self {
+        Self {
+            steps: self.steps.clone(),
+            ordinal: self.ordinal,
+            redactor: None, // redactor is not cloneable; clone drops it
+        }
+    }
+}
+
+impl std::fmt::Debug for StepRecorder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StepRecorder")
+            .field("steps", &self.steps.len())
+            .field("ordinal", &self.ordinal)
+            .field("has_redactor", &self.redactor.is_some())
+            .finish()
+    }
 }
 
 impl StepRecorder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Attach a redactor that processes output/error fields before persistence.
+    pub fn set_redactor(&mut self, redactor: Box<dyn Redactor>) {
+        self.redactor = Some(redactor);
     }
 
     /// Allocate the next ordinal and return it with the input hash.
@@ -46,6 +81,10 @@ impl StepRecorder {
 
     /// Record a successful step.
     pub fn record_ok(&mut self, rec: &StepRecord<'_>, output: Option<serde_json::Value>) {
+        let output = match (&self.redactor, output) {
+            (Some(r), Some(v)) => Some(r.redact_output(v)),
+            (_, v) => v,
+        };
         self.steps.push(Step {
             name: rec.name.to_string(),
             kind: StepKind::Plain,
@@ -66,6 +105,10 @@ impl StepRecorder {
 
     /// Record a failed step.
     pub fn record_err(&mut self, rec: &StepRecord<'_>, error: &str) {
+        let error = match &self.redactor {
+            Some(r) => r.redact_error(error),
+            None => error.to_string(),
+        };
         self.steps.push(Step {
             name: rec.name.to_string(),
             kind: StepKind::Plain,
@@ -76,7 +119,7 @@ impl StepRecorder {
             input_hash: rec.input_hash,
             content_hash: rec.content_hash,
             output: None,
-            error: Some(error.to_string()),
+            error: Some(error),
             attempt: rec.attempt,
             events: vec![],
             metadata: HashMap::new(),
@@ -228,5 +271,51 @@ mod tests {
 
         recorder.record_err(&rec("b", 1), "boom");
         assert_eq!(recorder.last_error(), Some("boom"));
+    }
+
+    struct StarRedactor;
+    impl Redactor for StarRedactor {
+        fn redact_output(&self, mut output: serde_json::Value) -> serde_json::Value {
+            if let Some(obj) = output.as_object_mut()
+                && obj.contains_key("secret")
+            {
+                obj.insert("secret".into(), serde_json::json!("***"));
+            }
+            output
+        }
+        fn redact_error(&self, error: &str) -> String {
+            error.replace("sk-", "sk-***")
+        }
+    }
+
+    #[test]
+    fn redactor_scrubs_output() {
+        let mut recorder = StepRecorder::new();
+        recorder.set_redactor(Box::new(StarRedactor));
+        recorder.record_ok(
+            &rec("a", 0),
+            Some(serde_json::json!({"secret": "abc123", "safe": true})),
+        );
+        let output = recorder.last_output().unwrap();
+        assert_eq!(output["secret"], "***");
+        assert_eq!(output["safe"], true);
+    }
+
+    #[test]
+    fn redactor_scrubs_error() {
+        let mut recorder = StepRecorder::new();
+        recorder.set_redactor(Box::new(StarRedactor));
+        recorder.record_err(&rec("a", 0), "auth failed with sk-live-xyz");
+        assert_eq!(
+            recorder.last_error(),
+            Some("auth failed with sk-***live-xyz")
+        );
+    }
+
+    #[test]
+    fn no_redactor_passes_through() {
+        let mut recorder = StepRecorder::new();
+        recorder.record_ok(&rec("a", 0), Some(serde_json::json!({"secret": "abc123"})));
+        assert_eq!(recorder.last_output().unwrap()["secret"], "abc123");
     }
 }

@@ -2,14 +2,24 @@
 ///
 /// Single responsibility: hook storage and dispatch. No step recording,
 /// no budget logic, no replay. CruxCtx delegates hook operations here.
-// TODO(#71): pre-step safety gates — add HookVerdict (Allow/Deny) pre-execution
-//   hooks so steps can be blocked before running (cf. braid's DestructiveCommandGuard)
 use std::future::Future;
 use std::pin::Pin;
 
 use crate::types::budget::Budget;
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
+
+/// Pre-step gate verdict — determines whether a step is allowed to execute.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HookVerdict {
+    /// Allow the step to proceed.
+    Allow,
+    /// Deny the step with a reason. The step will be recorded as skipped.
+    Deny(String),
+}
+
+/// Boxed sync gate that inspects a step name before execution.
+type PreStepGate = Box<dyn Fn(&str) -> HookVerdict + Send + Sync>;
 
 /// Boxed async handler for low-confidence recovery.
 type ConfidenceHandler = Box<
@@ -43,6 +53,7 @@ pub struct HookRegistry {
     failure_handler: Option<FailureHandler>,
     budget_handler: Option<BudgetHandler>,
     approval_handler: Option<ApprovalHandler>,
+    pre_step_gate: Option<PreStepGate>,
 }
 
 impl HookRegistry {
@@ -53,6 +64,25 @@ impl HookRegistry {
             failure_handler: None,
             budget_handler: None,
             approval_handler: None,
+            pre_step_gate: None,
+        }
+    }
+
+    /// Register a pre-step gate. If the gate returns `Deny`, the step is
+    /// skipped and recorded with status `Skipped`.
+    pub fn on_pre_step<F>(&mut self, gate: F)
+    where
+        F: Fn(&str) -> HookVerdict + Send + Sync + 'static,
+    {
+        self.pre_step_gate = Some(Box::new(gate));
+    }
+
+    /// Check the pre-step gate for a given step name. Returns `Allow` if no
+    /// gate is registered.
+    pub fn check_pre_step(&self, step_name: &str) -> HookVerdict {
+        match &self.pre_step_gate {
+            Some(gate) => gate(step_name),
+            None => HookVerdict::Allow,
         }
     }
 
@@ -165,6 +195,7 @@ impl std::fmt::Debug for HookRegistry {
             .field("has_failure_handler", &self.failure_handler.is_some())
             .field("has_budget_handler", &self.budget_handler.is_some())
             .field("has_approval_handler", &self.approval_handler.is_some())
+            .field("has_pre_step_gate", &self.pre_step_gate.is_some())
             .finish()
     }
 }
@@ -225,5 +256,28 @@ mod tests {
         let hooks = HookRegistry::new();
         let request = serde_json::json!({"summary": "enable network"});
         assert!(hooks.check_approval(request).await.is_none());
+    }
+
+    #[test]
+    fn pre_step_gate_allows_by_default() {
+        let hooks = HookRegistry::new();
+        assert_eq!(hooks.check_pre_step("anything"), HookVerdict::Allow);
+    }
+
+    #[test]
+    fn pre_step_gate_denies_blocked_steps() {
+        let mut hooks = HookRegistry::new();
+        hooks.on_pre_step(|name| {
+            if name.starts_with("dangerous_") {
+                HookVerdict::Deny("blocked by policy".into())
+            } else {
+                HookVerdict::Allow
+            }
+        });
+        assert_eq!(hooks.check_pre_step("safe_step"), HookVerdict::Allow);
+        assert_eq!(
+            hooks.check_pre_step("dangerous_rm"),
+            HookVerdict::Deny("blocked by policy".into())
+        );
     }
 }

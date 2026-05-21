@@ -62,6 +62,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     triage::register(registry);
     llm::register(registry);
     llm::register_stream(registry);
+    llm::register_fallback(registry);
 
     // BAML handlers
     #[cfg(feature = "baml")]
