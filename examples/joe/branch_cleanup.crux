@@ -1,5 +1,9 @@
 pipeline: branch_cleanup
 # Find merged branches, prune local and remote refs, flag orphaned worktrees.
+input:
+  base_branch: "main"
+  # Protected branches to exclude from deletion (comma-separated)
+  protected_branches: "main,develop,master"
 budget: { calls: 8 }
 
 steps:
@@ -8,8 +12,8 @@ steps:
       - step: merged_branches
         handler: shell::capture
         args:
-          cmd: "git branch --merged HEAD | grep -v '\\* \\|main$\\|develop$' || true"
-        # Local branches already merged into current branch
+          cmd: "git branch --merged {{ input.base_branch }} | grep -vE '\\*|^\\s*({{ input.protected_branches | replace: \",\", \"|\" }})$' || true"
+        # Local branches already merged into base branch; protected branches excluded dynamically
       - step: remote_stale
         handler: shell::capture
         args:
@@ -24,13 +28,13 @@ steps:
   - pipe: classify
     stages:
       - step: parse_branches
-        handler: text::parse_branch_list
+        handler: text::parse_branch_list  # aspirational
         # Structured list: branch name, current flag
       - step: detect_orphans
-        handler: triage::detect_orphaned_worktrees
+        handler: triage::detect_orphaned_worktrees  # aspirational
         # Worktrees whose branch is ahead of main with no recent commits
       - step: build_cleanup_plan
-        handler: triage::build_cleanup_plan
+        handler: triage::build_cleanup_plan  # aspirational
         # Safe-to-delete vs needs-review classification
 
   - route_on_confidence: act
@@ -50,5 +54,5 @@ steps:
         label: full_cleanup
         handler: shell::capture
         args:
-          cmd: "git branch --merged HEAD | grep -v '\\* \\|main$\\|develop$' | xargs -r git branch -d"
+          cmd: "git branch --merged {{ input.base_branch }} | grep -vE '\\*|^\\s*({{ input.protected_branches | replace: \",\", \"|\" }})$' | xargs -r git branch -d"
         # Delete all merged local branches and prune remote
