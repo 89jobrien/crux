@@ -66,26 +66,26 @@ All operate on a JSON array of Step objects (trace input).
 
 All parse CI log text (string input from `shell::capture` output).
 
-| Handler                 | Input                              | Output                                                                             |
-| ----------------------- | ---------------------------------- | ---------------------------------------------------------------------------------- | ------ | ------ | ------------- |
-| `ci::compile_errors`    | CI log text                        | `{ errors: [{code, message, file, line}] }`                                        |
-| `ci::clippy_violations` | CI log text                        | `{ violations: [{lint, message, file, line}] }`                                    |
-| `ci::nextest_failures`  | CI log text                        | `{ failures: [{test_name, message, file}] }`                                       |
-| `ci::deny_violations`   | CI log text                        | `{ violations: [{kind, crate_name, message}] }`                                    |
-| `ci::deduplicate_spans` | `{ errors, violations, failures }` | Same shape, deduplicated by file+line                                              |
-| `ci::classify_severity` | Deduplicated findings              | `{ ranked: [{..., severity: "compile"                                              | "deny" | "test" | "clippy"}] }` |
-| `ci::attach_owners`     | Ranked findings                    | `{ ranked: [{..., crate_name}] }` via `cargo metadata` subprocess                  |
-| `ci::score_fixability`  | Ranked findings with owners        | `HandlerOutput::with_confidence(findings, score)` — score is fraction auto-fixable |
+| Handler                 | Input                              | Output                                                     |
+| ----------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `ci::compile_errors`    | CI log text                        | `{ errors: [{code, message, file, line}] }`                |
+| `ci::clippy_violations` | CI log text                        | `{ violations: [{lint, message, file, line}] }`            |
+| `ci::nextest_failures`  | CI log text                        | `{ failures: [{test_name, message, file}] }`               |
+| `ci::deny_violations`   | CI log text                        | `{ violations: [{kind, crate_name, message}] }`            |
+| `ci::deduplicate_spans` | `{ errors, violations, failures }` | Same shape, deduplicated by file+line                      |
+| `ci::classify_severity` | Deduplicated findings              | `{ ranked: [{..., severity}] }` (compile/deny/test/clippy) |
+| `ci::attach_owners`     | Ranked findings                    | `{ ranked: [{..., crate_name}] }` via `cargo metadata`     |
+| `ci::score_fixability`  | Ranked+owners                      | `HandlerOutput::with_confidence(findings, score)`          |
 
 ### review.rs (5 handlers)
 
-| Handler                       | Registration    | Input                               | Output                                                             |
-| ----------------------------- | --------------- | ----------------------------------- | ------------------------------------------------------------------ | ------------ | ------------------ |
-| `review::arch_boundary_check` | `handler_value` | `{ files: [path] }`                 | `{ violations: [{file, imports, violation}] }` via `rg` subprocess |
-| `review::normalize_findings`  | `handler_value` | `{ clippy, arch, coverage }` merged | `{ findings: [{source, file, line, message, severity}] }`          |
-| `review::apply_severity`      | `handler_value` | `{ findings }`                      | `{ findings: [{..., tier: "blocking"                               | "suggestion" | "observation"}] }` |
-| `review::compute_score`       | `handler`       | `{ findings }`                      | `HandlerOutput::with_confidence(summary, score)` — fraction clean  |
-| `review::approve`             | `handler_value` | Input passthrough                   | Runs `gh pr review --approve` via subprocess                       |
+| Handler                       | Registration    | Input                        | Output                                                          |
+| ----------------------------- | --------------- | ---------------------------- | --------------------------------------------------------------- |
+| `review::arch_boundary_check` | `handler_value` | `{ files: [path] }`          | `{ violations: [{file, imports, violation}] }` via `rg`         |
+| `review::normalize_findings`  | `handler_value` | `{ clippy, arch, coverage }` | `{ findings: [{source, file, line, message, severity}] }`       |
+| `review::apply_severity`      | `handler_value` | `{ findings }`               | `{ findings: [{..., tier}] }` (blocking/suggestion/observation) |
+| `review::compute_score`       | `handler`       | `{ findings }`               | `HandlerOutput::with_confidence(summary, score)`                |
+| `review::approve`             | `handler_value` | Input passthrough            | Runs `gh pr review --approve` via subprocess                    |
 
 ### triage.rs (4 handlers)
 
@@ -697,7 +697,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 3. Verify:
 
-   ```
+   ```bash
    cargo nextest run -p cruxx-agentic -- analysis  -> all green
    cargo clippy -p cruxx-agentic -- -D warnings    -> zero warnings
    ```
@@ -1230,7 +1230,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 3. Verify:
 
-   ```
+   ```bash
    cargo nextest run -p cruxx-agentic -- ci  -> all green
    cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
    ```
@@ -1574,7 +1574,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 3. Verify:
 
-   ```
+   ```bash
    cargo nextest run -p cruxx-agentic -- review  -> all green
    cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
    ```
@@ -1884,7 +1884,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 3. Verify:
 
-   ```
+   ```bash
    cargo nextest run -p cruxx-agentic -- triage  -> all green
    cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
    ```
@@ -1957,7 +1957,7 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 5. Verify:
 
-   ```
+   ```bash
    cargo nextest run -p cruxx-agentic  -> all green
    cargo clippy -p cruxx-agentic -- -D warnings  -> zero warnings
    ```
@@ -1979,7 +1979,8 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 2. Run: `cargo check -p cruxx-agentic`
 
-3. Commit (if changed): `git commit -m "chore(agentic): add chrono and serde_yaml deps"`
+3. Commit (if changed):
+   `git commit -m "chore(agentic): add chrono and serde_yaml deps"`
 
 ### Task 7: Update pipeline files
 
@@ -2029,7 +2030,8 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 6. Remove `ASPIRATIONAL TEMPLATE` headers from all 5 files.
 
-7. Commit: `git commit -m "feat(pipelines): replace all ctrl::noop placeholders with real handlers"`
+7. Commit:
+   `git commit -m "feat(pipelines): replace noop placeholders with real handlers"`
 
 ### Task 8: Update capabilities doc
 
@@ -2047,7 +2049,8 @@ These 6 don't need new Rust handlers — they reuse `review::arch_boundary_check
 
 3. Update handler count in prose if present.
 
-4. Commit: `git commit -m "docs: update capabilities with 26 new handlers, remove resolved gaps"`
+4. Commit:
+   `git commit -m "docs: update capabilities with 26 new handlers"`
 
 ## Pre-Save Checklist
 
