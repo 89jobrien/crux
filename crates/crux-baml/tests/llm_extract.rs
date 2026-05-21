@@ -1,9 +1,7 @@
 // Integration tests for llm::extract handler.
 //
 // These tests make real API calls and are skipped when OPENAI_API_KEY is not set.
-// Run with: cargo nextest run --features baml -p cruxx-agentic
-
-#![cfg(feature = "baml")]
+// Run with: cargo nextest run -p crux-baml
 
 use crux_baml::extract::register_extract;
 use cruxx_script::{HandlerRegistry, handler_output::HandlerOutput};
@@ -141,7 +139,6 @@ async fn classify_returns_structured_output() {
 }
 
 /// ClassifyCIFailure must be reachable without API keys (error path only).
-#[cfg(feature = "baml")]
 #[tokio::test]
 async fn classify_ci_failure_is_wired() {
     // We cannot call BAML without API keys, but we can verify the handler

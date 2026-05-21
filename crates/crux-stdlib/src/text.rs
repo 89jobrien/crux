@@ -1,29 +1,44 @@
-use cruxx_script::HandlerRegistry;
+use cruxx_script::{HandlerMetadata, HandlerRegistry, RiskLevel};
 use serde_json::{Value, json};
 
-use crate::handlers;
-
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value(handlers::TEXT_PARSE_VIMGREP, |input: Value| async move {
-        let text = input
-            .get("text")
-            .or_else(|| input.get("output"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        Ok(json!({ "matches": parse_vimgrep(text) }))
-    });
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("text::parse_vimgrep")
+            .describe("Parse rg --vimgrep output into structured match records.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+        |input: Value| async move {
+            let text = input
+                .get("text")
+                .or_else(|| input.get("output"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(json!({ "matches": parse_vimgrep(text) }))
+        },
+    );
 
-    registry.handler_value(handlers::TEXT_PARSE_JSONL, |input: Value| async move {
-        let text = input
-            .get("text")
-            .or_else(|| input.get("output"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        Ok(json!({ "items": parse_jsonl(text) }))
-    });
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("text::parse_jsonl")
+            .describe(
+                "Parse newline-delimited JSON into an array of values, skipping invalid lines.",
+            )
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+        |input: Value| async move {
+            let text = input
+                .get("text")
+                .or_else(|| input.get("output"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(json!({ "items": parse_jsonl(text) }))
+        },
+    );
 
-    registry.handler_value(
-        handlers::TEXT_PARSE_FRONTMATTER,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("text::parse_frontmatter")
+            .describe("Parse YAML frontmatter fenced by --- lines, returning frontmatter and body.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let text = input
                 .get("text")
@@ -35,17 +50,28 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(handlers::TEXT_PARSE_DIFF, |input: Value| async move {
-        let text = input
-            .get("text")
-            .or_else(|| input.get("output"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        Ok(json!({ "files": parse_diff(text) }))
-    });
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("text::parse_diff")
+            .describe("Parse unified diff output into structured file and hunk records.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+        |input: Value| async move {
+            let text = input
+                .get("text")
+                .or_else(|| input.get("output"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(json!({ "files": parse_diff(text) }))
+        },
+    );
 
-    registry.handler_value(
-        handlers::TEXT_PARSE_BRANCH_LIST,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("text::parse_branch_list")
+            .describe(
+                "Parse git branch output into a list of branch names with current-branch flag.",
+            )
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let text = input
                 .get("text")
@@ -61,7 +87,6 @@ pub fn register(registry: &mut HandlerRegistry) {
 // Pure parsing functions (public for fuzz targets)
 // ---------------------------------------------------------------------------
 
-/// Parse `rg --vimgrep` output: `file:line:col:text` per line.
 pub fn parse_vimgrep(input: &str) -> Vec<Value> {
     input
         .lines()
@@ -80,8 +105,6 @@ pub fn parse_vimgrep(input: &str) -> Vec<Value> {
         .collect()
 }
 
-/// Parse newline-delimited JSON (JSONL) into a Vec of Values.
-/// Invalid lines are silently skipped.
 pub fn parse_jsonl(input: &str) -> Vec<Value> {
     input
         .lines()
@@ -90,22 +113,18 @@ pub fn parse_jsonl(input: &str) -> Vec<Value> {
         .collect()
 }
 
-/// Parse YAML frontmatter fenced by `---` lines.
-/// Returns (frontmatter as Value, body as string).
 pub fn parse_frontmatter(input: &str) -> (Value, String) {
     let trimmed = input.trim_start();
     if !trimmed.starts_with("---") {
         return (Value::Null, input.to_string());
     }
 
-    // Skip the opening `---` line
     let after_open = match trimmed.strip_prefix("---") {
         Some(rest) => rest.trim_start_matches('-'),
         None => return (Value::Null, input.to_string()),
     };
     let after_open = after_open.strip_prefix('\n').unwrap_or(after_open);
 
-    // Find the closing `---`
     if let Some(close_pos) = find_closing_fence(after_open) {
         let yaml_block = &after_open[..close_pos];
         let body = &after_open[close_pos..];
@@ -123,7 +142,6 @@ pub fn parse_frontmatter(input: &str) -> (Value, String) {
     }
 }
 
-/// Find position of a line that is exactly `---` (possibly with trailing dashes).
 fn find_closing_fence(input: &str) -> Option<usize> {
     let mut pos = 0;
     for line in input.lines() {
@@ -131,12 +149,11 @@ fn find_closing_fence(input: &str) -> Option<usize> {
         if trimmed.starts_with("---") && trimmed.chars().all(|c| c == '-') && !trimmed.is_empty() {
             return Some(pos);
         }
-        pos += line.len() + 1; // +1 for newline
+        pos += line.len() + 1;
     }
     None
 }
 
-/// Parse unified diff output into structured file/hunk data.
 pub fn parse_diff(input: &str) -> Vec<Value> {
     let mut files: Vec<Value> = Vec::new();
     let mut current_file: Option<String> = None;
@@ -145,18 +162,15 @@ pub fn parse_diff(input: &str) -> Vec<Value> {
 
     for line in input.lines() {
         if let Some(path) = line.strip_prefix("+++ b/") {
-            // Flush previous hunk
             if let Some(hunk) = current_hunk.take() {
                 hunks.push(hunk.to_value());
             }
-            // Flush previous file
             if let Some(file) = current_file.take() {
                 files.push(json!({ "file": file, "hunks": hunks }));
                 hunks = Vec::new();
             }
             current_file = Some(path.to_string());
         } else if line.starts_with("+++ ") {
-            // +++ /dev/null or similar
             if let Some(hunk) = current_hunk.take() {
                 hunks.push(hunk.to_value());
             }
@@ -166,7 +180,7 @@ pub fn parse_diff(input: &str) -> Vec<Value> {
             }
             current_file = Some(line.strip_prefix("+++ ").unwrap_or(line).to_string());
         } else if line.starts_with("--- ") {
-            // skip the --- a/file line
+            // skip
         } else if line.starts_with("@@ ") {
             if let Some(hunk) = current_hunk.take() {
                 hunks.push(hunk.to_value());
@@ -178,13 +192,12 @@ pub fn parse_diff(input: &str) -> Vec<Value> {
                 lines: Vec::new(),
             });
         } else if line.starts_with("diff --git") {
-            // ignore the diff --git header line
+            // ignore
         } else if let Some(ref mut hunk) = current_hunk {
             hunk.lines.push(line.to_string());
         }
     }
 
-    // Flush remaining
     if let Some(hunk) = current_hunk {
         hunks.push(hunk.to_value());
     }
@@ -211,9 +224,7 @@ impl HunkState {
     }
 }
 
-/// Parse `@@ -old_start,count +new_start,count @@` header.
 fn parse_hunk_header(line: &str) -> (u64, u64) {
-    // Format: @@ -A,B +C,D @@ optional context
     let parts: Vec<&str> = line.split_whitespace().collect();
     let old_start = parts
         .get(1)
@@ -230,7 +241,6 @@ fn parse_hunk_header(line: &str) -> (u64, u64) {
     (old_start, new_start)
 }
 
-/// Parse `git branch` output (one branch per line, `*` marks current).
 pub fn parse_branch_list(input: &str) -> Vec<Value> {
     input
         .lines()
@@ -399,7 +409,6 @@ mod proptests {
             prop::collection::hash_map("[a-z]{1,4}", "[a-z0-9]{0,8}", 0..4),
             0..10,
         )) {
-            // Serialize items as JSONL, parse back, verify same count
             let jsonl: String = items.iter()
                 .map(|m| serde_json::to_string(&m).expect("serialize"))
                 .collect::<Vec<_>>()

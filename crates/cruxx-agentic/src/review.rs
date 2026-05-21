@@ -1,12 +1,16 @@
 use cruxx_core::prelude::CruxErr;
-use cruxx_script::{HandlerOutput, HandlerRegistry};
+use cruxx_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel, SideEffect};
 use serde_json::{Value, json};
 
 use crate::handlers;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value(
-        handlers::REVIEW_ARCH_BOUNDARY_CHECK,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::REVIEW_ARCH_BOUNDARY_CHECK)
+            .describe("Scan staged files for domain-layer imports of adapter/infra modules.")
+            .risk(RiskLevel::Low)
+            .side_effects(vec![SideEffect::Shell])
+            .deterministic(true),
         |input: Value| async move {
             let files = input
                 .get("files")
@@ -51,8 +55,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(
-        handlers::REVIEW_NORMALIZE_FINDINGS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::REVIEW_NORMALIZE_FINDINGS)
+            .describe("Merge clippy, arch, and coverage findings into a unified list.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let mut findings = Vec::new();
 
@@ -106,6 +113,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::REVIEW_APPLY_SEVERITY)
+            .describe("Tag each finding with a severity tier based on its source.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler_value(handlers::REVIEW_APPLY_SEVERITY, |input: Value| async move {
         let findings = input
             .get("findings")
@@ -132,6 +145,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({"findings": tiered}))
     });
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::REVIEW_COMPUTE_SCORE)
+            .describe("Compute a 0–1 review score from the ratio of blocking findings.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(handlers::REVIEW_COMPUTE_SCORE, |input: Value| async move {
         let findings = input
             .get("findings")
@@ -164,6 +183,13 @@ pub fn register(registry: &mut HandlerRegistry) {
         ))
     });
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::REVIEW_APPROVE)
+            .describe("Approve a GitHub PR via the gh CLI.")
+            .risk(RiskLevel::Medium)
+            .side_effects(vec![SideEffect::Shell])
+            .deterministic(false),
+    );
     registry.handler_value(handlers::REVIEW_APPROVE, |input: Value| async move {
         let pr_number = input
             .get("args")
@@ -203,8 +229,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         }
     });
 
-    registry.handler_value(
-        handlers::REVIEW_DETECT_ANTIPATTERNS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::REVIEW_DETECT_ANTIPATTERNS)
+            .describe("Detect bare unwrap, panic, unsafe, and other antipatterns in diff hunks.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let files = input
                 .get("files")
@@ -281,6 +310,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::REVIEW_GROUP_BY_FILE)
+            .describe("Group findings by file path into a map.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler_value(handlers::REVIEW_GROUP_BY_FILE, |input: Value| async move {
         let findings = input
             .get("findings")
@@ -306,8 +341,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(Value::Object(map))
     });
 
-    registry.handler_value(
-        handlers::REVIEW_COMPOSE_DAILY_NOTE,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::REVIEW_COMPOSE_DAILY_NOTE)
+            .describe("Compose a dated markdown daily note from categorized commit items.")
+            .risk(RiskLevel::Low)
+            .deterministic(false),
         |input: Value| async move {
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
             let mut sections = vec![format!("# {today}\n")];

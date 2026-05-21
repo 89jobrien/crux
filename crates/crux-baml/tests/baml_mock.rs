@@ -3,8 +3,6 @@
 //! Each test starts a local mock OpenAI server, creates a `ClientRegistry`
 //! pointing at it, and calls the BAML function via `B.Function.with_client_registry`.
 
-#![cfg(feature = "baml")]
-
 mod mock_baml;
 
 use crate::mock_baml::{MockBamlServer, default_responses};

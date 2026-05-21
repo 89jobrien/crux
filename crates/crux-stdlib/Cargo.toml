@@ -1,0 +1,28 @@
+[package]
+name = "crux-stdlib"
+description = "Standard library handlers for cruxx-script pipelines (fs, git, json, text, ctrl)"
+version = "0.2.6"
+edition.workspace = true
+readme = "../../README.md"
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+cruxx-core = { path = "../cruxx-core", version = "0.2.6" }
+cruxx-script = { path = "../cruxx-script", version = "0.2.6" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+glob = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }
+proptest = { workspace = true }

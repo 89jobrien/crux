@@ -1,4 +1,3 @@
-#[cfg(feature = "baml")]
 #[tokio::test]
 async fn generate_pipeline_returns_valid_yaml() {
     let yaml = crux_baml::planner::generate_pipeline("read a file and count lines", None, &[])

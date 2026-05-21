@@ -1,4 +1,4 @@
-use cruxx_agentic::ctrl;
+use crux_stdlib::ctrl;
 use cruxx_script::HandlerRegistry;
 use serde_json::json;
 

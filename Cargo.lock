@@ -391,6 +391,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crux-baml"
+version = "0.2.6"
+dependencies = [
+ "baml",
+ "cruxx-core",
+ "cruxx-script",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+]
+
+[[package]]
+name = "crux-stdlib"
+version = "0.2.6"
+dependencies = [
+ "cruxx-core",
+ "cruxx-script",
+ "glob",
+ "proptest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "cruxx"
 version = "0.2.6"
 dependencies = [
@@ -409,10 +438,11 @@ dependencies = [
 name = "cruxx-agentic"
 version = "0.2.6"
 dependencies = [
- "baml",
  "bollard",
  "chrono",
  "clap",
+ "crux-baml",
+ "crux-stdlib",
  "cruxx-core",
  "cruxx-model",
  "cruxx-plugin",

@@ -1,14 +1,17 @@
 use chrono::{DateTime, Utc};
 use cruxx_core::prelude::CruxErr;
-use cruxx_script::{HandlerOutput, HandlerRegistry};
+use cruxx_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use crate::handlers;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value(
-        handlers::ANALYSIS_LATENCY_PROFILE,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_LATENCY_PROFILE)
+            .describe("Profile step latencies and identify slow outliers.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let steps = input
                 .get("steps")
@@ -65,40 +68,49 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(handlers::ANALYSIS_TOKEN_SPEND, |input: Value| async move {
-        let steps = input
-            .get("steps")
-            .and_then(|s| s.as_array())
-            .cloned()
-            .unwrap_or_default();
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_TOKEN_SPEND)
+            .describe("Tally token spend per step and identify top consumers.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+        |input: Value| async move {
+            let steps = input
+                .get("steps")
+                .and_then(|s| s.as_array())
+                .cloned()
+                .unwrap_or_default();
 
-        let mut by_step: Vec<(String, u64)> = Vec::new();
-        for step in &steps {
-            let name = step
-                .get("name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let tokens = step
-                .pointer("/output/metadata/tokens")
-                .and_then(|t| t.as_u64())
-                .unwrap_or(0);
-            by_step.push((name, tokens));
-        }
+            let mut by_step: Vec<(String, u64)> = Vec::new();
+            for step in &steps {
+                let name = step
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let tokens = step
+                    .pointer("/output/metadata/tokens")
+                    .and_then(|t| t.as_u64())
+                    .unwrap_or(0);
+                by_step.push((name, tokens));
+            }
 
-        by_step.sort_by(|a, b| b.1.cmp(&a.1));
-        let total: u64 = by_step.iter().map(|(_, t)| *t).sum();
-        let top3: Vec<&str> = by_step.iter().take(3).map(|(n, _)| n.as_str()).collect();
-        let items: Vec<Value> = by_step
-            .iter()
-            .map(|(n, t)| json!({"name": n, "tokens": t}))
-            .collect();
+            by_step.sort_by(|a, b| b.1.cmp(&a.1));
+            let total: u64 = by_step.iter().map(|(_, t)| *t).sum();
+            let top3: Vec<&str> = by_step.iter().take(3).map(|(n, _)| n.as_str()).collect();
+            let items: Vec<Value> = by_step
+                .iter()
+                .map(|(n, t)| json!({"name": n, "tokens": t}))
+                .collect();
 
-        Ok(json!({"by_step": items, "total": total, "top3": top3}))
-    });
+            Ok(json!({"by_step": items, "total": total, "top3": top3}))
+        },
+    );
 
-    registry.handler_value(
-        handlers::ANALYSIS_FAILURE_CLUSTERS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_FAILURE_CLUSTERS)
+            .describe("Cluster failed steps by error kind.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let steps = input
                 .get("steps")
@@ -136,8 +148,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(
-        handlers::ANALYSIS_REPLAY_CACHE_HITS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_REPLAY_CACHE_HITS)
+            .describe("Compute per-step replay cache hit/miss ratios.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let steps = input
                 .get("steps")
@@ -181,6 +196,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_TIGHTEN_BUDGET)
+            .describe("Suggest a tighter token budget based on actual spend ratio.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::ANALYSIS_TIGHTEN_BUDGET,
         |input: Value| async move {
@@ -217,8 +238,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(
-        handlers::ANALYSIS_COMPRESS_STAGES,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_COMPRESS_STAGES)
+            .describe("Suggest pipeline stage compression for high token-fraction steps.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let by_step = input
                 .pointer("/token_spend/by_step")
@@ -256,47 +280,56 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(handlers::ANALYSIS_TUNE_RETRY, |input: Value| async move {
-        let clusters = input
-            .pointer("/failure_clusters/clusters")
-            .and_then(|c| c.as_array())
-            .cloned()
-            .unwrap_or_default();
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_TUNE_RETRY)
+            .describe("Suggest retry parameters for steps with recurring failures.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+        |input: Value| async move {
+            let clusters = input
+                .pointer("/failure_clusters/clusters")
+                .and_then(|c| c.as_array())
+                .cloned()
+                .unwrap_or_default();
 
-        let suggestions: Vec<Value> = clusters
-            .iter()
-            .filter_map(|cluster| {
-                let count = cluster.get("count").and_then(|c| c.as_u64()).unwrap_or(0);
-                if count <= 2 {
-                    return None;
-                }
-                let names = cluster
-                    .get("step_names")
-                    .and_then(|n| n.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                Some(
-                    names
-                        .iter()
-                        .filter_map(|n| n.as_str())
-                        .map(|name| {
-                            json!({
-                                "step_name": name,
-                                "retry_count": 3,
-                                "backoff_ms": 1000
+            let suggestions: Vec<Value> = clusters
+                .iter()
+                .filter_map(|cluster| {
+                    let count = cluster.get("count").and_then(|c| c.as_u64()).unwrap_or(0);
+                    if count <= 2 {
+                        return None;
+                    }
+                    let names = cluster
+                        .get("step_names")
+                        .and_then(|n| n.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    Some(
+                        names
+                            .iter()
+                            .filter_map(|n| n.as_str())
+                            .map(|name| {
+                                json!({
+                                    "step_name": name,
+                                    "retry_count": 3,
+                                    "backoff_ms": 1000
+                                })
                             })
-                        })
-                        .collect::<Vec<Value>>(),
-                )
-            })
-            .flatten()
-            .collect();
+                            .collect::<Vec<Value>>(),
+                    )
+                })
+                .flatten()
+                .collect();
 
-        Ok(json!({"suggestions": suggestions}))
-    });
+            Ok(json!({"suggestions": suggestions}))
+        },
+    );
 
-    registry.handler_value(
-        handlers::ANALYSIS_PATCH_SCHEMA_CHECK,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_PATCH_SCHEMA_CHECK)
+            .describe("Validate a YAML patch against the pipeline schema.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let patch = input.get("patch").and_then(|p| p.as_str()).unwrap_or("");
 
@@ -311,8 +344,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(
-        handlers::ANALYSIS_REPLAY_DRY_RUN,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::ANALYSIS_REPLAY_DRY_RUN)
+            .describe("Dry-run a replay with a patch to detect step ordinal mismatches.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let trace_path = input
                 .get("trace_path")

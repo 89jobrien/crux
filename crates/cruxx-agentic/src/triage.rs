@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use cruxx_script::{HandlerOutput, HandlerRegistry};
+use cruxx_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -10,8 +10,11 @@ use crate::handlers;
 const DEDUP_DISTANCE_THRESHOLD: f64 = 0.4;
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value(
-        handlers::TRIAGE_PARSE_REPO_TAGS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_PARSE_REPO_TAGS)
+            .describe("Extract repo tag from todo metadata and attach it to each todo item.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let todos = input
                 .get("todos")
@@ -38,6 +41,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_SCORE_URGENCY)
+            .describe("Score and sort todos by urgency using priority weight and age in days.")
+            .risk(RiskLevel::Low)
+            .deterministic(false),
+    );
     registry.handler_value(handlers::TRIAGE_SCORE_URGENCY, |input: Value| async move {
         let todos = input
             .get("todos")
@@ -80,8 +89,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({"todos": result}))
     });
 
-    registry.handler_value(
-        handlers::TRIAGE_DEDUPLICATE_INTENT,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_DEDUPLICATE_INTENT)
+            .describe("Group todos with similar titles using normalized edit distance.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let todos = input
                 .get("todos")
@@ -133,6 +145,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_GROUP_BY_REPO)
+            .describe("Group todos into a map keyed by repo name.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler_value(handlers::TRIAGE_GROUP_BY_REPO, |input: Value| async move {
         let todos = input
             .get("todos")
@@ -161,6 +179,12 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // eod_ritual: merge gate results into a pass/fail summary
     // -----------------------------------------------------------------------
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_MERGE_RESULTS)
+            .describe("Aggregate gate pass/fail results into a single summary.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler_value(handlers::TRIAGE_MERGE_RESULTS, |input: Value| async move {
         let keys = [
             "cargo_fmt",
@@ -197,6 +221,12 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // secret_env_debug: parse probe outputs, classify, suggest fixes
     // -----------------------------------------------------------------------
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_PARSE_ENV_PROBE)
+            .describe("Parse 1Password, direnv, and dotenvx probe outputs into a findings list.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler_value(handlers::TRIAGE_PARSE_ENV_PROBE, |input: Value| async move {
         let mut findings = Vec::new();
 
@@ -239,6 +269,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         Ok(json!({"findings": findings}))
     });
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_CLASSIFY_SEVERITY)
+            .describe("Classify secret-chain health and emit a confidence score.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(handlers::TRIAGE_CLASSIFY_SEVERITY, |input: Value| async move {
         let findings = input
             .get("findings")
@@ -270,8 +306,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         ))
     });
 
-    registry.handler_value(
-        handlers::TRIAGE_SUGGEST_REMEDIATION,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_SUGGEST_REMEDIATION)
+            .describe("Suggest fix commands for broken 1Password, direnv, or dotenvx components.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let mut fixes = Vec::new();
 
@@ -304,8 +343,11 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // hook_diagnostics: correlate failures to hooks, measure latency
     // -----------------------------------------------------------------------
-    registry.handler_value(
-        handlers::TRIAGE_CORRELATE_FAILURES,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_CORRELATE_FAILURES)
+            .describe("Correlate hook names against recent failure text to identify culprits.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let hooks = input
                 .get("items")
@@ -333,6 +375,14 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_MEASURE_OVERHEAD)
+            .describe(
+                "Compute p50/p95 latency from hook duration samples and emit a confidence score.",
+            )
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::TRIAGE_MEASURE_OVERHEAD,
         |input: Value| async move {
@@ -374,8 +424,11 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // branch_cleanup: detect orphaned worktrees, build cleanup plan
     // -----------------------------------------------------------------------
-    registry.handler_value(
-        handlers::TRIAGE_DETECT_ORPHANED_WORKTREES,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_DETECT_ORPHANED_WORKTREES)
+            .describe("Identify worktrees not on main or develop from git worktree list output.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let worktree_text = input
                 .pointer("/worktree_list/output")
@@ -406,6 +459,14 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_BUILD_CLEANUP_PLAN)
+            .describe(
+                "Build a cleanup confidence score from merged branch and orphaned worktree counts.",
+            )
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::TRIAGE_BUILD_CLEANUP_PLAN,
         |input: Value| async move {
@@ -439,8 +500,11 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // todo_issue_sync: fuzzy match TODOs to issues, identify gaps
     // -----------------------------------------------------------------------
-    registry.handler_value(
-        handlers::TRIAGE_MATCH_TODOS_TO_ISSUES,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_MATCH_TODOS_TO_ISSUES)
+            .describe("Fuzzy-match todo items to GitHub issues by title edit distance.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let matches_arr = input
                 .get("matches")
@@ -486,6 +550,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_IDENTIFY_UNTRACKED)
+            .describe("Identify todos with no matching issue and emit a coverage confidence score.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::TRIAGE_IDENTIFY_UNTRACKED,
         |input: Value| async move {
@@ -519,8 +589,11 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // stale_plan_audit: match plans to commits, detect mismatches
     // -----------------------------------------------------------------------
-    registry.handler_value(
-        handlers::TRIAGE_MATCH_PLANS_TO_COMMITS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_MATCH_PLANS_TO_COMMITS)
+            .describe("Check whether each plan title has a keyword match in the recent commit log.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let plans = input
                 .get("frontmatter")
@@ -557,6 +630,12 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_DETECT_STATUS_MISMATCH)
+            .describe("Flag plans whose status contradicts their commit coverage.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::TRIAGE_DETECT_STATUS_MISMATCH,
         |input: Value| async move {
@@ -604,8 +683,11 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // herald_daily: categorize commits by conventional commit prefix
     // -----------------------------------------------------------------------
-    registry.handler_value(
-        handlers::TRIAGE_CATEGORIZE_COMMITS,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_CATEGORIZE_COMMITS)
+            .describe("Categorize commit log lines by conventional commit prefix.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let items = input
                 .get("items")
@@ -654,6 +736,12 @@ pub fn register(registry: &mut HandlerRegistry) {
     // -----------------------------------------------------------------------
     // obfsck_triage: classify true/false positives, generate allowlist entries
     // -----------------------------------------------------------------------
+    registry.register_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_CLASSIFY_TRUE_FALSE)
+            .describe("Classify obfsck findings as true or false positives using file and context heuristics.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
+    );
     registry.handler(
         handlers::TRIAGE_CLASSIFY_TRUE_FALSE,
         |input: Value| async move {
@@ -715,8 +803,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         },
     );
 
-    registry.handler_value(
-        handlers::TRIAGE_GENERATE_ALLOWLIST_ENTRIES,
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new(handlers::TRIAGE_GENERATE_ALLOWLIST_ENTRIES)
+            .describe("Generate obfsck allowlist pathspec entries from false-positive findings.")
+            .risk(RiskLevel::Low)
+            .deterministic(true),
         |input: Value| async move {
             let fps = input
                 .get("false_positives")

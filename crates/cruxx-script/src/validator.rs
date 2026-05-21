@@ -167,10 +167,17 @@ fn validate_handler_ref(
     args: Option<&Value>,
 ) {
     let Some(metadata) = registry.get_metadata(handler) else {
-        report.push(ValidationDiagnostic::error(
-            location,
-            format!("handler '{handler}' is not registered"),
-        ));
+        if registry.get_handler(handler).is_none() {
+            report.push(ValidationDiagnostic::error(
+                location,
+                format!("handler '{handler}' is not registered"),
+            ));
+        } else {
+            report.push(ValidationDiagnostic::warning(
+                location,
+                format!("handler '{handler}' has no metadata — args not validated"),
+            ));
+        }
         return;
     };
 
