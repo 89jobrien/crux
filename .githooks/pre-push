@@ -46,7 +46,7 @@ if [[ "$HAS_RS" == true ]]; then
         for sc in "${SHARED[@]}"; do [[ "$d" == "$sc" ]] && CLIPPY_ALL=true; done
         name=$(cargo metadata --no-deps --format-version 1 2>/dev/null \
             | jq -r --arg d "$d" '.packages[]|select(.manifest_path|contains($d+"/Cargo.toml"))|.name' 2>/dev/null | head -1)
-        CLIPPY_PKGS+=("${name:-$d}")
+        [[ -n "$name" ]] && CLIPPY_PKGS+=("$name")
     done
 
     if [[ "$CLIPPY_ALL" == true ]]; then

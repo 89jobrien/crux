@@ -20,7 +20,8 @@ Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
 
 Two registry methods exist for registering handlers:
 
-- `registry.handler(name, f)` -- handler returns `HandlerOutput` (with optional confidence)
+- `registry.handler(name, f)` -- handler returns `HandlerOutput`
+  (with optional confidence)
 - `registry.handler_value(name, f)` -- handler returns plain `Value`
   (auto-wrapped, confidence defaults to 1.0)
 
