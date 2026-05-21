@@ -1,6 +1,6 @@
 use cruxx_core::prelude::CruxErr;
 use cruxx_script::HandlerRegistry;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::error::require_str;
 
@@ -57,6 +57,68 @@ pub fn register(registry: &mut HandlerRegistry) {
             }
         }
         Ok(Value::Object(base))
+    });
+
+    registry.handler_value("json::group_by", |input: Value| async move {
+        let key = input
+            .get("args")
+            .and_then(|a| a.get("key"))
+            .and_then(|k| k.as_str())
+            .unwrap_or("group");
+        let items = input
+            .get("items")
+            .or_else(|| input.get("findings"))
+            .or_else(|| input.get("todos"))
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut groups: std::collections::HashMap<String, Vec<Value>> =
+            std::collections::HashMap::new();
+        for item in items {
+            let bucket = item
+                .get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            groups.entry(bucket).or_default().push(item);
+        }
+
+        let map: Map<String, Value> = groups
+            .into_iter()
+            .map(|(k, v)| (k, Value::Array(v)))
+            .collect();
+        Ok(Value::Object(map))
+    });
+
+    registry.handler_value("json::filter_nonempty", |input: Value| async move {
+        let field = input
+            .get("args")
+            .and_then(|a| a.get("field"))
+            .and_then(|f| f.as_str())
+            .unwrap_or("output");
+        let items = input
+            .get("items")
+            .or_else(|| input.get("results"))
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let filtered: Vec<Value> = items
+            .into_iter()
+            .filter(|item| {
+                let val = item.get(field);
+                match val {
+                    None | Some(Value::Null) => false,
+                    Some(Value::String(s)) => !s.is_empty(),
+                    Some(Value::Array(a)) => !a.is_empty(),
+                    Some(Value::Object(m)) => !m.is_empty(),
+                    _ => true,
+                }
+            })
+            .collect();
+
+        Ok(json!({"items": filtered}))
     });
 
     registry.handler_value("json::jq", |input: Value| async move {

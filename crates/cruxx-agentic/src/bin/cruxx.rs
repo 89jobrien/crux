@@ -478,10 +478,10 @@ async fn build_registry(pipeline: &PipelineDef, plugins_path: Option<&str>) -> H
     let mut reg = HandlerRegistry::new();
     cruxx_agentic::register_all_with_plugins(&mut reg, plugin_handler_descs);
 
-    if !manifest.plugin.is_empty() {
-        if let Err(e) = register_plugins(&mut reg, &manifest.plugin).await {
-            eprintln!("[cruxx] warning: failed to load plugins: {e}");
-        }
+    if !manifest.plugin.is_empty()
+        && let Err(e) = register_plugins(&mut reg, &manifest.plugin).await
+    {
+        eprintln!("[cruxx] warning: failed to load plugins: {e}");
     }
 
     for name in collect_handler_names(pipeline) {

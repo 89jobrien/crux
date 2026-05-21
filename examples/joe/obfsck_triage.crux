@@ -1,0 +1,40 @@
+pipeline: obfsck_triage
+# Parse obfsck findings, classify true vs false positives, and suggest
+# allowlist entries for false positives.
+budget: { calls: 8 }
+
+steps:
+  - step: run_scan
+    handler: shell::capture
+    args:
+      cmd: "mise run redact-audit --verbose 2>&1 || true"
+    # Run obfsck over staged files and capture JSONL findings
+
+  - pipe: classify
+    stages:
+      - step: parse_findings
+        handler: text::parse_jsonl
+        # Parse JSONL output into structured Finding[] with file, line, pattern
+      - step: generate_allowlist
+        handler: triage::generate_allowlist_entries
+        # For each false positive, emit the minimal allowlist entry
+      - step: classify_positives
+        handler: triage::classify_true_false
+        # Heuristics: test files, variable names, localhost IPs -> likely false positive
+        # Last stage -- emits confidence for route_on_confidence
+
+  - route_on_confidence: act
+    value: "{{ steps.classify.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: real_secrets
+        handler: ctrl::log
+        # Likely real secrets detected -- do not commit, investigate immediately
+      - range: "[0.3, 0.7)"
+        label: mixed
+        handler: ctrl::log
+        # Mix of true and false positives -- review each individually
+      - range: "[0.7, 1.0]"
+        label: all_false_positives
+        handler: ctrl::log
+        # All findings are false positives -- safe to add allowlist entries

@@ -1,0 +1,48 @@
+pipeline: eod_ritual
+# End-of-day closing ritual: run cargo gate, update handoff, check stale
+# todos, and produce a session summary.
+budget: { calls: 10, duration: "5m" }
+
+steps:
+  - join_all: gates
+    arms:
+      - step: cargo_fmt
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check 2>&1 || true"
+        # Format check -- catch uncommitted style drift
+      - step: cargo_clippy
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --all-targets -- -D warnings 2>&1 || true"
+        # Lint gate -- no new warnings allowed
+      - step: cargo_test
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run 2>&1 || true"
+        # Test gate -- all tests must pass
+
+  - join_all: state_capture
+    arms:
+      - step: git_status
+        handler: git::status
+        # Uncommitted changes, staged files, branch state
+      - step: doob_stale
+        handler: shell::capture
+        args:
+          cmd: "doob todo list --status pending 2>&1 || true"
+        # Overdue or stale todo items
+      - step: handoff_update
+        handler: shell::capture
+        args:
+          cmd: "hj handoff 2>&1 || true"
+        # Write current session state to HANDOFF.yaml
+
+  - pipe: summarize
+    stages:
+      - step: merge_gate_results
+        handler: triage::merge_results
+        # Combine fmt/clippy/test outcomes into pass/fail summary
+      - step: compose_summary
+        handler: ctrl::log
+        # Human-readable EOD summary: gates, stale items, handoff status

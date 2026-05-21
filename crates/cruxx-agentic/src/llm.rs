@@ -501,11 +501,11 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
             "provider": resp.provider,
             "streaming": false,
         });
-        if let Some(meta) = resp.metadata {
-            if let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object()) {
-                for (k, v) in meta_obj {
-                    map.insert(k.clone(), v.clone());
-                }
+        if let Some(meta) = resp.metadata
+            && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
+        {
+            for (k, v) in meta_obj {
+                map.insert(k.clone(), v.clone());
             }
         }
         Ok(out)
@@ -574,11 +574,11 @@ pub fn register(registry: &mut HandlerRegistry) {
         };
 
         let mut out = json!({ "content": resp.text, "provider": resp.provider });
-        if let Some(meta) = resp.metadata {
-            if let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object()) {
-                for (k, v) in meta_obj {
-                    map.insert(k.clone(), v.clone());
-                }
+        if let Some(meta) = resp.metadata
+            && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
+        {
+            for (k, v) in meta_obj {
+                map.insert(k.clone(), v.clone());
             }
         }
         Ok(out)

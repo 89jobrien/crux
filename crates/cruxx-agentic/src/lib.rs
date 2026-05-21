@@ -4,6 +4,8 @@
 //! module's `register` function individually to pick only what you need.
 
 pub mod adapters;
+pub mod analysis;
+pub mod ci;
 pub mod container;
 pub mod ctrl;
 pub mod error;
@@ -15,9 +17,12 @@ pub mod json;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
+pub mod review;
 pub mod rx;
 pub mod shell;
 pub mod sqlite;
+pub mod text;
+pub mod triage;
 
 #[cfg(feature = "baml")]
 pub mod planner;
@@ -64,6 +69,8 @@ pub fn register_all(registry: &mut HandlerRegistry) {
 /// Register all built-in handlers, including plugin handler descriptions
 /// for the planner.
 pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers: Vec<String>) {
+    analysis::register(registry);
+    ci::register(registry);
     container::register(registry);
     harness::register(registry);
     shell::register(registry);
@@ -71,8 +78,11 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     git::register(registry);
     json::register(registry);
     ctrl::register(registry);
+    review::register(registry);
     rx::register(registry);
     sqlite::register(registry);
+    text::register(registry);
+    triage::register(registry);
     llm::register(registry);
     llm::register_stream(registry);
     #[cfg(feature = "baml")]

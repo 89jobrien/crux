@@ -1,0 +1,51 @@
+pipeline: herald_daily
+# Synthesize cross-project git activity into an Obsidian daily note.
+# Scans multiple repos for today's commits and produces a structured summary.
+budget: { calls: 12, tokens: 10000 }
+
+steps:
+  - join_all: scan_repos
+    arms:
+      - step: crux_log
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/crux log --oneline --since='24 hours ago' 2>&1 || true"
+        # Today's crux commits
+      - step: minibox_log
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/minibox log --oneline --since='24 hours ago' 2>&1 || true"
+        # Today's minibox commits
+      - step: dotfiles_log
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/dotfiles log --oneline --since='24 hours ago' 2>&1 || true"
+        # Today's dotfiles commits
+      - step: doob_log
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/doob log --oneline --since='24 hours ago' 2>&1 || true"
+        # Today's doob commits
+      - step: devkit_log
+        handler: shell::capture
+        args:
+          cmd: "git -C $HOME/dev/devkit log --oneline --since='24 hours ago' 2>&1 || true"
+        # Today's devkit commits
+
+  - pipe: synthesize
+    stages:
+      - step: filter_empty
+        handler: json::filter_nonempty
+        args:
+          field: "output"
+        # Drop repos with no activity today
+      - step: categorize
+        handler: triage::categorize_commits
+        # Group by: feat, fix, chore, docs, refactor
+      - step: compose_note
+        handler: review::compose_daily_note
+        # Render as Obsidian-compatible markdown with wikilinks
+
+  - step: write_note
+    handler: ctrl::log
+    # Log the composed daily note -- in production replace with fs::write + path arg

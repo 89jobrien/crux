@@ -1,0 +1,47 @@
+pipeline: stale_plan_audit
+# Cross-check plan docs against git log to flag status mismatches.
+# Plans marked 'done' with no matching commits, or 'open' plans that
+# appear to have landed.
+budget: { calls: 10 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: scan_plans
+        handler: shell::capture
+        args:
+          cmd: "find docs/plans -name '*.md' -type f 2>/dev/null || true"
+        # All plan documents in docs/plans/
+      - step: recent_commits
+        handler: shell::capture
+        args:
+          cmd: "git log --oneline --since='30 days ago' 2>&1 || true"
+        # Last 30 days of commit history for matching
+
+  - pipe: cross_check
+    stages:
+      - step: parse_plan_status
+        handler: text::parse_frontmatter
+        # Extract title, status (open/done/blocked), and date from each plan
+      - step: match_commits
+        handler: triage::match_plans_to_commits
+        # Fuzzy-match plan titles/keywords against commit messages
+      - step: detect_mismatches
+        handler: triage::detect_status_mismatch
+        # Flag: done+no commits, open+matching commits, stale (>30d no activity)
+
+  - route_on_confidence: report
+    value: "{{ steps.cross_check.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: stale
+        handler: ctrl::log
+        # Multiple plans with mismatched status -- needs triage
+      - range: "[0.4, 0.8)"
+        label: minor_drift
+        handler: ctrl::log
+        # A few plans slightly out of date -- quick fixes
+      - range: "[0.8, 1.0]"
+        label: current
+        handler: ctrl::log
+        # All plans match git reality -- no action needed
