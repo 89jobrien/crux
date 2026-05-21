@@ -170,6 +170,31 @@ steps:
 }
 
 #[test]
+fn validation_detects_duplicate_step_names() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: dup-test
+steps:
+  - step: read
+    handler: json::pick
+  - step: read
+    handler: json::pick
+"#,
+    )
+    .unwrap();
+
+    let report = validate_pipeline(&pipeline, &registry());
+    assert!(
+        report.diagnostics.iter().any(|d| {
+            d.severity == crux_script::DiagnosticSeverity::Error
+                && d.message.contains("duplicate step name")
+        }),
+        "expected duplicate step name error, got: {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn validation_reports_overlapping_confidence_routes() {
     let pipeline = crux_script::load(
         r#"

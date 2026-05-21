@@ -2,6 +2,8 @@
 ///
 /// Single responsibility: hook storage and dispatch. No step recording,
 /// no budget logic, no replay. CruxCtx delegates hook operations here.
+// TODO(#71): pre-step safety gates — add HookVerdict (Allow/Deny) pre-execution
+//   hooks so steps can be blocked before running (cf. braid's DestructiveCommandGuard)
 use std::future::Future;
 use std::pin::Pin;
 

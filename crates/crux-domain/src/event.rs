@@ -12,7 +12,10 @@ pub enum StepEvent {
     /// Step execution has started.
     Started { step_name: String },
     /// An intermediate streaming chunk from a streaming step.
-    Chunk { payload: serde_json::Value },
+    Chunk {
+        step_name: String,
+        payload: serde_json::Value,
+    },
     /// Step completed successfully.
     Completed { step_name: String, duration_ms: u64 },
     /// Step failed.

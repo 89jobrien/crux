@@ -2,6 +2,8 @@
 ///
 /// Single responsibility: step construction and trace accumulation.
 /// No hook invocation, no replay, no budget logic.
+// TODO(#73): redaction before persist — apply a Redactor port before appending
+//   output/error fields so sensitive data never enters the trace (cf. braid-redact)
 use chrono::{DateTime, Utc};
 
 use std::collections::HashMap;
@@ -58,6 +60,7 @@ impl StepRecorder {
             attempt: rec.attempt,
             events: vec![],
             metadata: HashMap::new(),
+            findings: vec![],
         });
     }
 
@@ -77,6 +80,7 @@ impl StepRecorder {
             attempt: rec.attempt,
             events: vec![],
             metadata: HashMap::new(),
+            findings: vec![],
         });
     }
 
@@ -96,6 +100,7 @@ impl StepRecorder {
             attempt: 0,
             events: vec![],
             metadata: HashMap::new(),
+            findings: vec![],
         });
     }
 
@@ -122,6 +127,7 @@ impl StepRecorder {
             attempt: 0,
             events: vec![],
             metadata: HashMap::new(),
+            findings: vec![],
         });
     }
 

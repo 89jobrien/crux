@@ -81,9 +81,26 @@ impl ValidationReport {
 /// Validate a parsed pipeline against the registered handler metadata.
 pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> ValidationReport {
     let mut report = ValidationReport::default();
+    let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (idx, step) in pipeline.steps.iter().enumerate() {
         let location = format!("steps[{idx}]");
+
+        let step_name = match step {
+            StepDef::Step(n) => n.step.as_str(),
+            StepDef::Delegate(n) => n.name.as_deref().unwrap_or(&n.delegate),
+            StepDef::Pipe(n) => n.pipe.as_str(),
+            StepDef::JoinAll(n) => n.join_all.as_str(),
+            StepDef::RouteOnConfidence(n) => n.route_on_confidence.as_str(),
+            StepDef::Speculate(n) => n.speculate.as_str(),
+        };
+        if !seen_names.insert(step_name.to_string()) {
+            report.push(ValidationDiagnostic::error(
+                &location,
+                format!("duplicate step name '{step_name}'"),
+            ));
+        }
+
         match step {
             StepDef::Step(node) => {
                 let handler = node.handler.as_deref().unwrap_or(&node.step);

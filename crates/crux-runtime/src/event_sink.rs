@@ -69,4 +69,21 @@ mod tests {
             "expected Failed, got: {ev:?}"
         );
     }
+
+    #[tokio::test]
+    async fn emit_step_event_sends_chunk() {
+        let pipeline = EventPipeline::new(64);
+        let mut rx = pipeline.subscribe();
+
+        let mut ctx = CruxCtx::new("agent");
+        ctx.set_event_sender(pipeline.sender());
+
+        ctx.emit_step_event("my_step", serde_json::json!({"delta": "hi"}));
+
+        let ev = rx.recv().await.unwrap();
+        assert!(
+            matches!(ev, StepEvent::Chunk { ref step_name, .. } if step_name == "my_step"),
+            "expected Chunk, got: {ev:?}"
+        );
+    }
 }

@@ -123,6 +123,7 @@ pub(crate) mod test_helpers {
             attempt: 1,
             events: vec![],
             metadata: Default::default(),
+            findings: vec![],
         }
     }
 

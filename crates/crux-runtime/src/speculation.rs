@@ -86,6 +86,7 @@ where
                     attempt: 1,
                     events: vec![],
                     metadata: std::collections::HashMap::new(),
+                    findings: vec![],
                 });
             }
             return Err(CruxErr::step_failed(
@@ -114,6 +115,7 @@ where
                     attempt: 1,
                     events: vec![],
                     metadata: std::collections::HashMap::new(),
+                    findings: vec![],
                 });
                 winner_val = Some(val);
             } else {
@@ -135,6 +137,7 @@ where
                     attempt: 1,
                     events: vec![],
                     metadata: std::collections::HashMap::new(),
+                    findings: vec![],
                 });
             }
         }
@@ -149,14 +152,18 @@ where
     ///    use that value.
     /// 2. Otherwise, fall back to the byte-length of the serialized output so that arms
     ///    with more content win over arms with no score field (avoiding arbitrary first-wins).
-    // TODO(#68): arms without a score field tie at 0.0 — require score or use a better default
     pub async fn pick_best(self) -> Result<T, CruxErr> {
+        let spec_name = self.name.clone();
         self.pick_best_by(|val| {
             let json = serde_json::to_value(val).unwrap_or(serde_json::Value::Null);
             if let Some(score) = json.get("score").and_then(|v| v.as_f64()) {
                 return score as f32;
             }
-            // Fallback: use serialized output length as a proxy for richer content.
+            eprintln!(
+                "[crux] warning: speculate '{}' arm has no 'score' field, \
+                 falling back to output length",
+                spec_name
+            );
             json.to_string().len() as f32
         })
         .await
@@ -185,6 +192,7 @@ where
                         attempt: 1,
                         events: vec![],
                         metadata: std::collections::HashMap::new(),
+                        findings: vec![],
                     });
                     return Ok(val);
                 }
@@ -203,6 +211,7 @@ where
                         attempt: 1,
                         events: vec![],
                         metadata: std::collections::HashMap::new(),
+                        findings: vec![],
                     });
                     last_err = Some(e);
                 }

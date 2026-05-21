@@ -26,6 +26,7 @@ pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -
         attempt: 1,
         events: vec![],
         metadata: HashMap::new(),
+        findings: vec![],
     }
 }
 

@@ -19,8 +19,15 @@ impl Runner {
     }
 
     /// Run a pipeline definition with the given input, producing a full Crux trace.
+    ///
+    /// Validates the pipeline against the handler registry before execution.
+    /// If validation produces any errors, returns immediately with a failed trace.
+    /// Warnings are printed to stderr.
     pub async fn run(&self, pipeline: &PipelineDef, input: Value) -> Crux<Value> {
-        self.run_inner(pipeline, input, None, ReplayMode::Strict)
+        if let Some(crux) = self.validate_or_fail(pipeline) {
+            return crux;
+        }
+        self.run_core(pipeline, input, None, ReplayMode::Strict)
             .await
     }
 
@@ -35,7 +42,41 @@ impl Runner {
         previous: &Crux<Value>,
         mode: ReplayMode,
     ) -> Crux<Value> {
-        self.run_inner(pipeline, input, Some(previous), mode).await
+        if let Some(crux) = self.validate_or_fail(pipeline) {
+            return crux;
+        }
+        self.run_core(pipeline, input, Some(previous), mode).await
+    }
+
+    /// Run without pre-flight validation. Use for tests or REPL.
+    pub async fn run_unchecked(&self, pipeline: &PipelineDef, input: Value) -> Crux<Value> {
+        self.run_core(pipeline, input, None, ReplayMode::Strict)
+            .await
+    }
+
+    /// Validate and return a failed Crux if errors exist, or None to proceed.
+    fn validate_or_fail(&self, pipeline: &PipelineDef) -> Option<Crux<Value>> {
+        let report = crate::validator::validate_pipeline(pipeline, &self.registry);
+        for diag in &report.diagnostics {
+            if diag.severity == crate::validator::DiagnosticSeverity::Warning {
+                eprintln!("[crux] warning: {}: {}", diag.location, diag.message);
+            }
+        }
+        if !report.is_ok() {
+            let errors: Vec<String> = report
+                .diagnostics
+                .iter()
+                .filter(|d| d.severity == crate::validator::DiagnosticSeverity::Error)
+                .map(|d| format!("{}: {}", d.location, d.message))
+                .collect();
+            let ctx = CruxCtx::new(&pipeline.pipeline);
+            let err = CruxErr::step_failed(
+                &pipeline.pipeline,
+                format!("pipeline validation failed:\n{}", errors.join("\n")),
+            );
+            return Some(ctx.finalize(Err(err)));
+        }
+        None
     }
 
     /// Run a single Cruxfile target with the given name and optional budget override.
@@ -57,7 +98,7 @@ impl Runner {
         ctx.finalize(result)
     }
 
-    async fn run_inner(
+    async fn run_core(
         &self,
         pipeline: &PipelineDef,
         input: Value,
@@ -156,7 +197,8 @@ impl Runner {
                 Ok(handler_out)
             }
 
-            // TODO(#67): no agents are pre-registered — delegate: always fails at runtime
+            // delegate: works when agents are registered via registry.agent() or
+            // registry.agent_fn(). Use crux_stdlib::ctrl::register_echo_agent() for testing.
             StepDef::Delegate(node) => {
                 let step_name = node.name.as_deref().unwrap_or(&node.delegate);
                 let agent_runner = self
@@ -618,5 +660,48 @@ mod tests {
         assert_eq!(trace.steps.len(), restored.steps.len());
         assert_eq!(trace.steps[0].name, restored.steps[0].name);
         assert_eq!(trace.steps[0].input_hash, restored.steps[0].input_hash);
+    }
+
+    #[tokio::test]
+    async fn run_rejects_pipeline_with_validation_errors() {
+        let yaml = r#"
+pipeline: bad
+steps:
+  - step: s1
+    handler: shell::nonexistent
+"#;
+        let pipeline = crate::load(yaml).unwrap();
+        let mut reg = HandlerRegistry::new();
+        // Register one shell:: handler so the namespace is known.
+        reg.handler_value("shell::exec", |v: Value| async { Ok(v) });
+        let runner = Runner::new(Arc::new(reg));
+        let crux = runner.run(&pipeline, serde_json::json!({})).await;
+        assert!(crux.value().is_err());
+        let err = crux.value().unwrap_err();
+        assert!(
+            err.to_string().contains("validation"),
+            "expected validation error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_unchecked_skips_validation() {
+        let yaml = r#"
+pipeline: bad
+steps:
+  - step: s1
+    handler: shell::nonexistent
+"#;
+        let pipeline = crate::load(yaml).unwrap();
+        let reg = HandlerRegistry::new();
+        let runner = Runner::new(Arc::new(reg));
+        // run_unchecked should attempt execution (and fail at handler lookup, not validation)
+        let crux = runner.run_unchecked(&pipeline, serde_json::json!({})).await;
+        assert!(crux.value().is_err());
+        let err = crux.value().unwrap_err();
+        assert!(
+            !err.to_string().contains("validation"),
+            "unchecked should not validate, got: {err}"
+        );
     }
 }

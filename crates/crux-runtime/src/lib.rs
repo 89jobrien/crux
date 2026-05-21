@@ -1,4 +1,7 @@
 /// crux-runtime: domain types, traits, and runtime for the crux agentic DSL.
+// TODO(#78): EDDOS-style event aggregation — unify heterogeneous step types into a
+//   typed event stream (MPSC -> enrichment -> batching -> broadcast) for analytics,
+//   replay filtering, and multi-agent coordination (cf. devloop)
 #[macro_use]
 mod trace;
 

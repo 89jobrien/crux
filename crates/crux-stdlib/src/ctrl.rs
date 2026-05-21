@@ -62,6 +62,12 @@ fn to_plaintext_pretty(v: &Value) -> String {
     }
 }
 
+/// Register a `ctrl::echo` agent that returns its input unchanged.
+/// Useful for testing delegation in pipelines.
+pub fn register_echo_agent(registry: &mut HandlerRegistry) {
+    registry.agent_fn("echo", |input: Value| async move { Ok(input) });
+}
+
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("ctrl::noop").describe("Pass input through unchanged"),

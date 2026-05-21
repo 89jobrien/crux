@@ -2,6 +2,13 @@
 //!
 //! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
 
+// TODO(#72): planner-based action dispatch — refactor step/delegate/speculate to return
+//   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
+//   simulation, and side-effect-free testing
+
+// TODO(#77): error ergonomics — step closures require verbose error handling; explore
+//   a TryStep trait or `ctx.try_step()` that auto-wraps `?` into CruxErr::StepFailed
+
 /// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
 /// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
@@ -206,6 +213,16 @@ impl CruxCtx {
         }
     }
 
+    /// Emit an intermediate event for a named step.
+    ///
+    /// Broadcasts via the EventPipeline (if attached) as a `StepEvent::Chunk`.
+    pub fn emit_step_event(&self, step_name: &str, payload: serde_json::Value) {
+        self.emit(StepEvent::Chunk {
+            step_name: step_name.to_string(),
+            payload,
+        });
+    }
+
     /// Seed replay from a previous trace.
     pub fn replay_from(&mut self, previous: &Crux<serde_json::Value>) {
         self.replay.seed_from(previous);
@@ -341,6 +358,7 @@ impl CruxCtx {
             attempt: 1,
             events: vec![],
             metadata: std::collections::HashMap::new(),
+            findings: vec![],
         });
 
         if let Ok(snapshot) = child_crux.to_snapshot() {

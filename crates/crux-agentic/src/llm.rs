@@ -1,3 +1,6 @@
+// TODO(#74): multi-provider LLM fallback — add a Router that tries providers in
+//   tier order (Anthropic -> OpenAI -> Ollama) with automatic failover (cf. devkit)
+
 use crate::adapters::{AnthropicAdapter, OllamaAdapter, OpenAiAdapter};
 use crate::error::opt_str;
 use crate::provider::LlmProvider;

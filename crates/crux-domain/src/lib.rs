@@ -92,6 +92,7 @@ mod tests {
     #[test]
     fn step_event_chunk_carries_payload() {
         let e = StepEvent::Chunk {
+            step_name: "test-step".into(),
             payload: serde_json::json!({"token": "hello"}),
         };
         let json = serde_json::to_value(&e).unwrap();
