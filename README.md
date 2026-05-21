@@ -3,7 +3,7 @@
 An agentic DSL for Rust -- inspectable, serializable, replayable agent orchestration.
 
 `cruxx` is not a standalone language. It's a set of macros, traits, and types that make agentic
-control flow explicit in the Rust type system. 
+control flow explicit in the Rust type system.
 
 ## Quick example
 
@@ -69,17 +69,17 @@ the function returns. That value is:
 
 ## Crates
 
-| Crate                                   | Description                                              |
-| --------------------------------------- | -------------------------------------------------------- |
+| Crate                                   | Description                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
 | [`cruxx`](crates/cruxx)                 | Facade crate, re-exports `cruxx-core` + `cruxx-macros`                       |
 | [`cruxx-core`](crates/cruxx-core)       | Core types, traits, and runtime                                              |
 | [`cruxx-types`](crates/cruxx-types)     | Serializable wire-format types (`Crux<T>`, `Step`, `Budget`, `RecoveryKind`) |
 | [`cruxx-macros`](crates/cruxx-macros)   | `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` macros            |
-| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                      |
-| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness        |
-| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers              |
-| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                |
-| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution        |
+| [`cruxx-script`](crates/cruxx-script)   | YAML-driven pipeline scripting                                               |
+| [`cruxx-agentic`](crates/cruxx-agentic) | Step handlers: shell, fs, git, json, llm, container, harness                 |
+| [`cruxx-model`](crates/cruxx-model)     | Canonical model ID types and provider-specific parsers                       |
+| [`cruxx-plugin`](crates/cruxx-plugin)   | Subprocess plugin host for pipelines                                         |
+| [`cruxx-planner`](crates/cruxx-planner) | `EvolutionPlanner`: metrics-driven harness profile evolution                 |
 
 ## Features
 
@@ -197,7 +197,7 @@ export OPENAI_API_KEY=sk-...          # OpenAI
 cruxx run examples/extract_summary.crux examples/input_summary.json
 ```
 
-```
+```text
 Pipeline: extract_summary
 Status:   OK
 Duration: 1823.4ms
@@ -226,7 +226,7 @@ system via Crux<T> values.",
 cruxx run examples/extract_entities.crux examples/input_entities.json
 ```
 
-```
+```text
 Pipeline: extract_entities
 Status:   OK
 Duration: 1540.2ms
@@ -250,31 +250,31 @@ Output:
 
 **Always available:**
 
-| Handler             | Key args                      | Description                                  |
-| ------------------- | ----------------------------- | -------------------------------------------- |
-| `shell::exec`       | `cmd`                         | Run shell command, ignore exit code          |
-| `shell::capture`    | `cmd`                         | Run shell command, fail on non-zero exit     |
-| `fs::read`          | `path`                        | Read a file to string                        |
-| `fs::write`         | `path`, `content`             | Write a string to a file                     |
-| `fs::glob`          | `pattern`                     | Glob pattern match                           |
-| `fs::exists`        | `path`                        | Check path existence                         |
-| `git::staged_files` | —                             | `git diff --cached --name-only`              |
-| `git::diff`         | `revision`                    | `git diff [revision]`                        |
-| `git::log`          | `count`                       | `git log -N --format=%H\t%s`                 |
-| `git::status`       | —                             | `git status --porcelain`                     |
-| `json::pick`        | `fields`                      | Extract named fields from input object       |
-| `json::merge`       | `with`                        | Merge static object into input               |
-| `json::jq`          | `expr`                        | Dot-path traversal (e.g. `".foo.bar"`)       |
-| `ctrl::noop`        | —                             | Pass input through unchanged                 |
-| `ctrl::log`         | —                             | Log to stderr and pass through               |
-| `ctrl::assert`      | `condition`                   | Assert condition is truthy or fail           |
-| `llm::invoke`       | `prompt`, `provider`, `model` | Raw LLM completion (OpenAI/Anthropic/Ollama)      |
-| `container::run`    | `image`, `env`, `limits`      | Start a container from a `HarnessProfile`         |
-| `container::wait`   | `timeout_ms`                  | Block until container exits, emit exit code/logs  |
-| `harness::evolve`   | `profile`, `metrics_from`     | Run `EvolutionPlanner` and apply resulting diff   |
-| `harness::canary`   | `image`, `traffic_percent`    | Deploy canary alongside current harness           |
-| `rx::run`           | `name`, `args?`, `registry?`  | Run a script registered in the rx registry        |
-| `rx::list`          | `registry?`                   | List all commands in the rx registry              |
+| Handler             | Key args                      | Description                                      |
+| ------------------- | ----------------------------- | ------------------------------------------------ |
+| `shell::exec`       | `cmd`                         | Run shell command, ignore exit code              |
+| `shell::capture`    | `cmd`                         | Run shell command, fail on non-zero exit         |
+| `fs::read`          | `path`                        | Read a file to string                            |
+| `fs::write`         | `path`, `content`             | Write a string to a file                         |
+| `fs::glob`          | `pattern`                     | Glob pattern match                               |
+| `fs::exists`        | `path`                        | Check path existence                             |
+| `git::staged_files` | —                             | `git diff --cached --name-only`                  |
+| `git::diff`         | `revision`                    | `git diff [revision]`                            |
+| `git::log`          | `count`                       | `git log -N --format=%H\t%s`                     |
+| `git::status`       | —                             | `git status --porcelain`                         |
+| `json::pick`        | `fields`                      | Extract named fields from input object           |
+| `json::merge`       | `with`                        | Merge static object into input                   |
+| `json::jq`          | `expr`                        | Dot-path traversal (e.g. `".foo.bar"`)           |
+| `ctrl::noop`        | —                             | Pass input through unchanged                     |
+| `ctrl::log`         | —                             | Log to stderr and pass through                   |
+| `ctrl::assert`      | `condition`                   | Assert condition is truthy or fail               |
+| `llm::invoke`       | `prompt`, `provider`, `model` | Raw LLM completion (OpenAI/Anthropic/Ollama)     |
+| `container::run`    | `image`, `env`, `limits`      | Start a container from a `HarnessProfile`        |
+| `container::wait`   | `timeout_ms`                  | Block until container exits, emit exit code/logs |
+| `harness::evolve`   | `profile`, `metrics_from`     | Run `EvolutionPlanner` and apply resulting diff  |
+| `harness::canary`   | `image`, `traffic_percent`    | Deploy canary alongside current harness          |
+| `rx::run`           | `name`, `args?`, `registry?`  | Run a script registered in the rx registry       |
+| `rx::list`          | `registry?`                   | List all commands in the rx registry             |
 
 **Behind `--features baml`:**
 

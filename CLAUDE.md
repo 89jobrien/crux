@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working
+with code in this repository.
 
 ## Overview
 
@@ -38,8 +39,8 @@ Crates in `crates/`:
 - **`cruxx-macros`** -- `#[cruxx::agent]`, `#[cruxx::harness]`, `#[cruxx::evolve]` proc macros.
 - **`cruxx-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
-- **`cruxx-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven harness profile evolution.
-  Accepts `RunMetrics`, emits `HarnessDiff`.
+- **`cruxx-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
+  harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
 - **`cruxx-script`** -- YAML-driven pipeline scripting.
 - **`cruxx-types`** -- Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxId`, `CruxErr`) with
   minimal deps (serde, chrono, ulid). `cruxx-core` re-exports everything — no breaking change.
@@ -50,11 +51,11 @@ Crates in `crates/`:
 
 ## Feature Flags
 
-| Flag | Default | Effect |
-|------|---------|--------|
-| `tokio-runtime` | yes | Enables async support (tokio + futures). Required for compilation. |
-| `redb` | no | `RedbBackend` via redb (pure-Rust embedded KV store). |
-| `tracing` | no | Instrument with tracing spans. |
+| Flag            | Default | Effect                                                             |
+| --------------- | ------- | ------------------------------------------------------------------ |
+| `tokio-runtime` | yes     | Enables async support (tokio + futures). Required for compilation. |
+| `redb`          | no      | `RedbBackend` via redb (pure-Rust embedded KV store).              |
+| `tracing`       | no      | Instrument with tracing spans.                                     |
 
 ## Architecture
 
@@ -100,6 +101,7 @@ recovery path, not a fallback.
 ### Proc Macros
 
 `#[cruxx::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
+
 1. Inner function with `CruxCtx` injected as `t`
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
@@ -125,7 +127,7 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   `crates/cruxx-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
 - Build `cruxx-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
 - Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/cruxx-run
-  examples/<pipeline>.cruxx examples/input_<name>.json`
+examples/<pipeline>.cruxx examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
   for the exact injection commands (machine-local, gitignored).
 
