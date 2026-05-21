@@ -82,7 +82,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-script    -> all green
    cargo clippy -p crux-script -- -D warnings  -> zero warnings
    ```
@@ -165,7 +165,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-script    -> all green
    cargo clippy -p crux-script -- -D warnings  -> zero warnings
    ```
@@ -230,7 +230,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-runtime    -> all green
    cargo clippy -p crux-runtime -- -D warnings  -> zero warnings
    ```
@@ -289,7 +289,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-script    -> all green
    cargo clippy -p crux-script -- -D warnings  -> zero warnings
    ```
@@ -335,7 +335,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-domain    -> all green
    cargo clippy -p crux-domain -- -D warnings  -> zero warnings
    ```
@@ -390,7 +390,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-runtime    -> all green
    cargo clippy -p crux-runtime -- -D warnings  -> zero warnings
    ```
@@ -455,7 +455,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-types    -> all green
    cargo clippy -p crux-types -- -D warnings  -> zero warnings
    ```
@@ -545,7 +545,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-types    -> all green
    cargo clippy -p crux-types -- -D warnings  -> zero warnings
    ```
@@ -634,7 +634,7 @@ traces debuggable (cohort C: #76, #79, #83).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-types    -> all green
    cargo clippy -p crux-types -- -D warnings  -> zero warnings
    ```
