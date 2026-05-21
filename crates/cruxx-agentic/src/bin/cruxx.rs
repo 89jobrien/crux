@@ -351,7 +351,7 @@ fn cmd_plan_llm(
         .collect();
 
     let yaml = rt
-        .block_on(cruxx_agentic::planner::generate_pipeline(
+        .block_on(crux_baml::planner::generate_pipeline(
             goal,
             constraints,
             &extra,

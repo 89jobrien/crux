@@ -56,8 +56,8 @@ client<llm> Anthropic {
 // -- Auto (round-robin across providers) ------------------------------------
 
 client<llm> Auto {
-  provider round-robin
+  provider fallback
   options {
-    strategy [Anthropic, OpenAI]
+    strategy [OpenAI, Anthropic]
   }
 }

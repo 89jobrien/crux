@@ -130,7 +130,11 @@ pub fn register(registry: &mut HandlerRegistry) {
             .risk(RiskLevel::Low)
             .deterministic(true),
         |input: Value| async move {
-            let log = input.get("log").and_then(|l| l.as_str()).unwrap_or("");
+            let log = input
+                .get("log")
+                .or_else(|| input.get("stdout"))
+                .and_then(|l| l.as_str())
+                .unwrap_or("");
             let mut violations = Vec::new();
 
             for line in log.lines() {
