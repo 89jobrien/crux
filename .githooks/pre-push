@@ -27,7 +27,7 @@ done
 HAS_RS=false HAS_TF=false SH=() MD=() DC=() DIRS=()
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
-    case "$f" in *.rs) HAS_RS=true;; *.tf) HAS_TF=true;; *.sh) SH+=("$f");; *.md) MD+=("$f");; *devcontainer*.json) DC+=("$f");; esac
+    case "$f" in *.rs) HAS_RS=true;; *.tf) HAS_TF=true;; *.sh) SH+=("$f");; *.md) [[ "$f" != .ctx/* ]] && MD+=("$f");; *devcontainer*.json) DC+=("$f");; esac
     DIRS+=("${f%%/*}")
 done <<< "$CHANGED"
 mapfile -t DIRS < <(printf '%s\n' "${DIRS[@]}" | sort -u)
