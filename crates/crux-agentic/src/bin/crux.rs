@@ -58,6 +58,9 @@ enum Cli {
         /// Show full trace envelope (pipeline info, steps, timing)
         #[arg(short, long)]
         verbose: bool,
+        /// Print execution plan without running anything
+        #[arg(short = 'n', long)]
+        dry_run: bool,
         /// Replay from a previous trace JSON file (skip cached steps)
         #[arg(long)]
         replay: Option<String>,
@@ -104,6 +107,7 @@ fn main() {
             plugins,
             quiet,
             verbose,
+            dry_run,
             replay,
             replay_mode,
             save_trace,
@@ -115,6 +119,7 @@ fn main() {
             plugins.as_deref(),
             quiet,
             verbose,
+            dry_run,
             replay.as_deref(),
             &replay_mode,
             save_trace.as_deref(),
@@ -278,6 +283,7 @@ fn cmd_run_dispatch(
     plugins_path: Option<&str>,
     quiet: bool,
     verbose: bool,
+    dry_run: bool,
     replay_path: Option<&str>,
     replay_mode_str: &str,
     save_trace_path: Option<&str>,
@@ -318,28 +324,105 @@ fn cmd_run_dispatch(
 
     if crux_script::is_cruxfile(&contents) {
         let target_name = target_flag.or(target_or_input).map(String::from);
-        cmd_run_cruxfile(
-            &contents,
-            &pipeline_path,
-            target_name.as_deref(),
-            plugins_path,
-            quiet,
-            verbose,
-            save_trace_path,
-        );
+
+        if dry_run {
+            cmd_dry_run_cruxfile(&contents, &pipeline_path, target_name.as_deref());
+        } else {
+            cmd_run_cruxfile(
+                &contents,
+                &pipeline_path,
+                target_name.as_deref(),
+                plugins_path,
+                quiet,
+                verbose,
+                save_trace_path,
+            );
+        }
     } else {
         // Regular pipeline. target_or_input is actually an input file.
-        let input_path = input_flag.or(target_or_input);
-        cmd_run(
-            &pipeline_path,
-            input_path,
-            plugins_path,
-            quiet,
-            verbose,
-            replay_path,
-            replay_mode_str,
-            save_trace_path,
-        );
+        if dry_run {
+            cmd_dry_run_pipeline(&contents, &pipeline_path);
+        } else {
+            let input_path = input_flag.or(target_or_input);
+            cmd_run(
+                &pipeline_path,
+                input_path,
+                plugins_path,
+                quiet,
+                verbose,
+                replay_path,
+                replay_mode_str,
+                save_trace_path,
+            );
+        }
+    }
+}
+
+/// Print Cruxfile execution plan without running.
+fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
+    let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
+        eprintln!("error: failed to parse {path}: {e}");
+        std::process::exit(1);
+    });
+
+    let target = target_name.unwrap_or(&cruxfile.default);
+
+    let resolver = TargetResolver::new(&cruxfile).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    });
+
+    let order = resolver.execution_order(target).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    });
+
+    println!("Cruxfile: {} (target: {target})", cruxfile.project);
+    println!("Execution order: {}\n", order.join(" -> "));
+
+    for (i, &name) in order.iter().enumerate() {
+        let target_def = &cruxfile.targets[name];
+        let budget_info = target_def
+            .budget
+            .as_ref()
+            .or(cruxfile.budget.as_ref())
+            .map(|b| format!(" (budget: {b:?})"))
+            .unwrap_or_default();
+
+        if target_def.steps.is_empty() {
+            println!("  {:>2}. {name} (aggregation target){budget_info}", i + 1);
+        } else {
+            let tmp = PipelineDef {
+                pipeline: name.to_string(),
+                budget: None,
+                steps: target_def.steps.clone(),
+            };
+            let handlers = collect_handler_names(&tmp);
+            println!(
+                "  {:>2}. {name} ({} steps: {}){budget_info}",
+                i + 1,
+                target_def.steps.len(),
+                handlers.join(", ")
+            );
+        }
+    }
+}
+
+/// Print pipeline execution plan without running.
+fn cmd_dry_run_pipeline(contents: &str, path: &str) {
+    let pipeline = crux_script::load(contents).unwrap_or_else(|e| {
+        eprintln!("error: failed to parse {path}: {e}");
+        std::process::exit(1);
+    });
+
+    let handlers = collect_handler_names(&pipeline);
+    println!(
+        "Pipeline: {} ({} steps)\n",
+        pipeline.pipeline,
+        pipeline.steps.len()
+    );
+    for (i, name) in handlers.iter().enumerate() {
+        println!("  {:>2}. {name}", i + 1);
     }
 }
 
