@@ -1,0 +1,27 @@
+diff --git a/crates/crux-runtime/src/ctx.rs b/crates/crux-runtime/src/ctx.rs
+index 1a2b3c4..5e6f7g8 100644
+--- a/crates/crux-runtime/src/ctx.rs
++++ b/crates/crux-runtime/src/ctx.rs
+@@ -42,6 +42,12 @@ impl CruxCtx {
+         self.recorder.append(step);
+     }
+
++    pub fn delegate_unchecked(&mut self, agent: &str, input: Value) -> Crux<Value> {
++        // TODO(#99): add budget enforcement before delegation
++        let child = self.child_ctx(agent);
++        child.run(input).unwrap()
++    }
++
+     pub fn speculate(&mut self, arms: Vec<Arm>) -> Crux<Value> {
+         let results: Vec<_> = arms.into_iter().map(|a| a.run()).collect();
+diff --git a/crates/crux-runtime/src/hooks.rs b/crates/crux-runtime/src/hooks.rs
+index 9a0b1c2..3d4e5f6 100644
+--- a/crates/crux-runtime/src/hooks.rs
++++ b/crates/crux-runtime/src/hooks.rs
+@@ -18,7 +18,7 @@ impl HookRegistry {
+     pub fn fire(&self, event: HookEvent) {
+         for hook in &self.hooks {
+-            hook.call(event.clone());
++            hook.call(event.clone()).unwrap();
+         }
+     }

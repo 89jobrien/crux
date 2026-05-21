@@ -39,10 +39,10 @@ pub trait RegistryBackend: Send + Sync {
 
 ### Adapters
 
-| Adapter | Location | Feature flag |
-|---|---|---|
-| `InMemoryBackend` | `crux-runtime/src/registry/in_memory.rs` | (default) |
-| `RedbBackend` | `crux-runtime/src/registry/redb.rs` | `redb` |
+| Adapter           | Location                                 | Feature flag |
+| ----------------- | ---------------------------------------- | ------------ |
+| `InMemoryBackend` | `crux-runtime/src/registry/in_memory.rs` | (default)    |
+| `RedbBackend`     | `crux-runtime/src/registry/redb.rs`      | `redb`       |
 
 ---
 
@@ -94,8 +94,8 @@ pub trait Context: Send {
 
 ### Adapters
 
-| Adapter | Location |
-|---|---|
+| Adapter                | Location                  |
+| ---------------------- | ------------------------- |
 | `CruxCtx` (production) | `crux-runtime/src/ctx.rs` |
 
 ---
@@ -132,10 +132,10 @@ pub trait Agent: Send + Sync + 'static {
 
 ### Adapters
 
-| Adapter | Source |
-|---|---|
+| Adapter                            | Source                                       |
+| ---------------------------------- | -------------------------------------------- |
 | Macro-generated `FooAgent` structs | `#[crux::agent]` proc macro in `crux-macros` |
-| Hand-written `Agent` impls | any downstream crate |
+| Hand-written `Agent` impls         | any downstream crate                         |
 
 ---
 
@@ -168,9 +168,9 @@ pub struct LlmResponse { pub text: String, pub provider: String,
 
 ### Adapters
 
-| Adapter | Location | Notes |
-|---|---|---|
-| `StubLlmProvider` | `crux-agentic/src/handlers/llm.rs` | Always returns canned text |
+| Adapter           | Location                           | Notes                              |
+| ----------------- | ---------------------------------- | ---------------------------------- |
+| `StubLlmProvider` | `crux-agentic/src/handlers/llm.rs` | Always returns canned text         |
 | Anthropic adapter | `crux-agentic/src/handlers/llm.rs` | Live; requires `ANTHROPIC_API_KEY` |
 
 ---
@@ -213,9 +213,9 @@ pub enum SafetyViolation {
 
 ### Adapters
 
-| Adapter | Location |
-|---|---|
-| `StrictPolicy` (unit tests) | `crux-runtime/src/safety.rs` inline tests |
+| Adapter                       | Location                                  |
+| ----------------------------- | ----------------------------------------- |
+| `StrictPolicy` (unit tests)   | `crux-runtime/src/safety.rs` inline tests |
 | `BoundedPolicy` (conformance) | `crux/tests/conformance/safety_policy.rs` |
 
 ---
@@ -263,12 +263,12 @@ pub enum RiskLevel { Low, Medium, High, Critical }
 
 ### Adapters
 
-| Adapter | Location | Purpose |
-|---|---|---|
-| `AutoApproveGate` | `crux-agentic/src/adapters/` | Approves all requests unconditionally |
-| `TerminalApprovalGate` | `crux-agentic/src/adapters/` | Interactive TTY prompt |
-| `AlwaysApprove` (test) | `crux/tests/conformance/approval_gate.rs` | Conformance only |
-| `AlwaysDeny` (test) | `crux/tests/conformance/approval_gate.rs` | Conformance only |
+| Adapter                | Location                                  | Purpose                               |
+| ---------------------- | ----------------------------------------- | ------------------------------------- |
+| `AutoApproveGate`      | `crux-agentic/src/adapters/`              | Approves all requests unconditionally |
+| `TerminalApprovalGate` | `crux-agentic/src/adapters/`              | Interactive TTY prompt                |
+| `AlwaysApprove` (test) | `crux/tests/conformance/approval_gate.rs` | Conformance only                      |
+| `AlwaysDeny` (test)    | `crux/tests/conformance/approval_gate.rs` | Conformance only                      |
 
 ---
 
@@ -311,7 +311,7 @@ pub enum ContainerState {
 
 ### Adapters
 
-| Adapter | Location | Feature flag |
-|---|---|---|
-| `MockContainerClient` | `crux-agentic/src/adapters/container_client.rs` | (default) |
-| `DockerContainerClient` | same file | `docker` |
+| Adapter                 | Location                                        | Feature flag |
+| ----------------------- | ----------------------------------------------- | ------------ |
+| `MockContainerClient`   | `crux-agentic/src/adapters/container_client.rs` | (default)    |
+| `DockerContainerClient` | same file                                       | `docker`     |

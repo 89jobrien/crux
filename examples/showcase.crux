@@ -1,0 +1,81 @@
+pipeline: showcase
+# Demonstrates crux pipeline capabilities using only built-in handlers.
+# No API keys or repo state required -- fully self-contained.
+#
+# Run:
+#   crux run examples/showcase.crux examples/input_showcase.json
+#   crux run examples/showcase.crux examples/input_showcase.json -q
+#   crux run examples/showcase.crux examples/input_showcase.json -v
+budget: { calls: 12 }
+
+steps:
+  # -- 1. Parallel fan-out: read fixture files simultaneously ----------------
+  - join_all: gather_data
+    arms:
+      - step: read_metrics
+        handler: shell::capture
+        args:
+          cmd: "cat examples/fixtures/sample_metrics.json"
+      - step: count_lines
+        handler: shell::capture
+        args:
+          cmd: "wc -l < examples/fixtures/sample_text.txt"
+      - step: word_freq
+        handler: shell::capture
+        args:
+          cmd: "tr ' ' '\\n' < examples/fixtures/sample_text.txt | sort | uniq -c | sort -rn | head -5"
+
+  # -- 2. Full JSON log: show the join_all result ---------------------------
+  - step: log_gathered
+    handler: ctrl::log
+    args:
+      pretty: true
+    # Logs the full join_all output as pretty-printed JSON
+
+  # -- 3. Passthrough: ctrl::noop forwards data unchanged --------------------
+  - step: passthrough
+    handler: ctrl::noop
+
+  # -- 4. Validation: assert the data looks right ----------------------------
+  - step: check_not_empty
+    handler: ctrl::assert
+    args:
+      condition: true
+      message: "fixture data must not be empty"
+
+  # -- 5. Sequential pipe: transform through stages --------------------------
+  - pipe: summarize
+    stages:
+      - step: extract_service
+        handler: shell::capture
+        args:
+          cmd: "cat examples/fixtures/sample_metrics.json | jq -r '.service'"
+      - step: log_service
+        handler: ctrl::log
+        args:
+          field: stdout
+          compact: true
+        # Smart extraction: [crux::ctrl::log] api-gateway
+      - step: extract_errors
+        handler: shell::capture
+        args:
+          cmd: "cat examples/fixtures/sample_metrics.json | jq '.errors_total'"
+      - step: log_errors
+        handler: ctrl::log
+        args:
+          field: stdout
+          compact: true
+        # Smart extraction: [crux::ctrl::log] 37
+
+  # -- 6. Final: count lines with smart extraction --------------------------
+  - step: final_count
+    handler: shell::capture
+    args:
+      cmd: "wc -l < examples/fixtures/sample_text.txt"
+
+  - step: log_result
+    handler: ctrl::log
+    args:
+      field: stdout
+      compact: true
+    # Smart extraction: [crux::ctrl::log] 4

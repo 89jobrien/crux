@@ -1,0 +1,68 @@
+pipeline: showcase_review
+# Fixture-mode code review gate. Reads a synthetic diff and findings file,
+# classifies severity, computes a score, and emits a verdict.
+# Demonstrates: join_all, pipe, ctrl::log (field/compact/pretty).
+#
+# Run:
+#   crux run examples/showcase_review.crux
+#   crux run examples/showcase_review.crux -q
+#   crux run examples/showcase_review.crux -v
+budget: { calls: 12 }
+
+steps:
+  # -- 1. Parallel gather: read fixture diff and findings --------------------
+  - join_all: gather
+    arms:
+      - step: diff_stats
+        handler: shell::capture
+        args:
+          cmd: "wc -l < examples/fixtures/review_diff.patch"
+      - step: findings
+        handler: shell::capture
+        args:
+          cmd: "cat examples/fixtures/review_findings.json"
+
+  - step: log_inputs
+    handler: ctrl::log
+    args:
+      pretty: true
+
+  # -- 2. Pipe: classify and score ------------------------------------------
+  - pipe: evaluate
+    stages:
+      - step: count_by_severity
+        handler: shell::capture
+        args:
+          cmd: >
+            cat examples/fixtures/review_findings.json |
+            jq '{
+              blocking: [.[] | select(.severity == "blocking")] | length,
+              suggestion: [.[] | select(.severity == "suggestion")] | length,
+              nitpick: [.[] | select(.severity == "nitpick")] | length,
+              total: length
+            }'
+      - step: log_counts
+        handler: ctrl::log
+        args:
+          field: stdout
+          compact: true
+
+  # -- 3. Verdict: compute score and decide ----------------------------------
+  - step: verdict
+    handler: shell::capture
+    args:
+      cmd: >
+        cat examples/fixtures/review_findings.json |
+        jq '{
+          blocking: ([.[] | select(.severity == "blocking")] | length),
+          score: ((length - ([.[] | select(.severity == "blocking")] | length)) / length),
+          verdict: (if ([.[] | select(.severity == "blocking")] | length) > 0
+                    then "REQUEST_CHANGES" else "APPROVE" end),
+          files: [.[] | .file] | unique
+        }'
+
+  - step: log_verdict
+    handler: ctrl::log
+    args:
+      field: stdout
+      pretty: true

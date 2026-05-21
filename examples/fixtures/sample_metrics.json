@@ -1,0 +1,8 @@
+{
+  "service": "api-gateway",
+  "uptime_seconds": 86412,
+  "requests_total": 24719,
+  "errors_total": 37,
+  "p99_latency_ms": 142,
+  "healthy": true
+}

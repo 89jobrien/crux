@@ -1,0 +1,30 @@
+[
+  {
+    "file": "crates/crux-runtime/src/ctx.rs",
+    "line": 47,
+    "severity": "blocking",
+    "rule": "no-unwrap-in-lib",
+    "message": "delegate_unchecked uses .unwrap() — propagate error instead"
+  },
+  {
+    "file": "crates/crux-runtime/src/ctx.rs",
+    "line": 45,
+    "severity": "suggestion",
+    "rule": "todo-needs-issue",
+    "message": "TODO without linked issue: add budget enforcement before delegation"
+  },
+  {
+    "file": "crates/crux-runtime/src/hooks.rs",
+    "line": 21,
+    "severity": "blocking",
+    "rule": "no-unwrap-in-lib",
+    "message": ".unwrap() added to hook dispatch — will panic on hook failure"
+  },
+  {
+    "file": "crates/crux-runtime/src/hooks.rs",
+    "line": 21,
+    "severity": "nitpick",
+    "rule": "error-context",
+    "message": "Consider .context(\"hook dispatch failed\") for better error messages"
+  }
+]

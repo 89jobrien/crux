@@ -1,0 +1,288 @@
+{
+  "id": "crux_01KS4R3QRQ8XZRZHM3D5X9R45X",
+  "agent": "showcase",
+  "value": {
+    "Ok": {
+      "args": {
+        "compact": true,
+        "field": "stdout"
+      },
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "       4\n"
+    }
+  },
+  "steps": [
+    {
+      "name": "gather_data::read_metrics",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.568009Z",
+      "duration_ms": 5,
+      "input_hash": 3715832101184762131,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "{\n  \"service\": \"api-gateway\",\n  \"uptime_seconds\": 86412,\n  \"requests_total\": 24719,\n  \"errors_total\": 37,\n  \"p99_latency_ms\": 142,\n  \"healthy\": true\n}\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "gather_data::count_lines",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.569305Z",
+      "duration_ms": 6,
+      "input_hash": 10904644773342788527,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "       4\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "gather_data::word_freq",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.570855Z",
+      "duration_ms": 7,
+      "input_hash": 11081483576146500714,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "   2 quick\n   2 my\n   1 zebras\n   1 with\n   1 vow.\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "log_gathered",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.578235Z",
+      "duration_ms": 0,
+      "input_hash": 10827752254184924587,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "pretty": true
+        },
+        "input": [
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "{\n  \"service\": \"api-gateway\",\n  \"uptime_seconds\": 86412,\n  \"requests_total\": 24719,\n  \"errors_total\": 37,\n  \"p99_latency_ms\": 142,\n  \"healthy\": true\n}\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "       4\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "   2 quick\n   2 my\n   1 zebras\n   1 with\n   1 vow.\n"
+          }
+        ]
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "passthrough",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.578252Z",
+      "duration_ms": 0,
+      "input_hash": 14942302215237650629,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "pretty": true
+        },
+        "input": [
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "{\n  \"service\": \"api-gateway\",\n  \"uptime_seconds\": 86412,\n  \"requests_total\": 24719,\n  \"errors_total\": 37,\n  \"p99_latency_ms\": 142,\n  \"healthy\": true\n}\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "       4\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "   2 quick\n   2 my\n   1 zebras\n   1 with\n   1 vow.\n"
+          }
+        ]
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "check_not_empty",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.578272Z",
+      "duration_ms": 0,
+      "input_hash": 174873201032493796,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "condition": true,
+          "message": "fixture data must not be empty"
+        },
+        "input": [
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "{\n  \"service\": \"api-gateway\",\n  \"uptime_seconds\": 86412,\n  \"requests_total\": 24719,\n  \"errors_total\": 37,\n  \"p99_latency_ms\": 142,\n  \"healthy\": true\n}\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "       4\n"
+          },
+          {
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "   2 quick\n   2 my\n   1 zebras\n   1 with\n   1 vow.\n"
+          }
+        ]
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "summarize::extract_service",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.578292Z",
+      "duration_ms": 7,
+      "input_hash": 12705462751575359628,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "api-gateway\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "summarize::log_service",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.585475Z",
+      "duration_ms": 0,
+      "input_hash": 16700065194170303009,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "compact": true,
+          "field": "stdout"
+        },
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "api-gateway\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "summarize::extract_errors",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.585516Z",
+      "duration_ms": 8,
+      "input_hash": 5636443098738412718,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "37\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "summarize::log_errors",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.593706Z",
+      "duration_ms": 0,
+      "input_hash": 17154688065465553602,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "compact": true,
+          "field": "stdout"
+        },
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "37\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "final_count",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.599253Z",
+      "duration_ms": 0,
+      "input_hash": 8697206992335618617,
+      "content_hash": null,
+      "output": {
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "       4\n"
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "name": "log_result",
+      "kind": "plain",
+      "status": "ok",
+      "confidence": 1.0,
+      "started_at": "2026-05-21T07:48:28.599304Z",
+      "duration_ms": 0,
+      "input_hash": 10332990692999788216,
+      "content_hash": null,
+      "output": {
+        "args": {
+          "compact": true,
+          "field": "stdout"
+        },
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "       4\n"
+      },
+      "error": null,
+      "attempt": 1
+    }
+  ],
+  "children": [],
+  "started_at": "2026-05-21T07:48:28.567988Z",
+  "finished_at": "2026-05-21T07:48:28.599318Z"
+}

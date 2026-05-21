@@ -2,10 +2,6 @@
 
 status: done
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
-> (recommended) or superpowers:executing-plans to implement this plan task-by-task.
-> Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Transform crux from a single-runtime library into a general-purpose agentic execution
 substrate by adding three orthogonal layers: a `Planner` port for abstract action dispatch,
 a pure-domain `crux-domain` crate (no tokio/LLM deps), and an EDDOS-style typed event pipeline.

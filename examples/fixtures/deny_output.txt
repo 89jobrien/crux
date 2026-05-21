@@ -1,0 +1,5 @@
+advisories ok
+licenses FAIL: crate 'ring' has license 'OpenSSL' which is not in the allow list
+licenses FAIL: crate 'webpki' has license 'ISC' which is not explicitly allowed
+bans ok
+warning[duplicate]: crate 'syn' has 2 duplicate versions: 1.0.109, 2.0.87

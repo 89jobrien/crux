@@ -1,0 +1,78 @@
+pipeline: showcase_triage
+# Fixture-mode secret scan triage. Reads synthetic obfsck JSONL findings,
+# classifies true vs false positives, and suggests allowlist entries.
+# Demonstrates: pipe with jq transforms, ctrl::log field/compact/pretty.
+#
+# Run:
+#   crux run examples/showcase_triage.crux
+#   crux run examples/showcase_triage.crux -q
+#   crux run examples/showcase_triage.crux -v
+budget: { calls: 10 }
+
+steps:
+  # -- 1. Read fixture scan output ------------------------------------------
+  - step: read_scan
+    handler: shell::capture
+    args:
+      cmd: "cat examples/fixtures/obfsck_findings.jsonl"
+
+  - step: log_raw_count
+    handler: ctrl::log
+    args:
+      field: stdout
+      compact: true
+
+  # -- 2. Classify findings --------------------------------------------------
+  - pipe: classify
+    stages:
+      - step: split_by_confidence
+        handler: shell::capture
+        args:
+          cmd: >
+            cat examples/fixtures/obfsck_findings.jsonl |
+            jq -s '{
+              total: length,
+              true_positives: [.[] | select(.confidence >= 0.8) | {file, pattern, confidence}],
+              false_positives: [.[] | select(.confidence < 0.4) | {file, pattern, confidence}],
+              uncertain: [.[] | select(.confidence >= 0.4 and .confidence < 0.8) | {file, pattern, confidence}]
+            }'
+      - step: log_classified
+        handler: ctrl::log
+        args:
+          field: stdout
+          pretty: true
+
+  # -- 3. Generate allowlist entries for false positives ---------------------
+  - step: allowlist
+    handler: shell::capture
+    args:
+      cmd: >
+        cat examples/fixtures/obfsck_findings.jsonl |
+        jq -s '[.[] | select(.confidence < 0.4) |
+          {file, pattern, reason: "test fixture / variable name"}]'
+
+  - step: log_allowlist
+    handler: ctrl::log
+    args:
+      field: stdout
+      pretty: true
+
+  # -- 4. Final verdict ------------------------------------------------------
+  - step: verdict
+    handler: shell::capture
+    args:
+      cmd: >
+        cat examples/fixtures/obfsck_findings.jsonl |
+        jq -s '{
+          verdict: (if ([.[] | select(.confidence >= 0.8)] | length) > 0
+                   then "BLOCK — real secrets found" else "OK — safe to commit" end),
+          real_secrets: ([.[] | select(.confidence >= 0.8)] | length),
+          false_positives: ([.[] | select(.confidence < 0.4)] | length),
+          needs_review: ([.[] | select(.confidence >= 0.4 and .confidence < 0.8)] | length)
+        }'
+
+  - step: log_verdict
+    handler: ctrl::log
+    args:
+      field: stdout
+      compact: true

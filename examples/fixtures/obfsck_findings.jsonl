@@ -1,0 +1,5 @@
+{"file":"crates/crux-agentic/src/llm.rs","line":42,"pattern":"api_key","confidence":0.3,"context":"let api_key = std::env::var(\"OPENAI_API_KEY\")"}
+{"file":"tests/integration/auth_test.rs","line":15,"pattern":"password","confidence":0.1,"context":"let password = \"test_fixture_value\";"}
+{"file":"docs/setup.md","line":88,"pattern":"sk-proj-","confidence":0.9,"context":"export OPENAI_API_KEY=sk-proj-abc123..."}
+{"file":"tests/fixtures/sample.env","line":3,"pattern":"secret_key","confidence":0.2,"context":"SECRET_KEY=placeholder_for_testing"}
+{"file":".env.example","line":7,"pattern":"ghp_","confidence":0.85,"context":"GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}

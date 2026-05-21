@@ -1,0 +1,79 @@
+pipeline: crux-ci
+# Self-hosted CI gate — mirrors `just ci` using crux pipelines.
+#
+# Run:
+#   crux run Cruxfile.crux
+#   crux run Cruxfile.crux -v          # with timing
+#   crux run Cruxfile.crux -q          # errors only
+budget: { calls: 20 }
+
+steps:
+  # -- 1. Parallel lint gate: fmt + clippy + cargo-deny run concurrently -------
+  - join_all: lint_gate
+    arms:
+      - step: fmt_check
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check"
+      - step: clippy
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --all-targets -- -D warnings"
+      - step: cargo_deny
+        handler: shell::exec
+        args:
+          cmd: "cargo deny check 2>/dev/null || true"
+
+  - step: log_lint
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout
+
+  # -- 2. Build (warnings are errors) -----------------------------------------
+  - step: build
+    handler: shell::capture
+    args:
+      cmd: "RUSTFLAGS='-D warnings' cargo build --all-targets"
+
+  - step: log_build
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout
+
+  # -- 3. Test suite -----------------------------------------------------------
+  - step: test
+    handler: shell::capture
+    args:
+      cmd: "cargo nextest run"
+
+  - step: log_test
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout
+
+  # -- 4. Pipeline lint: validate all .crux files -----------------------------
+  - step: lint_crux
+    handler: shell::exec
+    args:
+      cmd: "find examples -name '*.crux' -print0 | xargs -0 cargo run --quiet -p crux-agentic --bin crux -- check"
+
+  - step: log_lint_crux
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout
+
+  # -- 5. Summary --------------------------------------------------------------
+  - step: summary
+    handler: shell::capture
+    args:
+      cmd: "echo 'CI gate passed'"
+
+  - step: log_summary
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout

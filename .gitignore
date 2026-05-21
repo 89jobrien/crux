@@ -30,3 +30,5 @@ target/
 crates/.env
 .claude/settings.local.json
 .idea/
+.worktrees/
+.claude/

@@ -1,0 +1,91 @@
+pipeline: showcase_ci
+# Fixture-mode CI gate. Reads synthetic cargo-deny output, parses violations,
+# and scores fixability.
+# Demonstrates: join_all, pipe, ctrl::assert, ctrl::log args.
+#
+# Run:
+#   crux run examples/showcase_ci.crux
+#   crux run examples/showcase_ci.crux -q
+#   crux run examples/showcase_ci.crux -v
+budget: { calls: 12 }
+
+steps:
+  # -- 1. Read fixture deny output ------------------------------------------
+  - step: read_deny
+    handler: shell::capture
+    args:
+      cmd: "cat examples/fixtures/deny_output.txt"
+
+  # -- 2. Parallel parse: count violation types ------------------------------
+  - join_all: parse_violations
+    arms:
+      - step: license_count
+        handler: shell::capture
+        args:
+          cmd: "grep -c 'licenses FAIL' examples/fixtures/deny_output.txt || echo 0"
+      - step: advisory_count
+        handler: shell::capture
+        args:
+          cmd: "grep -c 'advisories FAIL' examples/fixtures/deny_output.txt || echo 0"
+      - step: duplicate_count
+        handler: shell::capture
+        args:
+          cmd: "grep -c 'warning\\[duplicate\\]' examples/fixtures/deny_output.txt || echo 0"
+
+  - step: log_counts
+    handler: ctrl::log
+    args:
+      pretty: true
+
+  # -- 3. Validate: no advisory failures (blocking) -------------------------
+  - step: check_no_advisories
+    handler: ctrl::assert
+    args:
+      condition: true
+      message: "advisory violations would block this gate"
+
+  # -- 4. Classify and score -------------------------------------------------
+  - pipe: assess
+    stages:
+      - step: build_report
+        handler: shell::capture
+        args:
+          cmd: >
+            cat examples/fixtures/deny_output.txt |
+            jq -Rs '{
+              total_lines: [split("\n")[] | select(. != "")] | length,
+              failures: [split("\n")[] | select(test("FAIL"))] | length,
+              warnings: [split("\n")[] | select(test("warning"))] | length,
+              passes: [split("\n")[] | select(test(" ok$"))] | length,
+              details: [split("\n")[] | select(test("FAIL")) |
+                capture("(?<check>[a-z]+) FAIL: (?<msg>.+)")]
+            }'
+      - step: log_report
+        handler: ctrl::log
+        args:
+          field: stdout
+          pretty: true
+
+  # -- 5. Verdict ------------------------------------------------------------
+  - step: verdict
+    handler: shell::capture
+    args:
+      cmd: >
+        cat examples/fixtures/deny_output.txt |
+        jq -Rs '{
+          score: (([split("\n")[] | select(test(" ok$"))] | length) /
+                  ([split("\n")[] | select(. != "")] | length)),
+          action: (if ([split("\n")[] | select(test("advisories FAIL"))] | length) > 0
+                   then "BLOCK — advisory violations"
+                   elif ([split("\n")[] | select(test("licenses FAIL"))] | length) > 0
+                   then "FIX — update deny.toml allowlist"
+                   else "PASS" end),
+          fixable: [split("\n")[] | select(test("licenses FAIL"))] | length,
+          blocking: [split("\n")[] | select(test("advisories FAIL"))] | length
+        }'
+
+  - step: log_verdict
+    handler: ctrl::log
+    args:
+      field: stdout
+      compact: true
