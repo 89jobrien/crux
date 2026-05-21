@@ -1,5 +1,7 @@
 # Plan: praxis — Self-Improving Agent Runtime
 
+status: partial (crux-improve crate scaffolded, praxis workspace not created)
+
 ## Goal
 
 Create `~/dev/praxis` as a standalone Rust workspace that closes the

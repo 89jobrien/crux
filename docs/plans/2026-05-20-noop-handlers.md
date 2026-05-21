@@ -1,5 +1,7 @@
 # Plan: Fill In Noop Pipeline Placeholders
 
+status: done
+
 ## Goal
 
 Replace all 31 `ctrl::noop` placeholders across 5 example pipelines with real

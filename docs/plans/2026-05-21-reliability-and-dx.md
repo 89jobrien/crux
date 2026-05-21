@@ -1,5 +1,7 @@
 # Plan: Reliability + DX Improvement Cohort
 
+status: done
+
 ## Goal
 
 Make pipeline features trustworthy (cohort A: #64, #67, #68, #82) and crux
