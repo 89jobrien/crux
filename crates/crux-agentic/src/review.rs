@@ -5,6 +5,17 @@ use serde_json::{Value, json};
 use crate::handlers;
 
 pub fn register(registry: &mut HandlerRegistry) {
+    register_arch_boundary_check(registry);
+    register_normalize_findings(registry);
+    register_apply_severity(registry);
+    register_compute_score(registry);
+    register_approve(registry);
+    register_detect_antipatterns(registry);
+    register_group_by_file(registry);
+    register_compose_daily_note(registry);
+}
+
+fn register_arch_boundary_check(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::REVIEW_ARCH_BOUNDARY_CHECK)
             .describe("Scan staged files for domain-layer imports of adapter/infra modules.")
@@ -54,7 +65,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"violations": violations}))
         },
     );
+}
 
+fn register_normalize_findings(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::REVIEW_NORMALIZE_FINDINGS)
             .describe("Merge clippy, arch, and coverage findings into a unified list.")
@@ -112,7 +125,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"findings": findings}))
         },
     );
+}
 
+fn register_apply_severity(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::REVIEW_APPLY_SEVERITY)
             .describe("Tag each finding with a severity tier based on its source.")
@@ -144,10 +159,12 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         Ok(json!({"findings": tiered}))
     });
+}
 
+fn register_compute_score(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::REVIEW_COMPUTE_SCORE)
-            .describe("Compute a 0–1 review score from the ratio of blocking findings.")
+            .describe("Compute a 0\u{2013}1 review score from the ratio of blocking findings.")
             .risk(RiskLevel::Low)
             .deterministic(true),
     );
@@ -182,7 +199,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             score as f32,
         ))
     });
+}
 
+fn register_approve(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::REVIEW_APPROVE)
             .describe("Approve a GitHub PR via the gh CLI.")
@@ -228,7 +247,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         }
     });
+}
 
+fn register_detect_antipatterns(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::REVIEW_DETECT_ANTIPATTERNS)
             .describe("Detect bare unwrap, panic, unsafe, and other antipatterns in diff hunks.")
@@ -243,27 +264,31 @@ pub fn register(registry: &mut HandlerRegistry) {
 
             // (needle, message, severity)
             let patterns: &[(&str, &str, &str)] = &[
-                (".unwrap()", "bare unwrap — use expect() or ?", "suggestion"),
+                (
+                    ".unwrap()",
+                    "bare unwrap \u{2014} use expect() or ?",
+                    "suggestion",
+                ),
                 (
                     "panic!(",
-                    "bare panic — consider returning an error",
+                    "bare panic \u{2014} consider returning an error",
                     "suggestion",
                 ),
                 ("TODO", "TODO without issue reference", "nitpick"),
                 ("FIXME", "FIXME without issue reference", "nitpick"),
                 (
                     "unsafe {",
-                    "unsafe block — needs safety comment",
+                    "unsafe block \u{2014} needs safety comment",
                     "blocking",
                 ),
                 (
                     "println!(",
-                    "println! in non-test code — use tracing",
+                    "println! in non-test code \u{2014} use tracing",
                     "nitpick",
                 ),
                 (
                     "eprintln!(",
-                    "eprintln! in non-test code — use tracing",
+                    "eprintln! in non-test code \u{2014} use tracing",
                     "nitpick",
                 ),
             ];
@@ -309,7 +334,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"findings": findings}))
         },
     );
+}
 
+fn register_group_by_file(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::REVIEW_GROUP_BY_FILE)
             .describe("Group findings by file path into a map.")
@@ -340,7 +367,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             .collect();
         Ok(Value::Object(map))
     });
+}
 
+fn register_compose_daily_note(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::REVIEW_COMPOSE_DAILY_NOTE)
             .describe("Compose a dated markdown daily note from categorized commit items.")
