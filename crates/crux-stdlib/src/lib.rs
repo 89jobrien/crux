@@ -8,6 +8,7 @@ pub mod error;
 pub mod fs;
 pub mod git;
 pub mod json;
+pub mod shell;
 pub mod text;
 
 use crux_script::HandlerRegistry;
@@ -18,5 +19,6 @@ pub fn register_all(registry: &mut HandlerRegistry) {
     fs::register(registry);
     git::register(registry);
     json::register(registry);
+    shell::register(registry);
     text::register(registry);
 }

@@ -55,7 +55,6 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     ci::register(registry);
     container::register(registry);
     harness::register(registry);
-    shell::register(registry);
     review::register(registry);
     rx::register(registry);
     sqlite::register(registry);
