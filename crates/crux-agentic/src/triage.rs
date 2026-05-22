@@ -9,7 +9,53 @@ use crate::handlers;
 /// considered duplicates. Lower = stricter matching.
 const DEDUP_DISTANCE_THRESHOLD: f64 = 0.4;
 
+// Priority weights for urgency scoring
+const PRIORITY_CRITICAL_WEIGHT: f64 = 4.0;
+const PRIORITY_HIGH_WEIGHT: f64 = 3.0;
+const PRIORITY_MEDIUM_WEIGHT: f64 = 2.0;
+const PRIORITY_LOW_WEIGHT: f64 = 1.0;
+
+// Confidence scores for secret-chain classification
+const CONFIDENCE_BROKEN_SECRETS: f32 = 0.1;
+const CONFIDENCE_DIRENV_UNLOADED: f32 = 0.3;
+const CONFIDENCE_KEY_MISSING: f32 = 0.6;
+const CONFIDENCE_HEALTHY_SECRETS: f32 = 0.95;
+
+// Hook overhead latency ceiling (ms) for confidence degradation
+const MAX_HOOK_OVERHEAD_MS: f64 = 5000.0;
+
+// Branch cleanup confidence thresholds
+const CONFIDENCE_ORPHANED_WORKTREES: f32 = 0.3;
+const MANY_BRANCHES_THRESHOLD: usize = 5;
+const CONFIDENCE_MANY_BRANCHES: f32 = 0.6;
+const CONFIDENCE_CLEAN_STATE: f32 = 0.9;
+
+// Todo-issue fuzzy match threshold
+const TODO_ISSUE_MATCH_THRESHOLD: f64 = 0.5;
+
 pub fn register(registry: &mut HandlerRegistry) {
+    register_parse_repo_tags(registry);
+    register_score_urgency(registry);
+    register_deduplicate_intent(registry);
+    register_group_by_repo(registry);
+    register_merge_results(registry);
+    register_parse_env_probe(registry);
+    register_classify_severity(registry);
+    register_suggest_remediation(registry);
+    register_correlate_failures(registry);
+    register_measure_overhead(registry);
+    register_detect_orphaned_worktrees(registry);
+    register_build_cleanup_plan(registry);
+    register_match_todos_to_issues(registry);
+    register_identify_untracked(registry);
+    register_match_plans_to_commits(registry);
+    register_detect_status_mismatch(registry);
+    register_categorize_commits(registry);
+    register_classify_true_false(registry);
+    register_generate_allowlist_entries(registry);
+}
+
+fn register_parse_repo_tags(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_PARSE_REPO_TAGS)
             .describe("Extract repo tag from todo metadata and attach it to each todo item.")
@@ -40,7 +86,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"todos": tagged}))
         },
     );
+}
 
+fn register_score_urgency(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_SCORE_URGENCY)
             .describe("Score and sort todos by urgency using priority weight and age in days.")
@@ -63,11 +111,11 @@ pub fn register(registry: &mut HandlerRegistry) {
                     .and_then(|p| p.as_str())
                     .unwrap_or("medium");
                 let weight: f64 = match priority {
-                    "critical" => 4.0,
-                    "high" => 3.0,
-                    "medium" => 2.0,
-                    "low" => 1.0,
-                    _ => 1.0,
+                    "critical" => PRIORITY_CRITICAL_WEIGHT,
+                    "high" => PRIORITY_HIGH_WEIGHT,
+                    "medium" => PRIORITY_MEDIUM_WEIGHT,
+                    "low" => PRIORITY_LOW_WEIGHT,
+                    _ => PRIORITY_LOW_WEIGHT,
                 };
                 let created = todo
                     .get("created_at")
@@ -88,7 +136,9 @@ pub fn register(registry: &mut HandlerRegistry) {
         let result: Vec<Value> = scored.into_iter().map(|(_, t)| t).collect();
         Ok(json!({"todos": result}))
     });
+}
 
+fn register_deduplicate_intent(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_DEDUPLICATE_INTENT)
             .describe("Group todos with similar titles using normalized edit distance.")
@@ -144,7 +194,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"groups": result}))
         },
     );
+}
 
+fn register_group_by_repo(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_GROUP_BY_REPO)
             .describe("Group todos into a map keyed by repo name.")
@@ -175,10 +227,9 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         Ok(json!({"repos": map}))
     });
+}
 
-    // -----------------------------------------------------------------------
-    // eod_ritual: merge gate results into a pass/fail summary
-    // -----------------------------------------------------------------------
+fn register_merge_results(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_MERGE_RESULTS)
             .describe("Aggregate gate pass/fail results into a single summary.")
@@ -217,10 +268,9 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         Ok(json!({"passed": passed, "failed": failed, "gates": summary}))
     });
+}
 
-    // -----------------------------------------------------------------------
-    // secret_env_debug: parse probe outputs, classify, suggest fixes
-    // -----------------------------------------------------------------------
+fn register_parse_env_probe(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_PARSE_ENV_PROBE)
             .describe("Parse 1Password, direnv, and dotenvx probe outputs into a findings list.")
@@ -268,7 +318,9 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         Ok(json!({"findings": findings}))
     });
+}
 
+fn register_classify_severity(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_CLASSIFY_SEVERITY)
             .describe("Classify secret-chain health and emit a confidence score.")
@@ -294,10 +346,10 @@ pub fn register(registry: &mut HandlerRegistry) {
         }).count();
 
         let confidence: f32 = match (broken, unloaded, missing) {
-            (b, _, _) if b > 0 => 0.1,
-            (_, u, _) if u > 0 => 0.3,
-            (_, _, m) if m > 0 => 0.6,
-            _ => 0.95,
+            (b, _, _) if b > 0 => CONFIDENCE_BROKEN_SECRETS,
+            (_, u, _) if u > 0 => CONFIDENCE_DIRENV_UNLOADED,
+            (_, _, m) if m > 0 => CONFIDENCE_KEY_MISSING,
+            _ => CONFIDENCE_HEALTHY_SECRETS,
         };
 
         Ok(HandlerOutput::with_confidence(
@@ -305,7 +357,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             confidence,
         ))
     });
+}
 
+fn register_suggest_remediation(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_SUGGEST_REMEDIATION)
             .describe("Suggest fix commands for broken 1Password, direnv, or dotenvx components.")
@@ -339,10 +393,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"fixes": fixes}))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // hook_diagnostics: correlate failures to hooks, measure latency
-    // -----------------------------------------------------------------------
+fn register_correlate_failures(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_CORRELATE_FAILURES)
             .describe("Correlate hook names against recent failure text to identify culprits.")
@@ -374,7 +427,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"correlated_failures": correlated, "total_hooks": hooks.len()}))
         },
     );
+}
 
+fn register_measure_overhead(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_MEASURE_OVERHEAD)
             .describe(
@@ -411,8 +466,8 @@ pub fn register(registry: &mut HandlerRegistry) {
                 (p50, p95)
             };
 
-            // confidence: 1.0 if p95 < 500ms, degrades linearly to 0.0 at 5000ms
-            let confidence = (1.0 - (p95 / 5000.0).min(1.0)) as f32;
+            // confidence: 1.0 if p95 < 500ms, degrades linearly to 0.0 at MAX_HOOK_OVERHEAD_MS
+            let confidence = (1.0 - (p95 / MAX_HOOK_OVERHEAD_MS).min(1.0)) as f32;
 
             Ok(HandlerOutput::with_confidence(
                 json!({"p50_ms": p50, "p95_ms": p95, "sample_count": durations.len()}),
@@ -420,10 +475,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // branch_cleanup: detect orphaned worktrees, build cleanup plan
-    // -----------------------------------------------------------------------
+fn register_detect_orphaned_worktrees(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_DETECT_ORPHANED_WORKTREES)
             .describe("Identify worktrees not on main or develop from git worktree list output.")
@@ -458,7 +512,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"orphaned_worktrees": orphans}))
         },
     );
+}
 
+fn register_build_cleanup_plan(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_BUILD_CLEANUP_PLAN)
             .describe(
@@ -483,11 +539,11 @@ pub fn register(registry: &mut HandlerRegistry) {
 
             // confidence high = safe to auto-clean, low = needs manual review
             let confidence: f32 = if orphans > 0 {
-                0.3 // orphaned worktrees always need review
-            } else if branches > 5 {
-                0.6 // many merged branches — prune remotes first
+                CONFIDENCE_ORPHANED_WORKTREES
+            } else if branches > MANY_BRANCHES_THRESHOLD {
+                CONFIDENCE_MANY_BRANCHES
             } else {
-                0.9 // clean or trivially cleanable
+                CONFIDENCE_CLEAN_STATE
             };
 
             Ok(HandlerOutput::with_confidence(
@@ -496,10 +552,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // todo_issue_sync: fuzzy match TODOs to issues, identify gaps
-    // -----------------------------------------------------------------------
+fn register_match_todos_to_issues(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_MATCH_TODOS_TO_ISSUES)
             .describe("Fuzzy-match todo items to GitHub issues by title edit distance.")
@@ -534,7 +589,7 @@ pub fn register(registry: &mut HandlerRegistry) {
                             .to_lowercase();
                         let dist = edit_distance(&text, &title);
                         let max_len = text.len().max(title.len()) as f64;
-                        max_len > 0.0 && (dist as f64 / max_len) < 0.5
+                        max_len > 0.0 && (dist as f64 / max_len) < TODO_ISSUE_MATCH_THRESHOLD
                     });
                     let mut out = todo.clone();
                     if let Some(iss) = issue
@@ -549,7 +604,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"matched": matched}))
         },
     );
+}
 
+fn register_identify_untracked(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_IDENTIFY_UNTRACKED)
             .describe("Identify todos with no matching issue and emit a coverage confidence score.")
@@ -585,10 +642,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // stale_plan_audit: match plans to commits, detect mismatches
-    // -----------------------------------------------------------------------
+fn register_match_plans_to_commits(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_MATCH_PLANS_TO_COMMITS)
             .describe("Check whether each plan title has a keyword match in the recent commit log.")
@@ -629,7 +685,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"plans": matched}))
         },
     );
+}
 
+fn register_detect_status_mismatch(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_DETECT_STATUS_MISMATCH)
             .describe("Flag plans whose status contradicts their commit coverage.")
@@ -679,10 +737,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // herald_daily: categorize commits by conventional commit prefix
-    // -----------------------------------------------------------------------
+fn register_categorize_commits(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_CATEGORIZE_COMMITS)
             .describe("Categorize commit log lines by conventional commit prefix.")
@@ -732,10 +789,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(Value::Object(map))
         },
     );
+}
 
-    // -----------------------------------------------------------------------
-    // obfsck_triage: classify true/false positives, generate allowlist entries
-    // -----------------------------------------------------------------------
+fn register_classify_true_false(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::TRIAGE_CLASSIFY_TRUE_FALSE)
             .describe("Classify obfsck findings as true or false positives using file and context heuristics.")
@@ -802,7 +858,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             ))
         },
     );
+}
 
+fn register_generate_allowlist_entries(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::TRIAGE_GENERATE_ALLOWLIST_ENTRIES)
             .describe("Generate obfsck allowlist pathspec entries from false-positive findings.")
@@ -832,7 +890,7 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"allowlist_entries": entries}))
         },
     );
-} // end register
+}
 
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
