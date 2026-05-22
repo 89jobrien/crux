@@ -6,7 +6,25 @@ use std::collections::HashMap;
 
 use crate::handlers;
 
+const SLOW_STEP_MULTIPLIER: f64 = 2.0;
+const TOP_TOKEN_SPEND_COUNT: usize = 3;
+const BUDGET_TIGHTEN_THRESHOLD: f64 = 0.8;
+const BUDGET_TIGHTEN_FACTOR: f64 = 1.1;
+const FLAKY_THRESHOLD: f64 = 0.4;
+
 pub fn register(registry: &mut HandlerRegistry) {
+    register_latency_profile(registry);
+    register_token_spend(registry);
+    register_failure_clusters(registry);
+    register_replay_cache_hits(registry);
+    register_tighten_budget(registry);
+    register_compress_stages(registry);
+    register_tune_retry(registry);
+    register_patch_schema_check(registry);
+    register_replay_dry_run(registry);
+}
+
+fn register_latency_profile(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_LATENCY_PROFILE)
             .describe("Profile step latencies and identify slow outliers.")
@@ -54,7 +72,7 @@ pub fn register(registry: &mut HandlerRegistry) {
 
             let slow: Vec<Value> = durations
                 .iter()
-                .filter(|(_, d)| *d > median * 2.0)
+                .filter(|(_, d)| *d > median * SLOW_STEP_MULTIPLIER)
                 .map(|(name, d)| {
                     json!({
                         "name": name,
@@ -67,7 +85,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"slow_steps": slow, "median_ms": median}))
         },
     );
+}
 
+fn register_token_spend(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_TOKEN_SPEND)
             .describe("Tally token spend per step and identify top consumers.")
@@ -96,7 +116,11 @@ pub fn register(registry: &mut HandlerRegistry) {
 
             by_step.sort_by(|a, b| b.1.cmp(&a.1));
             let total: u64 = by_step.iter().map(|(_, t)| *t).sum();
-            let top3: Vec<&str> = by_step.iter().take(3).map(|(n, _)| n.as_str()).collect();
+            let top3: Vec<&str> = by_step
+                .iter()
+                .take(TOP_TOKEN_SPEND_COUNT)
+                .map(|(n, _)| n.as_str())
+                .collect();
             let items: Vec<Value> = by_step
                 .iter()
                 .map(|(n, t)| json!({"name": n, "tokens": t}))
@@ -105,7 +129,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"by_step": items, "total": total, "top3": top3}))
         },
     );
+}
 
+fn register_failure_clusters(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_FAILURE_CLUSTERS)
             .describe("Cluster failed steps by error kind.")
@@ -147,7 +173,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"clusters": items}))
         },
     );
+}
 
+fn register_replay_cache_hits(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_REPLAY_CACHE_HITS)
             .describe("Compute per-step replay cache hit/miss ratios.")
@@ -195,7 +223,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"by_step": items}))
         },
     );
+}
 
+fn register_tighten_budget(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_TIGHTEN_BUDGET)
             .describe("Suggest a tighter token budget based on actual spend ratio.")
@@ -216,8 +246,8 @@ pub fn register(registry: &mut HandlerRegistry) {
 
             let ratio = if budget > 0.0 { spend / budget } else { 0.0 };
 
-            if ratio > 0.8 {
-                let suggested = (spend * 1.1).ceil() as u64;
+            if ratio > BUDGET_TIGHTEN_THRESHOLD {
+                let suggested = (spend * BUDGET_TIGHTEN_FACTOR).ceil() as u64;
                 Ok(HandlerOutput::with_confidence(
                     json!({
                         "suggestion": {
@@ -237,7 +267,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             }
         },
     );
+}
 
+fn register_compress_stages(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_COMPRESS_STAGES)
             .describe("Suggest pipeline stage compression for high token-fraction steps.")
@@ -259,7 +291,7 @@ pub fn register(registry: &mut HandlerRegistry) {
                 .filter_map(|step| {
                     let tokens = step.get("tokens").and_then(|t| t.as_f64()).unwrap_or(0.0);
                     let fraction = if total > 0.0 { tokens / total } else { 0.0 };
-                    if fraction > 0.4 {
+                    if fraction > FLAKY_THRESHOLD {
                         Some(json!({
                             "stage": step.get("name")
                                 .and_then(|n| n.as_str())
@@ -279,7 +311,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"suggestions": suggestions}))
         },
     );
+}
 
+fn register_tune_retry(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_TUNE_RETRY)
             .describe("Suggest retry parameters for steps with recurring failures.")
@@ -324,7 +358,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"suggestions": suggestions}))
         },
     );
+}
 
+fn register_patch_schema_check(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_PATCH_SCHEMA_CHECK)
             .describe("Validate a YAML patch against the pipeline schema.")
@@ -343,7 +379,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             }
         },
     );
+}
 
+fn register_replay_dry_run(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_REPLAY_DRY_RUN)
             .describe("Dry-run a replay with a patch to detect step ordinal mismatches.")
