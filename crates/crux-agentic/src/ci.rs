@@ -4,7 +4,24 @@ use std::collections::{HashMap, HashSet};
 
 use crate::handlers;
 
+/// Maximum number of lines to scan forward when searching for lint annotations.
+const MAX_CONTEXT_LINES: usize = 5;
+
+/// Expected number of parts when splitting a `file:line:col` location string.
+const LOCATION_PARTS: usize = 3;
+
 pub fn register(registry: &mut HandlerRegistry) {
+    register_compile_errors(registry);
+    register_clippy_violations(registry);
+    register_nextest_failures(registry);
+    register_deny_violations(registry);
+    register_deduplicate_spans(registry);
+    register_classify_severity(registry);
+    register_attach_owners(registry);
+    register_score_fixability(registry);
+}
+
+fn register_compile_errors(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_COMPILE_ERRORS)
             .describe("Parse rustc error output into structured compile error records.")
@@ -38,7 +55,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"errors": errors}))
         },
     );
+}
 
+fn register_clippy_violations(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_CLIPPY_VIOLATIONS)
             .describe("Parse clippy warning output into structured violation records.")
@@ -59,7 +78,7 @@ pub fn register(registry: &mut HandlerRegistry) {
                     let lint = lines
                         .iter()
                         .skip(i)
-                        .take(5)
+                        .take(MAX_CONTEXT_LINES)
                         .find_map(|l| {
                             l.find("#[warn(").map(|pos| {
                                 let rest = &l[pos + 7..];
@@ -84,7 +103,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"violations": violations}))
         },
     );
+}
 
+fn register_nextest_failures(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_NEXTEST_FAILURES)
             .describe("Parse nextest output into structured test failure records.")
@@ -123,7 +144,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"failures": failures}))
         },
     );
+}
 
+fn register_deny_violations(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_DENY_VIOLATIONS)
             .describe("Parse cargo-deny output into structured license/advisory violation records.")
@@ -160,7 +183,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"violations": violations}))
         },
     );
+}
 
+fn register_deduplicate_spans(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_DEDUPLICATE_SPANS)
             .describe("Remove duplicate diagnostic spans from errors, violations, and failures.")
@@ -193,7 +218,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(Value::Object(result))
         },
     );
+}
 
+fn register_classify_severity(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_CLASSIFY_SEVERITY)
             .describe("Rank and label diagnostics by severity: error > failure > warning > info.")
@@ -252,7 +279,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"ranked": ranked}))
         },
     );
+}
 
+fn register_attach_owners(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::CI_ATTACH_OWNERS)
             .describe("Annotate ranked diagnostics with the owning crate name via cargo metadata.")
@@ -309,7 +338,9 @@ pub fn register(registry: &mut HandlerRegistry) {
             Ok(json!({"ranked": annotated}))
         },
     );
+}
 
+fn register_score_fixability(registry: &mut HandlerRegistry) {
     registry.register_metadata(
         HandlerMetadata::new(handlers::CI_SCORE_FIXABILITY)
             .describe("Score the auto-fixability ratio of ranked diagnostics.")
@@ -351,8 +382,8 @@ pub fn register(registry: &mut HandlerRegistry) {
 fn parse_location(line: &str) -> (String, u64) {
     let trimmed = line.trim().strip_prefix("-->").unwrap_or(line).trim();
     // Format: "src/main.rs:10:5"
-    let parts: Vec<&str> = trimmed.rsplitn(3, ':').collect();
-    if parts.len() >= 3 {
+    let parts: Vec<&str> = trimmed.rsplitn(LOCATION_PARTS, ':').collect();
+    if parts.len() >= LOCATION_PARTS {
         let file = parts[2].to_string();
         let ln = parts[1].parse::<u64>().unwrap_or(0);
         (file, ln)
