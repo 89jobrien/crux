@@ -54,12 +54,11 @@ impl ArmDef {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum BudgetDef {
-    Tokens { tokens: u64 },
-    Calls { calls: u64 },
-    Duration { duration_ms: u64 },
-    CostCents { cost_cents: u64 },
+pub struct BudgetDef {
+    pub tokens: Option<u64>,
+    pub calls: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub cost_cents: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -137,6 +136,50 @@ pub enum SpeculateMode {
 
 fn default_speculate_mode() -> SpeculateMode {
     SpeculateMode::PickBest
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compound_budget_preserves_all_constraints() {
+        let yaml = r#"
+pipeline: test
+budget:
+  calls: 40
+  duration_ms: 900000
+steps:
+  - step: s1
+"#;
+        let def: PipelineDef = serde_saphyr::from_str(yaml).expect("parse");
+        let budget = def.budget.expect("budget should be present");
+        assert!(budget.calls.is_some(), "calls should be present");
+        assert_eq!(budget.calls.unwrap(), 40);
+        assert!(budget.duration_ms.is_some(), "duration_ms should be present");
+        assert_eq!(budget.duration_ms.unwrap(), 900_000);
+    }
+
+    #[test]
+    fn single_budget_field_works() {
+        let yaml = r#"
+pipeline: test
+budget:
+  tokens: 5000
+steps:
+  - step: s1
+"#;
+        let def: PipelineDef = serde_saphyr::from_str(yaml).expect("parse");
+        let budget = def.budget.expect("budget should be present");
+        assert_eq!(budget.tokens.unwrap(), 5000);
+        assert!(budget.calls.is_none());
+        assert!(budget.duration_ms.is_none());
+        assert!(budget.cost_cents.is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -472,13 +472,23 @@ fn merge_args(mut input: Value, args: Option<Value>) -> Value {
 }
 
 fn budget_from_def(def: &BudgetDef) -> Budget {
-    match def {
-        BudgetDef::Tokens { tokens } => Budget::tokens(*tokens),
-        BudgetDef::Calls { calls } => Budget::calls(*calls),
-        BudgetDef::Duration { duration_ms } => {
-            Budget::duration(std::time::Duration::from_millis(*duration_ms))
-        }
-        BudgetDef::CostCents { cost_cents } => Budget::cost_cents(*cost_cents),
+    let mut budgets = Vec::new();
+    if let Some(tokens) = def.tokens {
+        budgets.push(Budget::tokens(tokens));
+    }
+    if let Some(calls) = def.calls {
+        budgets.push(Budget::calls(calls));
+    }
+    if let Some(duration_ms) = def.duration_ms {
+        budgets.push(Budget::duration(std::time::Duration::from_millis(duration_ms)));
+    }
+    if let Some(cost_cents) = def.cost_cents {
+        budgets.push(Budget::cost_cents(cost_cents));
+    }
+    match budgets.len() {
+        0 => Budget::default(),
+        1 => budgets.into_iter().next().unwrap(),
+        _ => Budget::combined(budgets),
     }
 }
 
