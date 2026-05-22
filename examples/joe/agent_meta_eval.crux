@@ -8,6 +8,8 @@ budget: { tokens: 16000, calls: 30 }
 steps:
   - step: load_trace
     handler: fs::read
+    args:
+      path: "{{input.trace_path}}"
     # Read trace from ~/.mbx/<run-id>.jsonl (JSONL format written by RedbBackend
     # or InMemoryBackend on flush). Validates schema version before proceeding.
 
@@ -61,6 +63,8 @@ steps:
 
   - step: emit_report
     handler: fs::write
+    args:
+      path: "{{input.report_path}}"
     # Writes structured report to .ctx/meta-eval-<run-id>.md:
     # - trace summary (step count, total tokens, wall time)
     # - analysis findings per arm

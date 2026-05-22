@@ -104,7 +104,7 @@ lint-crux:
         echo "No .crux files found"
         exit 0
     fi
-    cargo run --quiet -p crux-agentic --bin crux -- check $files
+    cargo run --quiet -p crux-agentic --features baml --bin crux -- check $files
 
 # Demo replay: fresh run vs cached replay with timing comparison
 replay-demo:

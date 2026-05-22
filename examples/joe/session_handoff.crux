@@ -50,6 +50,8 @@ steps:
 
   - step: emit_briefing
     handler: fs::write
+    args:
+      path: ".ctx/session-briefing.md"
     # Write session briefing to .ctx/session-briefing.md:
     # - dirty repos needing attention
     # - stale worktrees to clean up
