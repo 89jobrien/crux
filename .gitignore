@@ -1,4 +1,5 @@
 target/
+book/
 
 # BAML generated client — regenerate with `baml-cli generate`
 **/baml_client/
