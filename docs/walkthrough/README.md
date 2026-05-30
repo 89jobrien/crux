@@ -1,4 +1,4 @@
-# `crux::` — agentic workflows for Rust
+# `crux::`: Now available in multiple flavors
 
 `crux` has two surfaces: **YAML pipelines** (`.crux` files) for declarative workflows, and a
 **Rust macro API** (`#[crux::agent]`) when you need typed logic, delegation, and
