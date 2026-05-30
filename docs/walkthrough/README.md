@@ -30,7 +30,7 @@ types. If you are skimming, read **01** and **05**, then jump to **06** for the 
 
 | #   | Chapter                                                            | What you will learn                                                      |
 | --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| 01  | [Setup & Rust toolchain](./01-setup.md)                            | Install, scaffold a project, write your first `Cruxfile`                    |
+| 01  | [Setup & Rust toolchain](./01-setup.md)                            | Install, scaffold a project, write a hello-world                         |
 | 02  | [Core types](./02-core-types.md)                                   | `Crux<T>`, `CruxErr`, `Step`, `Agent` trait                              |
 | 03  | [Branching & delegation](./03-branching-delegation.md)             | `match`, confidence routes, `speculate`, `delegate`                      |
 | 04  | [Serializable task management](./04-task-registry.md)              | `TaskRegistry`, `Task`, crash-safe replay                                |
