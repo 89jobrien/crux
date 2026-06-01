@@ -480,7 +480,9 @@ fn budget_from_def(def: &BudgetDef) -> Budget {
         budgets.push(Budget::calls(calls));
     }
     if let Some(duration_ms) = def.duration_ms {
-        budgets.push(Budget::duration(std::time::Duration::from_millis(duration_ms)));
+        budgets.push(Budget::duration(std::time::Duration::from_millis(
+            duration_ms,
+        )));
     }
     if let Some(cost_cents) = def.cost_cents {
         budgets.push(Budget::cost_cents(cost_cents));
