@@ -160,7 +160,10 @@ steps:
         let budget = def.budget.expect("budget should be present");
         assert!(budget.calls.is_some(), "calls should be present");
         assert_eq!(budget.calls.unwrap(), 40);
-        assert!(budget.duration_ms.is_some(), "duration_ms should be present");
+        assert!(
+            budget.duration_ms.is_some(),
+            "duration_ms should be present"
+        );
         assert_eq!(budget.duration_ms.unwrap(), 900_000);
     }
 
