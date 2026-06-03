@@ -53,7 +53,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
       - name: stub generated modules for fmt
-        run: mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
+        run: |
+          mkdir -p crates/crux-agentic/src/baml_client && touch crates/crux-agentic/src/baml_client/mod.rs
+          mkdir -p crates/crux-baml/src/baml_client && touch crates/crux-baml/src/baml_client/mod.rs
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
