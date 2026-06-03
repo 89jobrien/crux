@@ -84,7 +84,7 @@ async fn pipeline(ctx: &mut CruxCtx, query: String) -> Result<String, CruxErr> {
     let sources = ["web", "docs", "code"];
     let mut scored: Vec<SearchResult> = Vec::new();
 
-    for (source, text) in sources.iter().zip(raw.into_iter()) {
+    for (source, text) in sources.iter().zip(raw) {
         let cleaned: String = ctx
             .pipe(
                 &format!("clean_{source}"),

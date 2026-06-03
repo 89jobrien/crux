@@ -58,7 +58,7 @@ async fn research_pipeline(query: String) -> Crux<String> {
     //    We process each source independently and collect scored results.
     let mut scored: Vec<SearchResult> = Vec::new();
     let sources = ["web", "docs", "code"];
-    for (source, text) in sources.iter().zip(raw.into_iter()) {
+    for (source, text) in sources.iter().zip(raw) {
         let cleaned: String = x
             .pipe(
                 &format!("clean_{source}"),
