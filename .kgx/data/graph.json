@@ -1,0 +1,1535 @@
+{
+  "nodes": [
+    {
+      "id": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "name": "#[crux::agent]",
+      "type": "proc_macro",
+      "supporting_text": "Transforms async fn into Agent trait impl + wrapper + optional run_registered",
+      "source_docs": [
+        "crux_macros_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "208e6fae-b143-447c-b1cc-cc0ad1316069",
+      "name": "#[crux::evolve]",
+      "type": "proc_macro",
+      "supporting_text": "Agent macro + is_evolution_agent() marker for evolution loops",
+      "source_docs": [
+        "crux_macros_crate"
+      ]
+    },
+    {
+      "id": "4854f900-da67-4039-8ef8-ce1941947754",
+      "name": "#[crux::harness]",
+      "type": "proc_macro",
+      "supporting_text": "Transforms struct into harness config with to_profile() method",
+      "source_docs": [
+        "crux_macros_crate"
+      ]
+    },
+    {
+      "id": "d8cd6c5c-0c83-4386-930d-b192d6803d24",
+      "name": ".crux file",
+      "type": "artifact",
+      "supporting_text": "Define steps, fan-out, piping, and budgets in .crux files",
+      "source_docs": [
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "5f3abf32-dedc-4825-be95-e26aeb032bdd",
+      "name": "Agent",
+      "type": "trait",
+      "supporting_text": "Port for agentic work units with Input/Output types, name, run, budget, lifecycle hooks",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "70d497a0-766e-4ed5-bab1-da191622940b",
+      "name": "AgenticError",
+      "type": "enum",
+      "supporting_text": "Error type wrapping IO/JSON/HTTP/custom, converts to CruxErr",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "4d094be4-4b73-4723-9f1c-caf0c6bf69d9",
+      "name": "AnthropicAdapter",
+      "type": "struct",
+      "supporting_text": "Anthropic API adapter implementing LlmProvider",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "98b3cda4-d501-4f76-a481-68cfdb46e3f2",
+      "name": "ApprovalDecision",
+      "type": "enum",
+      "supporting_text": "Approved/Denied/Deferred from approval gate",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "b88c14d5-2e50-488a-b2cb-4c2e901f827b",
+      "name": "ApprovalGate",
+      "type": "trait",
+      "supporting_text": "Port for escalation gates returning ApprovalDecision",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "883eb97b-643b-4479-b4ce-d51ec64b8a90",
+      "name": "AuditEntry",
+      "type": "struct",
+      "supporting_text": "Single audit log entry with timestamp, agent, tool, action, policy",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "22d5ec29-190f-4bf2-b647-c8b164d1f0cd",
+      "name": "AuditSink",
+      "type": "trait",
+      "supporting_text": "Port for append-only audit log",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "614f156b-5f57-4efa-a199-4af260a42a42",
+      "name": "AutoApproveGate",
+      "type": "struct",
+      "supporting_text": "Auto-approve up to risk threshold",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "f032be29-382d-44d1-982a-b6c815b97b54",
+      "name": "Budget",
+      "type": "enum",
+      "supporting_text": "Tagged enum: Tokens/Calls/Duration/CostCents/Combined execution constraints",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "6ce01743-7a00-450b-840b-8d2b6b6cd515",
+      "name": "BudgetKind",
+      "type": "enum",
+      "supporting_text": "Discriminant for Budget variants",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "9f03b37a-54ae-4859-b5ec-5fc82ca1965e",
+      "name": "BudgetTracker",
+      "type": "struct",
+      "supporting_text": "Runtime budget consumption state with remaining/consume/is_exceeded",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "eed236cd-5b31-4809-8772-6604cd1ee346",
+      "name": "CanonicalModelId",
+      "type": "struct",
+      "supporting_text": "4-part canonical ID: vendor:family:generation:variant",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "95fc8fd0-089b-4ba2-9ac6-0e912360826a",
+      "name": "CitedFinding",
+      "type": "struct",
+      "supporting_text": "Diagnostic finding with source citation",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "d4720880-693e-423d-8e38-37ab3c482bb7",
+      "name": "ContainerClient",
+      "type": "trait",
+      "supporting_text": "Port for container runtime operations (run, wait)",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "a6a7d460-b98f-4294-8a9b-7aa8e29cb7f9",
+      "name": "Context",
+      "type": "trait",
+      "supporting_text": "DIP abstraction over CruxCtx for testability",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "fa8b33b2-4dfe-4b4f-9f2b-54053e12ce26",
+      "name": "Crux::replay_from",
+      "type": "method",
+      "supporting_text": "replayable via Crux::replay_from(snapshot)",
+      "source_docs": [
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "95d94f51-1e76-469c-9266-9a808317091c",
+      "name": "Crux<T>",
+      "type": "struct",
+      "supporting_text": "Core execution trace fused with typed result",
+      "source_docs": [
+        "crux_types_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "name": "CruxCtx",
+      "type": "struct",
+      "supporting_text": "Production runtime adapter: step recording, hooks, replay, budget, combinators",
+      "source_docs": [
+        "crux_runtime_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "ca8020ca-b419-49e3-a360-b879e2113ce4",
+      "name": "CruxErr",
+      "type": "enum",
+      "supporting_text": "Tagged domain error: StepFailed/LowConfidence/BudgetExceeded/Delegation/Cancelled/Denied/ReplayMismatch",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "14b8f125-913e-4794-823a-eef7184aea88",
+      "name": "CruxId",
+      "type": "struct",
+      "supporting_text": "ULID-based trace identifier prefixed crux_",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "9367094f-0f91-4351-864b-869bad2683bc",
+      "name": "DelegationBuilder",
+      "type": "struct",
+      "supporting_text": "Fluent builder for sub-agent delegation with per-call budget/hooks",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "bbcda820-0a4d-4961-9362-dcfdeb978bdf",
+      "name": "DeterministicPlanner",
+      "type": "struct",
+      "supporting_text": "Rule-based zero-latency pipeline composer",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "4a3271c8-272a-4248-894d-3e4509de1378",
+      "name": "EvolutionOutcome",
+      "type": "enum",
+      "supporting_text": "Promoted/Discarded/Blocked/Denied evolution result",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "ff8aa54e-709b-474f-8a32-29b01269454d",
+      "name": "EvolutionPlanner",
+      "type": "struct",
+      "supporting_text": "Metrics-driven harness profile diff proposer",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "92d06986-390e-4849-9ac0-870a37d2b454",
+      "name": "FinalPhase",
+      "type": "enum",
+      "supporting_text": "Severity-ordered outcome: Succeeded/Skipped/Aborted/Failed/Errored",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "323e60a4-b7bb-4db6-b4a9-70b4bc0da77a",
+      "name": "GovernancePolicy",
+      "type": "struct",
+      "supporting_text": "Composable serializable governance policy with tool allow/block lists",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "6c5ca72c-bf75-4520-9513-9b285d27642d",
+      "name": "HandlerMetadata",
+      "type": "struct",
+      "supporting_text": "Handler static metadata: name, description, risk, capabilities",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "5ecdf0bc-1cff-41d4-a6f0-e5c4ec67462c",
+      "name": "HandlerOutput",
+      "type": "struct",
+      "supporting_text": "Handler result: value + optional confidence score",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "e60f2706-8aff-437f-88d0-a0734f04cef8",
+      "name": "HandlerRegistry",
+      "type": "struct",
+      "supporting_text": "Maps string names to async handlers and agents",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "d59dd61d-3ee5-4847-b40b-2b47867e6cc1",
+      "name": "HarnessDiff",
+      "type": "struct",
+      "supporting_text": "Proposed incremental change to HarnessProfile",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "38361e61-e044-4e90-9783-095830089197",
+      "name": "HarnessProfile",
+      "type": "struct",
+      "supporting_text": "Named versioned execution profile with resources and syscalls",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "84d27d5f-7041-419a-aca3-c9a69ca491d1",
+      "name": "HookRegistry",
+      "type": "struct",
+      "supporting_text": "Lifecycle hook dispatch: pre-step gates, confidence/failure/budget handlers",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "1b3eaaea-e507-4b82-9a1a-11640bf043a6",
+      "name": "HookVerdict",
+      "type": "enum",
+      "supporting_text": "Allow or Deny(reason) from pre-step gate",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "3c516ac5-3be7-41af-a26b-840371468513",
+      "name": "InMemoryAudit",
+      "type": "struct",
+      "supporting_text": "In-memory audit trail adapter for testing",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "65042b41-0328-4ba4-9b71-7f0b0b611569",
+      "name": "InMemoryBackend",
+      "type": "struct",
+      "supporting_text": "In-memory registry storage adapter",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "0cc61716-2b59-4ff1-8a2e-f9aee895e2f4",
+      "name": "LlmProvider",
+      "type": "trait",
+      "supporting_text": "Port for LLM completion: complete(req) -> LlmResponse",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "66625a30-99fe-4fd0-bc0b-2fb946f5d850",
+      "name": "OllamaAdapter",
+      "type": "struct",
+      "supporting_text": "Ollama local inference adapter implementing LlmProvider",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "eb23e677-e2bf-40ba-9b95-0fb1da3b849b",
+      "name": "OpenAiAdapter",
+      "type": "struct",
+      "supporting_text": "OpenAI API adapter implementing LlmProvider",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "b56d7cf6-e8f0-4eab-acc6-4581ca02229c",
+      "name": "PipelineDef",
+      "type": "struct",
+      "supporting_text": "Parsed pipeline definition: name, budget, steps",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "d640eb0e-eac2-4c13-9a99-5ed1778d1521",
+      "name": "PipelineGenerator",
+      "type": "trait",
+      "supporting_text": "Port for goal-to-YAML generation backends",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "2d3f31f7-3c7b-4fa5-b7e7-a68ff746ab2d",
+      "name": "PluginDiscovery",
+      "type": "trait",
+      "supporting_text": "Port for plugin discovery",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "d0f03226-ffac-4685-a824-d775d9d0dcce",
+      "name": "PluginHost",
+      "type": "struct",
+      "supporting_text": "Manages plugin subprocesses and routes handler invocations",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "50230e77-1eef-4fed-908e-a601456fc694",
+      "name": "PolicyAction",
+      "type": "enum",
+      "supporting_text": "Allow/Deny/Review from governance check",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "90f0bd93-5a4e-4bc5-ab20-f390b60a22b9",
+      "name": "ProviderModelRef",
+      "type": "struct",
+      "supporting_text": "Provider-specific reference + canonical ID + metadata",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "ca38816b-9614-43d7-a4bf-deea2d04b2d0",
+      "name": "Recovery<T>",
+      "type": "enum",
+      "supporting_text": "Closure-bearing hook return: Retry/RetryWith/Substitute/Escalate/Propagate/Skip/Continue",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "6783ef12-d47f-439e-b8b2-8d7f18ecadd3",
+      "name": "RecoveryKind",
+      "type": "enum",
+      "supporting_text": "Serializable recovery subset: Retry/Skip/Propagate/Continue",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "a881dbae-7b63-4222-a229-26ced7f245b5",
+      "name": "Redactor",
+      "type": "trait",
+      "supporting_text": "Port for scrubbing sensitive data before persistence",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "1340a263-0397-44ee-af73-6134fd6e8447",
+      "name": "RedbBackend",
+      "type": "struct",
+      "supporting_text": "Redb embedded KV store adapter (feature-gated)",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "f44fd819-5b06-4413-b3d7-58b82e86c2d6",
+      "name": "RegistryBackend",
+      "type": "trait",
+      "supporting_text": "Port for task registry storage: get/put/list/cas",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "name": "ReplayCache",
+      "type": "struct",
+      "supporting_text": "Step output cache matched by name+ordinal hash",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "6d52493f-18cc-4b2d-9460-d26d0eff0669",
+      "name": "ReplayMode",
+      "type": "enum",
+      "supporting_text": "Strict (fail on mismatch) or Lenient (forward name scan)",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "f5d3e02d-d4ac-4043-be09-84534edbe2a8",
+      "name": "ResourceHints",
+      "type": "struct",
+      "supporting_text": "Resource limits: memory_mb, cpu_millicores, timeout_seconds",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "62884944-8515-4b7b-bb86-4461a4f73f6c",
+      "name": "RiskLevel",
+      "type": "enum",
+      "supporting_text": "Low/Medium/High/Critical risk classification",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "cb427d10-7c48-49b6-9b89-ddf95a847878",
+      "name": "RunMetrics",
+      "type": "struct",
+      "supporting_text": "Single container run metrics: duration, memory, exit code",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "d4959bfe-ae08-45e8-86e9-972f7adf69f9",
+      "name": "Runner",
+      "type": "struct",
+      "supporting_text": "Executes parsed pipelines against handler registry",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "8c9cc419-0b29-47c0-b26c-7f0c3b26ea5a",
+      "name": "SafetyPolicy",
+      "type": "trait",
+      "supporting_text": "Port for validating harness changes against safety constraints",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "f4bfcde0-d0fe-44ed-9088-0a28a87b1fd5",
+      "name": "SafetyViolation",
+      "type": "enum",
+      "supporting_text": "HardCapExceeded/ForbiddenSyscall/Custom safety errors",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "8793af39-05e6-4321-9294-cddb55d9db9a",
+      "name": "SpeculationBuilder",
+      "type": "struct",
+      "supporting_text": "Fluent builder for speculation: pick_best_by, first_ok",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "name": "Step",
+      "type": "struct",
+      "supporting_text": "Single recorded execution unit with kind, status, confidence, output",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "0c56cb9c-14c5-4514-92b6-58082646b37f",
+      "name": "StepDef",
+      "type": "enum",
+      "supporting_text": "Union of step kinds: Step/Delegate/Pipe/JoinAll/RouteOnConfidence/Speculate",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "eb62c7ff-d3ea-4bfb-9b60-402f7c3db5d2",
+      "name": "StepKind",
+      "type": "enum",
+      "supporting_text": "Plain/Delegation/Branch/Speculation",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "cd2754ad-cdb1-4ed3-95d4-f3f8563a044b",
+      "name": "StepRecorder",
+      "type": "struct",
+      "supporting_text": "Step construction and accumulation with ordinal tracking",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "269a2fec-5092-411a-890e-b37c38968020",
+      "name": "StepState",
+      "type": "type_alias",
+      "supporting_text": "HashMap<String, Value> for pipe stage shared output",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "6c691279-fca2-4d4b-8c7c-b97df5238321",
+      "name": "StepStatus",
+      "type": "enum",
+      "supporting_text": "Ok/Err/Rejected/Skipped",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "e0afd61a-7d81-4422-bd54-15dc2050405f",
+      "name": "Task",
+      "type": "struct",
+      "supporting_text": "Task stored in registry with id, kind, status, input, checkpoint",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "beba38f0-386a-414a-9f46-e6c86d44122c",
+      "name": "TaskId",
+      "type": "struct",
+      "supporting_text": "ULID-based task identifier prefixed task_",
+      "source_docs": [
+        "crux_types_crate"
+      ]
+    },
+    {
+      "id": "c949e2ad-e012-4838-ae22-02780d58915a",
+      "name": "TaskRegistry",
+      "type": "struct",
+      "supporting_text": "High-level typed API for task lifecycle with CAS",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "15096888-ea1a-4660-9fca-18c9ffcf8ed5",
+      "name": "TaskStatus",
+      "type": "enum",
+      "supporting_text": "Pending/Running/Done/Failed",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "e580f8e8-797c-4af2-9fd1-b129e2cc556e",
+      "name": "TerminalApprovalGate",
+      "type": "struct",
+      "supporting_text": "Interactive stdin approval gate",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "7fdc3e0b-0c7e-4353-91a7-eac7b5778bbf",
+      "name": "TrustRegistry",
+      "type": "struct",
+      "supporting_text": "Registry of trust scores keyed by agent ID",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "23f94ec0-4299-44f7-84bd-e5d66f8118c6",
+      "name": "TrustScore",
+      "type": "struct",
+      "supporting_text": "Per-agent trust with temporal decay",
+      "source_docs": [
+        "crux_runtime_crate"
+      ]
+    },
+    {
+      "id": "143e2d08-1fac-4458-8147-e195c459a13d",
+      "name": "Vendor",
+      "type": "enum",
+      "supporting_text": "OpenAi/Anthropic/Google/Meta/Mistral/Cohere/Ollama/Local",
+      "source_docs": [
+        "crux_remaining_crates"
+      ]
+    },
+    {
+      "id": "45d7658c-b7fd-46a4-b12f-05424df23730",
+      "name": "causal_chain()",
+      "type": "method",
+      "supporting_text": "Crux<T> is inspectable via causal_chain()",
+      "source_docs": [
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "1078d852-9a93-408b-9dda-2938200e4c0a",
+      "name": "crux",
+      "type": "crate",
+      "supporting_text": "Facade crate re-exporting crux-runtime + crux-macros",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "name": "crux-agentic",
+      "type": "crate",
+      "supporting_text": "Step handlers and adapters for LLM, containers, approval",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "850ae7e0-7ccb-4205-816b-56dba5b3b7f9",
+      "name": "crux-macros",
+      "type": "crate",
+      "supporting_text": "Proc macro crate: agent, harness, evolve",
+      "source_docs": [
+        "crux_macros_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "d9ce3aa2-613e-49af-ba21-abe51e62c95d",
+      "name": "crux-model",
+      "type": "crate",
+      "supporting_text": "Canonical model ID types and per-vendor parsers",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "67d97c24-8631-4eca-afcf-84b1111484ff",
+      "name": "crux-planner",
+      "type": "crate",
+      "supporting_text": "Goal-to-pipeline generation (rule-based or LLM-backed)",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "21a401ba-3bdf-4367-abdd-4b0112671e66",
+      "name": "crux-plugin",
+      "type": "crate",
+      "supporting_text": "Subprocess plugin host for pipelines (JSON-RPC over stdin/stdout)",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "b236c391-523c-4d35-a87b-421575d7e308",
+      "name": "crux-runtime",
+      "type": "crate",
+      "supporting_text": "Core runtime crate with all domain logic",
+      "source_docs": [
+        "crux_runtime_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "b12f820d-938e-482d-9d6a-26fe4cdab3f1",
+      "name": "crux-script",
+      "type": "crate",
+      "supporting_text": "YAML-driven pipeline scripting with Runner and HandlerRegistry",
+      "source_docs": [
+        "crux_remaining_crates",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "name": "crux-types",
+      "type": "crate",
+      "supporting_text": "Wire-format types crate with minimal deps (serde, chrono, ulid)",
+      "source_docs": [
+        "crux_types_crate",
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "8a69188e-0b0c-4864-97c8-2965069be503",
+      "name": "ctrl::log",
+      "type": "handler",
+      "supporting_text": "Pipeline example uses ctrl::log handler",
+      "source_docs": [
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "6ef5e12e-5a27-49b6-a3e0-d7ac6b739b93",
+      "name": "delegations()",
+      "type": "method",
+      "supporting_text": "Crux<T> is inspectable via delegations()",
+      "source_docs": [
+        "readme_v2"
+      ]
+    },
+    {
+      "id": "4f8a34ca-9fdd-46fd-a4bc-8f6ec02af52c",
+      "name": "hash_content",
+      "type": "function",
+      "supporting_text": null,
+      "source_docs": []
+    },
+    {
+      "id": "5dd07eab-a760-4569-95f8-28e5ec138137",
+      "name": "hash_step_identity",
+      "type": "function",
+      "supporting_text": null,
+      "source_docs": []
+    },
+    {
+      "id": "20d53f36-6baf-4738-a819-12fa8c9f3117",
+      "name": "shell::capture",
+      "type": "handler",
+      "supporting_text": "Pipeline example uses shell::capture handler",
+      "source_docs": [
+        "readme_v2"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "6953be27-72e8-4d01-8935-d7bb973300fc",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "14b8f125-913e-4794-823a-eef7184aea88",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Crux<T> has field id: CruxId",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "10876486-f89f-4741-8123-8dce36f800bf",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Crux<T> has field steps: Vec<Step>",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "473de31a-4507-499d-87f0-d914f7afcde0",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "ca8020ca-b419-49e3-a360-b879e2113ce4",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Crux<T> has field value: Result<T, CruxErr>",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "a65733db-c329-4c4a-89ea-42c77a2f4880",
+      "source": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "target": "eb62c7ff-d3ea-4bfb-9b60-402f7c3db5d2",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Step has field kind: StepKind",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "0af08fea-0532-41cf-9a0b-9c57a35b438b",
+      "source": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "target": "6c691279-fca2-4d4b-8c7c-b97df5238321",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Step has field status: StepStatus",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "0152fe76-a524-4bda-be9f-e96c2ef353bd",
+      "source": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "target": "95fc8fd0-089b-4ba2-9ac6-0e912360826a",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Step has field findings: Vec<CitedFinding>",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "9e2b1e5f-3aa4-4d3c-820f-b152b833633e",
+      "source": "ca8020ca-b419-49e3-a360-b879e2113ce4",
+      "target": "6ce01743-7a00-450b-840b-8d2b6b6cd515",
+      "type": "references",
+      "confidence": 1.0,
+      "supporting_text": "CruxErr::BudgetExceeded contains budget_kind: BudgetKind",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "d9fe8ef8-730f-4ab0-8200-8a4485a011c8",
+      "source": "9f03b37a-54ae-4859-b5ec-5fc82ca1965e",
+      "target": "f032be29-382d-44d1-982a-b6c815b97b54",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "BudgetTracker wraps a Budget with consumption state",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "d90605cf-4583-40b5-b2eb-d0fffe1f4f69",
+      "source": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "target": "14b8f125-913e-4794-823a-eef7184aea88",
+      "type": "exports",
+      "confidence": 1.0,
+      "supporting_text": "crux-types defines CruxId",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "a2ec1ddb-5dce-4db9-9d95-b228dcf02528",
+      "source": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "target": "95d94f51-1e76-469c-9266-9a808317091c",
+      "type": "exports",
+      "confidence": 1.0,
+      "supporting_text": "crux-types defines Crux<T>",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "41d4dac9-5bb1-44d6-8ea2-f8c47b7576d0",
+      "source": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "target": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "type": "exports",
+      "confidence": 1.0,
+      "supporting_text": "crux-types defines Step",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "dd97b963-1b9f-4654-bf00-b224c73de20f",
+      "source": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "target": "ca8020ca-b419-49e3-a360-b879e2113ce4",
+      "type": "exports",
+      "confidence": 1.0,
+      "supporting_text": "crux-types defines CruxErr",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "336c18d5-f58f-49a2-8e2a-d04426820314",
+      "source": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "target": "f032be29-382d-44d1-982a-b6c815b97b54",
+      "type": "exports",
+      "confidence": 1.0,
+      "supporting_text": "crux-types defines Budget",
+      "source_doc": "crux_types_crate"
+    },
+    {
+      "id": "e7ecfb6a-4b13-43ad-b26b-0452ba9cdfe6",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "a6a7d460-b98f-4294-8a9b-7aa8e29cb7f9",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx implements Context trait",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "550e5896-0cfa-400b-bc83-492ba1545a34",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "cd2754ad-cdb1-4ed3-95d4-f3f8563a044b",
+      "type": "delegates_to",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx delegates step recording to StepRecorder",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "b43e4248-b433-4f24-abfa-2ed7d227f2da",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "84d27d5f-7041-419a-aca3-c9a69ca491d1",
+      "type": "delegates_to",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx delegates hook dispatch to HookRegistry",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "5b46a1c5-6c28-4d8d-8175-39102c119471",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "type": "delegates_to",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx delegates replay to ReplayCache",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "20547231-15f3-4ade-a177-507bf4845578",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "9f03b37a-54ae-4859-b5ec-5fc82ca1965e",
+      "type": "delegates_to",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx delegates budget tracking to BudgetTracker",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "07861126-a7a8-4ffc-9006-6b37c550d26e",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "9367094f-0f91-4351-864b-869bad2683bc",
+      "type": "creates",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx.delegate() returns DelegationBuilder",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "f5560249-378b-4ff5-b8f5-42d3a21f3869",
+      "source": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "target": "8793af39-05e6-4321-9294-cddb55d9db9a",
+      "type": "creates",
+      "confidence": 1.0,
+      "supporting_text": "CruxCtx.speculate() returns SpeculationBuilder",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "61871453-7754-4439-8064-71e85953d698",
+      "source": "9367094f-0f91-4351-864b-869bad2683bc",
+      "target": "5f3abf32-dedc-4825-be95-e26aeb032bdd",
+      "type": "invokes",
+      "confidence": 1.0,
+      "supporting_text": "DelegationBuilder.run() executes the delegated Agent",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "3cb1b80a-bbc9-4e12-a132-e6bd653f036f",
+      "source": "5f3abf32-dedc-4825-be95-e26aeb032bdd",
+      "target": "a6a7d460-b98f-4294-8a9b-7aa8e29cb7f9",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Agent::run takes &mut CruxCtx which implements Context",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "9a42bac7-4b89-47ac-8382-c23546c21a98",
+      "source": "5f3abf32-dedc-4825-be95-e26aeb032bdd",
+      "target": "f032be29-382d-44d1-982a-b6c815b97b54",
+      "type": "returns",
+      "confidence": 1.0,
+      "supporting_text": "Agent::budget() returns Budget",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "c9c81477-9a1f-4211-b6be-1069350cba1f",
+      "source": "c949e2ad-e012-4838-ae22-02780d58915a",
+      "target": "f44fd819-5b06-4413-b3d7-58b82e86c2d6",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "TaskRegistry<B: RegistryBackend> wraps a backend",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "64fef089-be08-4062-826e-b86410252922",
+      "source": "65042b41-0328-4ba4-9b71-7f0b0b611569",
+      "target": "f44fd819-5b06-4413-b3d7-58b82e86c2d6",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "InMemoryBackend implements RegistryBackend",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "5e4979e0-d901-47fa-a2c7-e2bfc26059ed",
+      "source": "1340a263-0397-44ee-af73-6134fd6e8447",
+      "target": "f44fd819-5b06-4413-b3d7-58b82e86c2d6",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "RedbBackend implements RegistryBackend (feature redb)",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "f442b0fb-6bc6-4536-8cf0-d60b597981bc",
+      "source": "e0afd61a-7d81-4422-bd54-15dc2050405f",
+      "target": "beba38f0-386a-414a-9f46-e6c86d44122c",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Task has field id: TaskId",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "40cb0e71-d111-4714-9599-e8be6ff09f34",
+      "source": "e0afd61a-7d81-4422-bd54-15dc2050405f",
+      "target": "15096888-ea1a-4660-9fca-18c9ffcf8ed5",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Task has field status: TaskStatus",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "e2255e50-9562-4e0f-aa60-d20d0f18e5da",
+      "source": "e0afd61a-7d81-4422-bd54-15dc2050405f",
+      "target": "95d94f51-1e76-469c-9266-9a808317091c",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "Task stores Crux<Value> as checkpoint",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "0b593e2d-9db2-4aea-bc61-318f9052e638",
+      "source": "d59dd61d-3ee5-4847-b40b-2b47867e6cc1",
+      "target": "38361e61-e044-4e90-9783-095830089197",
+      "type": "modifies",
+      "confidence": 1.0,
+      "supporting_text": "HarnessDiff.apply(base) produces new HarnessProfile",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "d2f551df-db52-476c-bad1-1560221aada3",
+      "source": "38361e61-e044-4e90-9783-095830089197",
+      "target": "f5d3e02d-d4ac-4043-be09-84534edbe2a8",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "HarnessProfile has field resources: ResourceHints",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "559d2e5b-ad8e-42a0-ab65-60ee55827e06",
+      "source": "8c9cc419-0b29-47c0-b26c-7f0c3b26ea5a",
+      "target": "d59dd61d-3ee5-4847-b40b-2b47867e6cc1",
+      "type": "validates",
+      "confidence": 1.0,
+      "supporting_text": "SafetyPolicy.validate(diff, base) checks harness changes",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "da2f9b82-b83c-4d0e-95cd-1d3352677248",
+      "source": "b236c391-523c-4d35-a87b-421575d7e308",
+      "target": "cde0cccd-e349-4e42-ae0f-9d92507c9831",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "crux-runtime re-exports all crux-types types",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "d91e963e-b671-458a-bae0-868eb8d17d12",
+      "source": "3c516ac5-3be7-41af-a26b-840371468513",
+      "target": "22d5ec29-190f-4bf2-b647-c8b164d1f0cd",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "InMemoryAudit implements AuditSink for testing",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "cecb3fa8-3479-41d6-b0c3-c697bab852b2",
+      "source": "7fdc3e0b-0c7e-4353-91a7-eac7b5778bbf",
+      "target": "23f94ec0-4299-44f7-84bd-e5d66f8118c6",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "TrustRegistry maps agent IDs to TrustScore",
+      "source_doc": "crux_runtime_crate"
+    },
+    {
+      "id": "8885124e-280e-428f-bb7c-d6c7c9c763dd",
+      "source": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "target": "5f3abf32-dedc-4825-be95-e26aeb032bdd",
+      "type": "generates_impl",
+      "confidence": 1.0,
+      "supporting_text": "Generates Agent trait implementation for the function",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "4c0bd323-06be-4b0d-baa9-d5fba7b29a80",
+      "source": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "target": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "type": "generates_usage",
+      "confidence": 1.0,
+      "supporting_text": "Generated wrapper creates CruxCtx and calls finalize",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "1d4a7c8a-229e-48d6-b2d9-ccfcf3945519",
+      "source": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "target": "c949e2ad-e012-4838-ae22-02780d58915a",
+      "type": "generates_usage",
+      "confidence": 0.8,
+      "supporting_text": "Optional run_registered() integrates with TaskRegistry",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "f2a49f4c-939f-4bd4-ac3a-e2e614692c51",
+      "source": "4854f900-da67-4039-8ef8-ce1941947754",
+      "target": "38361e61-e044-4e90-9783-095830089197",
+      "type": "generates_conversion",
+      "confidence": 1.0,
+      "supporting_text": "Generates to_profile() returning HarnessProfile",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "4c045efa-1a4b-47b1-89aa-bc55207ec389",
+      "source": "208e6fae-b143-447c-b1cc-cc0ad1316069",
+      "target": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "type": "extends",
+      "confidence": 1.0,
+      "supporting_text": "evolve delegates to agent expansion then adds marker",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "82ae21a6-24ec-498b-83a3-9c89c9cef224",
+      "source": "208e6fae-b143-447c-b1cc-cc0ad1316069",
+      "target": "4a3271c8-272a-4248-894d-3e4509de1378",
+      "type": "produces",
+      "confidence": 1.0,
+      "supporting_text": "Evolution agents return Crux<EvolutionOutcome>",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "819c8399-bc76-45d8-9341-bf0f202825b3",
+      "source": "850ae7e0-7ccb-4205-816b-56dba5b3b7f9",
+      "target": "b236c391-523c-4d35-a87b-421575d7e308",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Generated code references crux-runtime types",
+      "source_doc": "crux_macros_crate"
+    },
+    {
+      "id": "3b661f8b-428b-4f58-b226-dc4223f589a1",
+      "source": "d4959bfe-ae08-45e8-86e9-972f7adf69f9",
+      "target": "e60f2706-8aff-437f-88d0-a0734f04cef8",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Runner::new(registry) wraps HandlerRegistry",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "b4d69824-9cdc-4e05-b275-1c64889a2372",
+      "source": "d4959bfe-ae08-45e8-86e9-972f7adf69f9",
+      "target": "b56d7cf6-e8f0-4eab-acc6-4581ca02229c",
+      "type": "executes",
+      "confidence": 1.0,
+      "supporting_text": "Runner::run(pipeline, input) executes PipelineDef",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "12e23ece-8db7-444a-9172-a59e5ca91ece",
+      "source": "b56d7cf6-e8f0-4eab-acc6-4581ca02229c",
+      "target": "0c56cb9c-14c5-4514-92b6-58082646b37f",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "PipelineDef contains Vec<StepDef>",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "a8369c81-821d-497d-a6fd-a1216c4bd4e5",
+      "source": "ff8aa54e-709b-474f-8a32-29b01269454d",
+      "target": "d59dd61d-3ee5-4847-b40b-2b47867e6cc1",
+      "type": "produces",
+      "confidence": 1.0,
+      "supporting_text": "EvolutionPlanner.propose() produces HarnessDiff",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "74e879d9-65ed-4e30-af9f-833b1b4bad06",
+      "source": "ff8aa54e-709b-474f-8a32-29b01269454d",
+      "target": "cb427d10-7c48-49b6-9b89-ddf95a847878",
+      "type": "consumes",
+      "confidence": 1.0,
+      "supporting_text": "EvolutionPlanner.propose(profile, metrics) takes RunMetrics",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "659b78b6-814f-4acf-a8e8-1392c1118ce2",
+      "source": "d0f03226-ffac-4685-a824-d775d9d0dcce",
+      "target": "e60f2706-8aff-437f-88d0-a0734f04cef8",
+      "type": "integrates_with",
+      "confidence": 1.0,
+      "supporting_text": "Plugin handlers registered into HandlerRegistry",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "df61e845-9fcf-4a69-9772-122573087fbb",
+      "source": "b12f820d-938e-482d-9d6a-26fe4cdab3f1",
+      "target": "b236c391-523c-4d35-a87b-421575d7e308",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Uses CruxCtx, Crux<T>, CruxErr, Agent, ReplayMode",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "67376cf4-5606-42d4-b10f-9f32ce701203",
+      "source": "67d97c24-8631-4eca-afcf-84b1111484ff",
+      "target": "b236c391-523c-4d35-a87b-421575d7e308",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Uses HarnessDiff, HarnessProfile, ResourceHints",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "2ff78537-47e6-441e-99cc-2d00bbb4f014",
+      "source": "21a401ba-3bdf-4367-abdd-4b0112671e66",
+      "target": "b12f820d-938e-482d-9d6a-26fe4cdab3f1",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Integrates with HandlerRegistry from crux-script",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "33efa03b-a189-4a84-96b6-eedf6812412e",
+      "source": "1078d852-9a93-408b-9dda-2938200e4c0a",
+      "target": "b236c391-523c-4d35-a87b-421575d7e308",
+      "type": "re_exports",
+      "confidence": 1.0,
+      "supporting_text": "Facade re-exports all crux-runtime types",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "18e758f3-a001-415d-9479-04063c9c8949",
+      "source": "1078d852-9a93-408b-9dda-2938200e4c0a",
+      "target": "850ae7e0-7ccb-4205-816b-56dba5b3b7f9",
+      "type": "re_exports",
+      "confidence": 1.0,
+      "supporting_text": "Facade re-exports proc macros",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "66ecc2b0-3d78-4f98-b711-4196d4bea4d1",
+      "source": "4d094be4-4b73-4723-9f1c-caf0c6bf69d9",
+      "target": "0cc61716-2b59-4ff1-8a2e-f9aee895e2f4",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "AnthropicAdapter implements LlmProvider",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "278510ae-65dd-46e0-93f4-71a4863109e1",
+      "source": "eb23e677-e2bf-40ba-9b95-0fb1da3b849b",
+      "target": "0cc61716-2b59-4ff1-8a2e-f9aee895e2f4",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "OpenAiAdapter implements LlmProvider",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "b1a089ad-95e8-431d-8fb7-8adfb1c3fa38",
+      "source": "66625a30-99fe-4fd0-bc0b-2fb946f5d850",
+      "target": "0cc61716-2b59-4ff1-8a2e-f9aee895e2f4",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "OllamaAdapter implements LlmProvider",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "ac3af8ea-aa3a-47f0-9322-5b5e5b2b745c",
+      "source": "614f156b-5f57-4efa-a199-4af260a42a42",
+      "target": "b88c14d5-2e50-488a-b2cb-4c2e901f827b",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "AutoApproveGate implements ApprovalGate",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "1eb06ffc-2f6c-43c0-a09f-097260538f57",
+      "source": "e580f8e8-797c-4af2-9fd1-b129e2cc556e",
+      "target": "b88c14d5-2e50-488a-b2cb-4c2e901f827b",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "TerminalApprovalGate implements ApprovalGate",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "ae5e5c49-b8b7-4fd4-8a7e-03d4802049b5",
+      "source": "70d497a0-766e-4ed5-bab1-da191622940b",
+      "target": "ca8020ca-b419-49e3-a360-b879e2113ce4",
+      "type": "converts_to",
+      "confidence": 1.0,
+      "supporting_text": "From<AgenticError> for CruxErr",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "e729a7f9-d421-4849-b47c-894788e344f9",
+      "source": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "target": "b236c391-523c-4d35-a87b-421575d7e308",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Uses CruxCtx, Context, Agent, CruxErr",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "1484be51-54df-4532-a7fa-8266c3dfabed",
+      "source": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "target": "b12f820d-938e-482d-9d6a-26fe4cdab3f1",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Registers handlers via HandlerRegistry",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "637d8eba-4e45-4184-b5fb-ea0ae0a8222f",
+      "source": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "target": "d9ce3aa2-613e-49af-ba21-abe51e62c95d",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "Uses ProviderModelId, Vendor for model parsing",
+      "source_doc": "crux_remaining_crates"
+    },
+    {
+      "id": "35f6ddd7-7992-479d-a101-172b6e286f02",
+      "source": "1078d852-9a93-408b-9dda-2938200e4c0a",
+      "target": "d8cd6c5c-0c83-4386-930d-b192d6803d24",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "Define steps in .crux files",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "ce27cf3e-8eb8-4aa4-b6f3-e49f84db9534",
+      "source": "d8cd6c5c-0c83-4386-930d-b192d6803d24",
+      "target": "95d94f51-1e76-469c-9266-9a808317091c",
+      "type": "produces",
+      "confidence": 1.0,
+      "supporting_text": "Each step lands in a typed Crux<T> value",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "75b5116f-11df-42cb-914e-80c379addd92",
+      "source": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "target": "cf62e45e-5997-4a31-8d0a-77bc067a7dd3",
+      "type": "injects",
+      "confidence": 1.0,
+      "supporting_text": "#[crux::agent] macro injects x as CruxCtx",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "df696484-74b6-49e3-8d2c-a56e0f5d900e",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "45d7658c-b7fd-46a4-b12f-05424df23730",
+      "type": "exposes",
+      "confidence": 1.0,
+      "supporting_text": "inspectable via causal_chain()",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "adcb16e1-9d0f-472e-8766-f97a8de6f2f1",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "6ef5e12e-5a27-49b6-a3e0-d7ac6b739b93",
+      "type": "exposes",
+      "confidence": 1.0,
+      "supporting_text": "inspectable via delegations()",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "2ef3cd47-0054-42c3-907b-f5ea91822edd",
+      "source": "95d94f51-1e76-469c-9266-9a808317091c",
+      "target": "fa8b33b2-4dfe-4b4f-9f2b-54053e12ce26",
+      "type": "exposes",
+      "confidence": 1.0,
+      "supporting_text": "replayable via Crux::replay_from(snapshot)",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "73462675-d34e-4ced-a162-660223fa5d78",
+      "source": "b12f820d-938e-482d-9d6a-26fe4cdab3f1",
+      "target": "d8cd6c5c-0c83-4386-930d-b192d6803d24",
+      "type": "parses",
+      "confidence": 1.0,
+      "supporting_text": "YAML pipeline scripting",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "8e0faea2-e5bd-4532-a517-bbdeed24210f",
+      "source": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "target": "20d53f36-6baf-4738-a819-12fa8c9f3117",
+      "type": "provides",
+      "confidence": 1.0,
+      "supporting_text": "Step handlers: shell",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "cd353661-08e3-4031-b341-bb2b52e43d51",
+      "source": "7f56ca9d-fc1b-4469-9a55-cdf456d3d9ce",
+      "target": "8a69188e-0b0c-4864-97c8-2965069be503",
+      "type": "provides",
+      "confidence": 1.0,
+      "supporting_text": "Step handlers include ctrl::log",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "d909db95-6162-40b7-8bce-6f100a0628c6",
+      "source": "850ae7e0-7ccb-4205-816b-56dba5b3b7f9",
+      "target": "993908d6-3761-4b48-a64b-3f78522c7604",
+      "type": "provides",
+      "confidence": 1.0,
+      "supporting_text": "#[crux::agent] macro",
+      "source_doc": "readme_v2"
+    },
+    {
+      "id": "d6a44ec4-49c7-472d-8fff-c4bc7da191f5",
+      "source": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "target": "6d52493f-18cc-4b2d-9460-d26d0eff0669",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    },
+    {
+      "id": "91dff4db-c9f4-4dc0-bc37-021753e69ecf",
+      "source": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "target": "5dd07eab-a760-4569-95f8-28e5ec138137",
+      "type": "matched_by",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    },
+    {
+      "id": "1d475ba1-3083-46a0-b533-3d4b9c1d0f15",
+      "source": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "target": "95d94f51-1e76-469c-9266-9a808317091c",
+      "type": "seeded_from",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    },
+    {
+      "id": "0da6bc8d-148c-4764-9bbd-137c01896000",
+      "source": "cd2754ad-cdb1-4ed3-95d4-f3f8563a044b",
+      "target": "5dd07eab-a760-4569-95f8-28e5ec138137",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    },
+    {
+      "id": "ed0e0f07-dbf4-4dd4-9048-fc8aedc421fc",
+      "source": "cd2754ad-cdb1-4ed3-95d4-f3f8563a044b",
+      "target": "4f8a34ca-9fdd-46fd-a4bc-8f6ec02af52c",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    },
+    {
+      "id": "f39b753c-78d2-4846-a225-6a7ad2a1c078",
+      "source": "b18ba3fa-54be-4f5b-9f50-813f7ac7b10d",
+      "target": "784a6f91-a3f3-4554-b9e8-acc8a68cdebe",
+      "type": "caches_output_of",
+      "confidence": 1.0,
+      "supporting_text": null,
+      "source_doc": null
+    }
+  ]
+}

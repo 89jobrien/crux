@@ -89,7 +89,7 @@ impl BudgetTracker {
     }
 
     pub fn consume(&mut self, amount: u64) {
-        self.used += amount;
+        self.used = self.used.saturating_add(amount);
     }
 
     pub fn is_exceeded(&self) -> bool {

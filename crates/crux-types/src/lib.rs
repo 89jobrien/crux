@@ -17,3 +17,6 @@ pub mod error;
 pub mod id;
 pub mod recovery;
 pub mod step;
+
+#[cfg(kani)]
+mod kani_proofs;
