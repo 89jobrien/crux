@@ -9,6 +9,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "Serializable wire-format types for the crux agentic DSL"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [features]
 test-utils = []
 
