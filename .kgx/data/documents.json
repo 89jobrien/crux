@@ -1,0 +1,92 @@
+{
+  "documents": [
+    {
+      "id": "crux_macros_crate",
+      "title": "crux-macros: Proc macros for agent/harness/evolve",
+      "source": "crates/crux-macros/src/",
+      "raw_content": "crux-macros provides three proc macros: #[crux::agent] transforms async fn foo(input: T) -> Crux<U> into a FooAgent struct implementing Agent trait, a public wrapper function creating CruxCtx and calling finalize, and optionally run_registered() for TaskRegistry integration. Supports registry, checkpoint_every_step, and replay attributes. #[crux::harness] transforms a struct into a harness config with Default, Serialize/Deserialize, and to_profile() converting to HarnessProfile. #[crux::evolve] is syntactic sugar over agent with an additional is_evolution_agent() marker method. The ctx is aliased to x in the function body. Parameter handling: 0 params = Input=(), 1 param = Input=ParamType, 2+ params = Input=tuple.",
+      "chunks": [
+        {
+          "id": "44be70cc-e3bf-43b8-9c4f-048e6e6efc71",
+          "doc_id": "crux_macros_crate",
+          "text": "crux-macros provides three proc macros: #[crux::agent] transforms async fn foo(input: T) -> Crux<U> into a FooAgent struct implementing Agent trait, a public wrapper function creating CruxCtx and calling finalize, and optionally run_registered() for TaskRegistry integration. Supports registry, checkpoint_every_step, and replay attributes. #[crux::harness] transforms a struct into a harness config with Default, Serialize/Deserialize, and to_profile() converting to HarnessProfile. #[crux::evolve] is syntactic sugar over agent with an additional is_evolution_agent() marker method. The ctx is aliased to x in the function body. Parameter handling: 0 params = Input=(), 1 param = Input=ParamType, 2+ params = Input=tuple.",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "crux_remaining_crates",
+      "title": "crux-script, crux-planner, crux-model, crux-plugin, crux-agentic, crux (facade)",
+      "source": "crates/",
+      "raw_content": "crux-script: YAML-driven pipeline scripting. crux-planner: Goal-to-pipeline generation. crux-model: Canonical model IDs. crux-plugin: Subprocess plugin host. crux-agentic: Step handlers and adapters. crux: Facade re-exporting runtime + macros.",
+      "chunks": [
+        {
+          "id": "69cb721b-f998-470c-8656-4f3e5e0e7975",
+          "doc_id": "crux_remaining_crates",
+          "text": "crux-script: YAML-driven pipeline scripting. crux-planner: Goal-to-pipeline generation. crux-model: Canonical model IDs. crux-plugin: Subprocess plugin host. crux-agentic: Step handlers and adapters. crux: Facade re-exporting runtime + macros.",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "crux_runtime_crate",
+      "title": "crux-runtime: Core runtime and domain logic",
+      "source": "crates/crux-runtime/src/",
+      "raw_content": "crux-runtime contains all domain logic: traits, runtime context, combinators, registry, replay, hooks, and governance. Key types: Agent trait (port for agentic work units with Input/Output types, name, run, budget, lifecycle hooks), Context trait (DIP abstraction over CruxCtx for testability with step/hook/budget methods), CruxCtx (production runtime adapter implementing Context with step recording, hook dispatch, replay, budget tracking, event emission, and combinators), DelegationBuilder (fluent builder for sub-agent delegation with per-call budget/hooks), SpeculationBuilder (fluent builder for speculation with pick_best_by and first_ok), ReplayCache/ReplayMode (step output cache with Strict/Lenient modes matched by name+ordinal hash), HookRegistry/HookVerdict (lifecycle hook dispatch with pre-step gates, confidence/failure/budget handlers), StepRecorder/Redactor (step construction and accumulation with optional output redaction), Recovery<T> (closure-bearing hook return: Retry/RetryWith/Substitute/Escalate/Propagate/Skip/Continue), ApprovalGate/ApprovalDecision/ApprovalRequest/RiskLevel (escalation port for human-in-the-loop), SafetyPolicy/SafetyViolation (port for validating harness changes), TrustScore/TrustRegistry (per-agent trust with temporal decay), GovernancePolicy/PolicyAction (composable tool governance), AuditSink/AuditEntry/InMemoryAudit (append-only audit logging), TaskRegistry<B>/RegistryBackend/Task/TaskStatus (task persistence with CAS), InMemoryBackend/RedbBackend (storage adapters), HarnessProfile/HarnessDiff/ResourceHints (container resource profiles), EvolutionOutcome (evolution cycle result: Promoted/Discarded/Blocked/Denied). Combinators on CruxCtx: pipe (sequential chain), join_all (fan-out), route_on_confidence (validated range routing), delegate (sub-agent), speculate (race arms).",
+      "chunks": [
+        {
+          "id": "fa692968-1ed4-4f08-b628-179b05d02911",
+          "doc_id": "crux_runtime_crate",
+          "text": "crux-runtime contains all domain logic: traits, runtime context, combinators, registry, replay, hooks, and governance. Key types: Agent trait (port for agentic work units with Input/Output types, name, run, budget, lifecycle hooks), Context trait (DIP abstraction over CruxCtx for testability with step/hook/budget methods), CruxCtx (production runtime adapter implementing Context with step recording, hook dispatch, replay, budget tracking, event emission, and combinators), DelegationBuilder (fluent builder for sub-agent delegation with per-call budget/hooks), SpeculationBuilder (fluent builder for speculation with pick_best_by and first_ok), ReplayCache/ReplayMode (step output cache with Strict/Lenient modes matched by name+ordinal hash), HookRegistry/HookVerdict (lifecycle hook dispatch with pre-step gates, confidence/failure/budget handlers), StepRecorder/Redactor (step construction and accumulation with optional output redaction), Recovery<T> (closure-bearing hook return: Retry/Retry",
+          "offset": 0
+        },
+        {
+          "id": "8d0fa8ff-33db-4f96-8b8a-a9223d73a061",
+          "doc_id": "crux_runtime_crate",
+          "text": "th pre-step gates, confidence/failure/budget handlers), StepRecorder/Redactor (step construction and accumulation with optional output redaction), Recovery<T> (closure-bearing hook return: Retry/RetryWith/Substitute/Escalate/Propagate/Skip/Continue), ApprovalGate/ApprovalDecision/ApprovalRequest/RiskLevel (escalation port for human-in-the-loop), SafetyPolicy/SafetyViolation (port for validating harness changes), TrustScore/TrustRegistry (per-agent trust with temporal decay), GovernancePolicy/PolicyAction (composable tool governance), AuditSink/AuditEntry/InMemoryAudit (append-only audit logging), TaskRegistry<B>/RegistryBackend/Task/TaskStatus (task persistence with CAS), InMemoryBackend/RedbBackend (storage adapters), HarnessProfile/HarnessDiff/ResourceHints (container resource profiles), EvolutionOutcome (evolution cycle result: Promoted/Discarded/Blocked/Denied). Combinators on CruxCtx: pipe (sequential chain), join_all (fan-out), route_on_confidence (validated range routing), deleg",
+          "offset": 800
+        },
+        {
+          "id": "d7761368-70ca-444f-b8de-18419a2df847",
+          "doc_id": "crux_runtime_crate",
+          "text": " EvolutionOutcome (evolution cycle result: Promoted/Discarded/Blocked/Denied). Combinators on CruxCtx: pipe (sequential chain), join_all (fan-out), route_on_confidence (validated range routing), delegate (sub-agent), speculate (race arms).",
+          "offset": 1600
+        }
+      ]
+    },
+    {
+      "id": "crux_types_crate",
+      "title": "crux-types: Wire-format types",
+      "source": "crates/crux-types/src/",
+      "raw_content": "crux-types is the minimal-dependency wire-format crate. It defines the core data types that flow through the entire crux system. Key types: CruxId (ULID-based trace identifier, prefix crux_), TaskId (ULID-based task identifier, prefix task_), Budget (tagged enum with Tokens/Calls/Duration/CostCents/Combined variants), BudgetTracker (runtime consumption tracker with remaining/consume/is_exceeded), BudgetKind (discriminant enum), Crux<T> (execution trace fused with typed result, containing id, agent, value, steps, children, timestamps), Step (recorded unit of work with name, kind, status, confidence, timing, hashes, output, error, events, metadata, findings), StepKind (Plain/Delegation/Branch/Speculation), StepStatus (Ok/Err/Rejected/Skipped), CruxErr (tagged error enum: StepFailed/LowConfidence/BudgetExceeded/Delegation/Cancelled/Denied/ReplayMismatch), RecoveryKind (serializable subset: Retry/Skip/Propagate/Continue), FinalPhase (severity-ordered: Succeeded/Skipped/Aborted/Failed/Errored), CitedFinding (diagnostic with source citation), Delegation (extracted delegation info), StepRecord (per-step finalization data), StepState (HashMap type alias for pipe stage output). All types are serde-serializable with no async or runtime dependencies. External consumers like minibox depend on this crate to avoid pulling the full runtime.",
+      "chunks": [
+        {
+          "id": "b829ef80-0ae4-494d-b9a5-470a29741a4c",
+          "doc_id": "crux_types_crate",
+          "text": "crux-types is the minimal-dependency wire-format crate. It defines the core data types that flow through the entire crux system. Key types: CruxId (ULID-based trace identifier, prefix crux_), TaskId (ULID-based task identifier, prefix task_), Budget (tagged enum with Tokens/Calls/Duration/CostCents/Combined variants), BudgetTracker (runtime consumption tracker with remaining/consume/is_exceeded), BudgetKind (discriminant enum), Crux<T> (execution trace fused with typed result, containing id, agent, value, steps, children, timestamps), Step (recorded unit of work with name, kind, status, confidence, timing, hashes, output, error, events, metadata, findings), StepKind (Plain/Delegation/Branch/Speculation), StepStatus (Ok/Err/Rejected/Skipped), CruxErr (tagged error enum: StepFailed/LowConfidence/BudgetExceeded/Delegation/Cancelled/Denied/ReplayMismatch), RecoveryKind (serializable subset: Retry/Skip/Propagate/Continue), FinalPhase (severity-ordered: Succeeded/Skipped/Aborted/Failed/Error",
+          "offset": 0
+        },
+        {
+          "id": "09f4b6fb-e4b8-4fe6-bfe8-c04cfa30ba08",
+          "doc_id": "crux_types_crate",
+          "text": "ence/BudgetExceeded/Delegation/Cancelled/Denied/ReplayMismatch), RecoveryKind (serializable subset: Retry/Skip/Propagate/Continue), FinalPhase (severity-ordered: Succeeded/Skipped/Aborted/Failed/Errored), CitedFinding (diagnostic with source citation), Delegation (extracted delegation info), StepRecord (per-step finalization data), StepState (HashMap type alias for pipe stage output). All types are serde-serializable with no async or runtime dependencies. External consumers like minibox depend on this crate to avoid pulling the full runtime.",
+          "offset": 800
+        }
+      ]
+    },
+    {
+      "id": "readme_v2",
+      "title": "crux README v2",
+      "source": "README.md",
+      "raw_content": "crux -- Agentic workflows as YAML pipelines, backed by a typed Rust runtime. Write pipelines in YAML. Define steps, fan-out, piping, and budgets in .crux files. The runtime handles execution, tracing, and error recovery. Every step is traced. Each step lands in a typed Crux<T> value you can inspect, serialize, or replay after a crash. Rust when you need it. Drop into #[crux::agent] for custom logic, typed delegation, and confidence-based routing. Pipeline example uses shell::capture and ctrl::log handlers. Rust example uses #[crux::agent] macro which injects x as CruxCtx. Crux<T> is inspectable via causal_chain() and delegations(), serializable via serde_json, replayable via Crux::replay_from(snapshot). Version 0.2, Rust 1.88+ edition 2024. Nine crates: crux (facade), crux-runtime, crux-types, crux-macros, crux-agentic, crux-script, crux-model, crux-plugin, crux-planner. Feature flags: tokio-runtime (default), redb, tracing, baml. MIT licensed.",
+      "chunks": [
+        {
+          "id": "6fd9a395-7d11-4ce5-81b3-59d862ce59f6",
+          "doc_id": "readme_v2",
+          "text": "crux -- Agentic workflows as YAML pipelines, backed by a typed Rust runtime. Write pipelines in YAML. Define steps, fan-out, piping, and budgets in .crux files. The runtime handles execution, tracing, and error recovery. Every step is traced. Each step lands in a typed Crux<T> value you can inspect, serialize, or replay after a crash. Rust when you need it. Drop into #[crux::agent] for custom logic, typed delegation, and confidence-based routing. Pipeline example uses shell::capture and ctrl::log handlers. Rust example uses #[crux::agent] macro which injects x as CruxCtx. Crux<T> is inspectable via causal_chain() and delegations(), serializable via serde_json, replayable via Crux::replay_from(snapshot). Version 0.2, Rust 1.88+ edition 2024. Nine crates: crux (facade), crux-runtime, crux-types, crux-macros, crux-agentic, crux-script, crux-model, crux-plugin, crux-planner. Feature flags: tokio-runtime (default), redb, tracing, baml. MIT licensed.",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,9 @@ pub mod speculation;
 pub mod trust;
 pub mod types;
 
+#[cfg(kani)]
+mod kani_proofs;
+
 pub mod prelude {
     pub use crux_domain::action::{Action, StepIntent};
     pub use crux_domain::plan_result::PlanResult;
