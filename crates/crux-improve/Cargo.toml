@@ -7,9 +7,9 @@ license.workspace = true
 description = "Shared vocabulary and bridge types for crux self-improvement"
 
 [dependencies]
-crux-runtime = { path = "../crux-runtime", version = "0.2.6" }
-crux-types = { path = "../crux-types", version = "0.2.6" }
-crux-planner = { path = "../crux-planner", version = "0.2.6" }
+crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
+crux-types = { path = "../crux-types", version = "0.3.0" }
+crux-planner = { path = "../crux-planner", version = "0.3.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
