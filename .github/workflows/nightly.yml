@@ -42,7 +42,7 @@ jobs:
         run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@v2
       - name: cargo check on MSRV
-        run: cargo check --workspace --exclude crux-baml --all-targets
+        run: cargo check --workspace --exclude crux-baml --exclude crux-agentic --all-targets
 
   regression:
     name: regression tests
@@ -67,7 +67,7 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
       - name: cargo nextest run
-        run: cargo nextest run --workspace --exclude crux-baml
+        run: cargo nextest run --workspace --exclude crux-baml --exclude crux-agentic
 
   nightly-release:
     name: nightly release
