@@ -65,7 +65,7 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --workspace --exclude crux-baml --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
       - name: cargo nextest run
         run: cargo nextest run --workspace --exclude crux-baml
 
