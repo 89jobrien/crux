@@ -114,7 +114,7 @@ fn register_token_spend(registry: &mut HandlerRegistry) {
                 by_step.push((name, tokens));
             }
 
-            by_step.sort_by(|a, b| b.1.cmp(&a.1));
+            by_step.sort_by_key(|b| std::cmp::Reverse(b.1));
             let total: u64 = by_step.iter().map(|(_, t)| *t).sum();
             let top3: Vec<&str> = by_step
                 .iter()
