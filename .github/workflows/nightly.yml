@@ -56,7 +56,7 @@ jobs:
         run: |
           for crate in crux-agentic crux-baml; do
             mkdir -p "crates/$crate/src/baml_client"
-            printf '' > "crates/$crate/src/baml_client/mod.rs"
+            printf '\n' > "crates/$crate/src/baml_client/mod.rs"
           done
       - name: cargo fmt
         run: cargo fmt --all -- --check
