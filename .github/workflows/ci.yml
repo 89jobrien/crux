@@ -30,10 +30,12 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --workspace --exclude crux-baml --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
+      - name: cargo clippy (crux-agentic, lib only)
+        run: cargo clippy -p crux-agentic --lib -- -D warnings
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
-        run: cargo build --workspace --exclude crux-baml --locked --all-targets
+        run: cargo build --workspace --exclude crux-baml --exclude crux-agentic --locked --all-targets
 
   test:
     name: test
