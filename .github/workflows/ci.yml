@@ -30,10 +30,10 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude crux-baml --all-targets -- -D warnings
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
-        run: cargo build --locked --all-targets
+        run: cargo build --workspace --exclude crux-baml --locked --all-targets
 
   test:
     name: test
@@ -47,7 +47,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
       - name: cargo nextest run
-        run: cargo nextest run
+        run: cargo nextest run --workspace --exclude crux-baml
 
   deny:
     name: cargo deny
