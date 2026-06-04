@@ -8,6 +8,7 @@ use crate::handlers;
 /// Maximum normalized edit distance (0.0-1.0) for two titles to be
 /// considered duplicates. Lower = stricter matching.
 const DEDUP_DISTANCE_THRESHOLD: f64 = 0.4;
+const MIN_KEYWORD_LENGTH: usize = 4;
 
 // Priority weights for urgency scoring
 const PRIORITY_CRITICAL_WEIGHT: f64 = 4.0;
@@ -460,7 +461,7 @@ fn register_measure_overhead(registry: &mut HandlerRegistry) {
                 (0.0, 0.0)
             } else {
                 let mut sorted = durations.clone();
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                sorted.sort_by(|a, b| a.total_cmp(b));
                 let p50 = sorted[sorted.len() / 2];
                 let p95 = sorted[(sorted.len() * 95) / 100];
                 (p50, p95)
@@ -671,9 +672,9 @@ fn register_match_plans_to_commits(registry: &mut HandlerRegistry) {
                         .to_lowercase();
                     // Check if any commit message word-matches the plan title
                     let keywords: Vec<&str> = title.split_whitespace().collect();
-                    let has_commit = keywords
-                        .iter()
-                        .any(|kw| kw.len() > 4 && commit_text.to_lowercase().contains(*kw));
+                    let has_commit = keywords.iter().any(|kw| {
+                        kw.len() > MIN_KEYWORD_LENGTH && commit_text.to_lowercase().contains(*kw)
+                    });
                     let mut out = plan.clone();
                     if let Value::Object(ref mut m) = out {
                         m.insert("has_matching_commit".to_string(), Value::Bool(has_commit));

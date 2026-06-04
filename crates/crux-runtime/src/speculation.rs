@@ -99,7 +99,7 @@ where
         let mut winner_val: Option<T> = None;
         for (i, (arm_name, result)) in completed.into_iter().enumerate() {
             if i == winner_idx {
-                let val = result.unwrap();
+                let val = result.map_err(|e| CruxErr::step_failed(&arm_name, e.to_string()))?;
                 // Record the winner step
                 self.ctx.push_step(Step {
                     name: format!("{}::{}", self.name, arm_name),

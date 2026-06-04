@@ -32,8 +32,9 @@ impl FromStr for CanonicalModelId {
     type Err = ModelParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.splitn(5, ':').collect();
-        if parts.len() != 4 {
+        const FIELD_COUNT: usize = 4;
+        let parts: Vec<&str> = s.splitn(FIELD_COUNT + 1, ':').collect();
+        if parts.len() != FIELD_COUNT {
             return Err(ModelParseError::InvalidFormat(s.to_string()));
         }
         let vendor = parts[0].parse::<Vendor>()?;

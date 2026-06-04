@@ -52,8 +52,14 @@ impl PluginHost {
                 source: e,
             })?;
 
-        let stdin = child.stdin.take().expect("stdin piped");
-        let stdout = child.stdout.take().expect("stdout piped");
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| PluginError::Protocol("stdin not available after spawn".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| PluginError::Protocol("stdout not available after spawn".into()))?;
         let stdout = BufReader::new(stdout);
 
         let mut proc = PluginProcess {

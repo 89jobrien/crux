@@ -130,6 +130,8 @@ use crate::types::error::CruxErr;
 use crate::types::id::CruxId;
 use crate::types::recovery::Recovery;
 
+const DEFAULT_MAX_RETRIES: u32 = 3;
+
 pub struct CruxCtx {
     id: CruxId,
     agent_name: String,
@@ -156,7 +158,7 @@ impl CruxCtx {
             budget_tracker: BudgetTracker::new(Budget::default()),
             children: Vec::new(),
             started_at: Utc::now(),
-            max_retries: 3,
+            max_retries: DEFAULT_MAX_RETRIES,
             planner: std::sync::Arc::new(PassthroughPlanner),
             event_sender: None,
             state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
@@ -654,8 +656,7 @@ impl CruxCtx {
                     self.recorder.record_err(&rec, &e.to_string());
 
                     // Consult on_step_failure hook (mirrors execute_single).
-                    if self.hooks.has_failure_handler() {
-                        let recovery = self.hooks.check_failure(e.clone()).await.unwrap();
+                    if let Some(recovery) = self.hooks.check_failure(e.clone()).await {
                         return self
                             .apply_recovery(step_name, input_hash, 1.0, recovery)
                             .await;
@@ -829,9 +830,8 @@ impl CruxCtx {
                     error: e.to_string(),
                 });
 
-                if self.hooks.has_failure_handler() {
+                if let Some(recovery) = self.hooks.check_failure(e.clone()).await {
                     trace_hook!("on_step_failure", name);
-                    let recovery = self.hooks.check_failure(e.clone()).await.unwrap();
                     return self
                         .apply_recovery(name, input_hash, confidence, recovery)
                         .await;
@@ -1025,8 +1025,7 @@ impl Context for CruxCtx {
                 Err(e) => {
                     self.recorder.record_err(&rec, &e.to_string());
 
-                    if self.hooks.has_failure_handler() {
-                        let recovery = self.hooks.check_failure(e.clone()).await.unwrap();
+                    if let Some(recovery) = self.hooks.check_failure(e.clone()).await {
                         match recovery {
                             Recovery::Retry => continue,
                             Recovery::RetryWith(make_new) => {
@@ -2254,7 +2253,9 @@ fn eval_expr(expr: &str, state: &crux_types::step::StepState) -> anyhow::Result<
         return Ok(expr != "false");
     }
 
-    let start = expr.find("${{").unwrap();
+    let start = expr
+        .find("${{")
+        .ok_or_else(|| anyhow::anyhow!("missing '${{{{' in if_expr: {}", expr))?;
     let end = expr[start..]
         .find("}}")
         .map(|i| start + i + 2)

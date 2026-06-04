@@ -1,6 +1,7 @@
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
 const TIERS: &[&str] = &["opus", "sonnet", "haiku"];
+const MIN_PARTS_FOR_PATTERN: usize = 3;
 
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     let Some(rest) = raw.strip_prefix("claude-") else {
@@ -11,7 +12,7 @@ pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
 
     // Pattern A: claude-{tier}-{major}-{minor}[-{date}...]
     // e.g. claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5-20251001
-    if parts.len() >= 3 && TIERS.contains(&parts[0]) {
+    if parts.len() >= MIN_PARTS_FOR_PATTERN && TIERS.contains(&parts[0]) {
         let tier = parts[0];
         let major = parts[1];
         if major.chars().all(|c| c.is_ascii_digit()) {
@@ -29,7 +30,7 @@ pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
 
     // Pattern B: claude-{major}-{minor}-{tier}[-{date}...]
     // e.g. claude-3-5-haiku-20241022
-    if parts.len() >= 3 {
+    if parts.len() >= MIN_PARTS_FOR_PATTERN {
         let major = parts[0];
         let minor = parts[1];
         if major.chars().all(|c| c.is_ascii_digit())

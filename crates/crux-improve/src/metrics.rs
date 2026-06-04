@@ -2,6 +2,10 @@ use crux_types::crux_value::Crux;
 use crux_types::step::{StepKind, StepStatus};
 use serde::{Deserialize, Serialize};
 
+const EMPTY_TRACE_SCORE: f32 = 0.5;
+const SUCCESS_RATE_WEIGHT: f32 = 0.6;
+const CONFIDENCE_WEIGHT: f32 = 0.4;
+
 /// Metrics extracted from a `Crux<T>` trace. Crux-domain knowledge —
 /// consumers should not recompute these from raw steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,7 +42,7 @@ impl TraceMetrics {
                 speculation_count: 0,
                 speculation_hit_count: 0,
                 speculation_hit_rate: 0.0,
-                score: 0.5,
+                score: EMPTY_TRACE_SCORE,
             };
         }
 
@@ -71,7 +75,7 @@ impl TraceMetrics {
             0.0
         };
 
-        let score = success_rate * 0.6 + avg_confidence * 0.4;
+        let score = success_rate * SUCCESS_RATE_WEIGHT + avg_confidence * CONFIDENCE_WEIGHT;
 
         Self {
             step_count,

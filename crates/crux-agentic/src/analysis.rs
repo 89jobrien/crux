@@ -62,7 +62,7 @@ fn register_latency_profile(registry: &mut HandlerRegistry) {
             }
 
             let mut sorted: Vec<f64> = durations.iter().map(|(_, d)| *d).collect();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.total_cmp(b));
             let mid = sorted.len() / 2;
             let median = if sorted.len().is_multiple_of(2) {
                 (sorted[mid - 1] + sorted[mid]) / 2.0

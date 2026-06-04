@@ -7,6 +7,8 @@ use tokio::process::Command;
 
 use crate::error::opt_str;
 
+const DEFAULT_LOG_COUNT: u64 = 10;
+
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("git::staged_files")
@@ -74,7 +76,7 @@ pub fn register(registry: &mut HandlerRegistry) {
                 .get("args")
                 .and_then(|a| a.get("n"))
                 .and_then(|v| v.as_u64())
-                .unwrap_or(10);
+                .unwrap_or(DEFAULT_LOG_COUNT);
             let n_str = format!("-{n}");
             let out = git_cmd(&["log", &n_str, "--format=%H\t%s"], cwd.as_deref()).await?;
             let commits: Vec<Value> = out

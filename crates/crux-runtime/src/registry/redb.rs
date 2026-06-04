@@ -82,7 +82,10 @@ impl RegistryBackend for RedbBackend {
             let (key, _val) = entry.map_err(storage_err)?;
             let s: &str = key.value();
             if prefix.is_empty() || s.starts_with(prefix) {
-                ids.push(s.parse::<TaskId>().unwrap_or_else(|_| unreachable!()));
+                ids.push(
+                    s.parse::<TaskId>()
+                        .map_err(|_| RegistryErr::Storage(format!("corrupt task id: {s}")))?,
+                );
             }
         }
 

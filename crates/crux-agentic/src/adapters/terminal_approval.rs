@@ -13,12 +13,7 @@ impl AutoApproveGate {
 }
 
 fn risk_severity(level: RiskLevel) -> u8 {
-    match level {
-        RiskLevel::Low => 1,
-        RiskLevel::Medium => 2,
-        RiskLevel::High => 3,
-        RiskLevel::Critical => 4,
-    }
+    level as u8
 }
 
 impl ApprovalGate for AutoApproveGate {

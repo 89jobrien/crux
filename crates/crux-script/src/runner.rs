@@ -487,9 +487,9 @@ fn budget_from_def(def: &BudgetDef) -> Budget {
     if let Some(cost_cents) = def.cost_cents {
         budgets.push(Budget::cost_cents(cost_cents));
     }
-    match budgets.len() {
-        0 => Budget::default(),
-        1 => budgets.into_iter().next().unwrap(),
+    match budgets.as_slice() {
+        [] => Budget::default(),
+        [_] => budgets.into_iter().next().unwrap_or_default(),
         _ => Budget::combined(budgets),
     }
 }

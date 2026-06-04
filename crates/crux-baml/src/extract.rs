@@ -73,10 +73,11 @@ pub fn register_extract(registry: &mut HandlerRegistry) {
                     })?
                     .to_string();
 
+                const DEFAULT_MAX_SENTENCES: i64 = 3;
                 let max_sentences = input_map
                     .get("max_sentences")
                     .and_then(|v| v.as_i64())
-                    .unwrap_or(3);
+                    .unwrap_or(DEFAULT_MAX_SENTENCES);
 
                 let result = b.Summarize.call(text, max_sentences).await.map_err(|e| {
                     CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))

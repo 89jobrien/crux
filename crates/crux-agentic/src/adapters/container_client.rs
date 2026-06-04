@@ -120,9 +120,12 @@ impl ContainerClient for DockerContainerClient {
             .try_collect::<Vec<_>>()
             .await;
 
+        const BYTES_PER_MB: u64 = 1024 * 1024;
+        const NANOCPUS_PER_MILLICORE: u64 = 1_000_000;
+
         let host_config = HostConfig {
-            memory: Some((memory_mb * 1024 * 1024) as i64),
-            nano_cpus: Some((cpu_millicores * 1_000_000) as i64),
+            memory: Some((memory_mb * BYTES_PER_MB) as i64),
+            nano_cpus: Some((cpu_millicores * NANOCPUS_PER_MILLICORE) as i64),
             ..Default::default()
         };
 
