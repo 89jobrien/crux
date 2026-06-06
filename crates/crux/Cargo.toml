@@ -1,5 +1,5 @@
 [package]
-name = "cruxx"
+name = "crux"
 description = "An agentic DSL for Rust — inspectable, serializable, replayable agent execution"
 version.workspace = true
 edition.workspace = true
