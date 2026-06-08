@@ -8,37 +8,29 @@ use serde_json::{Value, json};
 
 use crate::registry::{build_registry, collect_handler_names, print_trace, warn_missing_env};
 
+/// Shared config for the `run` subcommand, replacing positional arg sprawl.
+pub struct RunConfig<'a> {
+    pub pipeline_arg: Option<&'a str>,
+    pub target_or_input: Option<&'a str>,
+    pub target_flag: Option<&'a str>,
+    pub input_flag: Option<&'a str>,
+    pub plugins_path: Option<&'a str>,
+    pub quiet: bool,
+    pub verbose: bool,
+    pub dry_run: bool,
+    pub replay_path: Option<&'a str>,
+    pub replay_mode_str: &'a str,
+    pub save_trace_path: Option<&'a str>,
+    pub strict: bool,
+}
+
 /// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
-#[allow(clippy::too_many_arguments)]
-pub fn cmd_run_dispatch(
-    pipeline_arg: Option<&str>,
-    target_or_input: Option<&str>,
-    target_flag: Option<&str>,
-    input_flag: Option<&str>,
-    plugins_path: Option<&str>,
-    quiet: bool,
-    verbose: bool,
-    dry_run: bool,
-    replay_path: Option<&str>,
-    replay_mode_str: &str,
-    save_trace_path: Option<&str>,
-    strict: bool,
-) {
+pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
     // Resolve pipeline path: explicit arg, or discover Cruxfile in cwd.
-    let pipeline_path = match pipeline_arg {
+    let pipeline_path = match cfg.pipeline_arg {
         Some("-") => {
             // stdin -- always a regular pipeline
-            cmd_run(
-                "-",
-                target_or_input.or(input_flag),
-                plugins_path,
-                quiet,
-                verbose,
-                replay_path,
-                replay_mode_str,
-                save_trace_path,
-                strict,
-            );
+            cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
             return;
         }
         Some(p) => p.to_string(),
@@ -60,39 +52,20 @@ pub fn cmd_run_dispatch(
     });
 
     if crux_script::is_cruxfile(&contents) {
-        let target_name = target_flag.or(target_or_input).map(String::from);
+        let target_name = cfg.target_flag.or(cfg.target_or_input).map(String::from);
 
-        if dry_run {
+        if cfg.dry_run {
             cmd_dry_run_cruxfile(&contents, &pipeline_path, target_name.as_deref());
         } else {
-            cmd_run_cruxfile(
-                &contents,
-                &pipeline_path,
-                target_name.as_deref(),
-                plugins_path,
-                quiet,
-                verbose,
-                save_trace_path,
-                strict,
-            );
+            cmd_run_cruxfile(&contents, &pipeline_path, target_name.as_deref(), cfg);
         }
     } else {
         // Regular pipeline. target_or_input is actually an input file.
-        if dry_run {
+        if cfg.dry_run {
             cmd_dry_run_pipeline(&contents, &pipeline_path);
         } else {
-            let input_path = input_flag.or(target_or_input);
-            cmd_run(
-                &pipeline_path,
-                input_path,
-                plugins_path,
-                quiet,
-                verbose,
-                replay_path,
-                replay_mode_str,
-                save_trace_path,
-                strict,
-            );
+            let input_path = cfg.input_flag.or(cfg.target_or_input);
+            cmd_run(&pipeline_path, input_path, cfg);
         }
     }
 }
@@ -166,17 +139,12 @@ fn cmd_dry_run_pipeline(contents: &str, path: &str) {
 }
 
 /// Run a Cruxfile: resolve target, execute dependency chain.
-#[allow(clippy::too_many_arguments)]
-fn cmd_run_cruxfile(
-    contents: &str,
-    path: &str,
-    target_name: Option<&str>,
-    plugins_path: Option<&str>,
-    quiet: bool,
-    verbose: bool,
-    save_trace_path: Option<&str>,
-    strict: bool,
-) {
+fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: &RunConfig<'_>) {
+    let plugins_path = cfg.plugins_path;
+    let quiet = cfg.quiet;
+    let verbose = cfg.verbose;
+    let save_trace_path = cfg.save_trace_path;
+    let strict = cfg.strict;
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
         eprintln!("error: failed to parse {path}: {e}");
         std::process::exit(1);
@@ -334,18 +302,14 @@ fn cmd_run_cruxfile(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_run(
-    pipeline_path: &str,
-    input_path: Option<&str>,
-    plugins_path: Option<&str>,
-    quiet: bool,
-    verbose: bool,
-    replay_path: Option<&str>,
-    replay_mode_str: &str,
-    save_trace_path: Option<&str>,
-    strict: bool,
-) {
+fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
+    let plugins_path = cfg.plugins_path;
+    let quiet = cfg.quiet;
+    let verbose = cfg.verbose;
+    let replay_path = cfg.replay_path;
+    let replay_mode_str = cfg.replay_mode_str;
+    let save_trace_path = cfg.save_trace_path;
+    let strict = cfg.strict;
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")

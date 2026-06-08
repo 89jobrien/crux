@@ -99,25 +99,47 @@ where
         let mut winner_val: Option<T> = None;
         for (i, (arm_name, result)) in completed.into_iter().enumerate() {
             if i == winner_idx {
-                let val = result.map_err(|e| CruxErr::step_failed(&arm_name, e.to_string()))?;
-                // Record the winner step
-                self.ctx.push_step(Step {
-                    name: format!("{}::{}", self.name, arm_name),
-                    kind: StepKind::Speculation,
-                    status: StepStatus::Ok,
-                    confidence: best_score,
-                    started_at: Utc::now(),
-                    duration_ms: 0,
-                    input_hash,
-                    content_hash: None,
-                    output: serde_json::to_value(&val).ok(),
-                    error: None,
-                    attempt: 1,
-                    events: vec![],
-                    metadata: std::collections::HashMap::new(),
-                    findings: vec![],
-                });
-                winner_val = Some(val);
+                match result {
+                    Ok(val) => {
+                        self.ctx.push_step(Step {
+                            name: format!("{}::{}", self.name, arm_name),
+                            kind: StepKind::Speculation,
+                            status: StepStatus::Ok,
+                            confidence: best_score,
+                            started_at: Utc::now(),
+                            duration_ms: 0,
+                            input_hash,
+                            content_hash: None,
+                            output: serde_json::to_value(&val).ok(),
+                            error: None,
+                            attempt: 1,
+                            events: vec![],
+                            metadata: std::collections::HashMap::new(),
+                            findings: vec![],
+                        });
+                        winner_val = Some(val);
+                    }
+                    Err(e) => {
+                        let err_msg = e.to_string();
+                        self.ctx.push_step(Step {
+                            name: format!("{}::{}", self.name, arm_name),
+                            kind: StepKind::Speculation,
+                            status: StepStatus::Err,
+                            confidence: best_score,
+                            started_at: Utc::now(),
+                            duration_ms: 0,
+                            input_hash,
+                            content_hash: None,
+                            output: None,
+                            error: Some(err_msg.clone()),
+                            attempt: 1,
+                            events: vec![],
+                            metadata: std::collections::HashMap::new(),
+                            findings: vec![],
+                        });
+                        return Err(CruxErr::step_failed(&arm_name, err_msg));
+                    }
+                }
             } else {
                 let (status, output, error) = match result {
                     Ok(val) => (StepStatus::Rejected, serde_json::to_value(&val).ok(), None),

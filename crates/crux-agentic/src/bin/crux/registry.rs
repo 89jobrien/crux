@@ -37,6 +37,7 @@ pub async fn build_registry(
         eprintln!("[crux] warning: failed to load plugins: {e}");
     }
 
+    // TODO(review): use HashSet instead of Vec + .contains() for dedup
     let mut unregistered: Vec<String> = Vec::new();
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {

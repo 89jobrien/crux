@@ -161,7 +161,10 @@ impl TargetResolver {
                     match color.get(dep.as_str()) {
                         Some(Color::Gray) => {
                             // Found a cycle. Build the cycle path.
-                            let start = path.iter().position(|&n| n == dep).unwrap_or(0);
+                            let start = path
+                                .iter()
+                                .position(|&n| n == dep)
+                                .expect("dep must be in path when Gray");
                             let mut cycle: Vec<String> =
                                 path[start..].iter().map(|s| s.to_string()).collect();
                             cycle.push(dep.clone());

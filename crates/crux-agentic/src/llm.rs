@@ -60,6 +60,8 @@ fn parse_llm_input(input: &Value, handler: &str) -> Result<ParsedInput, CruxErr>
     })
 }
 
+// TODO(review): consider taking &str for api_key — fallback handler clones
+//   per vendor attempt; clone inside only when adapter constructor needs owned
 async fn dispatch_llm(
     vendor: Vendor,
     api_key: String,
