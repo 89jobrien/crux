@@ -20,17 +20,6 @@ pub fn harness(attr: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Marks an async function as an evolution agent.
-///
-/// Same as `#[crux::agent]` but semantically marks the function as part of
-/// the harness evolution loop. Generates an `is_evolution_agent()` method.
-#[proc_macro_attribute]
-pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
-    evolve::expand(attr.into(), item.into())
-        .unwrap_or_else(|e| e.to_compile_error())
-        .into()
-}
-
 /// Marks an async function as a crux agent.
 ///
 /// Injects a `CruxCtx` binding called `x`, wraps the return type from
@@ -44,6 +33,17 @@ pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn agent(attr: TokenStream, item: TokenStream) -> TokenStream {
     agent::expand(attr.into(), item.into())
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+/// Marks an async function as an evolution agent.
+///
+/// Same as `#[crux::agent]` but semantically marks the function as part of
+/// the harness evolution loop. Generates an `is_evolution_agent()` method.
+#[proc_macro_attribute]
+pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
+    evolve::expand(attr.into(), item.into())
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
 }
