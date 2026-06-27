@@ -484,20 +484,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-improve"
-version = "0.3.0"
-dependencies = [
- "chrono",
- "crux-planner",
- "crux-runtime",
- "crux-types",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "crux-macros"
 version = "0.3.0"
 dependencies = [
