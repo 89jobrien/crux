@@ -2,10 +2,108 @@ use crate::adapters::{AnthropicAdapter, OllamaAdapter, OpenAiAdapter};
 use crate::error::opt_str;
 use crate::provider::LlmProvider;
 use crate::provider::LlmRequest;
-use crux_model::{ProviderModelId, Vendor};
+use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
+
+const DEFAULT_MAX_TOKENS: u32 = 1024;
+const DEFAULT_MODEL: &str = "gpt-4o-mini";
+const DEFAULT_SYSTEM: &str = "You are a helpful assistant.";
+const DEFAULT_BASE_URL_ANTHROPIC: &str = "https://api.anthropic.com";
+const DEFAULT_BASE_URL_OLLAMA: &str = "http://localhost:11434";
+const DEFAULT_BASE_URL_OPENAI: &str = "https://api.openai.com";
+
+struct ParsedInput {
+    prompt: String,
+    vendor: Vendor,
+    model_ref: ProviderModelRef,
+    system: String,
+    max_tokens: u32,
+    api_key: String,
+}
+
+fn parse_llm_input(input: &Value, handler: &str) -> Result<ParsedInput, CruxErr> {
+    let prompt = input
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| CruxErr::step_failed(handler, "missing 'prompt' field"))?
+        .to_string();
+
+    let vendor = opt_str(input, "provider")
+        .unwrap_or("openai")
+        .parse::<Vendor>()
+        .unwrap_or(Vendor::OpenAi);
+    let model_str = opt_str(input, "model").unwrap_or(DEFAULT_MODEL);
+    let model_ref = ProviderModelId::parse_lenient(vendor, model_str);
+    let system = opt_str(input, "system")
+        .unwrap_or(DEFAULT_SYSTEM)
+        .to_string();
+    let max_tokens = input
+        .get("args")
+        .and_then(|a| a.get("max_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(DEFAULT_MAX_TOKENS as u64) as u32;
+    let api_key = opt_str(input, "api_key")
+        .map(str::to_string)
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        .unwrap_or_default();
+
+    Ok(ParsedInput {
+        prompt,
+        vendor,
+        model_ref,
+        system,
+        max_tokens,
+        api_key,
+    })
+}
+
+// TODO(review): consider taking &str for api_key — fallback handler clones
+//   per vendor attempt; clone inside only when adapter constructor needs owned
+async fn dispatch_llm(
+    vendor: Vendor,
+    api_key: String,
+    model_ref: ProviderModelRef,
+    base_url_override: Option<&str>,
+    req: LlmRequest,
+) -> Result<crate::provider::LlmResponse, CruxErr> {
+    match vendor {
+        Vendor::Anthropic => {
+            let base_url = base_url_override
+                .unwrap_or(DEFAULT_BASE_URL_ANTHROPIC)
+                .to_string();
+            AnthropicAdapter::new(api_key, model_ref, base_url)
+                .complete(req)
+                .await
+        }
+        Vendor::Ollama => {
+            let base_url = base_url_override
+                .unwrap_or(DEFAULT_BASE_URL_OLLAMA)
+                .to_string();
+            OllamaAdapter::new(model_ref, base_url).complete(req).await
+        }
+        _ => {
+            let base_url = base_url_override
+                .unwrap_or(DEFAULT_BASE_URL_OPENAI)
+                .to_string();
+            OpenAiAdapter::new(api_key, model_ref, base_url)
+                .complete(req)
+                .await
+        }
+    }
+}
+
+fn merge_metadata(out: &mut Value, resp: &crate::provider::LlmResponse) {
+    if let Some(meta) = &resp.metadata
+        && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
+    {
+        for (k, v) in meta_obj {
+            map.insert(k.clone(), v.clone());
+        }
+    }
+}
 
 /// Register the `llm::stream` handler.
 ///
@@ -15,150 +113,40 @@ use serde_json::{Value, json};
 /// `provider`, and `streaming: false` in the output.
 pub fn register_stream(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::stream", |input: Value| async move {
-        let prompt = input
-            .get("prompt")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| CruxErr::step_failed("llm::stream", "missing 'prompt' field"))?
-            .to_string();
-
-        let vendor = opt_str(&input, "provider")
-            .unwrap_or("openai")
-            .parse::<Vendor>()
-            .unwrap_or(Vendor::OpenAi);
-        let model_str = opt_str(&input, "model").unwrap_or("gpt-4o-mini");
-        let model_ref = ProviderModelId::parse_lenient(vendor, model_str);
-        let system = opt_str(&input, "system")
-            .unwrap_or("You are a helpful assistant.")
-            .to_string();
-        let max_tokens = input
-            .get("args")
-            .and_then(|a| a.get("max_tokens"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1024) as u32;
-        let api_key = opt_str(&input, "api_key")
-            .map(str::to_string)
-            .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-            .unwrap_or_default();
-
+        let p = parse_llm_input(&input, "llm::stream")?;
+        let base_url = opt_str(&input, "base_url");
         let req = LlmRequest {
-            prompt,
-            system: Some(system),
-            max_tokens,
+            prompt: p.prompt,
+            system: Some(p.system),
+            max_tokens: p.max_tokens,
         };
 
-        let resp = match vendor {
-            Vendor::Anthropic => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("https://api.anthropic.com")
-                    .to_string();
-                AnthropicAdapter::new(api_key, model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-            Vendor::Ollama => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("http://localhost:11434")
-                    .to_string();
-                OllamaAdapter::new(model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-            _ => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("https://api.openai.com")
-                    .to_string();
-                OpenAiAdapter::new(api_key, model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-        };
+        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
 
         let mut out = json!({
             "content": resp.text,
             "provider": resp.provider,
             "streaming": false,
         });
-        if let Some(meta) = resp.metadata
-            && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
-        {
-            for (k, v) in meta_obj {
-                map.insert(k.clone(), v.clone());
-            }
-        }
+        merge_metadata(&mut out, &resp);
         Ok(out)
     });
 }
 
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::invoke", |input: Value| async move {
-        let prompt = input
-            .get("prompt")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| CruxErr::step_failed("llm::invoke", "missing 'prompt' field"))?
-            .to_string();
-
-        let vendor = opt_str(&input, "provider")
-            .unwrap_or("openai")
-            .parse::<Vendor>()
-            .unwrap_or(Vendor::OpenAi);
-        let model_str = opt_str(&input, "model").unwrap_or("gpt-4o-mini");
-        let model_ref = ProviderModelId::parse_lenient(vendor, model_str);
-        let system = opt_str(&input, "system")
-            .unwrap_or("You are a helpful assistant.")
-            .to_string();
-        let max_tokens = input
-            .get("args")
-            .and_then(|a| a.get("max_tokens"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1024) as u32;
-        let api_key = opt_str(&input, "api_key")
-            .map(str::to_string)
-            .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-            .unwrap_or_default();
-
+        let p = parse_llm_input(&input, "llm::invoke")?;
+        let base_url = opt_str(&input, "base_url");
         let req = LlmRequest {
-            prompt,
-            system: Some(system),
-            max_tokens,
+            prompt: p.prompt,
+            system: Some(p.system),
+            max_tokens: p.max_tokens,
         };
 
-        let resp = match vendor {
-            Vendor::Anthropic => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("https://api.anthropic.com")
-                    .to_string();
-                AnthropicAdapter::new(api_key, model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-            Vendor::Ollama => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("http://localhost:11434")
-                    .to_string();
-                OllamaAdapter::new(model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-            _ => {
-                let base_url = opt_str(&input, "base_url")
-                    .unwrap_or("https://api.openai.com")
-                    .to_string();
-                OpenAiAdapter::new(api_key, model_ref, base_url)
-                    .complete(req)
-                    .await?
-            }
-        };
+        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
 
         let mut out = json!({ "content": resp.text, "provider": resp.provider });
-        if let Some(meta) = resp.metadata
-            && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
-        {
-            for (k, v) in meta_obj {
-                map.insert(k.clone(), v.clone());
-            }
-        }
+        merge_metadata(&mut out, &resp);
         Ok(out)
     });
 }
@@ -189,21 +177,21 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
             })
             .unwrap_or_else(|| vec![Vendor::Anthropic, Vendor::OpenAi]);
 
-        let model_str = opt_str(&input, "model").unwrap_or("gpt-4o-mini");
+        let model_str = opt_str(&input, "model").unwrap_or(DEFAULT_MODEL);
         let system = opt_str(&input, "system")
-            .unwrap_or("You are a helpful assistant.")
+            .unwrap_or(DEFAULT_SYSTEM)
             .to_string();
         let max_tokens = input
             .get("args")
             .and_then(|a| a.get("max_tokens"))
             .and_then(|v| v.as_u64())
-            .unwrap_or(1024) as u32;
+            .unwrap_or(DEFAULT_MAX_TOKENS as u64) as u32;
         let api_key = opt_str(&input, "api_key")
             .map(str::to_string)
             .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
             .or_else(|| std::env::var("OPENAI_API_KEY").ok())
             .unwrap_or_default();
-        let base_url_override = opt_str(&input, "base_url").map(str::to_string);
+        let base_url_override = opt_str(&input, "base_url");
 
         let mut last_err =
             CruxErr::step_failed("llm::invoke_with_fallback", "no providers configured");
@@ -215,43 +203,12 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
                 system: Some(system.clone()),
                 max_tokens,
             };
-            let result = match vendor {
-                Vendor::Anthropic => {
-                    let base = base_url_override
-                        .as_deref()
-                        .unwrap_or("https://api.anthropic.com")
-                        .to_string();
-                    AnthropicAdapter::new(api_key.clone(), model_ref, base)
-                        .complete(req)
-                        .await
-                }
-                Vendor::Ollama => {
-                    let base = base_url_override
-                        .as_deref()
-                        .unwrap_or("http://localhost:11434")
-                        .to_string();
-                    OllamaAdapter::new(model_ref, base).complete(req).await
-                }
-                _ => {
-                    let base = base_url_override
-                        .as_deref()
-                        .unwrap_or("https://api.openai.com")
-                        .to_string();
-                    OpenAiAdapter::new(api_key.clone(), model_ref, base)
-                        .complete(req)
-                        .await
-                }
-            };
+            let result =
+                dispatch_llm(*vendor, api_key.clone(), model_ref, base_url_override, req).await;
             match result {
                 Ok(resp) => {
                     let mut out = json!({ "content": resp.text, "provider": resp.provider });
-                    if let Some(meta) = resp.metadata
-                        && let (Some(map), Some(meta_obj)) = (out.as_object_mut(), meta.as_object())
-                    {
-                        for (k, v) in meta_obj {
-                            map.insert(k.clone(), v.clone());
-                        }
-                    }
+                    merge_metadata(&mut out, &resp);
                     return Ok(out);
                 }
                 Err(e) => {

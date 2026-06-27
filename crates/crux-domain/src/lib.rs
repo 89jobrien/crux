@@ -115,9 +115,11 @@ mod pipeline_tests {
     use crate::event::StepEvent;
     use crate::pipeline::EventPipeline;
 
+    const TEST_CHANNEL_CAPACITY: usize = 64;
+
     #[tokio::test]
     async fn pipeline_delivers_event_to_subscriber() {
-        let pipeline = EventPipeline::new(64);
+        let pipeline = EventPipeline::new(TEST_CHANNEL_CAPACITY);
         let mut rx = pipeline.subscribe();
 
         let sender = pipeline.sender();
@@ -133,7 +135,7 @@ mod pipeline_tests {
 
     #[tokio::test]
     async fn pipeline_drops_events_when_no_subscriber() {
-        let pipeline = EventPipeline::new(64);
+        let pipeline = EventPipeline::new(TEST_CHANNEL_CAPACITY);
         let sender = pipeline.sender();
         // Sending with no subscriber should not panic or block
         let _ = sender.send(StepEvent::Started {
@@ -143,7 +145,7 @@ mod pipeline_tests {
 
     #[tokio::test]
     async fn multiple_subscribers_each_receive_event() {
-        let pipeline = EventPipeline::new(64);
+        let pipeline = EventPipeline::new(TEST_CHANNEL_CAPACITY);
         let mut rx1 = pipeline.subscribe();
         let mut rx2 = pipeline.subscribe();
 

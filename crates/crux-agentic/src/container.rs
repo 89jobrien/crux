@@ -4,6 +4,10 @@ use serde_json::{Value, json};
 
 use crate::adapters::container_client::ContainerClient;
 
+const DEFAULT_MEMORY_MB: u64 = 512;
+const DEFAULT_CPU_MILLICORES: u64 = 1000;
+const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
+
 #[cfg(feature = "docker")]
 use crate::adapters::container_client::DockerContainerClient;
 
@@ -45,9 +49,13 @@ async fn handle_run(input: Value) -> Result<Value, CruxErr> {
                 .collect()
         })
         .unwrap_or_default();
-    let memory_mb = args["memory_mb"].as_u64().unwrap_or(512);
-    let cpu_millicores = args["cpu_millicores"].as_u64().unwrap_or(1000);
-    let timeout = args["timeout_seconds"].as_u64().unwrap_or(300);
+    let memory_mb = args["memory_mb"].as_u64().unwrap_or(DEFAULT_MEMORY_MB);
+    let cpu_millicores = args["cpu_millicores"]
+        .as_u64()
+        .unwrap_or(DEFAULT_CPU_MILLICORES);
+    let timeout = args["timeout_seconds"]
+        .as_u64()
+        .unwrap_or(DEFAULT_TIMEOUT_SECONDS);
 
     let client = default_client();
     let handle = client
@@ -62,7 +70,9 @@ async fn handle_wait(input: Value) -> Result<Value, CruxErr> {
     let container_id = args["container_id"]
         .as_str()
         .ok_or_else(|| CruxErr::step_failed("container::wait", "missing container_id"))?;
-    let timeout = args["timeout_seconds"].as_u64().unwrap_or(300);
+    let timeout = args["timeout_seconds"]
+        .as_u64()
+        .unwrap_or(DEFAULT_TIMEOUT_SECONDS);
 
     let client = default_client();
     let state = client

@@ -1,5 +1,5 @@
-use crux_agentic::shell;
 use crux_script::HandlerRegistry;
+use crux_stdlib::shell;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {

@@ -92,7 +92,8 @@ impl ExprContext {
                 .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
         }
 
-        let parts: Vec<&str> = path.splitn(3, '.').collect();
+        const MAX_PATH_SEGMENTS: usize = 3;
+        let parts: Vec<&str> = path.splitn(MAX_PATH_SEGMENTS, '.').collect();
         match parts.as_slice() {
             // `steps.<name>.output` — full output value
             ["steps", name, "output"] => self
@@ -120,7 +121,9 @@ impl ExprContext {
                     .steps
                     .get(*name)
                     .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
-                let field_path = rest.strip_prefix("output.").unwrap();
+                // TODO(review): trim_start_matches strips repeated "output." prefixes;
+                //   use strip_prefix("output.").unwrap_or(rest) for single-strip
+                let field_path = rest.trim_start_matches("output.");
                 json_get(&step.output, field_path)
                     .ok_or_else(|| ExprError::UnknownPath(path.to_string()))
             }

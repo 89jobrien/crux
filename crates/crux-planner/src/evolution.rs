@@ -26,6 +26,17 @@ impl Default for EvolutionPlanner {
     }
 }
 
+/// Linux OOM killer exit code.
+const OOM_EXIT_CODE: i32 = 137;
+/// Minimum memory bump (MB) after OOM.
+const MIN_OOM_MEMORY_BUMP_MB: i64 = 128;
+/// Minimum memory bump (MB) under pressure.
+const MIN_PRESSURE_MEMORY_BUMP_MB: i64 = 64;
+/// Minimum timeout bump (seconds).
+const MIN_TIMEOUT_BUMP_SECONDS: i64 = 30;
+/// Milliseconds per second.
+const MS_PER_SECOND: u64 = 1000;
+
 impl EvolutionPlanner {
     /// Analyze metrics and produce a diff. Returns empty diff if no changes needed.
     pub fn propose(&self, profile: &HarnessProfile, metrics: &[RunMetrics]) -> HarnessDiff {
@@ -36,10 +47,13 @@ impl EvolutionPlanner {
         let mut diff = HarnessDiff::default();
 
         // Check for OOM kills (exit code 137)
-        let oom_count = metrics.iter().filter(|m| m.exit_code == 137).count();
+        let oom_count = metrics
+            .iter()
+            .filter(|m| m.exit_code == OOM_EXIT_CODE)
+            .count();
         if oom_count > 0 {
             let bump = (profile.resources.memory_mb as f64 * self.memory_bump_factor) as i64;
-            diff.memory_delta_mb = Some(bump.max(128));
+            diff.memory_delta_mb = Some(bump.max(MIN_OOM_MEMORY_BUMP_MB));
         }
 
         // Check memory pressure (non-OOM but close to limit)
@@ -48,17 +62,17 @@ impl EvolutionPlanner {
             let pressure = max_peak as f64 / profile.resources.memory_mb as f64;
             if pressure > self.memory_pressure_threshold {
                 let bump = (profile.resources.memory_mb as f64 * self.memory_bump_factor) as i64;
-                diff.memory_delta_mb = Some(bump.max(64));
+                diff.memory_delta_mb = Some(bump.max(MIN_PRESSURE_MEMORY_BUMP_MB));
             }
         }
 
         // Check timeout pressure
-        let timeout_ms = profile.resources.timeout_seconds * 1000;
+        let timeout_ms = profile.resources.timeout_seconds * MS_PER_SECOND;
         let max_duration = metrics.iter().map(|m| m.duration_ms).max().unwrap_or(0);
         let time_pressure = max_duration as f64 / timeout_ms as f64;
         if time_pressure > self.timeout_pressure_threshold {
             let bump = (profile.resources.timeout_seconds as f64 * self.timeout_bump_factor) as i64;
-            diff.timeout_delta_seconds = Some(bump.max(30));
+            diff.timeout_delta_seconds = Some(bump.max(MIN_TIMEOUT_BUMP_SECONDS));
         }
 
         diff

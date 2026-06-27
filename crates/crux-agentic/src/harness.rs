@@ -18,8 +18,9 @@ async fn handle_evolve(input: Value) -> Result<Value, CruxErr> {
     let args = input.get("args").unwrap_or(&input);
     let base: HarnessProfile = serde_json::from_value(args["base_profile"].clone())
         .map_err(|e| CruxErr::step_failed("harness::evolve", e.to_string()))?;
+    const DEFAULT_MEMORY_BUMP_MB: i64 = 256;
     let diff = HarnessDiff {
-        memory_delta_mb: Some(256),
+        memory_delta_mb: Some(DEFAULT_MEMORY_BUMP_MB),
         ..Default::default()
     };
     let proposed = diff.apply(&base);

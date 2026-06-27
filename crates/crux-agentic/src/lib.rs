@@ -16,7 +16,6 @@ pub mod llm_step;
 pub mod provider;
 pub mod review;
 pub mod rx;
-pub mod shell;
 pub mod sqlite;
 pub mod triage;
 

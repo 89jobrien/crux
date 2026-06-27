@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+const DEFAULT_TRUST_SCORE: f64 = 0.5;
+
 /// Per-agent trust score with temporal decay.
 #[derive(Debug, Clone)]
 pub struct TrustScore {
@@ -12,7 +14,7 @@ pub struct TrustScore {
 impl Default for TrustScore {
     fn default() -> Self {
         Self {
-            score: 0.5,
+            score: DEFAULT_TRUST_SCORE,
             successes: 0,
             failures: 0,
             last_updated: unix_now(),

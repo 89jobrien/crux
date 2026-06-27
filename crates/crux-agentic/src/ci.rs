@@ -233,13 +233,19 @@ fn register_classify_severity(registry: &mut HandlerRegistry) {
                 .cloned()
                 .unwrap_or_default();
 
+            const SEVERITY_COMPILE: u8 = 0;
+            const SEVERITY_DENY: u8 = 1;
+            const SEVERITY_TEST: u8 = 2;
+            const SEVERITY_CLIPPY: u8 = 3;
+            const SEVERITY_OTHER: u8 = 4;
+
             let severity_order = |source: &str| -> u8 {
                 match source {
-                    "compile" => 0,
-                    "deny" => 1,
-                    "test" => 2,
-                    "clippy" => 3,
-                    _ => 4,
+                    "compile" => SEVERITY_COMPILE,
+                    "deny" => SEVERITY_DENY,
+                    "test" => SEVERITY_TEST,
+                    "clippy" => SEVERITY_CLIPPY,
+                    _ => SEVERITY_OTHER,
                 }
             };
 

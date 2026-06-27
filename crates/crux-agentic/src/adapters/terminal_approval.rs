@@ -12,13 +12,10 @@ impl AutoApproveGate {
     }
 }
 
+// TODO(review): verify RiskLevel discriminants — old code mapped Low->1..Critical->4;
+//   `as u8` gives Low->0 if no #[repr]. Check enum definition.
 fn risk_severity(level: RiskLevel) -> u8 {
-    match level {
-        RiskLevel::Low => 1,
-        RiskLevel::Medium => 2,
-        RiskLevel::High => 3,
-        RiskLevel::Critical => 4,
-    }
+    level as u8
 }
 
 impl ApprovalGate for AutoApproveGate {

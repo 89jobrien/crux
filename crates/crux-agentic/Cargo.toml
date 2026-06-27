@@ -39,10 +39,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 [[bin]]
 name = "crux"
-path = "src/bin/crux.rs"
+path = "src/bin/crux/main.rs"
 
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
 proptest = { workspace = true }
-crux-baml = { path = "../crux-baml", version = "0.3.0" }
