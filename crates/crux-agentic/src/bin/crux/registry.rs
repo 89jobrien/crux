@@ -37,14 +37,11 @@ pub async fn build_registry(
         eprintln!("[crux] warning: failed to load plugins: {e}");
     }
 
-    // TODO(review): use HashSet instead of Vec + .contains() for dedup
-    let mut unregistered: Vec<String> = Vec::new();
+    let mut unregistered: std::collections::HashSet<String> = std::collections::HashSet::new();
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {
             if strict {
-                if !unregistered.contains(&name) {
-                    unregistered.push(name);
-                }
+                unregistered.insert(name);
             } else {
                 let n = name.clone();
                 reg.handler_value(name, move |_input: Value| {
@@ -63,9 +60,11 @@ pub async fn build_registry(
     }
 
     if !unregistered.is_empty() {
+        let mut sorted: Vec<String> = unregistered.into_iter().collect();
+        sorted.sort();
         eprintln!(
             "[crux] error: --strict mode: unregistered handlers: {}",
-            unregistered.join(", ")
+            sorted.join(", ")
         );
         std::process::exit(1);
     }
