@@ -13,7 +13,6 @@ crates = [
   { dir = "crates/crux-stdlib", pkg = "crux-stdlib" },
   { dir = "crates/crux-improve", pkg = "crux-improve" },
   { dir = "crates/crux-planner", pkg = "crux-planner" },
-  { dir = "xtask" },
 ]
 # offline_skip = "test(/.*network.*/)"
 

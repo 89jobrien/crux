@@ -1,6 +1,6 @@
 # Handoff — crux (2026-06-30)
 
-**Branch:** feat/event-bus | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
 
 ## Items
