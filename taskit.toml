@@ -13,13 +13,14 @@ crates = [
   { dir = "crates/crux-stdlib", pkg = "crux-stdlib" },
   { dir = "crates/crux-improve", pkg = "crux-improve" },
   { dir = "crates/crux-planner", pkg = "crux-planner" },
+  { dir = "xtask" },
 ]
 # offline_skip = "test(/.*network.*/)"
 
 
 [[workspace.propagation]]
 source = "crux-agentic"
-dependents = ["crux-planner"]
+dependents = ["crux", "crux-planner"]
 
 [[workspace.propagation]]
 source = "crux-baml"
@@ -27,7 +28,7 @@ dependents = ["crux-agentic"]
 
 [[workspace.propagation]]
 source = "crux-domain"
-dependents = ["crux", "crux-runtime"]
+dependents = ["crux", "crux", "crux-runtime"]
 
 [[workspace.propagation]]
 source = "crux-macros"
