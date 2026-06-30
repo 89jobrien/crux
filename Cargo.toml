@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "xtask"]
 resolver = "2"
 
 [workspace.package]
@@ -53,6 +53,23 @@ toml = "0.8"
 
 # Temp files
 tempfile = "3"
+
+# Internal crates
+crux-domain = { path = "crates/crux-domain" }
+crux-types = { path = "crates/crux-types" }
+crux-runtime = { path = "crates/crux-runtime" }
+crux-macros = { path = "crates/crux-macros" }
+crux-script = { path = "crates/crux-script" }
+crux-agentic = { path = "crates/crux-agentic" }
+crux-planner = { path = "crates/crux-planner" }
+crux-model = { path = "crates/crux-model" }
+crux-plugin = { path = "crates/crux-plugin" }
+crux-baml = { path = "crates/crux-baml" }
+crux-stdlib = { path = "crates/crux-stdlib" }
+crux-improve = { path = "crates/crux-improve" }
+
+# File patterns
+glob = "0.3"
 
 # Shared vocabulary
 slashcrux = "0.1.1"

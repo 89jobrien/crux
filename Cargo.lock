@@ -597,8 +597,10 @@ name = "crux-types"
 version = "0.3.0"
 dependencies = [
  "chrono",
+ "reqwest",
  "serde",
  "serde_json",
+ "tokio",
  "ulid",
 ]
 
@@ -2847,6 +2849,10 @@ name = "writeable"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
 
 [[package]]
 name = "yoke"

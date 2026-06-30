@@ -1,0 +1,41 @@
+pipeline: harness_rollback
+# Detect degraded harness performance and roll back to the previous profile.
+# Polls health metrics, classifies degradation, and restores the prior state.
+budget: { calls: 8 }
+
+steps:
+  - step: health_check
+    handler: shell::capture
+    args:
+      cmd: "echo '{{ input.health_cmd }}'"
+    # Poll current harness health: OOM events, restart count, latency
+
+  - step: classify_health
+    handler: llm::extract
+    args:
+      input: "{{ steps.health_check.output }}"
+      function: ClassifyHealth
+    # Score harness health as confidence 0.0-1.0
+
+  - route_on_confidence: action
+    value: "{{ steps.classify_health.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: rollback
+        steps:
+          - step: restore_profile
+            handler: harness::evolve
+            args:
+              base_profile: "{{ input.previous_profile }}"
+            # Apply the previous known-good profile
+          - step: notify
+            handler: ctrl::log
+            # Log rollback event for audit trail
+      - range: "[0.4, 0.8)"
+        label: degraded
+        handler: ctrl::log
+        # Performance below target but not critical -- monitor
+      - range: "[0.8, 1.0]"
+        label: healthy
+        handler: ctrl::log
+        # No rollback needed -- harness is performing well

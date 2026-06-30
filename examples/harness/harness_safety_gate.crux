@@ -1,0 +1,35 @@
+pipeline: harness_safety_gate
+# Validate a proposed HarnessDiff against safety policy and approval gate.
+# Routes through hard-cap validation, then approval if required.
+budget: { calls: 6 }
+
+steps:
+  - step: validate_diff
+    handler: harness::safety_validate
+    args:
+      diff: "{{ input.diff }}"
+      base_profile: "{{ input.base_profile }}"
+    # Check hard caps: memory, CPU, timeout, forbidden syscalls
+
+  - step: check_approval_required
+    handler: harness::approval_check
+    args:
+      diff: "{{ input.diff }}"
+    # Returns whether network_access_change or syscall_additions
+    # trigger the requires_approval policy gate
+
+  - route_on_confidence: gate
+    value: "{{ steps.validate_diff.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: hard_reject
+        handler: ctrl::log
+        # SafetyViolation: HardCapExceeded or ForbiddenSyscall
+      - range: "[0.3, 0.7)"
+        label: approval_required
+        handler: ctrl::log
+        # Diff is within caps but policy requires human sign-off
+      - range: "[0.7, 1.0]"
+        label: approved
+        handler: ctrl::log
+        # Within all caps and no approval needed -- proceed

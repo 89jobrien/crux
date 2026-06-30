@@ -1,0 +1,3 @@
+# crux-baml
+
+<!-- Crate documentation -->

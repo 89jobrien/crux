@@ -1,0 +1,3 @@
+# crux-model
+
+<!-- Crate documentation -->

@@ -1,0 +1,49 @@
+pipeline: harness_audit
+# Audit trail for harness profile changes. Collects diff history,
+# validates each change had proper approval, and flags anomalies.
+budget: { calls: 8 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: diff_history
+        handler: shell::capture
+        args:
+          cmd: "echo '{{ input.history_cmd }}'"
+        # Fetch recent HarnessDiff log entries
+      - step: approval_log
+        handler: shell::capture
+        args:
+          cmd: "echo '{{ input.approval_cmd }}'"
+        # Fetch approval gate decisions for each diff
+
+  - pipe: analyze
+    stages:
+      - step: match_approvals
+        handler: llm::extract
+        args:
+          input: "diffs={{ steps.gather.diff_history.output }} approvals={{ steps.gather.approval_log.output }}"
+          function: MatchApprovals
+        # Cross-reference each applied diff with its approval record
+      - step: flag_anomalies
+        handler: llm::extract
+        args:
+          input: "{{ steps.analyze.match_approvals }}"
+          function: FlagAnomalies
+        # Detect: unapproved changes, policy bypasses, repeated rollbacks
+
+  - route_on_confidence: report
+    value: "{{ steps.analyze.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: violations_found
+        handler: ctrl::log
+        # Unapproved diffs or policy bypasses detected
+      - range: "[0.4, 0.8)"
+        label: warnings
+        handler: ctrl::log
+        # Minor gaps in audit trail -- review recommended
+      - range: "[0.8, 1.0]"
+        label: clean
+        handler: ctrl::log
+        # All changes properly approved and documented

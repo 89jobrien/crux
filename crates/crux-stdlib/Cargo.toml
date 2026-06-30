@@ -13,16 +13,16 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
-crux-script = { path = "../crux-script", version = "0.3.0" }
+crux-runtime = { workspace = true } #unified
+crux-script = { workspace = true } #unified
+glob = { workspace = true } #unified
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-glob = "0.3"
 
 [dev-dependencies]
-tokio = { workspace = true }
-tempfile = { workspace = true }
 proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

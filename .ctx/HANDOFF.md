@@ -1,6 +1,6 @@
-# Handoff — crux (2026-06-29)
+# Handoff — crux (2026-06-30)
 
-**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** feat/event-bus | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
 
 ## Items
@@ -10,7 +10,17 @@ EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bri
 
 ## Log
 
-- 20260628:000000: AIL run (2 iterations), dead code removal, develop→main merge, memory banking, pattern learner, health assessment. 538 tests pass, 0 clippy warnings, 18 real TODOs, 0 ring violations.
+- 20260628:000000: Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
+concrete nu rewrites; added heredoc git-commit + gh api --jq exceptions to coursers
+rules; smoke tests 5/5 pass, archived. Dead code audit + removal: dropped crux-improve
+crate (650 lines, 0 external callers), crux-agentic shell shim, duplicate crux-baml
+dev-dep. develop -> main merge: fixed dirty Cargo.lock, resolved remote divergence on
+origin/main. Memory banking: populated .ctx/memory-bank/ with 6 standard files +
+patterns.md + mistakes.md. Pattern learner: 11 patterns extracted (skill co-occurrence,
+crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
+0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
+baseline written to .health-baseline.json.
+
 - 20260504:224027: handjobs triage — 0 open items, 0 GH issues synced
 - 20260424:212604: Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit, pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased commits to origin.
 

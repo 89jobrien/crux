@@ -17,31 +17,31 @@ baml = ["dep:crux-baml"]
 docker = ["dep:bollard", "dep:futures"]
 
 [dependencies]
-crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
-crux-model = { path = "../crux-model", version = "0.3.0" }
-crux-script = { path = "../crux-script", version = "0.3.0" }
+bollard = { version = "0.20", optional = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+crux-baml = { workspace = true, optional = true } #unified
+crux-model = { workspace = true } #unified
+crux-plugin = { workspace = true } #unified
+crux-runtime = { workspace = true } #unified
+crux-script = { workspace = true } #unified
+crux-stdlib = { workspace = true } #unified
+futures = { workspace = true, optional = true }
+glob = { workspace = true } #unified
+ignore = "0.4"
+reqwest = { workspace = true }
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-chrono = { workspace = true }
-tokio = { workspace = true }
-reqwest = { workspace = true }
 thiserror = { workspace = true }
-glob = "0.3"
-ignore = "0.4"
-clap = { workspace = true }
-crux-baml = { path = "../crux-baml", version = "0.3.0", optional = true }
-bollard = { version = "0.20", optional = true }
-futures = { workspace = true, optional = true }
-crux-plugin = { path = "../crux-plugin", version = "0.3.0" }
-crux-stdlib = { path = "../crux-stdlib", version = "0.3.0" }
-rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { workspace = true }
 
 [[bin]]
 name = "crux"
 path = "src/bin/crux/main.rs"
 
 [dev-dependencies]
-tokio = { workspace = true }
-tempfile = { workspace = true }
 proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

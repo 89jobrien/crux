@@ -1,0 +1,3 @@
+# crux-domain
+
+<!-- Crate documentation -->

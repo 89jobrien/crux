@@ -14,9 +14,13 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [features]
 test-utils = []
+vector-http = ["dep:reqwest", "dep:tokio"]
+vector-file = []
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 ulid = { workspace = true, features = ["serde"] }
+reqwest = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }

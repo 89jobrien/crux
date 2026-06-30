@@ -1,0 +1,3 @@
+# crux-planner
+
+<!-- Crate documentation -->

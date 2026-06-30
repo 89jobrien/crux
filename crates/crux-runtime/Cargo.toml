@@ -18,26 +18,26 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 [dependencies]
 # Always required — Step.output is Option<Value>, children are type-erased
 anyhow = { workspace = true }
-crux-types = { path = "../crux-types", version = "0.3.0" }
-crux-domain = { path = "../crux-domain", version = "0.3.0", features = ["tokio-pipeline"] }
+chrono = { workspace = true }
+crux-domain = { workspace = true, features = ["tokio-pipeline"] } #unified
+crux-types = { workspace = true } #unified
+futures = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-chrono = { workspace = true }
 slashcrux = { workspace = true }
+tempfile = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 # Optional
 tokio = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
-redb = { workspace = true, optional = true }
-tempfile = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
+crux-types = { workspace = true, features = ["test-utils"] } #unified
 futures = { workspace = true }
 proptest = { workspace = true }
-crux-types = { path = "../crux-types", version = "0.3.0", features = ["test-utils"] }
+tokio = { workspace = true }
 
 [features]
 default = ["tokio-runtime"]

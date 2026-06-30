@@ -1,0 +1,3 @@
+# crux-agentic
+
+<!-- Crate documentation -->

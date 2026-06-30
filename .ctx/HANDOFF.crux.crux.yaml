@@ -1,84 +1,79 @@
 project: crux
 id: crux
-updated: 2026-06-29
+updated: 2026-06-30
 items: []
 log:
-  - date: 20260628:000000
-    summary: |
-      Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
-      concrete nu rewrites; added heredoc git-commit + gh api --jq exceptions to coursers
-      rules; smoke tests 5/5 pass, archived. Dead code audit + removal: dropped crux-improve
-      crate (650 lines, 0 external callers), crux-agentic shell shim, duplicate crux-baml
-      dev-dep. develop -> main merge: fixed dirty Cargo.lock, resolved remote divergence on
-      origin/main. Memory banking: populated .ctx/memory-bank/ with 6 standard files +
-      patterns.md + mistakes.md. Pattern learner: 11 patterns extracted (skill co-occurrence,
-      crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
-      0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
-      baseline written to .health-baseline.json.
-    commits:
-      - f7feff3
-      - 9b1e7f2
-      - f81c711
-      - e34a9ef
-      - 81cc10b
-  - date: 20260504:224027
-    summary: handjobs triage — 0 open items, 0 GH issues synced
-    commits: []
-  - date: 20260424:212604
-    summary: |
-      Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit, pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased commits to origin.
-    commits: []
-    session: 34
-  - date: 20260424:103928
-    summary: |
-      Ran jcmd:ideate audit — cross-checked all 7 superpowers plan docs against git log. All plans confirmed landed (crux-agentic, plugin-system, orchestrator-patterns, crux-types-extraction, hook-tests, agentic-substrate, sqlite-handlers). Added `status: done` header to all 7 plan files.
-    commits: []
-    session: 32
-  - date: 20260424:000000
-    summary: |
-      Major feature session — crux-domain scaffolded with Planner trait (Passthrough/DenyAll/Simulate), Action enum, PlanResult, StepEvent typed enum. EventPipeline with broadcast fan-out wired into CruxCtx step dispatch. RulePlanner (deterministic Path B) added to crux-planner. crux-agentic: plan subcommand, --plugins flag via PluginDiscovery port, handler name constants, jq limitation docs. substrate: Step.metadata field + end-to-end integration tests. All plan items marked status: done in handoff.
-    commits: []
-    session: 33
-  - date: 20260423:000000
-    summary: |
-      Implemented rx handler module for crux-agentic: rx::run (execute scripts from registry by name) and rx::list (enumerate registered scripts). Registry types mirror rx-registry-json without dependency. Fixed planner test signature (added missing extra_handlers arg). Updated README and crux-capabilities.md. All 453 tests pass.
-    commits: []
-    session: 31
-  - date: 20260422:164000
-    summary: |
-      Implemented crux-agentic sqlite handler module: 7 CRUD handlers (open, close, prepare, execute, query, bind, step). Added sqlite handler name constants (OPEN, CLOSE, PREPARE, EXECUTE, QUERY, BIND, STEP) and comprehensive test coverage: property tests for CRUD invariants (32 property tests) validating lifecycle safety (connection → statement → execution), state transitions, and error conditions; fuzz target for arg-parsing resilience. All 360+ tests pass, clippy clean. gitignore updated: .env exclusion in root and crates/ dir.
-    commits: []
-    session: 30
-  - date: 20260422:130205
-    summary: |
-      Generalized .githooks/pre-commit and pre-push hooks (removed Maestro-specific hardcoding; auto-detect crates via cargo metadata; env-var config for shared crates, conformance test pattern, TF dir). Added bats test suite (18 tests: 9 pre-commit, 9 pre-push) and fuzz.sh (filename classifier + git-ref input fuzzer, 500 iterations). Wired just test-hooks and fuzz-hooks recipes. All 18 tests pass.
-    commits: []
-    session: 29
-  - date: 20260421:052733
-    summary: |
-      Structured BAML types for GeneratePipeline planner (PipelineDef replacing raw yaml string); serde_yaml serialization in planner.rs. Added SafetyPolicy + ApprovalGate conformance tests (45 total, all pass). Fixed 7 example pipeline audit issues: DelegateNode field rename in planner.baml, llm::extract function args in 5 enrich pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote conformance spec to .ctx/conformance-spec.md.
-    commits: []
-    session: 28
-  - date: 20260420:173838
-    summary: |
-      Closed all 3 remaining HANDOFF items. crux-27 (stale macro doc comments) was already fixed in prior commit cae63c9. crux-28: added DockerContainerClient adapter behind docker feature (bollard 0.20, resource limits, integration test). crux-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated on baml. 360/360 tests pass, CI clean.
-    commits: []
-    session: 27
-  - date: 20260420:132031
-    summary: |
-      Revised walkthrough series (all 8 docs) for clarity and crux rename consistency. Updated CLAUDE.md workspace structure with new crates (crux-planner, crux-model, crux-plugin, crux-script) and new proc macros (#[crux::harness], #[crux::evolve]). 358/358 tests pass.
-    commits: []
-    session: 26
-  - date: 20260420:131613
-    summary: |
-      Implemented orchestrator patterns: HarnessProfile, ResourceHints, HarnessDiff, EvolutionOutcome, SafetyPolicy trait, ApprovalGate trait, on_approval_required hook (crux-core); container::run/wait, harness::evolve/canary handlers, AutoApproveGate, TerminalApprovalGate (crux-agentic); EvolutionPlanner + RunMetrics (crux-planner); #[crux::harness] and #[crux::evolve] proc macros (crux-macros). Updated all docs. 358/358 tests pass, clippy clean.
-    commits: []
-    session: 25
-  - date: 2026-05-10
-    summary: "e301435 feat(crux-improve): add bridge crate with shared vocabulary types"
-    commits: []
-  - date: 2026-05-04
-    summary: reviewed CI workflow — no changes made this session
-    commits: []
+- date: 20260628:000000
+  summary: |
+    Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
+    concrete nu rewrites; added heredoc git-commit + gh api --jq exceptions to coursers
+    rules; smoke tests 5/5 pass, archived. Dead code audit + removal: dropped crux-improve
+    crate (650 lines, 0 external callers), crux-agentic shell shim, duplicate crux-baml
+    dev-dep. develop -> main merge: fixed dirty Cargo.lock, resolved remote divergence on
+    origin/main. Memory banking: populated .ctx/memory-bank/ with 6 standard files +
+    patterns.md + mistakes.md. Pattern learner: 11 patterns extracted (skill co-occurrence,
+    crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
+    0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
+    baseline written to .health-baseline.json.
+  commits: []
+- date: 20260504:224027
+  summary: handjobs triage — 0 open items, 0 GH issues synced
+  commits: []
+- date: 20260424:212604
+  summary: |
+    Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit, pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased commits to origin.
+  commits: []
+  session: 34
+- date: 20260424:103928
+  summary: |
+    Ran jcmd:ideate audit — cross-checked all 7 superpowers plan docs against git log. All plans confirmed landed (crux-agentic, plugin-system, orchestrator-patterns, crux-types-extraction, hook-tests, agentic-substrate, sqlite-handlers). Added `status: done` header to all 7 plan files.
+  commits: []
+  session: 32
+- date: 20260424:000000
+  summary: |
+    Major feature session — crux-domain scaffolded with Planner trait (Passthrough/DenyAll/Simulate), Action enum, PlanResult, StepEvent typed enum. EventPipeline with broadcast fan-out wired into CruxCtx step dispatch. RulePlanner (deterministic Path B) added to crux-planner. crux-agentic: plan subcommand, --plugins flag via PluginDiscovery port, handler name constants, jq limitation docs. substrate: Step.metadata field + end-to-end integration tests. All plan items marked status: done in handoff.
+  commits: []
+  session: 33
+- date: 20260423:000000
+  summary: |
+    Implemented rx handler module for crux-agentic: rx::run (execute scripts from registry by name) and rx::list (enumerate registered scripts). Registry types mirror rx-registry-json without dependency. Fixed planner test signature (added missing extra_handlers arg). Updated README and crux-capabilities.md. All 453 tests pass.
+  commits: []
+  session: 31
+- date: 20260422:164000
+  summary: |
+    Implemented crux-agentic sqlite handler module: 7 CRUD handlers (open, close, prepare, execute, query, bind, step). Added sqlite handler name constants (OPEN, CLOSE, PREPARE, EXECUTE, QUERY, BIND, STEP) and comprehensive test coverage: property tests for CRUD invariants (32 property tests) validating lifecycle safety (connection → statement → execution), state transitions, and error conditions; fuzz target for arg-parsing resilience. All 360+ tests pass, clippy clean. gitignore updated: .env exclusion in root and crates/ dir.
+  commits: []
+  session: 30
+- date: 20260422:130205
+  summary: |
+    Generalized .githooks/pre-commit and pre-push hooks (removed Maestro-specific hardcoding; auto-detect crates via cargo metadata; env-var config for shared crates, conformance test pattern, TF dir). Added bats test suite (18 tests: 9 pre-commit, 9 pre-push) and fuzz.sh (filename classifier + git-ref input fuzzer, 500 iterations). Wired just test-hooks and fuzz-hooks recipes. All 18 tests pass.
+  commits: []
+  session: 29
+- date: 20260421:052733
+  summary: |
+    Structured BAML types for GeneratePipeline planner (PipelineDef replacing raw yaml string); serde_yaml serialization in planner.rs. Added SafetyPolicy + ApprovalGate conformance tests (45 total, all pass). Fixed 7 example pipeline audit issues: DelegateNode field rename in planner.baml, llm::extract function args in 5 enrich pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote conformance spec to .ctx/conformance-spec.md.
+  commits: []
+  session: 28
+- date: 20260420:173838
+  summary: |
+    Closed all 3 remaining HANDOFF items. crux-27 (stale macro doc comments) was already fixed in prior commit cae63c9. crux-28: added DockerContainerClient adapter behind docker feature (bollard 0.20, resource limits, integration test). crux-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated on baml. 360/360 tests pass, CI clean.
+  commits: []
+  session: 27
+- date: 20260420:132031
+  summary: |
+    Revised walkthrough series (all 8 docs) for clarity and crux rename consistency. Updated CLAUDE.md workspace structure with new crates (crux-planner, crux-model, crux-plugin, crux-script) and new proc macros (#[crux::harness], #[crux::evolve]). 358/358 tests pass.
+  commits: []
+  session: 26
+- date: 20260420:131613
+  summary: |
+    Implemented orchestrator patterns: HarnessProfile, ResourceHints, HarnessDiff, EvolutionOutcome, SafetyPolicy trait, ApprovalGate trait, on_approval_required hook (crux-core); container::run/wait, harness::evolve/canary handlers, AutoApproveGate, TerminalApprovalGate (crux-agentic); EvolutionPlanner + RunMetrics (crux-planner); #[crux::harness] and #[crux::evolve] proc macros (crux-macros). Updated all docs. 358/358 tests pass, clippy clean.
+  commits: []
+  session: 25
+- date: 2026-05-10
+  summary: 'e301435 feat(crux-improve): add bridge crate with shared vocabulary types'
+  commits: []
+- date: 2026-05-04
+  summary: reviewed CI workflow — no changes made this session
+  commits: []
 description: |
   An agentic DSL for Rust — inspectable, serializable, replayable agent execution. Rust-embedded DSL (macros, traits, types) for writing agentic programs where every step, branch, delegation, and failure is a first-class value.

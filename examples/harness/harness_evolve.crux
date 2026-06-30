@@ -1,0 +1,51 @@
+pipeline: harness_evolve
+# Propose resource changes to a harness profile based on run metrics.
+# Computes a diff, validates against safety policy, and routes to
+# approval or auto-apply depending on the change severity.
+budget: { calls: 8 }
+
+steps:
+  - join_all: gather
+    arms:
+      - step: collect_metrics
+        handler: shell::capture
+        args:
+          cmd: "echo '{{ input.metrics_cmd }}'"
+        # Fetch recent run metrics (OOM count, p95 latency, CPU saturation)
+      - step: load_profile
+        handler: harness::evolve
+        args:
+          base_profile: "{{ input.base_profile }}"
+        # Compute a HarnessDiff from current profile + metrics
+
+  - pipe: validate
+    stages:
+      - step: safety_check
+        handler: harness::safety_validate
+        args:
+          diff: "{{ steps.gather.load_profile.diff }}"
+          base_profile: "{{ input.base_profile }}"
+        # Validate proposed diff against SafetyPolicy hard caps
+      - step: classify_risk
+        handler: llm::extract
+        args:
+          input: "{{ steps.gather }}"
+          function: ClassifyRisk
+        # Score the change: memory-only bumps are low risk,
+        # syscall/network changes are high risk
+
+  - route_on_confidence: apply
+    value: "{{ steps.validate.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: rejected
+        handler: ctrl::log
+        # SafetyPolicy rejected the diff -- no changes applied
+      - range: "[0.4, 0.7)"
+        label: needs_approval
+        handler: ctrl::log
+        # Diff requires human/gate approval before applying
+      - range: "[0.7, 1.0]"
+        label: auto_apply
+        handler: ctrl::log
+        # Low-risk diff within policy -- apply immediately
