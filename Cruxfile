@@ -1,49 +1,18 @@
-project: crux
-default: ci
-budget: { calls: 50 }
-
-targets:
-  lint:
-    steps:
-      - join_all: checks
-        arms:
-          - step: fmt_check
-            handler: shell::capture
-            args:
-              cmd: "cargo fmt --all -- --check"
-          - step: clippy
-            handler: shell::capture
-            args:
-              cmd: "cargo clippy --all-targets -- -D warnings"
-          - step: cargo_deny
-            handler: shell::exec
-            args:
-              cmd: "cargo deny check 2>/dev/null || true"
-
-  build:
-    depends: [lint]
-    steps:
-      - step: compile
-        handler: shell::capture
-        args:
-          cmd: "RUSTFLAGS='-D warnings' cargo build --all-targets"
-
-  test:
-    depends: [build]
-    budget: { calls: 10 }
-    steps:
-      - step: nextest
-        handler: shell::capture
-        args:
-          cmd: "cargo nextest run"
-
-  lint_crux:
-    depends: [build]
-    steps:
-      - step: validate_pipelines
-        handler: shell::exec
-        args:
-          cmd: "find examples -name '*.crux' -print0 | xargs -0 cargo run --quiet -p crux-agentic --bin crux -- check"
-
-  ci:
-    depends: [lint, build, test, lint_crux]
+# Cruxfile for crux
+name: crux-ci
+steps:
+  - name: self-check
+    run: taskit self-check
+    gate: true
+  - name: fmt --check
+    run: taskit fmt --check
+  - name: lint
+    run: taskit lint
+  - name: compile-tests
+    run: taskit compile-tests
+  - name: test
+    run: taskit test
+  - name: check-deps
+    run: taskit check-deps
+  - name: check-protocol-drift
+    run: taskit check-protocol-drift

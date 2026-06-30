@@ -1,0 +1,54 @@
+pipeline: harness_canary
+# Canary-deploy a candidate harness profile alongside the baseline.
+# Run a workload on both, compare metrics, and promote or rollback.
+budget: { calls: 10 }
+
+steps:
+  - step: prepare_candidate
+    handler: harness::evolve
+    args:
+      base_profile: "{{ input.base_profile }}"
+    # Generate candidate profile from proposed diff
+
+  - join_all: run_canary
+    arms:
+      - step: baseline_run
+        handler: shell::capture
+        args:
+          cmd: "echo 'baseline metrics placeholder'"
+        # Run workload against current production profile
+      - step: candidate_run
+        handler: shell::capture
+        args:
+          cmd: "echo 'candidate metrics placeholder'"
+        # Run same workload against candidate profile
+
+  - pipe: compare
+    stages:
+      - step: diff_metrics
+        handler: llm::extract
+        args:
+          input: "baseline={{ steps.run_canary.baseline_run.output }} candidate={{ steps.run_canary.candidate_run.output }}"
+          function: CompareMetrics
+        # Compare p95 latency, error rate, resource usage
+      - step: promote_decision
+        handler: harness::canary
+        args:
+          candidate_profile: "{{ steps.prepare_candidate.proposed_profile }}"
+        # Decide: Promoted, Rejected, or Extended canary window
+
+  - route_on_confidence: outcome
+    value: "{{ steps.compare.confidence }}"
+    routes:
+      - range: "[0.0, 0.3)"
+        label: rollback
+        handler: ctrl::log
+        # Candidate worse than baseline -- discard
+      - range: "[0.3, 0.7)"
+        label: extend
+        handler: ctrl::log
+        # Inconclusive -- extend canary window for more data
+      - range: "[0.7, 1.0]"
+        label: promote
+        handler: ctrl::log
+        # Candidate outperforms baseline -- promote to production

@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "quality_score": 0.8512493753123439,
+  "iosp_score": 0.9802955665024631,
+  "violations": 12,
+  "total": 966,
+  "complexity_warnings": 0,
+  "magic_number_warnings": 4,
+  "nesting_depth_warnings": 0,
+  "function_length_warnings": 0,
+  "unsafe_warnings": 0,
+  "error_handling_warnings": 17,
+  "duplicate_groups": 8,
+  "dead_code_warnings": 0,
+  "fragment_groups": 6,
+  "boilerplate_warnings": 40,
+  "srp_struct_warnings": 4,
+  "srp_module_warnings": 9,
+  "wildcard_import_warnings": 0,
+  "sdp_violations": 0,
+  "coupling_warnings": 0,
+  "coupling_cycles": 0,
+  "tq_no_assertion_warnings": 1,
+  "tq_no_sut_warnings": 4,
+  "tq_untested_warnings": 6,
+  "tq_uncovered_warnings": 0,
+  "tq_untested_logic_warnings": 0,
+  "structural_srp_warnings": 5,
+  "structural_coupling_warnings": 1,
+  "total_findings": 124,
+  "violation_details": [
+    {
+      "name": "CruxErr::is_transient",
+      "file": "crates/crux-types/src/error.rs",
+      "line": 71
+    },
+    {
+      "name": "TraceMetrics::extract",
+      "file": "crates/crux-improve/src/metrics.rs",
+      "line": 29
+    },
+    {
+      "name": "replay_compare",
+      "file": "crates/crux-improve/src/comparison.rs",
+      "line": 28
+    },
+    {
+      "name": "TargetResolver::new",
+      "file": "crates/crux-script/src/resolve.rs",
+      "line": 49
+    },
+    {
+      "name": "TargetResolver::check_cycles",
+      "file": "crates/crux-script/src/resolve.rs",
+      "line": 135
+    },
+    {
+      "name": "validate_cruxfile",
+      "file": "crates/crux-script/src/validator.rs",
+      "line": 172
+    },
+    {
+      "name": "cmd_run_dispatch",
+      "file": "crates/crux-agentic/src/bin/crux.rs",
+      "line": 312
+    },
+    {
+      "name": "cmd_dry_run_cruxfile",
+      "file": "crates/crux-agentic/src/bin/crux.rs",
+      "line": 400
+    },
+    {
+      "name": "cmd_run_cruxfile",
+      "file": "crates/crux-agentic/src/bin/crux.rs",
+      "line": 469
+    },
+    {
+      "name": "unwrap_shell_results",
+      "file": "crates/crux-stdlib/src/ctrl.rs",
+      "line": 8
+    },
+    {
+      "name": "eval_jq",
+      "file": "crates/crux-stdlib/src/json.rs",
+      "line": 299
+    },
+    {
+      "name": "traverse",
+      "file": "crates/crux-stdlib/src/json.rs",
+      "line": 404
+    }
+  ]
+}

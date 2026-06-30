@@ -1,0 +1,75 @@
+generated: 2026-06-26
+since_days: 30
+sessions_scanned: 13
+total_commands: 399
+top_supported:
+  - command: rustqual .
+    count: 33
+    rule: no-bash-use-nu
+    est_savings_tokens: 10199
+  - command: gh run
+    count: 26
+    rule: no-bash-use-nu
+    rtk_equivalent: rtk gh
+    est_savings_tokens: 20020
+    est_savings_pct: 80
+  - command: git diff
+    count: 21
+    rule: no-bash-use-nu
+    rtk_equivalent: rtk git
+    est_savings_tokens: 21908
+    est_savings_pct: 70
+  - command: git add
+    count: 20
+    rule: no-bash-use-nu
+    est_savings_tokens: 1074
+  - command: git checkout
+    count: 18
+    rule: no-bash-use-nu
+    est_savings_tokens: 4635
+  - command: gh api
+    count: 17
+    rule: no-bash-use-nu
+    est_savings_tokens: 1145
+  - command: cargo check
+    count: 15
+    rule: no-bash-use-nu
+    rtk_equivalent: rtk cargo
+    est_savings_tokens: 3215
+    est_savings_pct: 80
+  - command: cargo kani
+    count: 15
+    rule: no-bash-use-nu
+    est_savings_tokens: 3916
+  - command: cargo nextest
+    count: 12
+    rule: no-bash-use-nu
+    est_savings_tokens: 2099
+  - command: cargo clippy
+    count: 12
+    rule: no-bash-use-nu
+    est_savings_tokens: 1068
+  - command: doob todo
+    count: 10
+    rule: no-bash-use-nu
+    est_savings_tokens: 1540
+  - command: git status
+    count: 10
+    rule: no-bash-use-nu
+    est_savings_tokens: 572
+  - command: grep
+    count: 8
+    rule: no-bash-use-nu
+    est_savings_tokens: 405
+  - command: git
+    count: 8
+    rule: no-bash-use-nu
+    est_savings_tokens: 2100
+  - command: git commit
+    count: 7
+    rule: no-bash-use-nu
+    est_savings_tokens: 2503
+top_unhandled:
+  - base_command: nu
+    count: 34
+    example: "nu -c \"'{\\\"tool_name\\\": \\\"Bash\\\", \\\"tool_input\\\": {\\\"command\\\": \\\"grep -c foo Ca..."

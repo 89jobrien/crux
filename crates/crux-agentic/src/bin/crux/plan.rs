@@ -5,7 +5,6 @@ use crux_script::schema::PipelineDef;
 #[cfg(feature = "baml")]
 use serde_json::{Value, json};
 
-// TODO(review): add `use super::OutputType;` to avoid repeated `super::OutputType` refs
 #[cfg(feature = "baml")]
 use crate::registry::{collect_handler_names, resolve_plugins_path};
 

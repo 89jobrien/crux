@@ -13,6 +13,7 @@ pub mod testing;
 
 pub mod budget;
 pub mod crux_value;
+pub mod emission;
 pub mod error;
 pub mod id;
 pub mod recovery;

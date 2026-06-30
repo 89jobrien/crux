@@ -31,3 +31,12 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     extract::register_decompose(registry);
     planner::register_plan(registry, plugin_handlers);
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn register_all_does_not_panic() {
+        let mut registry = crux_script::HandlerRegistry::new();
+        super::register_all(&mut registry);
+    }
+}

@@ -1,0 +1,166 @@
+[workspace]
+crates = [
+  { dir = "crates/crux", pkg = "crux" },
+  { dir = "crates/crux-domain", pkg = "crux-domain" },
+  { dir = "crates/crux-macros", pkg = "crux-macros" },
+  { dir = "crates/crux-runtime", pkg = "crux-runtime" },
+  { dir = "crates/crux-types", pkg = "crux-types" },
+  { dir = "crates/crux-script", pkg = "crux-script" },
+  { dir = "crates/crux-agentic", pkg = "crux-agentic" },
+  { dir = "crates/crux-baml", pkg = "crux-baml" },
+  { dir = "crates/crux-model", pkg = "crux-model" },
+  { dir = "crates/crux-plugin", pkg = "crux-plugin" },
+  { dir = "crates/crux-stdlib", pkg = "crux-stdlib" },
+  { dir = "crates/crux-improve", pkg = "crux-improve" },
+  { dir = "crates/crux-planner", pkg = "crux-planner" },
+  { dir = "xtask" },
+]
+# offline_skip = "test(/.*network.*/)"
+
+
+[[workspace.propagation]]
+source = "crux-agentic"
+dependents = ["crux", "crux-planner"]
+
+[[workspace.propagation]]
+source = "crux-baml"
+dependents = ["crux-agentic"]
+
+[[workspace.propagation]]
+source = "crux-domain"
+dependents = ["crux", "crux", "crux-runtime"]
+
+[[workspace.propagation]]
+source = "crux-macros"
+dependents = ["crux"]
+
+[[workspace.propagation]]
+source = "crux-model"
+dependents = ["crux-agentic"]
+
+[[workspace.propagation]]
+source = "crux-plugin"
+dependents = ["crux-agentic"]
+
+[[workspace.propagation]]
+source = "crux-runtime"
+dependents = ["crux", "crux-script", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib", "crux-planner"]
+
+[[workspace.propagation]]
+source = "crux-script"
+dependents = ["crux", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib"]
+
+[[workspace.propagation]]
+source = "crux-stdlib"
+dependents = ["crux-agentic"]
+
+[[workspace.propagation]]
+source = "crux-types"
+dependents = ["crux-runtime", "crux-runtime", "crux-improve"]
+
+[protocol]
+# lockfile = "taskit-protocol.lock"
+
+[[protocol.surfaces]]
+name = "crux-domain-planner"
+path = "crates/crux-domain/src/planner.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-recorder"
+path = "crates/crux-runtime/src/recorder.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-audit"
+path = "crates/crux-runtime/src/audit.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-safety"
+path = "crates/crux-runtime/src/safety.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-agent"
+path = "crates/crux-runtime/src/agent.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-approval"
+path = "crates/crux-runtime/src/approval.rs"
+
+[[protocol.surfaces]]
+name = "crux-runtime-context"
+path = "crates/crux-runtime/src/context.rs"
+
+[[protocol.surfaces]]
+name = "crux-types-emission"
+path = "crates/crux-types/src/emission.rs"
+
+[[protocol.surfaces]]
+name = "crux-script-step_runner"
+path = "crates/crux-script/src/step_runner.rs"
+
+[[protocol.surfaces]]
+name = "crux-agentic-provider"
+path = "crates/crux-agentic/src/provider.rs"
+
+[[protocol.surfaces]]
+name = "crux-plugin-discovery"
+path = "crates/crux-plugin/src/discovery.rs"
+
+[[protocol.surfaces]]
+name = "crux-improve-lib"
+path = "crates/crux-improve/src/lib.rs"
+
+[[protocol.surfaces]]
+name = "crux-planner-generator"
+path = "crates/crux-planner/src/generator.rs"
+
+# Coverage enforcement: run `taskit coverage` to check.
+#
+# [coverage]
+# crate_name = "my-crate"
+# threshold = 80.0
+
+[ci]
+# cruxfile = "Cruxfile"
+
+[[ci.steps]]
+name = "self-check"
+cmd = "self-check"
+gate = true
+
+[[ci.steps]]
+name = "fmt --check"
+cmd = "fmt --check"
+gate = false
+
+[[ci.steps]]
+name = "lint"
+cmd = "lint"
+gate = false
+
+[[ci.steps]]
+name = "compile-tests"
+cmd = "compile-tests"
+gate = false
+
+[[ci.steps]]
+name = "test"
+cmd = "test"
+gate = false
+
+[[ci.steps]]
+name = "check-deps"
+cmd = "check-deps"
+gate = false
+
+[[ci.steps]]
+name = "check-protocol-drift"
+cmd = "check-protocol-drift"
+gate = false
+
+# Git flow: main (stable) -> staging (work) -> release (publish) -> main
+# These are the defaults; uncomment to customize branch names.
+#
+# [flow]
+# main = "main"
+# staging = "staging"
+# release = "release"

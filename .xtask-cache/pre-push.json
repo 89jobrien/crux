@@ -1,0 +1,15 @@
+{
+  "head_sha": "f5f63a83ee81ef0687d399d9f0644bc6b9382fbf",
+  "crates": [
+    "crux",
+    "crux-agentic",
+    "crux-baml",
+    "crux-improve",
+    "crux-planner",
+    "crux-plugin",
+    "crux-runtime",
+    "crux-script",
+    "crux-stdlib",
+    "crux-types"
+  ]
+}

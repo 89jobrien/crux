@@ -12,17 +12,17 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+crux-runtime = { workspace = true } #unified
+crux-script = { workspace = true } #unified
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
-crux-script = { path = "../crux-script", version = "0.3.0" }
 
 [dev-dependencies]
-tokio = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [[bin]]
 name = "echo-plugin"

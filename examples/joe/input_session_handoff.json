@@ -1,0 +1,42 @@
+{
+  "dirty_repos": ["crux", "minibox", "dotfiles"],
+  "handoffs": [
+    ".ctx/HANDOFF.crux.crux.yaml",
+    "../minibox/.ctx/HANDOFF.minibox.minibox.yaml"
+  ],
+  "pending_todos": [
+    {
+      "id": "todo-001",
+      "repo": "crux",
+      "title": "Replace ctrl::noop placeholders in example pipelines",
+      "priority": "P2",
+      "status": "pending",
+      "created": "2026-06-28"
+    },
+    {
+      "id": "todo-002",
+      "repo": "minibox",
+      "title": "Fix cross-compile CI for musl target",
+      "priority": "P1",
+      "status": "pending",
+      "created": "2026-06-25"
+    },
+    {
+      "id": "todo-003",
+      "repo": "crux",
+      "title": "Add redb feature gate to CI matrix",
+      "priority": "P3",
+      "status": "pending",
+      "created": "2026-06-29"
+    }
+  ],
+  "stale_worktrees": [
+    "minibox: /Users/joe/dev/minibox-wt-fix-ssh (branch: fix/ssh-timeout, 3 days old)"
+  ],
+  "recent_activity": [
+    "crux: 18f4596 feat: add crux-improve crate",
+    "crux: 986afe2 docs(ctx): EOD handoff",
+    "minibox: a1b2c3d fix: tailscale auth retry logic",
+    "dotfiles: d4e5f6a chore: update nu config"
+  ]
+}

@@ -15,11 +15,11 @@ categories.workspace = true
 baml = ["dep:crux-agentic"]
 
 [dependencies]
-crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
+crux-agentic = { workspace = true, features = ["baml"], optional = true } #unified
+crux-runtime = { workspace = true } #unified
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-crux-agentic = { path = "../crux-agentic", version = "0.3.0", optional = true, features = ["baml"] }
 
 [dev-dependencies]
 indoc = "2.0.7"
