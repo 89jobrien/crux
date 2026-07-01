@@ -18,6 +18,7 @@ sqlite = ["dep:rusqlite"]
 
 [dependencies]
 chrono = { workspace = true }
+clap = { workspace = true }
 crux-runtime = { workspace = true }
 crux-types = { workspace = true }
 dirs = { workspace = true }
