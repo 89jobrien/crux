@@ -494,3 +494,142 @@ mod tests {
         assert!(matches!(err, TaskErr::CycleDetected));
     }
 }
+
+#[cfg(test)]
+mod proptest_tasks {
+    use super::*;
+    use crux_runtime::registry::InMemoryBackend;
+    use crux_types::task::Priority;
+    use proptest::prelude::*;
+
+    fn arb_priority() -> impl Strategy<Value = Priority> {
+        prop_oneof![
+            Just(Priority::P0),
+            Just(Priority::P1),
+            Just(Priority::P2),
+            Just(Priority::P3),
+        ]
+    }
+
+    fn arb_spec() -> impl Strategy<Value = TaskSpec> {
+        ("[a-z]{3,20}", arb_priority()).prop_map(|(title, priority)| TaskSpec {
+            title,
+            description: None,
+            priority,
+            status: ProjectTaskStatus::Open,
+            labels: vec![],
+            dependencies: vec![],
+        })
+    }
+
+    fn rt() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    proptest! {
+        #[test]
+        fn task_without_deps_is_ready(spec in arb_spec()) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                let id = mgr.add(spec).await.unwrap();
+                let ready = mgr.ready().await.unwrap();
+                prop_assert!(ready.iter().any(|t| t.id == id));
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn self_block_always_fails(spec in arb_spec()) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                let id = mgr.add(spec).await.unwrap();
+                let err = mgr.block(&id, &id).await.unwrap_err();
+                prop_assert!(matches!(err, TaskErr::CycleDetected));
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn blocked_task_not_ready_unless_blocker_done(
+            spec_a in arb_spec(),
+            spec_b in arb_spec(),
+        ) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                let a = mgr.add(spec_a).await.unwrap();
+                let b = mgr.add(spec_b).await.unwrap();
+                mgr.block(&b, &a).await.unwrap();
+
+                let ready = mgr.ready().await.unwrap();
+                prop_assert!(!ready.iter().any(|t| t.id == b));
+
+                mgr.update(&a, TaskPatch {
+                    status: Some(ProjectTaskStatus::Done),
+                    ..Default::default()
+                }).await.unwrap();
+                let ready = mgr.ready().await.unwrap();
+                prop_assert!(ready.iter().any(|t| t.id == b));
+
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn by_priority_is_sorted(
+            specs in prop::collection::vec(arb_spec(), 2..10),
+        ) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                for spec in specs {
+                    mgr.add(spec).await.unwrap();
+                }
+                let sorted = mgr.by_priority().await.unwrap();
+                for window in sorted.windows(2) {
+                    prop_assert!(window[0].spec.priority <= window[1].spec.priority);
+                }
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn stats_total_matches_count(
+            specs in prop::collection::vec(arb_spec(), 0..20),
+        ) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                let count = specs.len();
+                for spec in specs {
+                    mgr.add(spec).await.unwrap();
+                }
+                let stats = mgr.stats().await.unwrap();
+                prop_assert_eq!(stats.total, count);
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn stats_by_status_sums_to_total(
+            specs in prop::collection::vec(arb_spec(), 1..15),
+        ) {
+            let rt = rt();
+            rt.block_on(async {
+                let mgr = TaskManager::new(InMemoryBackend::new());
+                for spec in specs {
+                    mgr.add(spec).await.unwrap();
+                }
+                let stats = mgr.stats().await.unwrap();
+                let sum: usize = stats.by_status.values().sum();
+                prop_assert_eq!(sum, stats.total);
+                Ok(())
+            })?;
+        }
+    }
+}
