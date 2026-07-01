@@ -1,13 +1,16 @@
 //! TaskManager -- high-level project task management.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use crux_runtime::registry::RegistryBackend;
 use crux_types::id::TaskId;
+use crux_types::task::DependencyKind;
 
 use crate::error::TaskErr;
-use crate::types::{ProjectTask, TaskFilter, TaskPatch, TaskSpec, TaskStats};
+use crate::types::{
+    Dependency, ProjectTask, ProjectTaskStatus, TaskFilter, TaskPatch, TaskSpec, TaskStats,
+};
 
 /// High-level project task manager, generic over storage backend.
 pub struct TaskManager<B: RegistryBackend> {
@@ -104,11 +107,47 @@ impl<B: RegistryBackend> TaskManager<B> {
     }
 
     pub async fn ready(&self) -> Result<Vec<ProjectTask>, TaskErr> {
-        todo!()
+        let all = self.all_tasks().await?;
+        let mut result = Vec::new();
+        for task in &all {
+            if task.spec.status != ProjectTaskStatus::Open
+                && task.spec.status != ProjectTaskStatus::InProgress
+            {
+                continue;
+            }
+            if task.spec.dependencies.is_empty() {
+                result.push(task.clone());
+                continue;
+            }
+            let all_resolved = task.spec.dependencies.iter().all(|dep| {
+                all.iter()
+                    .find(|t| t.id == dep.target)
+                    .is_none_or(|t| t.spec.status == ProjectTaskStatus::Done)
+            });
+            if all_resolved {
+                result.push(task.clone());
+            }
+        }
+        Ok(result)
     }
 
     pub async fn blocked(&self) -> Result<Vec<ProjectTask>, TaskErr> {
-        todo!()
+        let all = self.all_tasks().await?;
+        let mut result = Vec::new();
+        for task in &all {
+            if task.spec.dependencies.is_empty() {
+                continue;
+            }
+            let has_unresolved = task.spec.dependencies.iter().any(|dep| {
+                all.iter()
+                    .find(|t| t.id == dep.target)
+                    .is_some_and(|t| t.spec.status != ProjectTaskStatus::Done)
+            });
+            if has_unresolved {
+                result.push(task.clone());
+            }
+        }
+        Ok(result)
     }
 
     pub async fn by_priority(&self) -> Result<Vec<ProjectTask>, TaskErr> {
@@ -117,12 +156,34 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(tasks)
     }
 
-    pub async fn block(&self, _id: &TaskId, _blocker: &TaskId) -> Result<(), TaskErr> {
-        todo!()
+    pub async fn block(&self, id: &TaskId, blocker: &TaskId) -> Result<(), TaskErr> {
+        if id == blocker {
+            return Err(TaskErr::CycleDetected);
+        }
+        self.check_cycle(id, blocker).await?;
+        let dep = Dependency {
+            target: blocker.clone(),
+            kind: DependencyKind::BlockedBy,
+        };
+        self.update(
+            id,
+            TaskPatch {
+                add_dependencies: vec![dep],
+                ..Default::default()
+            },
+        )
+        .await
     }
 
-    pub async fn unblock(&self, _id: &TaskId, _blocker: &TaskId) -> Result<(), TaskErr> {
-        todo!()
+    pub async fn unblock(&self, id: &TaskId, blocker: &TaskId) -> Result<(), TaskErr> {
+        self.update(
+            id,
+            TaskPatch {
+                remove_dependencies: vec![blocker.clone()],
+                ..Default::default()
+            },
+        )
+        .await
     }
 
     pub async fn stats(&self) -> Result<TaskStats, TaskErr> {
@@ -138,6 +199,25 @@ impl<B: RegistryBackend> TaskManager<B> {
             by_status,
             by_priority,
         })
+    }
+
+    async fn check_cycle(&self, target: &TaskId, from: &TaskId) -> Result<(), TaskErr> {
+        let mut visited = HashSet::new();
+        let mut stack = vec![from.clone()];
+        while let Some(current) = stack.pop() {
+            if current == *target {
+                return Err(TaskErr::CycleDetected);
+            }
+            if !visited.insert(current.clone()) {
+                continue;
+            }
+            if let Ok(task) = self.get(&current).await {
+                for dep in &task.spec.dependencies {
+                    stack.push(dep.target.clone());
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn all_tasks(&self) -> Result<Vec<ProjectTask>, TaskErr> {
@@ -318,5 +398,99 @@ mod tests {
         mgr.add(done_spec).await.unwrap();
         let s = mgr.stats().await.unwrap();
         assert_eq!(s.total, 2);
+    }
+
+    #[tokio::test]
+    async fn block_adds_dependency() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        let task = mgr.get(&id2).await.unwrap();
+        assert_eq!(task.spec.dependencies.len(), 1);
+        assert_eq!(task.spec.dependencies[0].target, id1);
+    }
+
+    #[tokio::test]
+    async fn unblock_removes_dependency() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        mgr.unblock(&id2, &id1).await.unwrap();
+        let task = mgr.get(&id2).await.unwrap();
+        assert!(task.spec.dependencies.is_empty());
+    }
+
+    #[tokio::test]
+    async fn ready_returns_unblocked_open_tasks() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        let ready = mgr.ready().await.unwrap();
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, id1);
+    }
+
+    #[tokio::test]
+    async fn ready_includes_task_after_blocker_done() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        mgr.update(
+            &id1,
+            TaskPatch {
+                status: Some(ProjectTaskStatus::Done),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let ready = mgr.ready().await.unwrap();
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, id2);
+    }
+
+    #[tokio::test]
+    async fn blocked_returns_tasks_with_unresolved_deps() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        let blocked = mgr.blocked().await.unwrap();
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(blocked[0].id, id2);
+    }
+
+    #[tokio::test]
+    async fn cycle_detection_self_block() {
+        let mgr = make_manager();
+        let id = mgr.add(sample_spec()).await.unwrap();
+        let err = mgr.block(&id, &id).await.unwrap_err();
+        assert!(matches!(err, TaskErr::CycleDetected));
+    }
+
+    #[tokio::test]
+    async fn cycle_detection_two_node() {
+        let mgr = make_manager();
+        let id1 = mgr.add(sample_spec()).await.unwrap();
+        let id2 = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&id2, &id1).await.unwrap();
+        let err = mgr.block(&id1, &id2).await.unwrap_err();
+        assert!(matches!(err, TaskErr::CycleDetected));
+    }
+
+    #[tokio::test]
+    async fn cycle_detection_three_node() {
+        let mgr = make_manager();
+        let a = mgr.add(sample_spec()).await.unwrap();
+        let b = mgr.add(sample_spec()).await.unwrap();
+        let c = mgr.add(sample_spec()).await.unwrap();
+        mgr.block(&b, &a).await.unwrap();
+        mgr.block(&c, &b).await.unwrap();
+        let err = mgr.block(&a, &c).await.unwrap_err();
+        assert!(matches!(err, TaskErr::CycleDetected));
     }
 }
