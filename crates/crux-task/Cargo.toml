@@ -1,0 +1,37 @@
+[package]
+name = "crux-task"
+description = "Project task management for crux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["redb"]
+redb = ["dep:redb"]
+sqlite = ["dep:rusqlite"]
+
+[dependencies]
+chrono = { workspace = true }
+crux-runtime = { workspace = true }
+crux-types = { workspace = true }
+dirs = { workspace = true }
+redb = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+ulid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[[bin]]
+name = "crux-task"
+path = "src/bin/crux-task/main.rs"
