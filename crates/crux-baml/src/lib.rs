@@ -18,6 +18,8 @@ pub mod planner;
 
 use crux_script::HandlerRegistry;
 
+pub use extract::{register_extract, register_extract_with};
+
 /// Register all BAML-backed handlers.
 pub fn register_all(registry: &mut HandlerRegistry) {
     extract::register_extract(registry);

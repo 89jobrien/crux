@@ -13,9 +13,9 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 crux-runtime = { workspace = true } #unified
 indexmap = { version = "2", features = ["serde"] }
+miette = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }

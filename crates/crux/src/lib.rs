@@ -1,7 +1,9 @@
+//! crux — an agentic DSL for Rust.
+//!
+//! Re-exports crux-runtime types and crux-macros proc macros.
+//! This is the primary entry point for consumers of the crux workspace.
+
 pub use crux_macros::{agent, evolve, harness};
-/// crux — an agentic DSL for Rust.
-///
-/// Re-exports crux-runtime types and crux-macros proc macros.
 pub use crux_runtime::*;
 
 // TODO(#83): trace visualization / export — add a Crux<T>::to_mermaid() or similar

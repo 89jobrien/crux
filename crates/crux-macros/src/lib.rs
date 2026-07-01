@@ -1,8 +1,9 @@
-/// crux-macros: proc macros for the crux agentic DSL.
-///
-/// Provides `#[crux::agent]`, `#[crux::harness]`, and `#[crux::evolve]`
-/// which transform async functions and structs into traced, replayable
-/// agent functions and harness profile configs.
+//! crux-macros: proc macros for the crux agentic DSL.
+//!
+//! Provides `#[crux::agent]`, `#[crux::harness]`, and `#[crux::evolve]`
+//! which transform async functions and structs into traced, replayable
+//! agent functions and harness profile configs.
+
 use proc_macro::TokenStream;
 
 mod agent;

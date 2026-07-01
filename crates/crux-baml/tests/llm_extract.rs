@@ -1,16 +1,18 @@
-// Integration tests for llm::extract handler.
-//
-// These tests make real API calls and are skipped when OPENAI_API_KEY is not set.
-// Run with: cargo nextest run -p crux-baml
+// Integration tests for llm::extract handler using MockLLM — no API keys required.
 
-use crux_baml::extract::register_extract;
+mod mock_baml;
+
+use crate::mock_baml::{MockBamlServer, default_responses};
+use crux_baml::register_extract_with;
 use crux_script::{HandlerRegistry, handler_output::HandlerOutput};
 use serde_json::json;
 
-fn make_registry() -> HandlerRegistry {
+async fn make_mock_registry() -> (MockBamlServer, HandlerRegistry) {
+    let server = MockBamlServer::start(default_responses()).await;
+    let client_registry = server.registry();
     let mut registry = HandlerRegistry::new();
-    register_extract(&mut registry);
-    registry
+    register_extract_with(&mut registry, Some(client_registry));
+    (server, registry)
 }
 
 async fn invoke(
@@ -23,21 +25,9 @@ async fn invoke(
     Ok(handler(input).await?)
 }
 
-/// Returns true when an OpenAI API key is available in the environment.
-fn has_api_key() -> bool {
-    std::env::var("OPENAI_API_KEY")
-        .map(|k| !k.is_empty())
-        .unwrap_or(false)
-}
-
 #[tokio::test]
 async fn extract_entities_returns_structured_output() {
-    if !has_api_key() {
-        eprintln!("OPENAI_API_KEY not set — skipping llm::extract integration test");
-        return;
-    }
-
-    let registry = make_registry();
+    let (_server, registry) = make_mock_registry().await;
     let input = json!({
         "function": "ExtractEntities",
         "input": {
@@ -67,12 +57,7 @@ async fn extract_entities_returns_structured_output() {
 
 #[tokio::test]
 async fn summarize_returns_structured_output() {
-    if !has_api_key() {
-        eprintln!("OPENAI_API_KEY not set — skipping llm::extract integration test");
-        return;
-    }
-
-    let registry = make_registry();
+    let (_server, registry) = make_mock_registry().await;
     let input = json!({
         "function": "Summarize",
         "input": {
@@ -102,12 +87,7 @@ async fn summarize_returns_structured_output() {
 
 #[tokio::test]
 async fn classify_returns_structured_output() {
-    if !has_api_key() {
-        eprintln!("OPENAI_API_KEY not set — skipping llm::extract integration test");
-        return;
-    }
-
-    let registry = make_registry();
+    let (_server, registry) = make_mock_registry().await;
     let input = json!({
         "function": "Classify",
         "input": {
@@ -138,13 +118,10 @@ async fn classify_returns_structured_output() {
     );
 }
 
-/// ClassifyCIFailure must be reachable without API keys (error path only).
+/// ClassifyCIFailure wiring test — verifies the handler recognises the function.
 #[tokio::test]
 async fn classify_ci_failure_is_wired() {
-    // We cannot call BAML without API keys, but we can verify the handler
-    // does NOT return "unknown BAML function" for ClassifyCIFailure.
-    // With no API key the error will be a BAML/HTTP error, not an "unknown function" error.
-    let registry = make_registry();
+    let (_server, registry) = make_mock_registry().await;
     let input = json!({
         "function": "ClassifyCIFailure",
         "input": {
@@ -158,8 +135,6 @@ async fn classify_ci_failure_is_wired() {
         .expect("llm::extract handler must be registered");
 
     let result = handler(input).await;
-    // Either succeeds (if API key available) OR fails with a BAML/API error.
-    // It must NOT fail with "unknown BAML function 'ClassifyCIFailure'".
     if let Err(e) = result {
         let msg = e.to_string();
         assert!(
@@ -171,7 +146,7 @@ async fn classify_ci_failure_is_wired() {
 
 #[tokio::test]
 async fn unknown_function_returns_error() {
-    let registry = make_registry();
+    let (_server, registry) = make_mock_registry().await;
     let input = json!({
         "function": "NonExistentFunction",
         "input": { "text": "hello" }

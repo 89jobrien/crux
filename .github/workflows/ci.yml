@@ -29,4 +29,4 @@ jobs:
         run: cargo install taskit || cargo install --path .
 
       - name: Run CI pipeline
-        run: cargo xtask ci --fail-fast
+        run: taskit ci --fail-fast

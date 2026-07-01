@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use miette::Diagnostic;
 use serde_json::Value;
 
 use crate::metadata::ArgType;
@@ -13,6 +14,15 @@ use crate::schema::{ArmDef, CruxfileDef, PipelineDef, RouteBranch, StepDef};
 pub enum DiagnosticSeverity {
     Error,
     Warning,
+}
+
+impl DiagnosticSeverity {
+    fn to_miette_severity(self) -> miette::Severity {
+        match self {
+            DiagnosticSeverity::Error => miette::Severity::Error,
+            DiagnosticSeverity::Warning => miette::Severity::Warning,
+        }
+    }
 }
 
 impl fmt::Display for DiagnosticSeverity {
@@ -49,6 +59,28 @@ impl ValidationDiagnostic {
     }
 }
 
+impl fmt::Display for ValidationDiagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.location, self.message)
+    }
+}
+
+impl std::error::Error for ValidationDiagnostic {}
+
+impl Diagnostic for ValidationDiagnostic {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(format!("crux::validate::{}", self.severity)))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(self.severity.to_miette_severity())
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        None
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ValidationReport {
     pub diagnostics: Vec<ValidationDiagnostic>,
@@ -75,6 +107,45 @@ impl ValidationReport {
 
     fn push(&mut self, diagnostic: ValidationDiagnostic) {
         self.diagnostics.push(diagnostic);
+    }
+}
+
+impl fmt::Display for ValidationReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "pipeline validation: {} error(s), {} warning(s)",
+            self.error_count(),
+            self.warning_count()
+        )
+    }
+}
+
+impl std::error::Error for ValidationReport {}
+
+impl Diagnostic for ValidationReport {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new("crux::validate"))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        if self.error_count() > 0 {
+            Some(miette::Severity::Error)
+        } else if self.warning_count() > 0 {
+            Some(miette::Severity::Warning)
+        } else {
+            Some(miette::Severity::Advice)
+        }
+    }
+
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
+        if self.diagnostics.is_empty() {
+            None
+        } else {
+            Some(Box::new(
+                self.diagnostics.iter().map(|d| d as &dyn Diagnostic),
+            ))
+        }
     }
 }
 

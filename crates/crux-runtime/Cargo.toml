@@ -17,11 +17,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [dependencies]
 # Always required — Step.output is Option<Value>, children are type-erased
-anyhow = { workspace = true }
 chrono = { workspace = true }
 crux-domain = { workspace = true, features = ["tokio-pipeline"] } #unified
-crux-types = { workspace = true } #unified
+crux-types = { workspace = true, features = ["miette"] } #unified
 futures = { workspace = true, optional = true }
+miette = { workspace = true }
 redb = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -1,3 +1,8 @@
+//! crux-model: canonical model ID types and provider-specific parsers.
+//!
+//! Normalizes LLM model identifiers across providers (OpenAI, Anthropic,
+//! Google, etc.) into a canonical form for consistent routing and billing.
+
 pub mod canonical;
 pub mod error;
 pub mod parser;

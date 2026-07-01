@@ -2219,9 +2219,9 @@ impl CruxCtx {
         alias: &str,
         opts: StepOpts,
         f: F,
-    ) -> anyhow::Result<Option<serde_json::Value>>
+    ) -> miette::Result<Option<serde_json::Value>>
     where
-        F: FnOnce(&crux_types::step::StepState) -> anyhow::Result<serde_json::Value>,
+        F: FnOnce(&crux_types::step::StepState) -> miette::Result<serde_json::Value>,
     {
         if let Some(ref expr) = opts.if_expr {
             let state = self.state.read().expect("StepState lock poisoned");
@@ -2246,7 +2246,9 @@ impl CruxCtx {
 /// - `""` or strings without `${{ }}` — always `true` (unconditional)
 /// - `${{ outputs['alias'].field }}` — resolved to a string; `"false"`, `"0"`,
 ///   or `""` map to `false`; anything else maps to `true`
-fn eval_expr(expr: &str, state: &crux_types::step::StepState) -> anyhow::Result<bool> {
+fn eval_expr(expr: &str, state: &crux_types::step::StepState) -> miette::Result<bool> {
+    use miette::WrapErr as _;
+
     let expr = expr.trim();
 
     if expr.is_empty() || !expr.contains("${{") {
@@ -2255,14 +2257,15 @@ fn eval_expr(expr: &str, state: &crux_types::step::StepState) -> anyhow::Result<
 
     let start = expr
         .find("${{")
-        .ok_or_else(|| anyhow::anyhow!("missing '${{{{' in if_expr: {}", expr))?;
+        .ok_or_else(|| miette::miette!("missing '${{{{' in if_expr: {}", expr))?;
     let end = expr[start..]
         .find("}}")
         .map(|i| start + i + 2)
-        .ok_or_else(|| anyhow::anyhow!("unclosed '${{{{' in if_expr: {}", expr))?;
+        .ok_or_else(|| miette::miette!("unclosed '${{{{' in if_expr: {}", expr))?;
     let inner = expr[start + 3..end - 2].trim();
 
-    let resolved = resolve_output_ref_for_guard(inner, state)?;
+    let resolved = resolve_output_ref_for_guard(inner, state)
+        .wrap_err_with(|| format!("evaluating if_expr: {expr}"))?;
 
     Ok(!matches!(resolved.as_str(), "false" | "0" | ""))
 }
@@ -2270,20 +2273,18 @@ fn eval_expr(expr: &str, state: &crux_types::step::StepState) -> anyhow::Result<
 fn resolve_output_ref_for_guard(
     expr: &str,
     state: &crux_types::step::StepState,
-) -> anyhow::Result<String> {
-    use anyhow::Context as _;
-
+) -> miette::Result<String> {
     let rest = expr
         .strip_prefix("outputs['")
-        .ok_or_else(|| anyhow::anyhow!("unsupported guard expression: {}", expr))?;
+        .ok_or_else(|| miette::miette!("unsupported guard expression: {}", expr))?;
     let (alias, rest) = rest
         .split_once("']")
-        .ok_or_else(|| anyhow::anyhow!("malformed alias in guard: {}", expr))?;
+        .ok_or_else(|| miette::miette!("malformed alias in guard: {}", expr))?;
     let field_path = rest.trim_start_matches('.');
 
     let alias_val = state
         .get(alias)
-        .ok_or_else(|| anyhow::anyhow!("alias '{}' not in state", alias))?;
+        .ok_or_else(|| miette::miette!("alias '{alias}' not in state"))?;
 
     let val = if field_path.is_empty() {
         alias_val.clone()
@@ -2292,7 +2293,7 @@ fn resolve_output_ref_for_guard(
         for seg in field_path.split('.') {
             cur = cur
                 .get(seg)
-                .with_context(|| format!("field '{}' not found in '{}'", seg, alias))?;
+                .ok_or_else(|| miette::miette!("field '{seg}' not found in alias '{alias}'"))?;
         }
         cur.clone()
     };

@@ -1,7 +1,7 @@
-/// crux-script: YAML-driven pipeline scripting for the crux agentic DSL.
-///
-/// Define agent pipelines declaratively in YAML files, register step handlers
-/// in Rust, and execute without recompilation.
+//! crux-script: YAML-driven pipeline scripting for the crux agentic DSL.
+//!
+//! Define agent pipelines declaratively in YAML files, register step handlers
+//! in Rust, and execute without recompilation.
 // TODO(#82): pipeline validation pass — catch bad refs, missing handlers, type
 //   mismatches, and unreachable steps before execution starts (static analysis)
 pub mod expr;

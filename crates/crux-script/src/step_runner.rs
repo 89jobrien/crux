@@ -2,7 +2,7 @@
 ///
 /// This is separate from [`HandlerRegistry`] (async, closure-based) and serves
 /// as an auditable catalog of built-in step kinds with their required capabilities.
-use anyhow::Result;
+use miette::Result;
 
 /// Capabilities a step runner may require from the execution environment.
 #[derive(Debug, Clone, PartialEq, Eq)]

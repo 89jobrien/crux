@@ -124,6 +124,46 @@ impl std::fmt::Display for CruxErr {
 
 impl std::error::Error for CruxErr {}
 
+#[cfg(feature = "miette")]
+impl miette::Diagnostic for CruxErr {
+    fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        let code = match self {
+            Self::StepFailed { .. } => "crux::step_failed",
+            Self::LowConfidence { .. } => "crux::low_confidence",
+            Self::BudgetExceeded { .. } => "crux::budget_exceeded",
+            Self::Delegation { .. } => "crux::delegation",
+            Self::Cancelled { .. } => "crux::cancelled",
+            Self::ReplayMismatch { .. } => "crux::replay_mismatch",
+            Self::Denied { .. } => "crux::denied",
+        };
+        Some(Box::new(code))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Error)
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        let help: Option<&str> = match self {
+            Self::BudgetExceeded { .. } => Some("increase the budget or reduce step count"),
+            Self::ReplayMismatch { .. } => Some("clear the replay cache or use lenient mode"),
+            Self::LowConfidence { .. } => Some("lower the threshold or improve the step output"),
+            Self::Denied { .. } => Some("check planner policy or use PassthroughPlanner"),
+            _ => None,
+        };
+        help.map(|h| Box::new(h) as Box<dyn std::fmt::Display>)
+    }
+
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
+        match self {
+            Self::Delegation { source, .. } => Some(Box::new(std::iter::once(
+                source.as_ref() as &dyn miette::Diagnostic
+            ))),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
