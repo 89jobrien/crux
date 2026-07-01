@@ -69,6 +69,7 @@ crux-plugin = { path = "crates/crux-plugin" }
 crux-baml = { path = "crates/crux-baml" }
 crux-stdlib = { path = "crates/crux-stdlib" }
 crux-improve = { path = "crates/crux-improve" }
+crux-task = { path = "crates/crux-task" }
 
 # File patterns
 glob = "0.3"

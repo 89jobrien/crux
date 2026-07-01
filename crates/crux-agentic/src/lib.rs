@@ -17,6 +17,7 @@ pub mod provider;
 pub mod review;
 pub mod rx;
 pub mod sqlite;
+pub mod task;
 pub mod triage;
 
 pub use llm_step::LlmStep;
@@ -57,6 +58,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     review::register(registry);
     rx::register(registry);
     sqlite::register(registry);
+    task::register(registry);
     triage::register(registry);
     llm::register(registry);
     llm::register_stream(registry);

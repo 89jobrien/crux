@@ -119,3 +119,9 @@ pub const SQLITE_INSERT: &str = "sqlite::insert";
 pub const SQLITE_UPDATE: &str = "sqlite::update";
 pub const SQLITE_DELETE: &str = "sqlite::delete";
 pub const SQLITE_UPSERT: &str = "sqlite::upsert";
+
+// task
+pub const TASK_CREATE: &str = "task::create";
+pub const TASK_UPDATE: &str = "task::update";
+pub const TASK_LIST: &str = "task::list";
+pub const TASK_READY: &str = "task::ready";
