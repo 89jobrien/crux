@@ -2,7 +2,6 @@
 crates = [
   { dir = "crates/crux", pkg = "crux" },
   { dir = "crates/crux-domain", pkg = "crux-domain" },
-  { dir = "crates/crux-macros", pkg = "crux-macros" },
   { dir = "crates/crux-runtime", pkg = "crux-runtime" },
   { dir = "crates/crux-types", pkg = "crux-types" },
   { dir = "crates/crux-script", pkg = "crux-script" },
