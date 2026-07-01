@@ -13,7 +13,7 @@ categories.workspace = true
 
 [features]
 default = ["redb"]
-redb = ["dep:redb"]
+redb = ["dep:redb", "crux-runtime/redb"]
 sqlite = ["dep:rusqlite"]
 
 [dependencies]
@@ -31,6 +31,7 @@ ulid = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
