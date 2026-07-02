@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "algorithm": "sha256-normalized-core-contract-v1",
+  "surfaces": [
+    {
+      "name": "crux-domain-planner",
+      "path": "crates/crux-domain/src/planner.rs",
+      "hash": "83927c047320b24234b228d6e02ea9f40bb68ba599eceb9ea029bd16f28f5b5e"
+    },
+    {
+      "name": "crux-runtime-recorder",
+      "path": "crates/crux-runtime/src/recorder.rs",
+      "hash": "f9dcfec327327c157dc485af758823dc32fd8763cf0530929e12b625a24ec14f"
+    },
+    {
+      "name": "crux-runtime-audit",
+      "path": "crates/crux-runtime/src/audit.rs",
+      "hash": "3c026897613a2accf2c99017102ecf26221adbf11f62ec0fa82e366923a80d59"
+    },
+    {
+      "name": "crux-runtime-safety",
+      "path": "crates/crux-runtime/src/safety.rs",
+      "hash": "ddf308fdd858e5c29438b595fd247461a72cd7c81a5b58b97daaf7af6177da09"
+    },
+    {
+      "name": "crux-runtime-agent",
+      "path": "crates/crux-runtime/src/agent.rs",
+      "hash": "f54a2cb044b0d2e74163452901c5cad83528195d07c498d75d29e60e011ef0b0"
+    },
+    {
+      "name": "crux-runtime-approval",
+      "path": "crates/crux-runtime/src/approval.rs",
+      "hash": "367d10d9e0e9fdc64e69cf15a5b02e5bb15c8dd87aef09462558b8189f73a66d"
+    },
+    {
+      "name": "crux-runtime-context",
+      "path": "crates/crux-runtime/src/context.rs",
+      "hash": "0f49b8b5845045e69bb2a9ff1b738ff2918b128b302698a592eea7ddd846e926"
+    },
+    {
+      "name": "crux-types-emission",
+      "path": "crates/crux-types/src/emission.rs",
+      "hash": "28e469fcb6a7601b59c01630c6ff79f124019c5f405abd579704ed03bd898860"
+    },
+    {
+      "name": "crux-script-step_runner",
+      "path": "crates/crux-script/src/step_runner.rs",
+      "hash": "4d9536a58a932641c6a3a64f69d91886c3bace5eff5870de410436c83cec2315"
+    },
+    {
+      "name": "crux-agentic-provider",
+      "path": "crates/crux-agentic/src/provider.rs",
+      "hash": "a7e38a8db1f0a62c78e6db9ddfda6358c88d0b2b4e6c015f7e1da86db14bfa75"
+    },
+    {
+      "name": "crux-plugin-discovery",
+      "path": "crates/crux-plugin/src/discovery.rs",
+      "hash": "f8cc866a253e532a462ed44410f2830afc6be5d45ef28c3bcea61d6bf912d56d"
+    },
+    {
+      "name": "crux-improve-lib",
+      "path": "crates/crux-improve/src/lib.rs",
+      "hash": "eef982852e9b97d1eeb3892eb8c61ff3d77edb1fb3893945d32c2b5a3eb68c25"
+    },
+    {
+      "name": "crux-planner-generator",
+      "path": "crates/crux-planner/src/generator.rs",
+      "hash": "5cd96b067b7286f2abfe7ce1f5b8d3e4e8fb5a1b2fa676b2da579e3cd5bcab81"
+    }
+  ]
+}

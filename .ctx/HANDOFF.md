@@ -23,7 +23,7 @@ wire types: Priority enum, TaskLabel, DependencyKind, TaskSnapshot (serde all).
 Updated crux-baml MockLLM tests with miette error handling. Merged event-bus
 feature (crux-agentic event broadcasting). Added CONFORMANCE.md spec. All 538+
 tests pass, clippy clean.
- [74d22a4, 8ca208c, 18f5de2, 0d432d8, cf6f0ee]
+
 - 20260701:000000: Design session — crux-task project task management system. Brainstormed 3 approaches
 (Registry Evolution, Domain Split, Unified Task), selected Domain Split: runtime
 TaskRegistry stays lean, new crux-task crate owns richer domain types. Design doc

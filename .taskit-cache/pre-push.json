@@ -1,0 +1,7 @@
+{
+  "head_sha": "e5e429bc92e2106cab2da6f82044e45ca9513da3",
+  "crates": [
+    "crux-agentic",
+    "crux-types"
+  ]
+}

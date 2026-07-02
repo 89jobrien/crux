@@ -40,12 +40,7 @@ log:
     Updated crux-baml MockLLM tests with miette error handling. Merged event-bus
     feature (crux-agentic event broadcasting). Added CONFORMANCE.md spec. All 538+
     tests pass, clippy clean.
-  commits:
-  - !Sha 74d22a4
-  - !Sha 8ca208c
-  - !Sha 18f5de2
-  - !Sha 0d432d8
-  - !Sha cf6f0ee
+  commits: []
 - date: 20260701:000000
   summary: |
     Design session — crux-task project task management system. Brainstormed 3 approaches
