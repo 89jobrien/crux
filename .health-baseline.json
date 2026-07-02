@@ -1,35 +1,17 @@
 {
-  "date": "2026-06-28",
-  "commit": "9b1e7f2",
+  "date": "2026-07-01",
+  "tests": {
+    "total": 725,
+    "passed": 725,
+    "failed": 0,
+    "skipped": 0
+  },
   "clippy": {
     "warnings": 0,
-    "errors": 0,
-    "excluded": ["crux-baml", "crux-agentic"]
+    "errors": 0
   },
-  "tests": {
-    "total": 538,
-    "passed": 538,
-    "failed": 0,
-    "skipped": 0,
-    "excluded": ["crux-baml", "crux-agentic"]
-  },
-  "todos": {
-    "raw_count": 26,
-    "real_count": 18,
-    "false_positives": 8,
-    "with_issue_number": 13,
-    "review_tagged": 4,
-    "fixme_count": 1
-  },
-  "versions": {
-    "workspace": "0.3.0",
-    "all_crates_inherit_workspace": true,
-    "inconsistencies": 0
-  },
-  "depgraph": {
-    "ring_violations": 0,
-    "architectural_concerns": [
-      "crux-planner → crux-agentic (planner depends on handler crate — unusual layering)"
-    ]
-  }
+  "todo_fixme": 26,
+  "crates": 15,
+  "versions_consistent": false,
+  "version": "0.3.0"
 }

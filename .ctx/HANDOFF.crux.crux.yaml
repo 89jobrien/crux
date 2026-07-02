@@ -41,11 +41,11 @@ log:
     feature (crux-agentic event broadcasting). Added CONFORMANCE.md spec. All 538+
     tests pass, clippy clean.
   commits:
-  - 74d22a4
-  - 8ca208c
-  - 18f5de2
-  - 0d432d8
-  - cf6f0ee
+  - !Sha 74d22a4
+  - !Sha 8ca208c
+  - !Sha 18f5de2
+  - !Sha 0d432d8
+  - !Sha cf6f0ee
 - date: 20260701:000000
   summary: |
     Design session — crux-task project task management system. Brainstormed 3 approaches

@@ -1,10 +1,12 @@
 {
-  "head_sha": "9d24590ed7659b1d8005b0a3fe7fb877913f1d04",
+  "head_sha": "03c764d56c77dec5516be0275d44d064090c4357",
   "crates": [
     "crux",
     "crux-agentic",
     "crux-baml",
+    "crux-domain",
     "crux-improve",
+    "crux-model",
     "crux-planner",
     "crux-plugin",
     "crux-runtime",
