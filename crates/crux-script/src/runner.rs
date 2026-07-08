@@ -198,7 +198,7 @@ impl Runner {
             }
 
             // delegate: works when agents are registered via registry.agent() or
-            // registry.agent_fn(). Use crux_stdlib::ctrl::register_echo_agent() for testing.
+            // registry.agent_fn().
             StepDef::Delegate(node) => {
                 let step_name = node.name.as_deref().unwrap_or(&node.delegate);
                 let agent_runner = self
