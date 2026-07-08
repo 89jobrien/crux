@@ -39,12 +39,6 @@ pub fn load_cruxfile(yaml: &str) -> Result<CruxfileDef, serde_saphyr::Error> {
     serde_saphyr::from_str(yaml)
 }
 
-/// Load a Cruxfile definition from a file path.
-pub fn load_cruxfile_file(path: impl AsRef<std::path::Path>) -> Result<CruxfileDef, LoadError> {
-    let contents = std::fs::read_to_string(path)?;
-    Ok(serde_saphyr::from_str(&contents)?)
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     #[error("IO error: {0}")]

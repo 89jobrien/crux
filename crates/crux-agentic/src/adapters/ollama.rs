@@ -1,4 +1,3 @@
-use crux_model::parser::ollama::enrich_from_api_entry;
 use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use serde_json::json;
@@ -23,35 +22,6 @@ impl OllamaAdapter {
             model,
             base_url: base_url.into(),
         }
-    }
-
-    pub async fn list_models(&self) -> Result<Vec<ProviderModelRef>, CruxErr> {
-        let url = format!("{}/api/tags", self.base_url.trim_end_matches('/'));
-        let client = reqwest::Client::new();
-        let resp: serde_json::Value = client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| CruxErr::step_failed("ollama", format!("HTTP error: {e}")))?
-            .json()
-            .await
-            .map_err(|e| CruxErr::step_failed("ollama", format!("JSON error: {e}")))?;
-
-        let models = resp["models"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|entry| {
-                        let name = entry["name"].as_str()?;
-                        let mut model_ref = ProviderModelId::parse_lenient(Vendor::Ollama, name);
-                        let meta = enrich_from_api_entry(entry);
-                        model_ref = model_ref.with_metadata(meta);
-                        Some(model_ref)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        Ok(models)
     }
 }
 

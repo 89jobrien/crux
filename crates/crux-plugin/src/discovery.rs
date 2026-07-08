@@ -24,13 +24,6 @@ impl TomlFileDiscovery {
     pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
         Self { path: path.into() }
     }
-
-    /// Returns a `TomlFileDiscovery` pointed at `~/.crux/plugins.toml`.
-    /// Falls back to `./.crux/plugins.toml` if `HOME` is not set.
-    pub fn default_path() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        Self::new(format!("{home}/.crux/plugins.toml"))
-    }
 }
 
 impl PluginDiscovery for TomlFileDiscovery {

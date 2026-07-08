@@ -1,7 +1,16 @@
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
 /// Mistral naming: `{family}-{tier}[-{version}]`.
+///
 /// "large", "small", "latest" are tiers/tags, not numeric generations.
+/// The split at the first `-` places the tier (e.g. `large`) and any
+/// trailing version (e.g. `2407`) together in `variant`, and `generation`
+/// is left empty. This is intentional: Mistral does not use numeric
+/// generation numbers in the same sense as Anthropic or OpenAI, so
+/// conflating tier with version in `variant` preserves the raw identity
+/// without information loss.
+///
+/// Example: `mistral-large-2407` → `family="mistral"`, `variant="large-2407"`.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     let (family, variant) = match raw.split_once('-') {
         Some((f, rest)) => (f.to_string(), rest.to_string()),
