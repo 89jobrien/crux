@@ -24,50 +24,70 @@ pub struct RunConfig<'a> {
     pub strict: bool,
 }
 
-/// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
-pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
-    // Resolve pipeline path: explicit arg, or discover Cruxfile in cwd.
-    let pipeline_path = match cfg.pipeline_arg {
-        Some("-") => {
-            // stdin -- always a regular pipeline
-            cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
-            return;
-        }
-        Some(p) => p.to_string(),
+/// Resolve the pipeline path from the config, or discover `Cruxfile` in cwd.
+///
+/// Returns `None` when the pipeline arg is `"-"` (stdin), indicating the caller
+/// should read from stdin directly. Returns `Some(path)` for a named file.
+/// Exits the process if no path is discoverable.
+fn resolve_pipeline_path(pipeline_arg: Option<&str>) -> Option<String> {
+    match pipeline_arg {
+        Some("-") => None, // caller handles stdin
+        Some(p) => Some(p.to_string()),
         None => {
-            // Discovery: look for Cruxfile in cwd
             if std::path::Path::new("Cruxfile").exists() {
-                "Cruxfile".to_string()
+                Some("Cruxfile".to_string())
             } else {
                 eprintln!("error: no pipeline file specified and no Cruxfile found in cwd");
                 std::process::exit(1);
             }
         }
+    }
+}
+
+/// Select the effective target name from config fields, in priority order.
+///
+/// Pure: no I/O. Returns `None` when no target was specified.
+fn select_target_name<'a>(cfg: &'a RunConfig<'_>) -> Option<&'a str> {
+    cfg.target_flag.or(cfg.target_or_input)
+}
+
+/// Dispatch to the appropriate execution path given already-loaded file contents.
+///
+/// All I/O (file read, stdin) is done before this call; this function is pure
+/// dispatch over the parsed `contents` and config.
+fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>) {
+    if crux_script::is_cruxfile(contents) {
+        let target_name = select_target_name(cfg).map(String::from);
+        if cfg.dry_run {
+            cmd_dry_run_cruxfile(contents, pipeline_path, target_name.as_deref());
+        } else {
+            cmd_run_cruxfile(contents, pipeline_path, target_name.as_deref(), cfg);
+        }
+    } else {
+        // Regular pipeline. target_or_input is the input file, not a target.
+        if cfg.dry_run {
+            cmd_dry_run_pipeline(contents, pipeline_path);
+        } else {
+            let input_path = cfg.input_flag.or(cfg.target_or_input);
+            cmd_run(pipeline_path, input_path, cfg);
+        }
+    }
+}
+
+/// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
+pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
+    let Some(pipeline_path) = resolve_pipeline_path(cfg.pipeline_arg) else {
+        // stdin path — always a regular pipeline
+        cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
+        return;
     };
 
-    // Try to detect if this is a Cruxfile.
     let contents = std::fs::read_to_string(&pipeline_path).unwrap_or_else(|e| {
         eprintln!("error: cannot read {pipeline_path}: {e}");
         std::process::exit(1);
     });
 
-    if crux_script::is_cruxfile(&contents) {
-        let target_name = cfg.target_flag.or(cfg.target_or_input).map(String::from);
-
-        if cfg.dry_run {
-            cmd_dry_run_cruxfile(&contents, &pipeline_path, target_name.as_deref());
-        } else {
-            cmd_run_cruxfile(&contents, &pipeline_path, target_name.as_deref(), cfg);
-        }
-    } else {
-        // Regular pipeline. target_or_input is actually an input file.
-        if cfg.dry_run {
-            cmd_dry_run_pipeline(&contents, &pipeline_path);
-        } else {
-            let input_path = cfg.input_flag.or(cfg.target_or_input);
-            cmd_run(&pipeline_path, input_path, cfg);
-        }
-    }
+    dispatch_on_contents(&contents, &pipeline_path, cfg);
 }
 
 /// Print Cruxfile execution plan without running.

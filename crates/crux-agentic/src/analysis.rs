@@ -12,6 +12,13 @@ const BUDGET_TIGHTEN_THRESHOLD: f64 = 0.8;
 const BUDGET_TIGHTEN_FACTOR: f64 = 1.1;
 const FLAKY_THRESHOLD: f64 = 0.4;
 
+/// Minimum failure cluster size before a retry suggestion is emitted.
+const RETRY_SUGGESTION_MIN_CLUSTER_SIZE: u64 = 2;
+/// Suggested retry attempt count for recurring-failure steps.
+const SUGGESTED_RETRY_COUNT: u64 = 3;
+/// Suggested initial backoff in milliseconds for retry suggestions.
+const SUGGESTED_BACKOFF_MS: u64 = 1000;
+
 pub fn register(registry: &mut HandlerRegistry) {
     register_latency_profile(registry);
     register_token_spend(registry);
@@ -330,7 +337,7 @@ fn register_tune_retry(registry: &mut HandlerRegistry) {
                 .iter()
                 .filter_map(|cluster| {
                     let count = cluster.get("count").and_then(|c| c.as_u64()).unwrap_or(0);
-                    if count <= 2 {
+                    if count <= RETRY_SUGGESTION_MIN_CLUSTER_SIZE {
                         return None;
                     }
                     let names = cluster
@@ -345,8 +352,8 @@ fn register_tune_retry(registry: &mut HandlerRegistry) {
                             .map(|name| {
                                 json!({
                                     "step_name": name,
-                                    "retry_count": 3,
-                                    "backoff_ms": 1000
+                                    "retry_count": SUGGESTED_RETRY_COUNT,
+                                    "backoff_ms": SUGGESTED_BACKOFF_MS
                                 })
                             })
                             .collect::<Vec<Value>>(),

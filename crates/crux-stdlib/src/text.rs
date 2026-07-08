@@ -154,6 +154,50 @@ fn find_closing_fence(input: &str) -> Option<usize> {
     None
 }
 
+/// Classify a diff line into its semantic role.
+enum DiffLine<'a> {
+    /// `+++ b/<path>` or `+++ <path>` — new file path header.
+    FilePath(&'a str),
+    /// `--- <path>` — old file path header (skipped).
+    OldFile,
+    /// `@@ -a,b +c,d @@` — hunk header.
+    HunkHeader,
+    /// `diff --git ...` — git metadata (ignored).
+    GitMeta,
+    /// Any other line — content belonging to the current hunk.
+    Content,
+}
+
+fn classify_diff_line(line: &str) -> DiffLine<'_> {
+    if let Some(path) = line.strip_prefix("+++ b/") {
+        DiffLine::FilePath(path)
+    } else if let Some(path) = line.strip_prefix("+++ ") {
+        DiffLine::FilePath(path)
+    } else if line.starts_with("--- ") {
+        DiffLine::OldFile
+    } else if line.starts_with("@@ ") {
+        DiffLine::HunkHeader
+    } else if line.starts_with("diff --git") {
+        DiffLine::GitMeta
+    } else {
+        DiffLine::Content
+    }
+}
+
+/// Flush the current hunk into `hunks`, if one is in progress.
+fn flush_hunk(current_hunk: &mut Option<HunkState>, hunks: &mut Vec<Value>) {
+    if let Some(hunk) = current_hunk.take() {
+        hunks.push(hunk.to_value());
+    }
+}
+
+/// Flush the current file (including its hunks) into `files`, if one is open.
+fn flush_file(current_file: &mut Option<String>, hunks: &mut Vec<Value>, files: &mut Vec<Value>) {
+    if let Some(file) = current_file.take() {
+        files.push(json!({ "file": file, "hunks": std::mem::take(hunks) }));
+    }
+}
+
 pub fn parse_diff(input: &str) -> Vec<Value> {
     let mut files: Vec<Value> = Vec::new();
     let mut current_file: Option<String> = None;
@@ -161,49 +205,32 @@ pub fn parse_diff(input: &str) -> Vec<Value> {
     let mut current_hunk: Option<HunkState> = None;
 
     for line in input.lines() {
-        if let Some(path) = line.strip_prefix("+++ b/") {
-            if let Some(hunk) = current_hunk.take() {
-                hunks.push(hunk.to_value());
+        match classify_diff_line(line) {
+            DiffLine::FilePath(path) => {
+                flush_hunk(&mut current_hunk, &mut hunks);
+                flush_file(&mut current_file, &mut hunks, &mut files);
+                current_file = Some(path.to_string());
             }
-            if let Some(file) = current_file.take() {
-                files.push(json!({ "file": file, "hunks": hunks }));
-                hunks = Vec::new();
+            DiffLine::OldFile | DiffLine::GitMeta => {}
+            DiffLine::HunkHeader => {
+                flush_hunk(&mut current_hunk, &mut hunks);
+                let (old_start, new_start) = parse_hunk_header(line);
+                current_hunk = Some(HunkState {
+                    old_start,
+                    new_start,
+                    lines: Vec::new(),
+                });
             }
-            current_file = Some(path.to_string());
-        } else if line.starts_with("+++ ") {
-            if let Some(hunk) = current_hunk.take() {
-                hunks.push(hunk.to_value());
+            DiffLine::Content => {
+                if let Some(ref mut hunk) = current_hunk {
+                    hunk.lines.push(line.to_string());
+                }
             }
-            if let Some(file) = current_file.take() {
-                files.push(json!({ "file": file, "hunks": hunks }));
-                hunks = Vec::new();
-            }
-            current_file = Some(line.strip_prefix("+++ ").unwrap_or(line).to_string());
-        } else if line.starts_with("--- ") {
-            // skip
-        } else if line.starts_with("@@ ") {
-            if let Some(hunk) = current_hunk.take() {
-                hunks.push(hunk.to_value());
-            }
-            let (old_start, new_start) = parse_hunk_header(line);
-            current_hunk = Some(HunkState {
-                old_start,
-                new_start,
-                lines: Vec::new(),
-            });
-        } else if line.starts_with("diff --git") {
-            // ignore
-        } else if let Some(ref mut hunk) = current_hunk {
-            hunk.lines.push(line.to_string());
         }
     }
 
-    if let Some(hunk) = current_hunk {
-        hunks.push(hunk.to_value());
-    }
-    if let Some(file) = current_file {
-        files.push(json!({ "file": file, "hunks": hunks }));
-    }
+    flush_hunk(&mut current_hunk, &mut hunks);
+    flush_file(&mut current_file, &mut hunks, &mut files);
 
     files
 }

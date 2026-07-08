@@ -15,6 +15,9 @@ const CONFIDENCE_HEALTHY_SECRETS: f32 = 0.95;
 // Hook overhead latency ceiling (ms) for confidence degradation
 const MAX_HOOK_OVERHEAD_MS: f64 = 5000.0;
 
+/// Percentile index (0–100) used for the high-latency hook overhead percentile.
+const HOOK_OVERHEAD_PERCENTILE: usize = 95;
+
 pub(super) fn register(registry: &mut HandlerRegistry) {
     register_parse_env_probe(registry);
     register_classify_severity(registry);
@@ -218,7 +221,7 @@ fn register_measure_overhead(registry: &mut HandlerRegistry) {
                 let mut sorted = durations.clone();
                 sorted.sort_by(|a, b| a.total_cmp(b));
                 let p50 = sorted[sorted.len() / 2];
-                let p95 = sorted[(sorted.len() * 95) / 100];
+                let p95 = sorted[(sorted.len() * HOOK_OVERHEAD_PERCENTILE) / 100];
                 (p50, p95)
             };
 
