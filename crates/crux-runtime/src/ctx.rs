@@ -843,6 +843,66 @@ impl CruxCtx {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Stream drain helpers (pure, no `self`)
+// ---------------------------------------------------------------------------
+
+/// The final outcome of draining an async stream to completion.
+enum StreamDrain<T> {
+    /// Stream yielded at least one item and completed without error.
+    Ok {
+        value: T,
+        events: Vec<serde_json::Value>,
+    },
+    /// Stream yielded an error item; `duration_ms` is measured to the error.
+    Err {
+        error: CruxErr,
+        events: Vec<serde_json::Value>,
+        duration_ms: u64,
+    },
+    /// Stream completed without yielding any items.
+    Empty { duration_ms: u64 },
+}
+
+/// Drain `stream` to completion, collecting JSON-serialized events.
+///
+/// Returns a `StreamDrain` describing the final outcome. `step_start` is used
+/// to compute `duration_ms` on error/empty paths.
+async fn drain_stream<S, T>(mut stream: S, step_start: chrono::DateTime<Utc>) -> StreamDrain<T>
+where
+    S: futures::Stream<Item = Result<T, CruxErr>> + Unpin,
+    T: serde::Serialize,
+{
+    use futures::StreamExt as _;
+    let mut events: Vec<serde_json::Value> = Vec::new();
+    let mut last_value: Option<T> = None;
+
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(val) => {
+                if let Ok(json_val) = serde_json::to_value(&val) {
+                    events.push(json_val);
+                }
+                last_value = Some(val);
+            }
+            Err(e) => {
+                let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
+                return StreamDrain::Err {
+                    error: e,
+                    events,
+                    duration_ms,
+                };
+            }
+        }
+    }
+
+    let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
+    match last_value {
+        Some(value) => StreamDrain::Ok { value, events },
+        None => StreamDrain::Empty { duration_ms },
+    }
+}
+
 impl CruxCtx {
     async fn step_inner<F, Fut, T>(
         &mut self,
@@ -929,6 +989,60 @@ impl CruxCtx {
 
         self.execute_single(name, confidence, input_hash, content_hash, f)
             .await
+    }
+
+    /// Record the outcome of a stream drain and return the final value (or error).
+    fn record_stream_outcome<T>(
+        &mut self,
+        name: &str,
+        input_hash: u64,
+        step_start: chrono::DateTime<Utc>,
+        duration_ms: u64,
+        drain: StreamDrain<T>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize,
+    {
+        let make_rec = |dur_ms| StepRecord {
+            name,
+            input_hash,
+            content_hash: None,
+            confidence: 1.0,
+            started_at: step_start,
+            duration_ms: dur_ms,
+            attempt: 1,
+        };
+
+        match drain {
+            StreamDrain::Ok { value, events } => {
+                let rec = make_rec(duration_ms);
+                self.recorder
+                    .record_ok(&rec, serde_json::to_value(&value).ok());
+                if let Some(step) = self.recorder.steps_mut().last_mut() {
+                    step.events = events;
+                }
+                Ok(value)
+            }
+            StreamDrain::Err {
+                error,
+                events,
+                duration_ms: err_dur,
+            } => {
+                let rec = make_rec(err_dur);
+                self.recorder.record_err(&rec, &error.to_string());
+                if let Some(step) = self.recorder.steps_mut().last_mut() {
+                    step.events = events;
+                }
+                Err(error)
+            }
+            StreamDrain::Empty {
+                duration_ms: empty_dur,
+            } => {
+                let rec = make_rec(empty_dur);
+                self.recorder.record_err(&rec, "stream yielded no items");
+                Err(CruxErr::step_failed(name, "stream yielded no items"))
+            }
+        }
     }
 }
 
@@ -1128,8 +1242,6 @@ impl Context for CruxCtx {
         S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        use futures::StreamExt;
-
         trace_step!(name, 1.0_f32);
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
@@ -1155,74 +1267,9 @@ impl Context for CruxCtx {
         }
 
         let step_start = Utc::now();
-        let mut stream = f();
-        let mut events: Vec<serde_json::Value> = Vec::new();
-        let mut last_value: Option<T> = None;
-
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(val) => {
-                    if let Ok(json_val) = serde_json::to_value(&val) {
-                        events.push(json_val);
-                    }
-                    last_value = Some(val);
-                }
-                Err(e) => {
-                    let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
-                    let rec = StepRecord {
-                        name,
-                        input_hash,
-                        content_hash: None,
-                        confidence: 1.0,
-                        started_at: step_start,
-                        duration_ms,
-                        attempt: 1,
-                    };
-                    self.recorder.record_err(&rec, &e.to_string());
-                    // Patch in events on the last step
-                    if let Some(step) = self.recorder.steps_mut().last_mut() {
-                        step.events = events;
-                    }
-                    return Err(e);
-                }
-            }
-        }
-
+        let drain = drain_stream(f(), step_start).await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
-
-        match last_value {
-            Some(val) => {
-                let rec = StepRecord {
-                    name,
-                    input_hash,
-                    content_hash: None,
-                    confidence: 1.0,
-                    started_at: step_start,
-                    duration_ms,
-                    attempt: 1,
-                };
-                self.recorder
-                    .record_ok(&rec, serde_json::to_value(&val).ok());
-                // Patch in events on the last step
-                if let Some(step) = self.recorder.steps_mut().last_mut() {
-                    step.events = events;
-                }
-                Ok(val)
-            }
-            None => {
-                let rec = StepRecord {
-                    name,
-                    input_hash,
-                    content_hash: None,
-                    confidence: 1.0,
-                    started_at: step_start,
-                    duration_ms,
-                    attempt: 1,
-                };
-                self.recorder.record_err(&rec, "stream yielded no items");
-                Err(CruxErr::step_failed(name, "stream yielded no items"))
-            }
-        }
+        self.record_stream_outcome(name, input_hash, step_start, duration_ms, drain)
     }
 
     async fn try_step<F, Fut, T, E>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
