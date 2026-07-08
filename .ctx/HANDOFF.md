@@ -1,4 +1,4 @@
-# Handoff — crux (2026-07-01)
+# Handoff — crux (2026-07-08)
 
 **Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
@@ -10,6 +10,13 @@ EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bri
 | crux-task-impl | p1 | open | Implement crux-task crate (10-task plan) |
 
 ## Log
+
+- 20260708:000000: Heavy refactor session — IOSP decomposition, runtime/script/stdlib
+  component refactoring, dead code removal across crux-runtime, crux-script,
+  crux-stdlib, crux-agentic, crux-model. Extracted magic numbers to constants,
+  decomposed long methods (join_all, step_stream, step_retryable, step_inner),
+  separated pure logic from I/O in dispatch paths. Two branch merges (iosp +
+  dead-code). All 538+ tests pass, clippy clean.
 
 - 20260701:120000: Major crux-task implementation session — scaffolded crate with types (TaskError,
 TaskState, TaskSnapshot), error handling (anyhow → miette diagnostic errors),

@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: 2026-07-01
+updated: 2026-07-08
 items:
 - id: crux-task-impl
   doob_uuid: null
@@ -26,6 +26,31 @@ items:
   completed: null
   extra: []
 log:
+- date: 20260708:000000
+  summary: |
+    Heavy refactor session across crux runtime and stdlib components:
+    IOSP decomposition — extracted magic numbers into named constants (crux-agentic).
+    Runtime refactoring — decomposed long context methods: join_all, step_stream,
+    step_retryable, step_inner into separate implementations (crux-runtime).
+    Script dispatch — extracted per-step-kind dispatch logic in execute_step()
+    (crux-script). Stdlib parsing — decomposed parse_diff() into hunk/line/context
+    helpers (crux-stdlib). Pure logic separation — separated pure logic from I/O
+    in run dispatch, eval_jq, and TargetResolver. Dead code removal across crates.
+    Two branch merges: refactor/iosp-magic-numbers-splits (const extraction) and
+    fix/dead-code-srp-crux-model (dead code cleanup). All 538+ tests pass, clippy
+    clean. Scope spans crux-runtime, crux-script, crux-stdlib, crux-agentic,
+    crux-model, crux-core crates.
+  commits:
+    - 2737bd2
+    - 8183e2d
+    - 5361284
+    - 51396b7
+    - a85d9b7
+    - ef858c8
+    - cb63420
+    - 95f2bb0
+    - c6adda3
+    - d07bd1f
 - date: 20260701:120000
   summary: |
     Major crux-task implementation session — scaffolded crate with types (TaskError,
