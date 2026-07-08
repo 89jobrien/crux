@@ -52,3 +52,56 @@ mod tests {
         assert_eq!(r.vendor, Vendor::OpenAi);
     }
 }
+
+#[cfg(test)]
+mod proptest_roundtrip {
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::canonical::CanonicalModelId;
+
+    /// Strategy for generating ASCII model ID strings that are safe to feed
+    /// into vendor parsers without triggering panics.
+    fn model_id_strategy() -> impl Strategy<Value = String> {
+        "[a-z0-9][a-z0-9._-]{0,30}"
+    }
+
+    fn all_vendors() -> Vec<Vendor> {
+        vec![
+            Vendor::Anthropic,
+            Vendor::OpenAi,
+            Vendor::Google,
+            Vendor::Mistral,
+            Vendor::Ollama,
+        ]
+    }
+
+    proptest! {
+        /// `parse_lenient` must never panic for any vendor and any ASCII input.
+        #[test]
+        fn parse_lenient_does_not_panic(raw in model_id_strategy()) {
+            for vendor in all_vendors() {
+                let _ = ProviderModelId::parse_lenient(vendor, &raw);
+            }
+        }
+
+        /// The canonical ID produced by `parse_lenient` must round-trip through
+        /// `Display` → `FromStr` without loss.
+        #[test]
+        fn canonical_display_fromstr_roundtrip(raw in model_id_strategy()) {
+            for vendor in all_vendors() {
+                let model_ref = ProviderModelId::parse_lenient(vendor, &raw);
+                let canonical = &model_ref.provider_id;
+                // Display then re-parse the CanonicalModelId (not the provider ID).
+                let canonical_id = &model_ref.canonical;
+                let displayed = canonical_id.to_string();
+                let reparsed: Result<CanonicalModelId, _> = displayed.parse();
+                prop_assert!(
+                    reparsed.is_ok(),
+                    "canonical roundtrip failed for vendor={vendor:?} raw={canonical}: {displayed}"
+                );
+                prop_assert_eq!(reparsed.unwrap(), canonical_id.clone());
+            }
+        }
+    }
+}

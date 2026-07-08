@@ -12,6 +12,13 @@ pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
 
     // Pattern A: claude-{tier}-{major}-{minor}[-{date}...]
     // e.g. claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5-20251001
+    //
+    // The minor version (e.g. `6` in `sonnet-4-6`) is encoded as part of
+    // `variant` (e.g. `"sonnet-6"`) rather than in a dedicated `minor` field.
+    // `CanonicalModelId` has no `minor` field; adding one would change the
+    // colon-separated display format and break `FromStr` roundtrips. Callers
+    // that need to extract the minor version should parse `variant` directly
+    // (e.g. split on `-` and take the last numeric segment).
     if parts.len() >= MIN_PARTS_FOR_PATTERN && TIERS.contains(&parts[0]) {
         let tier = parts[0];
         let major = parts[1];
