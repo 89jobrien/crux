@@ -55,7 +55,7 @@
     {
       "name": "crux-plugin-discovery",
       "path": "crates/crux-plugin/src/discovery.rs",
-      "hash": "f8cc866a253e532a462ed44410f2830afc6be5d45ef28c3bcea61d6bf912d56d"
+      "hash": "7e9b74fa8fad7735e3d8f07e2c82f908d1dc19920dd7765742108004c2016dcf"
     },
     {
       "name": "crux-improve-lib",
