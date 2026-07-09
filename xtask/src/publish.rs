@@ -138,6 +138,52 @@ pub(crate) fn parse_publish_args(args: &[String]) -> Result<PublishArgs, String>
 }
 
 #[allow(dead_code)]
+pub(crate) fn cargo_publish(crate_name: &str) -> Result<(), PublishError> {
+    let status = std::process::Command::new("cargo")
+        .args(["publish", "-p", crate_name])
+        .status()
+        .unwrap_or_else(|e| panic!("failed to spawn cargo: {e}"));
+    if status.success() {
+        Ok(())
+    } else {
+        Err(PublishError::CargoPublishFailed {
+            crate_name: crate_name.to_string(),
+            exit_code: status.code().unwrap_or(-1),
+        })
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn wait_for_index(crate_name: &str, version: &str) -> Result<(), PublishError> {
+    let url = sparse_index_url(crate_name);
+    for attempt in 1..=POLL_RETRIES {
+        match ureq::get(&url).call() {
+            Ok(response) => {
+                let body = response.into_string().unwrap_or_default();
+                if version_in_index_body(&body, version) {
+                    eprintln!("  [{crate_name}] indexed after {attempt} poll(s)");
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                return Err(PublishError::HttpError {
+                    crate_name: crate_name.to_string(),
+                    source: Box::new(e),
+                });
+            }
+        }
+        eprintln!(
+            "  [{crate_name}] not yet indexed (attempt {attempt}/{POLL_RETRIES}), waiting {POLL_INTERVAL_SECS}s..."
+        );
+        std::thread::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS));
+    }
+    Err(PublishError::IndexPollTimeout {
+        crate_name: crate_name.to_string(),
+        version: version.to_string(),
+    })
+}
+
+#[allow(dead_code)]
 pub(crate) fn sparse_index_url(crate_name: &str) -> String {
     let c1 = &crate_name[..2];
     let c2 = &crate_name[2..4];
@@ -238,5 +284,14 @@ mod tests {
     fn version_in_index_body_partial_match_not_counted() {
         let body = r#"{"name":"crux","vers":"0.3.10","deps":[],"cksum":"abc"}"#;
         assert!(!version_in_index_body(body, "0.3.1"));
+    }
+
+    #[test]
+    fn wait_for_index_would_succeed_if_version_present_on_first_poll() {
+        let body = "{\"name\":\"crux\",\"vers\":\"0.3.1\",\"deps\":[],\"cksum\":\"x\"}";
+        assert!(
+            version_in_index_body(body, "0.3.1"),
+            "first-poll success requires version_in_index_body to return true"
+        );
     }
 }
