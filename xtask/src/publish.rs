@@ -1,3 +1,119 @@
+use std::fmt;
+
+#[allow(dead_code)]
+pub(crate) struct CrateSpec {
+    pub name: &'static str,
+}
+
+#[allow(dead_code)]
+pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
+    CrateSpec { name: "crux-types" },
+    CrateSpec { name: "crux-model" },
+    CrateSpec {
+        name: "crux-domain",
+    },
+    CrateSpec {
+        name: "crux-macros",
+    },
+    CrateSpec {
+        name: "crux-runtime",
+    },
+    CrateSpec {
+        name: "crux-script",
+    },
+    CrateSpec { name: "crux-task" },
+    CrateSpec {
+        name: "crux-improve",
+    },
+    CrateSpec { name: "crux-baml" },
+    CrateSpec {
+        name: "crux-stdlib",
+    },
+    CrateSpec {
+        name: "crux-plugin",
+    },
+    CrateSpec {
+        name: "crux-agentic",
+    },
+    CrateSpec {
+        name: "crux-planner",
+    },
+    CrateSpec { name: "crux" },
+];
+
+#[allow(dead_code)]
+pub(crate) const POLL_RETRIES: u32 = 30;
+#[allow(dead_code)]
+pub(crate) const POLL_INTERVAL_SECS: u64 = 10;
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub(crate) enum PublishError {
+    CargoPublishFailed {
+        crate_name: String,
+        exit_code: i32,
+    },
+    IndexPollTimeout {
+        crate_name: String,
+        version: String,
+    },
+    HttpError {
+        crate_name: String,
+        source: Box<ureq::Error>,
+    },
+    VersionNotInWorkspace,
+    UnknownFromCrate {
+        name: String,
+    },
+}
+
+impl fmt::Display for PublishError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CargoPublishFailed {
+                crate_name,
+                exit_code,
+            } => write!(
+                f,
+                "cargo publish -p {crate_name} failed with exit code {exit_code}"
+            ),
+            Self::IndexPollTimeout {
+                crate_name,
+                version,
+            } => write!(
+                f,
+                "timed out waiting for {crate_name} {version} to appear on crates.io"
+            ),
+            Self::HttpError { crate_name, source } => {
+                write!(f, "HTTP error polling index for {crate_name}: {source}")
+            }
+            Self::VersionNotInWorkspace => {
+                write!(f, "could not read version from workspace Cargo.toml")
+            }
+            Self::UnknownFromCrate { name } => {
+                write!(f, "--from crate '{name}' not found in publish order")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PublishError {}
+
+#[allow(dead_code)]
+pub(crate) fn workspace_version() -> Result<String, PublishError> {
+    let manifest =
+        std::fs::read_to_string("Cargo.toml").map_err(|_| PublishError::VersionNotInWorkspace)?;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("version")
+            && let Some(val) = trimmed.split('"').nth(1)
+        {
+            return Ok(val.to_string());
+        }
+    }
+    Err(PublishError::VersionNotInWorkspace)
+}
+
 #[allow(dead_code)]
 pub(crate) struct PublishArgs {
     pub from: Option<String>,
@@ -42,6 +158,30 @@ pub(crate) fn version_in_index_body(body: &str, version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn publish_order_contains_fourteen_crates() {
+        assert_eq!(PUBLISH_ORDER.len(), 14);
+    }
+
+    #[test]
+    fn publish_order_starts_with_leaves() {
+        assert_eq!(PUBLISH_ORDER[0].name, "crux-types");
+        assert_eq!(PUBLISH_ORDER[1].name, "crux-model");
+    }
+
+    #[test]
+    fn publish_order_ends_with_facade() {
+        assert_eq!(PUBLISH_ORDER[13].name, "crux");
+    }
+
+    #[test]
+    fn workspace_version_parses_from_cargo_toml() {
+        let version = workspace_version().unwrap();
+        let parts: Vec<&str> = version.split('.').collect();
+        assert_eq!(parts.len(), 3);
+        assert!(parts.iter().all(|p| p.parse::<u32>().is_ok()));
+    }
 
     #[test]
     fn parse_no_args_returns_none_from() {
