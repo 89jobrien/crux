@@ -19,21 +19,21 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-crux-agentic = { path = "crates/crux-agentic" }
-crux-baml = { path = "crates/crux-baml" }
+crux-agentic = { path = "crates/crux-agentic", version = "0.3.1" }
+crux-baml = { path = "crates/crux-baml", version = "0.3.1" }
 
 # Internal crates
-crux-domain = { path = "crates/crux-domain" }
-crux-improve = { path = "crates/crux-improve" }
-crux-macros = { path = "crates/crux-macros" }
-crux-model = { path = "crates/crux-model" }
-crux-planner = { path = "crates/crux-planner" }
-crux-plugin = { path = "crates/crux-plugin" }
-crux-runtime = { path = "crates/crux-runtime" }
-crux-script = { path = "crates/crux-script" }
-crux-stdlib = { path = "crates/crux-stdlib" }
-crux-task = { path = "crates/crux-task" }
-crux-types = { path = "crates/crux-types" }
+crux-domain = { path = "crates/crux-domain", version = "0.3.1" }
+crux-improve = { path = "crates/crux-improve", version = "0.3.1" }
+crux-macros = { path = "crates/crux-macros", version = "0.3.1" }
+crux-model = { path = "crates/crux-model", version = "0.3.1" }
+crux-planner = { path = "crates/crux-planner", version = "0.3.1" }
+crux-plugin = { path = "crates/crux-plugin", version = "0.3.1" }
+crux-runtime = { path = "crates/crux-runtime", version = "0.3.1" }
+crux-script = { path = "crates/crux-script", version = "0.3.1" }
+crux-stdlib = { path = "crates/crux-stdlib", version = "0.3.1" }
+crux-task = { path = "crates/crux-task", version = "0.3.1" }
+crux-types = { path = "crates/crux-types", version = "0.3.1" }
 
 # Directories
 dirs = "6"
