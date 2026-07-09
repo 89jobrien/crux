@@ -29,7 +29,6 @@ crux-types = { workspace = true }
 crux-script = { workspace = true } #unified
 crux-stdlib = { workspace = true } #unified
 futures = { workspace = true, optional = true }
-glob = { workspace = true } #unified
 ignore = "0.4"
 reqwest = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
