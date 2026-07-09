@@ -5,6 +5,8 @@
 //! If `taskit` is not installed, this shim installs it automatically
 //! via `cargo install taskit`.
 
+mod publish;
+
 use std::process::{Command, exit};
 
 fn main() {
