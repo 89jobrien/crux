@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89.0"
 license = "MIT"
 authors = ["Joseph O'Brien"]
 repository = "https://github.com/89jobrien/crux"
@@ -15,74 +15,74 @@ keywords = ["agent", "agentic", "dsl", "replay", "trace"]
 categories = ["development-tools", "asynchronous"]
 
 [workspace.dependencies]
-# Core
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
-serde-saphyr = "0.0.23"
-thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
-
-# Async
-tokio = { version = "1", features = ["full"] }
-futures = "0.3"
-
-# IDs
-ulid = { version = "1", features = ["serde"] }
-
-# Proc macro
-syn = { version = "2", features = ["full", "extra-traits"] }
-quote = "1"
-proc-macro2 = "1"
-
-# Storage
-redb = "4"
-
-# Observability
-tracing = "0.1"
-
-# Diagnostics
-miette = { version = "7", features = ["fancy"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-
-# HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
-# TOML parsing
-toml = "0.8"
-
-# Temp files
-tempfile = "3"
+crux-agentic = { path = "crates/crux-agentic" }
+crux-baml = { path = "crates/crux-baml" }
 
 # Internal crates
 crux-domain = { path = "crates/crux-domain" }
-crux-types = { path = "crates/crux-types" }
-crux-runtime = { path = "crates/crux-runtime" }
-crux-macros = { path = "crates/crux-macros" }
-crux-script = { path = "crates/crux-script" }
-crux-agentic = { path = "crates/crux-agentic" }
-crux-planner = { path = "crates/crux-planner" }
-crux-model = { path = "crates/crux-model" }
-crux-plugin = { path = "crates/crux-plugin" }
-crux-baml = { path = "crates/crux-baml" }
-crux-stdlib = { path = "crates/crux-stdlib" }
 crux-improve = { path = "crates/crux-improve" }
+crux-macros = { path = "crates/crux-macros" }
+crux-model = { path = "crates/crux-model" }
+crux-planner = { path = "crates/crux-planner" }
+crux-plugin = { path = "crates/crux-plugin" }
+crux-runtime = { path = "crates/crux-runtime" }
+crux-script = { path = "crates/crux-script" }
+crux-stdlib = { path = "crates/crux-stdlib" }
 crux-task = { path = "crates/crux-task" }
+crux-types = { path = "crates/crux-types" }
+
+# Directories
+dirs = "6"
+futures = "0.3"
 
 # File patterns
 glob = "0.3"
 
-# Shared vocabulary
-slashcrux = "0.1.1"
+# Diagnostics
+miette = { version = "7", features = ["fancy"] }
+proc-macro2 = "1"
+proptest = "1.11.0"
+quote = "1"
+
+# Storage
+redb = "4"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # SQLite
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Core
+serde = { version = "1", features = ["derive"] }
+serde-saphyr = "0.0.23"
+serde_json = "1"
+serde_yaml = "0.9"
 
-# Directories
-dirs = "6"
+# Shared vocabulary
+slashcrux = "0.1.1"
+
+# Proc macro
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+# Temp files
+tempfile = "3"
+thiserror = "2"
+
+# Async
+tokio = { version = "1", features = ["full"] }
 
 # Testing
 tokio-test = "0.4"
-proptest = "1.11.0"
+
+# TOML parsing
+toml = "0.8"
+
+# Observability
+tracing = "0.1"
+
+# IDs
+ulid = { version = "1", features = ["serde"] }

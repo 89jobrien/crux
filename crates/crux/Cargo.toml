@@ -16,18 +16,18 @@ categories.workspace = true
 name = "crux"
 
 [dependencies]
-crux-runtime = { path = "../crux-runtime", version = "0.3.0" }
-crux-macros = { path = "../crux-macros", version = "0.3.0" }
-crux-domain = { path = "../crux-domain" }
-crux-script = { path = "../crux-script", version = "0.3.0", optional = true }
+crux-domain = { workspace = true } #unified
+crux-macros = { workspace = true } #unified
+crux-runtime = { workspace = true } #unified
+crux-script = { workspace = true, optional = true } #unified
 
 [dev-dependencies]
-tokio = { workspace = true }
+crux-agentic = { workspace = true } #unified
+crux-domain = { workspace = true, features = ["tokio-pipeline"] } #unified
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-futures = { workspace = true }
-crux-agentic = { path = "../crux-agentic", version = "0.3.0" }
-crux-domain = { path = "../crux-domain", features = ["tokio-pipeline"] }
+tokio = { workspace = true }
 
 [features]
 default = ["tokio-runtime"]
