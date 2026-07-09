@@ -35,44 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: gate
     environment: crates-io
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # Layer 0: no internal deps
-      - name: publish crux-types
-        run: cargo publish -p crux-types
-      - name: publish crux-model
-        run: cargo publish -p crux-model
-      - name: publish crux-domain
-        run: cargo publish -p crux-domain
-      - name: publish crux-macros
-        run: cargo publish -p crux-macros
-      # Layer 1: depends on types/domain
-      - name: publish crux-runtime
-        run: cargo publish -p crux-runtime
-      # Layer 2: depends on runtime
-      - name: publish crux-script
-        run: cargo publish -p crux-script
-      - name: publish crux-task
-        run: cargo publish -p crux-task
-      - name: publish crux-improve
-        run: cargo publish -p crux-improve
-      # Layer 3: depends on runtime + script
-      - name: publish crux-baml
-        run: cargo publish -p crux-baml
-      - name: publish crux-stdlib
-        run: cargo publish -p crux-stdlib
-      - name: publish crux-plugin
-        run: cargo publish -p crux-plugin
-      # Layer 4: depends on all of the above
-      - name: publish crux-agentic
-        run: cargo publish -p crux-agentic
-      # Layer 5: depends on agentic + runtime
-      - name: publish crux-planner
-        run: cargo publish -p crux-planner
-      # Layer 6: facade crate
-      - name: publish crux
-        run: cargo publish -p crux
+      - name: publish all crates
+        run: cargo xtask publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
