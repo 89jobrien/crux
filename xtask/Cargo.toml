@@ -5,3 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
+ureq = "2"
+serde_json = "1"
