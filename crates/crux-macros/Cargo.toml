@@ -1,5 +1,5 @@
 [package]
-name = "crux-macros"
+name = "crux-derive"
 description = "Proc macros for the crux agentic DSL"
 version.workspace = true
 edition.workspace = true

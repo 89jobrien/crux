@@ -11,7 +11,7 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
         name: "crux-domain",
     },
     CrateSpec {
-        name: "crux-macros",
+        name: "crux-derive",
     },
     CrateSpec {
         name: "crux-runtime",

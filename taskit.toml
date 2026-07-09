@@ -29,7 +29,7 @@ source = "crux-domain"
 dependents = ["crux", "crux", "crux-runtime"]
 
 [[workspace.propagation]]
-source = "crux-macros"
+source = "crux-derive"
 dependents = ["crux"]
 
 [[workspace.propagation]]

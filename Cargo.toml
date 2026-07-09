@@ -25,7 +25,7 @@ crux-baml = { path = "crates/crux-baml", version = "0.3.1" }
 # Internal crates
 crux-domain = { path = "crates/crux-domain", version = "0.3.1" }
 crux-improve = { path = "crates/crux-improve", version = "0.3.1" }
-crux-macros = { path = "crates/crux-macros", version = "0.3.1" }
+crux-derive = { path = "crates/crux-macros", version = "0.3.1" }
 crux-model = { path = "crates/crux-model", version = "0.3.1" }
 crux-planner = { path = "crates/crux-planner", version = "0.3.1" }
 crux-plugin = { path = "crates/crux-plugin", version = "0.3.1" }

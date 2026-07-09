@@ -17,7 +17,7 @@ name = "crux"
 
 [dependencies]
 crux-domain = { workspace = true } #unified
-crux-macros = { workspace = true } #unified
+crux-derive = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-script = { workspace = true, optional = true } #unified
 
