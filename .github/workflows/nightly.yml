@@ -31,13 +31,13 @@ jobs:
       - run: cargo machete
 
   msrv:
-    name: MSRV (1.88)
+    name: MSRV (1.89.0)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.88"
+          toolchain: "1.89.0"
       - name: install protoc
         run: sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@v2
