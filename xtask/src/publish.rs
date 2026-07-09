@@ -1,11 +1,9 @@
 use std::fmt;
 
-#[allow(dead_code)]
 pub(crate) struct CrateSpec {
     pub name: &'static str,
 }
 
-#[allow(dead_code)]
 pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec { name: "crux-types" },
     CrateSpec { name: "crux-model" },
@@ -41,12 +39,9 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec { name: "crux" },
 ];
 
-#[allow(dead_code)]
 pub(crate) const POLL_RETRIES: u32 = 30;
-#[allow(dead_code)]
 pub(crate) const POLL_INTERVAL_SECS: u64 = 10;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum PublishError {
     CargoPublishFailed {
@@ -99,7 +94,6 @@ impl fmt::Display for PublishError {
 
 impl std::error::Error for PublishError {}
 
-#[allow(dead_code)]
 pub(crate) fn workspace_version() -> Result<String, PublishError> {
     let manifest =
         std::fs::read_to_string("Cargo.toml").map_err(|_| PublishError::VersionNotInWorkspace)?;
@@ -114,12 +108,10 @@ pub(crate) fn workspace_version() -> Result<String, PublishError> {
     Err(PublishError::VersionNotInWorkspace)
 }
 
-#[allow(dead_code)]
 pub(crate) struct PublishArgs {
     pub from: Option<String>,
 }
 
-#[allow(dead_code)]
 pub(crate) fn parse_publish_args(args: &[String]) -> Result<PublishArgs, String> {
     let mut from = None;
     let mut iter = args.iter();
@@ -137,7 +129,34 @@ pub(crate) fn parse_publish_args(args: &[String]) -> Result<PublishArgs, String>
     Ok(PublishArgs { from })
 }
 
-#[allow(dead_code)]
+pub(crate) fn run_publish(args: PublishArgs) -> Result<(), PublishError> {
+    let version = workspace_version()?;
+    eprintln!("publishing crux workspace v{version}");
+
+    let crates = match args.from.as_deref() {
+        None => PUBLISH_ORDER,
+        Some(name) => {
+            let pos = PUBLISH_ORDER
+                .iter()
+                .position(|c| c.name == name)
+                .ok_or_else(|| PublishError::UnknownFromCrate {
+                    name: name.to_string(),
+                })?;
+            &PUBLISH_ORDER[pos..]
+        }
+    };
+
+    for spec in crates {
+        eprintln!("publishing {} ...", spec.name);
+        cargo_publish(spec.name)?;
+        eprintln!("waiting for {} to be indexed ...", spec.name);
+        wait_for_index(spec.name, &version)?;
+    }
+
+    eprintln!("all crates published successfully");
+    Ok(())
+}
+
 pub(crate) fn cargo_publish(crate_name: &str) -> Result<(), PublishError> {
     let status = std::process::Command::new("cargo")
         .args(["publish", "-p", crate_name])
@@ -153,7 +172,6 @@ pub(crate) fn cargo_publish(crate_name: &str) -> Result<(), PublishError> {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn wait_for_index(crate_name: &str, version: &str) -> Result<(), PublishError> {
     let url = sparse_index_url(crate_name);
     for attempt in 1..=POLL_RETRIES {
@@ -183,14 +201,12 @@ pub(crate) fn wait_for_index(crate_name: &str, version: &str) -> Result<(), Publ
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn sparse_index_url(crate_name: &str) -> String {
     let c1 = &crate_name[..2];
     let c2 = &crate_name[2..4];
     format!("https://index.crates.io/{c1}/{c2}/{crate_name}")
 }
 
-#[allow(dead_code)]
 pub(crate) fn version_in_index_body(body: &str, version: &str) -> bool {
     body.lines().any(|line| {
         if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
@@ -293,5 +309,44 @@ mod tests {
             version_in_index_body(body, "0.3.1"),
             "first-poll success requires version_in_index_body to return true"
         );
+    }
+
+    fn crates_from(from: Option<&str>) -> Result<&'static [CrateSpec], PublishError> {
+        match from {
+            None => Ok(PUBLISH_ORDER),
+            Some(name) => {
+                let pos = PUBLISH_ORDER
+                    .iter()
+                    .position(|c| c.name == name)
+                    .ok_or_else(|| PublishError::UnknownFromCrate {
+                        name: name.to_string(),
+                    })?;
+                Ok(&PUBLISH_ORDER[pos..])
+            }
+        }
+    }
+
+    fn run_publish_dry(args: PublishArgs) -> Result<(), PublishError> {
+        crates_from(args.from.as_deref())?;
+        Ok(())
+    }
+
+    #[test]
+    fn run_publish_rejects_unknown_from_crate() {
+        let args = PublishArgs {
+            from: Some("not-a-real-crate".to_string()),
+        };
+        let err = run_publish_dry(args).unwrap_err();
+        assert!(matches!(err, PublishError::UnknownFromCrate { .. }));
+    }
+
+    #[test]
+    fn run_publish_dry_from_crux_planner_skips_twelve_crates() {
+        let args = PublishArgs {
+            from: Some("crux-planner".to_string()),
+        };
+        let remaining = crates_from(args.from.as_deref()).unwrap();
+        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining[0].name, "crux-planner");
     }
 }

@@ -7,12 +7,28 @@
 
 mod publish;
 
+use publish::{parse_publish_args, run_publish};
 use std::process::{Command, exit};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
-    // Try running taskit directly first
+    if args.first().map(|s| s.as_str()) == Some("publish") {
+        match parse_publish_args(&args[1..]) {
+            Ok(publish_args) => {
+                if let Err(e) = run_publish(publish_args) {
+                    eprintln!("publish failed: {e}");
+                    exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("usage error: {e}");
+                exit(2);
+            }
+        }
+        return;
+    }
+
     match Command::new("taskit").args(&args).status() {
         Ok(status) => exit(status.code().unwrap_or(1)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -25,7 +41,6 @@ fn main() {
                 eprintln!("failed to install taskit");
                 exit(1);
             }
-            // Retry after install
             let status = Command::new("taskit")
                 .args(&args)
                 .status()
