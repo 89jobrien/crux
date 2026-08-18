@@ -68,12 +68,17 @@ Requires Rust 1.88+ (edition 2024).
 | [`crux`](crates/crux)                 | Facade -- re-exports runtime + macros                   |
 | [`crux-runtime`](crates/crux-runtime) | Core types, traits, and runtime                         |
 | [`crux-types`](crates/crux-types)     | Wire-format types (`Crux<T>`, `Step`, `Budget`)         |
-| [`crux-macros`](crates/crux-macros)   | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
+| [`crux-derive`](crates/crux-macros)   | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
 | [`crux-agentic`](crates/crux-agentic) | Step handlers: shell, fs, git, llm, container           |
 | [`crux-script`](crates/crux-script)   | YAML pipeline scripting                                 |
 | [`crux-model`](crates/crux-model)     | Model ID types and provider parsers                     |
 | [`crux-plugin`](crates/crux-plugin)   | Subprocess plugin host                                  |
 | [`crux-planner`](crates/crux-planner) | Metrics-driven harness evolution                        |
+| [`crux-domain`](crates/crux-domain)   | Pure domain types -- no async, no LLM deps              |
+| [`crux-baml`](crates/crux-baml)       | BAML-powered LLM handlers (extract, decompose, plan)    |
+| [`crux-stdlib`](crates/crux-stdlib)   | Standard library handlers (fs, git, json, text, ctrl)   |
+| [`crux-task`](crates/crux-task)       | Project task management                                 |
+| [`crux-improve`](crates/crux-improve) | Improvement protocol: strategies, diffs, comparisons    |
 
 ## Feature flags
 

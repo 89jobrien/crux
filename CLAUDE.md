@@ -31,12 +31,16 @@ Always use `cargo nextest run` instead of `cargo test`.
 
 Crates in `crates/`:
 
-- **`crux`** -- Facade crate. Re-exports `crux-runtime` + `crux-macros`. Integration tests live here
-  (`tests/agent_macro.rs`, `combinators.rs`, `delegation.rs`, `speculation.rs`, `task_registry.rs`).
+- **`crux`** -- Facade crate. Re-exports `crux-domain`, `crux-derive`, `crux-runtime` (optional
+  `crux-script`). Integration tests live here (`tests/agent_macro.rs`, `checkpoint.rs`,
+  `combinators.rs`, `conformance.rs`, `delegation.rs`, `evolve_macro.rs`, `harness_macro.rs`,
+  `research_pipeline.rs`, `speculation.rs`, `streaming.rs`, `substrate_integration.rs`,
+  `task_registry.rs`).
 - **`crux-runtime`** -- All domain logic: types, traits, runtime. Includes orchestrator types
   (`HarnessProfile`, `ResourceHints`, `HarnessDiff`, `EvolutionOutcome`) and ports
   (`SafetyPolicy`, `ApprovalGate`).
-- **`crux-macros`** -- `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
+- **`crux-macros`** (package name `crux-derive`, renamed for crates.io publishing) --
+  `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
 - **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
@@ -48,6 +52,12 @@ Crates in `crates/`:
   is the serializable subset of `Recovery<T>` (closure variants stay in core).
 - **`crux-model`** -- Canonical model ID types and provider-specific parsers.
 - **`crux-plugin`** -- Subprocess plugin host for pipelines.
+- **`crux-domain`** -- Pure domain types for the crux agentic DSL -- no async, no LLM deps.
+- **`crux-baml`** -- BAML-powered LLM handlers for crux-script pipelines (extract, decompose, plan).
+- **`crux-stdlib`** -- Standard library handlers for crux-script pipelines (fs, git, json, text, ctrl).
+- **`crux-task`** -- Project task management for crux.
+- **`crux-improve`** -- Improvement protocol for the crux agent runtime: strategies, diffs,
+  comparisons, and policies, built on `crux-types` trace types.
 
 ## Feature Flags
 
