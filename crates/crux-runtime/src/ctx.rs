@@ -119,7 +119,6 @@ use crux_domain::pipeline::EventSender;
 use crux_domain::plan_result::PlanResult;
 use crux_domain::planner::{PassthroughPlanner, Planner};
 
-use crate::agent::Agent;
 use crate::context::Context;
 use crate::hooks::HookRegistry;
 use crate::recorder::{StepRecord, StepRecorder};
@@ -142,7 +141,7 @@ pub struct CruxCtx {
     children: Vec<Crux<serde_json::Value>>,
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
-    pub(crate) planner: std::sync::Arc<dyn Planner>,
+    planner: std::sync::Arc<dyn Planner>,
     event_sender: Option<EventSender>,
     state: std::sync::Arc<std::sync::RwLock<crux_types::step::StepState>>,
 }
@@ -213,6 +212,11 @@ impl CruxCtx {
     /// Set a pre-boxed Arc planner (used internally for child context propagation).
     pub(crate) fn set_planner_arc(&mut self, planner: std::sync::Arc<dyn Planner>) {
         self.planner = planner;
+    }
+
+    /// Clone the current planner handle for child contexts.
+    pub(crate) fn planner_arc(&self) -> std::sync::Arc<dyn Planner> {
+        std::sync::Arc::clone(&self.planner)
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.
@@ -310,13 +314,13 @@ impl CruxCtx {
 
     // -- Internal helpers for orchestration --------------------------
 
-    /// Allocate an ordinal and return the input hash for a delegation step.
-    pub(crate) fn next_delegation_hash(&mut self, name: &str) -> u64 {
+    /// Allocate an ordinal and return the input hash for a child run step.
+    pub(crate) fn next_child_run_hash(&mut self, name: &str) -> u64 {
         let (_ordinal, hash) = self.recorder.next_ordinal(name);
         hash
     }
 
-    /// Set budget directly (used by DelegationBuilder for child contexts).
+    /// Set budget directly for a child context.
     pub(crate) fn set_budget_direct(&mut self, budget: Budget) {
         self.budget_tracker = BudgetTracker::new(budget);
     }
@@ -331,18 +335,16 @@ impl CruxCtx {
         &mut self.recorder
     }
 
-    /// Push a raw step (used by delegation/speculation).
+    /// Push a raw orchestration step.
     pub(crate) fn push_step(&mut self, step: crate::types::step::Step) {
         self.recorder.push_raw(step);
     }
-
-    /// Push a child crux (used by delegation).
+    /// Push a child crux trace.
     pub(crate) fn push_child(&mut self, child: Crux<serde_json::Value>) {
         self.children.push(child);
     }
-
-    /// Record a delegation step and append the child crux.
-    pub(crate) fn record_delegation_step<T: serde::Serialize>(
+    /// Record a child run step and append the child crux.
+    pub(crate) fn record_child_run_step<T: serde::Serialize>(
         &mut self,
         name: &str,
         input_hash: u64,
@@ -378,19 +380,6 @@ impl CruxCtx {
         if let Ok(snapshot) = child_crux.to_snapshot() {
             self.push_child(snapshot);
         }
-    }
-
-    /// Start building a delegation to agent `A`.
-    pub fn delegate<'a, A: Agent>(
-        &'a mut self,
-        name: &str,
-        input: A::Input,
-    ) -> crate::delegation::DelegationBuilder<'a, A>
-    where
-        A::Input: Send,
-        A::Output: Send + serde::Serialize + serde::de::DeserializeOwned,
-    {
-        crate::delegation::DelegationBuilder::new(self, name, input)
     }
 
     /// Route execution based on a confidence score to the first matching named range.
@@ -669,29 +658,6 @@ impl CruxCtx {
 
         // All slots filled — unwrap is safe.
         Ok(results.into_iter().map(Option::unwrap).collect())
-    }
-
-    /// Start a speculation: run multiple approaches, pick the best.
-    #[allow(clippy::type_complexity)]
-    pub fn speculate<'a, T>(
-        &'a mut self,
-        name: &str,
-        arms: Vec<(
-            &str,
-            std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, CruxErr>> + Send>>,
-        )>,
-    ) -> crate::speculation::SpeculationBuilder<'a, T>
-    where
-        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
-    {
-        let spec_arms = arms
-            .into_iter()
-            .map(|(arm_name, fut)| crate::speculation::SpecArm {
-                name: arm_name.to_string(),
-                fut,
-            })
-            .collect();
-        crate::speculation::SpeculationBuilder::new(self, name, spec_arms)
     }
 
     /// Apply a `Recovery<serde_json::Value>` and convert back to `T`.

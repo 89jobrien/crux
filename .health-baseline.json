@@ -1,8 +1,8 @@
 {
-  "date": "2026-07-01",
+  "date": "2026-07-08",
   "tests": {
-    "total": 725,
-    "passed": 725,
+    "total": 743,
+    "passed": 743,
     "failed": 0,
     "skipped": 0
   },
@@ -13,5 +13,5 @@
   "todo_fixme": 26,
   "crates": 15,
   "versions_consistent": false,
-  "version": "0.3.0"
+  "version": "0.3.1"
 }

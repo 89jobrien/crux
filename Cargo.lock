@@ -434,6 +434,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -460,11 +469,11 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crux"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crux-agentic",
+ "crux-derive",
  "crux-domain",
- "crux-macros",
  "crux-runtime",
  "crux-script",
  "futures",
@@ -475,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "crux-agentic"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bollard",
  "chrono",
@@ -489,7 +498,6 @@ dependencies = [
  "crux-task",
  "crux-types",
  "futures",
- "glob",
  "ignore",
  "proptest",
  "reqwest",
@@ -504,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "crux-baml"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "baml",
  "crux-runtime",
@@ -516,8 +524,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crux-derive"
+version = "0.3.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "crux-domain"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -526,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "crux-improve"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "crux-types",
@@ -537,17 +554,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-macros"
-version = "0.3.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "crux-model"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "proptest",
  "serde",
@@ -557,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "crux-planner"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crux-agentic",
  "crux-runtime",
@@ -571,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "crux-plugin"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crux-runtime",
  "crux-script",
@@ -585,7 +593,7 @@ dependencies = [
 
 [[package]]
 name = "crux-runtime"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "crux-domain",
@@ -605,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "crux-script"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crux-runtime",
  "indexmap",
@@ -619,13 +627,12 @@ dependencies = [
 
 [[package]]
 name = "crux-stdlib"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crux-runtime",
  "crux-script",
  "glob",
  "proptest",
- "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
@@ -635,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "crux-task"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "clap",
@@ -650,12 +657,11 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "ulid",
 ]
 
 [[package]]
 name = "crux-types"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "miette",
@@ -814,6 +820,16 @@ name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
+name = "flate2"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide",
+]
 
 [[package]]
 name = "fnv"
@@ -1494,6 +1510,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
 dependencies = [
  "adler2",
+ "simd-adler32",
 ]
 
 [[package]]
@@ -2211,6 +2228,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simd-adler32"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
+
+[[package]]
 name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2637,6 +2660,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
 dependencies = [
  "base64",
+ "flate2",
  "log",
  "once_cell",
  "rustls",
@@ -3087,6 +3111,10 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "ureq",
+]
 
 [[package]]
 name = "yoke"
