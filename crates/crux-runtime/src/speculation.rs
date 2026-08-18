@@ -17,6 +17,30 @@ pub struct SpecArm<T> {
     pub name: String,
     pub fut: Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>,
 }
+impl CruxCtx {
+    /// Start a speculation: run multiple approaches, pick the best.
+    #[allow(clippy::type_complexity)]
+    pub fn speculate<'a, T>(
+        &'a mut self,
+        name: &str,
+        arms: Vec<(
+            &str,
+            Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>,
+        )>,
+    ) -> SpeculationBuilder<'a, T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        let spec_arms = arms
+            .into_iter()
+            .map(|(arm_name, fut)| SpecArm {
+                name: arm_name.to_string(),
+                fut,
+            })
+            .collect();
+        SpeculationBuilder::new(self, name, spec_arms)
+    }
+}
 
 pub struct SpeculationBuilder<'a, T> {
     ctx: &'a mut CruxCtx,

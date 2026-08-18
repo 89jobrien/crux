@@ -13,6 +13,20 @@ use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
 
 type BoxRecoveryFut = Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>;
+impl CruxCtx {
+    /// Start building a delegation to agent `A`.
+    pub fn delegate<'a, A: Agent>(
+        &'a mut self,
+        name: &str,
+        input: A::Input,
+    ) -> DelegationBuilder<'a, A>
+    where
+        A::Input: Send,
+        A::Output: Send + serde::Serialize + serde::de::DeserializeOwned,
+    {
+        DelegationBuilder::new(self, name, input)
+    }
+}
 
 pub struct DelegationBuilder<'a, A: Agent> {
     ctx: &'a mut CruxCtx,
@@ -73,11 +87,11 @@ where
     /// Execute the delegation.
     pub async fn run(self) -> Result<A::Output, CruxErr> {
         trace_delegate!(&self.name, A::name());
-        let input_hash = self.ctx.next_delegation_hash(&self.name);
+        let input_hash = self.ctx.next_child_run_hash(&self.name);
 
         // Create child context, inheriting the parent's planner
         let mut child_ctx = CruxCtx::new(A::name());
-        child_ctx.set_planner_arc(std::sync::Arc::clone(&self.ctx.planner));
+        child_ctx.set_planner_arc(self.ctx.planner_arc());
         if let Some(budget) = self.budget {
             child_ctx.set_budget_direct(budget);
         }
@@ -109,7 +123,7 @@ where
         };
 
         self.ctx
-            .record_delegation_step(&self.name, input_hash, &child_crux, output_val, error_msg);
+            .record_child_run_step(&self.name, input_hash, &child_crux, output_val, error_msg);
 
         match child_crux.value {
             Ok(v) => Ok(v),

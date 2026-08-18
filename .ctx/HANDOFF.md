@@ -1,6 +1,6 @@
-# Handoff — crux (2026-07-08)
+# Handoff — crux (2026-08-17)
 
-**Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** refactor/runtime-module-cycles | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
 
 ## Items
@@ -11,12 +11,18 @@ EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bri
 
 ## Log
 
-- 20260708:000000: Heavy refactor session — IOSP decomposition, runtime/script/stdlib
-  component refactoring, dead code removal across crux-runtime, crux-script,
-  crux-stdlib, crux-agentic, crux-model. Extracted magic numbers to constants,
-  decomposed long methods (join_all, step_stream, step_retryable, step_inner),
-  separated pure logic from I/O in dispatch paths. Two branch merges (iosp +
-  dead-code). All 538+ tests pass, clippy clean.
+- 20260708:000000: Heavy refactor session across crux runtime and stdlib components:
+IOSP decomposition — extracted magic numbers into named constants (crux-agentic).
+Runtime refactoring — decomposed long context methods: join_all, step_stream,
+step_retryable, step_inner into separate implementations (crux-runtime).
+Script dispatch — extracted per-step-kind dispatch logic in execute_step()
+(crux-script). Stdlib parsing — decomposed parse_diff() into hunk/line/context
+helpers (crux-stdlib). Pure logic separation — separated pure logic from I/O
+in run dispatch, eval_jq, and TargetResolver. Dead code removal across crates.
+Two branch merges: refactor/iosp-magic-numbers-splits (const extraction) and
+fix/dead-code-srp-crux-model (dead code cleanup). All 538+ tests pass, clippy
+clean. Scope spans crux-runtime, crux-script, crux-stdlib, crux-agentic,
+crux-model, crux-core crates.
 
 - 20260701:120000: Major crux-task implementation session — scaffolded crate with types (TaskError,
 TaskState, TaskSnapshot), error handling (anyhow → miette diagnostic errors),
@@ -54,5 +60,3 @@ crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 
 baseline written to .health-baseline.json.
 
 - 20260504:224027: handjobs triage — 0 open items, 0 GH issues synced
-- 20260424:212604: Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit, pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased commits to origin.
-

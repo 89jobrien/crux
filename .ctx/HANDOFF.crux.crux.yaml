@@ -1,6 +1,6 @@
 project: crux
 id: crux
-updated: 2026-07-08
+updated: 2026-08-17
 items:
 - id: crux-task-impl
   doob_uuid: null
@@ -40,17 +40,7 @@ log:
     fix/dead-code-srp-crux-model (dead code cleanup). All 538+ tests pass, clippy
     clean. Scope spans crux-runtime, crux-script, crux-stdlib, crux-agentic,
     crux-model, crux-core crates.
-  commits:
-    - 2737bd2
-    - 8183e2d
-    - 5361284
-    - 51396b7
-    - a85d9b7
-    - ef858c8
-    - cb63420
-    - 95f2bb0
-    - c6adda3
-    - d07bd1f
+  commits: []
 - date: 20260701:120000
   summary: |
     Major crux-task implementation session — scaffolded crate with types (TaskError,
