@@ -7,8 +7,8 @@ use serde_json::Value;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, JoinAllNode, PipeNode, PipelineDef, RouteNode, SpeculateMode,
-    SpeculateNode, StepDef, StepNode, TargetDef,
+    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, PipeNode, PipelineDef, RouteNode,
+    SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -220,6 +220,10 @@ impl Runner {
                 Ok::<Value, CruxErr>(raw.value)
             })
             .await?;
+
+        if let Some(expect) = &node.expect {
+            check_expect(&node.step, &handler_out, expect)?;
+        }
 
         let confidence = *confidence_cell.lock().unwrap();
         expr_ctx.steps.insert(
@@ -514,6 +518,55 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
         ),
         other => other,
     }
+}
+
+/// Evaluate a step's `expect:` clause against its handler output.
+///
+/// Looks up `exit_code`, `stdout`, `stderr` fields on the output value (the
+/// convention used by shell-style handlers). Any configured check that fails
+/// produces a descriptive `CruxErr::StepFailed`. Checks not configured in the
+/// `expect:` block are skipped.
+fn check_expect(step_name: &str, output: &Value, expect: &ExpectDef) -> Result<(), CruxErr> {
+    if let Some(expected_code) = expect.exit_code {
+        let actual = output.get("exit_code").and_then(|v| v.as_i64());
+        if actual != Some(expected_code) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.exit_code mismatch: expected {expected_code}, got {}",
+                    actual
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "<missing>".to_string())
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stdout_contains {
+        let actual = output.get("stdout").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stdout_contains mismatch: stdout did not contain {needle:?} (stdout was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stderr_contains {
+        let actual = output.get("stderr").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stderr_contains mismatch: stderr did not contain {needle:?} (stderr was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Merge static step args into handler input under the "args" key.

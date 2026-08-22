@@ -79,6 +79,26 @@ pub struct StepNode {
     pub handler: Option<String>,
     #[serde(default)]
     pub args: Option<serde_json::Value>,
+    /// Declarative post-execution assertions (#82). Evaluated against the handler's
+    /// output value after the step runs; a mismatch fails the pipeline with a
+    /// descriptive error even though the handler itself succeeded.
+    #[serde(default)]
+    pub expect: Option<ExpectDef>,
+}
+
+/// Declarative assertions checked against a step's output value after execution.
+///
+/// Expects the output to be a JSON object with `exit_code` (number), `stdout`
+/// (string), and/or `stderr` (string) fields — the convention used by shell-style
+/// handlers. Fields not present in the `expect:` block are not checked.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ExpectDef {
+    #[serde(default)]
+    pub exit_code: Option<i64>,
+    #[serde(default)]
+    pub stdout_contains: Option<String>,
+    #[serde(default)]
+    pub stderr_contains: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
