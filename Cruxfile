@@ -1,18 +1,84 @@
-# Cruxfile for crux
-name: crux-ci
-steps:
-  - name: self-check
-    run: taskit self-check
-    gate: true
-  - name: fmt --check
-    run: taskit fmt --check
-  - name: lint
-    run: taskit lint
-  - name: compile-tests
-    run: taskit compile-tests
-  - name: test
-    run: taskit test
-  - name: check-deps
-    run: taskit check-deps
-  - name: check-protocol-drift
-    run: taskit check-protocol-drift
+project: crux
+# Self-hosted CI gate for the crux workspace -- mirrors `just ci`.
+#
+# This is a Cruxfile (multi-target), not a pipeline: targets form a
+# dependency DAG and are resolved topologically before execution.
+#
+# Run:
+#   crux run                    # default target (ci) + all dependencies
+#   crux run Cruxfile lint      # one target + its dependencies
+#   crux run -n                 # print the execution plan, run nothing
+#   crux run -v                 # per-target timing and step counts
+#
+# Targets form a fail-fast chain, cheapest first: the first failure stops
+# the run and the remaining targets are reported as skipped.
+default: ci
+budget: { calls: 20, duration_ms: 1800000 }
+
+targets:
+  # -- 1. Formatting: fastest gate, fails before anything is compiled -------
+  fmt:
+    steps:
+      - step: fmt_check
+        handler: shell::capture
+        args:
+          cmd: "cargo fmt --all -- --check"
+
+  # -- 2. Clippy with warnings-as-errors -----------------------------------
+  lint:
+    depends: [fmt]
+    steps:
+      - step: clippy
+        handler: shell::capture
+        args:
+          cmd: "cargo clippy --all-targets -- -D warnings"
+
+  # -- 3. Type check the whole workspace -----------------------------------
+  check:
+    depends: [lint]
+    steps:
+      - step: cargo_check
+        handler: shell::capture
+        args:
+          cmd: "RUSTFLAGS='-D warnings' cargo check --workspace --all-targets"
+
+  # -- 4. Locked build (CI parity) -----------------------------------------
+  build:
+    depends: [check]
+    steps:
+      - step: cargo_build
+        handler: shell::capture
+        args:
+          cmd: "RUSTFLAGS='-D warnings' cargo build --locked --all-targets"
+
+  # -- 5. Test suite --------------------------------------------------------
+  test:
+    depends: [build]
+    steps:
+      - step: nextest
+        handler: shell::capture
+        args:
+          cmd: "cargo nextest run"
+
+  # -- 6. Dependency audit --------------------------------------------------
+  deny:
+    depends: [test]
+    steps:
+      - step: cargo_deny
+        handler: shell::capture
+        args:
+          cmd: "cargo deny check"
+
+  # -- 7. Pipeline lint: validate every .crux file under examples/ ----------
+  #      Needs --features baml so the llm:: handlers are registered.
+  lint-crux:
+    depends: [deny]
+    steps:
+      - step: check_pipelines
+        handler: shell::capture
+        args:
+          cmd: "find examples -name '*.crux' -print0 | xargs -0 cargo run --quiet -p crux-agentic --features baml --bin crux -- check"
+
+  # -- 8. Aggregation target: no steps, just the full dependency closure ----
+  ci:
+    depends: [fmt, lint, check, build, test, deny, lint-crux]

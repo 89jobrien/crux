@@ -1,34 +1,54 @@
 pipeline: harness_safety_gate
 # Validate a proposed HarnessDiff against safety policy and approval gate.
-# Routes through hard-cap validation, then approval if required.
+#
+# Two gates in sequence:
+#   1. a hard-cap assertion that aborts the run outright on a cap breach,
+#   2. a scored policy gate that routes to reject / approval / auto-approve.
+#
+# Expected input:
+#   base_profile     -- HarnessProfile the diff is computed against
+#   within_hard_caps -- bool; false means memory, CPU, timeout or syscall
+#                       limits were breached
+#   policy_findings  -- [{ tier: "blocking" | ... }] from the safety policy
 budget: { calls: 6 }
 
 steps:
-  - step: validate_diff
-    handler: harness::safety_validate
+  # -- 1. Compute the proposed profile and its diff from the base profile ---
+  - step: propose_diff
+    handler: harness::evolve
     args:
-      diff: "{{ input.diff }}"
       base_profile: "{{ input.base_profile }}"
-    # Check hard caps: memory, CPU, timeout, forbidden syscalls
 
-  - step: check_approval_required
-    handler: harness::approval_check
+  # -- 2. Hard-cap gate: fail before scoring on a cap or syscall breach -----
+  - step: hard_cap_gate
+    handler: ctrl::assert
     args:
-      diff: "{{ input.diff }}"
-    # Returns whether network_access_change or syscall_additions
-    # trigger the requires_approval policy gate
+      condition: "{{ input.within_hard_caps }}"
+      message: "SafetyViolation: HardCapExceeded or ForbiddenSyscall"
 
+  # -- 3. Lift the policy findings to the top level for the scorer ----------
+  - step: collect_findings
+    handler: json::merge
+    args:
+      with:
+        findings: "{{ input.policy_findings }}"
+
+  # -- 4. Score: 1.0 = no blocking findings, 0.0 = all findings blocking ----
+  - step: policy_score
+    handler: review::compute_score
+
+  # -- 5. Route on the policy score ----------------------------------------
   - route_on_confidence: gate
-    value: "{{ steps.validate_diff.confidence }}"
+    value: "{{ steps.policy_score.confidence }}"
     routes:
       - range: "[0.0, 0.3)"
         label: hard_reject
         handler: ctrl::log
-        # SafetyViolation: HardCapExceeded or ForbiddenSyscall
+        # Blocking findings dominate -- SafetyPolicy rejects the diff
       - range: "[0.3, 0.7)"
         label: approval_required
         handler: ctrl::log
-        # Diff is within caps but policy requires human sign-off
+        # Within caps but policy requires human sign-off via ApprovalGate
       - range: "[0.7, 1.0]"
         label: approved
         handler: ctrl::log

@@ -22,15 +22,10 @@ steps:
     routes:
       - range: "[0.0, 0.4)"
         label: rollback
-        steps:
-          - step: restore_profile
-            handler: harness::evolve
-            args:
-              base_profile: "{{ input.previous_profile }}"
-            # Apply the previous known-good profile
-          - step: notify
-            handler: ctrl::log
-            # Log rollback event for audit trail
+        handler: harness::evolve
+        args:
+          base_profile: "{{ input.previous_profile }}"
+        # Apply the previous known-good profile
       - range: "[0.4, 0.8)"
         label: degraded
         handler: ctrl::log
@@ -39,3 +34,9 @@ steps:
         label: healthy
         handler: ctrl::log
         # No rollback needed -- harness is performing well
+
+  - step: notify
+    handler: ctrl::log
+    args:
+      compact: true
+    # Log the routed outcome for the audit trail

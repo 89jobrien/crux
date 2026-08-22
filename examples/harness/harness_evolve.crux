@@ -21,11 +21,12 @@ steps:
   - pipe: validate
     stages:
       - step: safety_check
-        handler: harness::safety_validate
+        handler: ctrl::assert
         args:
-          diff: "{{ steps.gather.load_profile.diff }}"
-          base_profile: "{{ input.base_profile }}"
-        # Validate proposed diff against SafetyPolicy hard caps
+          condition: "{{ input.within_hard_caps }}"
+          message: "SafetyPolicy rejected the diff: hard cap exceeded or forbidden syscall"
+        # Hard-cap gate over the proposed diff -- fails the pipe outright when
+        # the change breaches SafetyPolicy memory/CPU/timeout/syscall limits
       - step: classify_risk
         handler: llm::extract
         args:
