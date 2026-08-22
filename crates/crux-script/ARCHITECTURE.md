@@ -57,5 +57,5 @@ Pipeline execution engine with a layered design:
 ## Expression Language
 
 `expr` module supports template expressions in pipeline YAML:
-`${{ steps.prev.output.field }}` style interpolation with JSON path
+`{{ steps.prev.output.field }}` style interpolation with JSON path
 traversal.

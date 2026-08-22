@@ -10,6 +10,7 @@
 - [Budgets and errors](pipelines/04-budgets-and-errors.md)
 - [LLM pipelines](pipelines/05-llm-pipelines.md)
 - [Real-world examples](pipelines/06-real-world-examples.md)
+- [Cruxfiles](pipelines/07-cruxfiles.md)
 
 # Rust API
 

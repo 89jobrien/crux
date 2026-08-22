@@ -58,3 +58,19 @@ runner.run(&pipeline, input).await?;
 
 - **Pipeline** — single execution flow with `pipeline:` key
 - **Cruxfile** — multi-target build file with `targets:` key
+
+`is_cruxfile` picks between them by looking for a line starting with
+`targets:`; everything else is parsed as a pipeline. Load with
+`load_cruxfile` / `load`, validate with `validate_cruxfile` /
+`validate_pipeline`, and execute with `Runner::run_target` /
+`Runner::run`.
+
+`TargetResolver::execution_order` returns the topologically sorted
+closure for a target, rejecting unknown dependencies and cycles at
+construction. Each target runs in its own `CruxCtx`, so budgets are
+scoped per target rather than per run, and a target's own `budget:`
+overrides the file-level default.
+
+Cruxfile targets are invoked with a null input and are not replayable —
+both are single-pipeline notions. See `docs/pipelines/07-cruxfiles.md`
+for the user-facing guide.

@@ -23,6 +23,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   metrics-driven harness profile evolution
 - `#[crux::harness]` proc macro -- annotates a struct as a managed harness
 - `#[crux::evolve]` proc macro -- injects `EvolutionPlanner` + `CruxCtx` into an evolution fn
+- `crux <target>` shorthand for `crux run --target <target>`, and `crux <file>` for
+  `crux run <file>` -- argv is rewritten before parsing, so existing invocations are
+  unaffected
+- Cruxfile chapter in the pipeline guide (`docs/pipelines/07-cruxfiles.md`), covering
+  targets, dependency resolution, fail-fast, per-target budgets, and the shorthand
+
+### Changed
+
+- Root `Cruxfile` is now a real multi-target Cruxfile mirroring `just ci`
+  (`fmt -> lint -> typecheck -> build -> test -> deny -> lint-crux -> ci`); it was
+  previously in taskit's format, which neither crux-script schema accepts
+- The Cruxfile's `cargo check` target is named `typecheck`, since `crux check` is the
+  file validator and subcommands win over targets of the same name
+- An unresolvable Cruxfile target now prints the available target list
+- `--target` passed alongside a plain pipeline warns that it is ignored
+
+### Fixed
+
+- Bare `crux run` in the repo root panicked: the root `Cruxfile` has no `targets:` key,
+  so it fell through to the pipeline parser and hit an `expect`. The Cruxfile now parses;
+  the underlying panic on a malformed pipeline is unchanged
+- `examples/harness/harness_rollback.crux` failed to parse: a `route_on_confidence`
+  branch used a nested `steps:` list, which `RouteBranch` does not model
+- `examples/harness/harness_safety_gate.crux` and `harness_evolve.crux` referenced
+  `harness::safety_validate` and `harness::approval_check`, neither of which is
+  implemented; both now build on registered handlers
+- Template delimiter in `crux-script` docs and `CONFORMANCE.md` was written `${{ ... }}`;
+  the runtime accepts `{{ ... }}`
+
+### Removed
+
+- `Cruxfile.v1`, a pipeline mislabelled as a Cruxfile whose header referenced a
+  `Cruxfile.crux` that never existed; its content is now the root Cruxfile's targets
 
 ## [0.1.0] - 2026-04-12
 

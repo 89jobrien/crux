@@ -90,6 +90,18 @@ The input JSON is available to handlers as the initial pipeline state.
 Steps that don't need external input (like our `hello.crux`) can run
 without it.
 
+## Shorthand
+
+A first argument that names an existing file runs as a pipeline, so the
+`run` is optional:
+
+```bash
+crux hello.crux
+```
+
+The same shorthand names a target when the argument isn't a file --
+see [Cruxfiles](07-cruxfiles.md).
+
 ## What just happened
 
 Each step ran in order. The output of one step becomes the input to

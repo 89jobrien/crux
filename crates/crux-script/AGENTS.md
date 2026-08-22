@@ -25,7 +25,7 @@ file_formats:
         key: "pipeline:"
       - name: Cruxfile
         key: "targets:"
-expression_syntax: "${{ steps.<name>.output.<path> }}"
+expression_syntax: "{{ steps.<name>.output.<path> }}"
 ---
 
 # Agents: crux-script
@@ -40,8 +40,9 @@ in `crux-agentic`, `crux-stdlib`, and `crux-baml`.
 Files use `.crux` extension (YAML syntax). Two formats:
 - **Pipeline** — `pipeline:` top-level key
 - **Cruxfile** — `targets:` top-level key (multi-target)
+- Cruxfile targets: null input, no replay, budget scoped per target
 
 ### Expression Syntax
 
-`${{ steps.<name>.output.<path> }}` — JSON path interpolation
+`{{ steps.<name>.output.<path> }}` — JSON path interpolation
 resolved at runtime by `expr.rs`.

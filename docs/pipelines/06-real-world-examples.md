@@ -123,6 +123,8 @@ Each runs in under a second with no external dependencies.
 
 ## What next
 
+- [Cruxfiles](07-cruxfiles.md) -- multi-target build files and the
+  `crux <target>` shorthand
 - [Handlers and capabilities](../crux-capabilities.md) -- full
   handler reference
 - [Syntax reference](../crux-syntax-reference.md) -- complete YAML

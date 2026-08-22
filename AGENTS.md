@@ -100,6 +100,27 @@ crux run examples/showcase.crux -v    # verbose
 
 Pipeline files use `.crux` extension (YAML syntax).
 
+### Cruxfiles
+
+A file with a top-level `targets:` key is a Cruxfile: named targets with
+`depends:` edges, resolved topologically and run fail-fast. Everything else
+parses as a single pipeline.
+
+`crux <target>` is shorthand for `crux run --target <target>`, and
+`crux <file>` for `crux run <file>`:
+
+```bash
+crux lint            # run the `lint` target and its dependencies
+crux lint -n         # print the execution plan, run nothing
+crux run             # default target of ./Cruxfile
+```
+
+Subcommand names (`list`, `check`, `run`, `plan`, `help`) win over targets of
+the same name -- the repo Cruxfile uses `typecheck`, not `check`, for this
+reason. Cruxfile targets take no JSON input and do not support `--replay`.
+
+See `docs/pipelines/07-cruxfiles.md`.
+
 ## BAML
 
 - `baml_client/` is generated and gitignored. Regenerate with

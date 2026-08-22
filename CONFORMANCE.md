@@ -149,7 +149,7 @@ Lifecycle hooks intercept step execution at defined points.
 4. Template expressions (`{{ outputs['alias'].field }}`) MUST resolve
    against the pipeline's `StepState`. Missing aliases or fields MUST
    produce an error.
-5. Conditional guards (`if_expr`) MUST support `${{ outputs['alias'] }}`
+5. Conditional guards (`if_expr`) MUST support `{{ outputs['alias'] }}`
    syntax. The expression MUST resolve to a string; values `"false"`,
    `"0"`, and `""` are falsy, all others truthy.
 6. Pipeline validation MUST detect: missing handlers, unreachable steps

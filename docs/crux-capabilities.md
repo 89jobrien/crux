@@ -2,6 +2,16 @@
 
 Native support status for crux-script pipeline step types and handlers.
 
+## File Forms
+
+| Form     | Detected by         | Runs                                              |
+| -------- | ------------------- | ------------------------------------------------- |
+| Pipeline | `pipeline:` key     | one ordered `steps:` list, with JSON input/replay |
+| Cruxfile | `targets:` key      | a target DAG, fail-fast, null input, no replay    |
+
+`crux <target>` is shorthand for `crux run --target <target>`. See
+[Cruxfiles](pipelines/07-cruxfiles.md).
+
 ## Pipeline Combinators
 
 | Kind               | Pipeline key                       | Status                                                          |
@@ -144,3 +154,5 @@ Doob backlog processing and prioritization.
 | `speculate: pick_best` | Arms that don't emit `score` all tie at 0.0 (stub) (#68)                           |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
+| `harness::evolve`      | Registered without `HandlerMetadata`, so its args are not validated               |
+| `harness::canary`      | Registered without `HandlerMetadata`, so its args are not validated               |
