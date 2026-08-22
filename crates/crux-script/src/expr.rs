@@ -137,13 +137,8 @@ fn json_get(value: &Value, path: &str) -> Option<Value> {
     let mut current = value;
     let mut owned;
     for key in path.split('.') {
-        match current.get(key) {
-            Some(v) => {
-                owned = v.clone();
-                current = &owned;
-            }
-            None => return None,
-        }
+        owned = current.get(key)?.clone();
+        current = &owned;
     }
     Some(current.clone())
 }
