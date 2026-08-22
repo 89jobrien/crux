@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
+use crux_script::{HandlerRegistry, TargetResolver, schema::CruxfileDef, schema::PipelineDef};
 use serde_json::{Value, json};
 
 use crate::registry::{build_registry, collect_handler_names, print_trace, warn_missing_env};
@@ -65,6 +65,11 @@ fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>
         }
     } else {
         // Regular pipeline. target_or_input is the input file, not a target.
+        if let Some(t) = cfg.target_flag {
+            eprintln!(
+                "[crux] warning: --target {t} ignored: {pipeline_path} is a pipeline, not a Cruxfile"
+            );
+        }
         if cfg.dry_run {
             cmd_dry_run_pipeline(contents, pipeline_path);
         } else {
@@ -90,6 +95,23 @@ pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
     dispatch_on_contents(&contents, &pipeline_path, cfg);
 }
 
+/// Resolve a target's execution order, listing the available targets on failure.
+///
+/// With the bare-target shorthand (`crux <target>`) a typo is the common error,
+/// so the target list is worth printing rather than just the parse failure.
+fn execution_order_or_exit<'a>(
+    resolver: &'a TargetResolver,
+    cruxfile: &'a CruxfileDef,
+    target: &'a str,
+) -> Vec<&'a str> {
+    resolver.execution_order(target).unwrap_or_else(|e| {
+        eprintln!("error: {e}");
+        let names: Vec<&str> = cruxfile.targets.keys().map(String::as_str).collect();
+        eprintln!("available targets: {}", names.join(", "));
+        std::process::exit(1);
+    })
+}
+
 /// Print Cruxfile execution plan without running.
 fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
@@ -104,10 +126,7 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
         std::process::exit(1);
     });
 
-    let order = resolver.execution_order(target).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        std::process::exit(1);
-    });
+    let order = execution_order_or_exit(&resolver, &cruxfile, target);
 
     println!("Cruxfile: {} (target: {target})", cruxfile.project);
     println!("Execution order: {}\n", order.join(" -> "));
@@ -177,10 +196,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         std::process::exit(1);
     });
 
-    let order = resolver.execution_order(target).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        std::process::exit(1);
-    });
+    let order = execution_order_or_exit(&resolver, &cruxfile, target);
 
     if verbose {
         eprintln!(

@@ -5,10 +5,15 @@ project: crux
 # dependency DAG and are resolved topologically before execution.
 #
 # Run:
+#   crux                        # help
 #   crux run                    # default target (ci) + all dependencies
-#   crux run Cruxfile lint      # one target + its dependencies
-#   crux run -n                 # print the execution plan, run nothing
-#   crux run -v                 # per-target timing and step counts
+#   crux lint                   # one target + its dependencies
+#   crux lint -n                # print the execution plan, run nothing
+#   crux lint -v                # per-target timing and step counts
+#
+# `crux <target>` is shorthand for `crux run --target <target>`. The names
+# list, check, run and plan are crux subcommands and always win over a target
+# of the same name -- hence `typecheck` below rather than `check`.
 #
 # Targets form a fail-fast chain, cheapest first: the first failure stops
 # the run and the remaining targets are reported as skipped.
@@ -34,7 +39,8 @@ targets:
           cmd: "cargo clippy --all-targets -- -D warnings"
 
   # -- 3. Type check the whole workspace -----------------------------------
-  check:
+  #      Named `typecheck`, not `check`: `crux check` is the file validator.
+  typecheck:
     depends: [lint]
     steps:
       - step: cargo_check
@@ -44,7 +50,7 @@ targets:
 
   # -- 4. Locked build (CI parity) -----------------------------------------
   build:
-    depends: [check]
+    depends: [typecheck]
     steps:
       - step: cargo_build
         handler: shell::capture
@@ -81,4 +87,4 @@ targets:
 
   # -- 8. Aggregation target: no steps, just the full dependency closure ----
   ci:
-    depends: [fmt, lint, check, build, test, deny, lint-crux]
+    depends: [fmt, lint, typecheck, build, test, deny, lint-crux]

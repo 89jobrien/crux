@@ -27,7 +27,11 @@ enum OutputType {
 }
 
 #[derive(Parser)]
-#[command(name = "crux", about = "crux pipeline runner and planner")]
+#[command(
+    name = "crux",
+    about = "crux pipeline runner and planner",
+    after_help = "Cruxfile shorthand:\n  crux <target>       run a Cruxfile target -- same as `crux run --target <target>`\n  crux <file.crux>    run a pipeline file   -- same as `crux run <file.crux>`\n\nSubcommand names (list, check, run, plan, help) always win over a Cruxfile\ntarget of the same name; reach those with `crux run --target <name>`."
+)]
 enum Cli {
     /// List discovered .crux pipeline files under a directory
     List {
@@ -101,8 +105,41 @@ enum Cli {
     },
 }
 
+/// Subcommand names that take precedence over the Cruxfile target shorthand.
+const SUBCOMMANDS: &[&str] = &["list", "check", "run", "plan", "help"];
+
+/// Rewrite `crux <target> [args..]` into `crux run --target <target> [args..]`.
+///
+/// A first argument naming a subcommand, starting with `-`, or absent entirely
+/// is left alone, so every existing invocation parses exactly as before. A
+/// first argument that names an existing file becomes `run <file>` instead, so
+/// `crux path/to/pipeline.crux` runs that pipeline directly.
+///
+/// `is_file` is injected so the rewrite is testable without touching disk.
+fn normalize_args(args: Vec<String>, is_file: impl Fn(&str) -> bool) -> Vec<String> {
+    let Some(first) = args.get(1).cloned() else {
+        return args;
+    };
+    if first.starts_with('-') || SUBCOMMANDS.contains(&first.as_str()) {
+        return args;
+    }
+
+    let mut out = vec![args[0].clone(), "run".to_string()];
+    if is_file(&first) {
+        out.push(first);
+    } else {
+        out.push("--target".to_string());
+        out.push(first);
+    }
+    out.extend(args.into_iter().skip(2));
+    out
+}
+
 fn main() {
-    let cli = Cli::parse();
+    let argv = normalize_args(std::env::args().collect(), |p| {
+        std::path::Path::new(p).is_file()
+    });
+    let cli = Cli::parse_from(argv);
 
     match cli {
         Cli::List { root } => cmd_list(&root),
@@ -187,7 +224,93 @@ fn cmd_list(root: &str) {
 
 #[cfg(test)]
 mod tests {
+    use super::normalize_args;
     use super::plan::*;
+
+    /// Normalize an argv vector against a cwd where no file exists.
+    fn norm(args: &[&str]) -> Vec<String> {
+        normalize_args(args.iter().map(|s| s.to_string()).collect(), |_| false)
+    }
+
+    /// Normalize an argv vector against a cwd where exactly `file` exists.
+    fn norm_with_file(args: &[&str], file: &str) -> Vec<String> {
+        let file = file.to_string();
+        normalize_args(args.iter().map(|s| s.to_string()).collect(), move |p| {
+            p == file
+        })
+    }
+
+    #[test]
+    fn bare_target_rewrites_to_run_with_target_flag() {
+        assert_eq!(norm(&["crux", "fmt"]), ["crux", "run", "--target", "fmt"]);
+    }
+
+    #[test]
+    fn bare_target_preserves_trailing_flags() {
+        assert_eq!(
+            norm(&["crux", "lint", "-v", "--save-trace", "t.json"]),
+            [
+                "crux",
+                "run",
+                "--target",
+                "lint",
+                "-v",
+                "--save-trace",
+                "t.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn hyphenated_target_is_not_mistaken_for_a_flag() {
+        assert_eq!(
+            norm(&["crux", "lint-crux"]),
+            ["crux", "run", "--target", "lint-crux"]
+        );
+    }
+
+    #[test]
+    fn known_subcommands_are_left_alone() {
+        for sub in ["list", "check", "run", "plan", "help"] {
+            assert_eq!(
+                norm(&["crux", sub, "x"]),
+                ["crux", sub, "x"],
+                "subcommand '{sub}' must not be rewritten"
+            );
+        }
+    }
+
+    #[test]
+    fn leading_flag_is_left_alone() {
+        assert_eq!(norm(&["crux", "--help"]), ["crux", "--help"]);
+        assert_eq!(norm(&["crux", "-h"]), ["crux", "-h"]);
+    }
+
+    #[test]
+    fn no_args_is_left_alone() {
+        assert_eq!(norm(&["crux"]), ["crux"]);
+    }
+
+    #[test]
+    fn existing_file_becomes_a_pipeline_run_not_a_target() {
+        assert_eq!(
+            norm_with_file(
+                &["crux", "examples/showcase.crux", "-v"],
+                "examples/showcase.crux"
+            ),
+            ["crux", "run", "examples/showcase.crux", "-v"]
+        );
+    }
+
+    #[test]
+    fn missing_file_path_falls_through_to_target() {
+        // A path that does not exist is still treated as a target name, so the
+        // error surfaces as "unknown target" with the target list.
+        assert_eq!(
+            norm(&["crux", "nope.crux"]),
+            ["crux", "run", "--target", "nope.crux"]
+        );
+    }
 
     #[test]
     fn plan_subcommand_with_rule_planner_prints_steps() {
