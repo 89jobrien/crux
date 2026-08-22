@@ -39,7 +39,6 @@ pub fn register_extract_with(
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
 
-            // TODO(#69): only 3 BAML functions wired — add more or make dynamic
             match function.as_str() {
                 "ExtractEntities" => {
                     let text = input_map

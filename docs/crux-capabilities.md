@@ -162,7 +162,7 @@ Doob backlog processing and prioritization.
 
 | Kind             | What it does                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------ |
-| `llm::extract`   | BAML structured extraction (3 functions: `ExtractEntities`, `Summarize`, `Classify`) |
+| `llm::extract`   | BAML structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
 | `llm::decompose` | BAML spec decomposition into task list                                               |
 | `llm::plan`      | BAML pipeline generation from natural language goal                                  |
 
@@ -174,5 +174,4 @@ Doob backlog processing and prioritization.
 | `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents (#67) |
 | `route_on_confidence`  | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76) |
 | `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84) |
-| `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
