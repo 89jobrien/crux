@@ -150,7 +150,8 @@ async fn jq_dot_path_still_works() {
 async fn jq_unsupported_syntax_returns_error() {
     let reg = registry();
     let handler = reg.get_handler("json::jq").unwrap();
-    let input = json!({"args": {"expr": "select(.x > 1)"}, "x": 2});
+    // reduce(...) remains genuinely unsupported (no full jq runtime).
+    let input = json!({"args": {"expr": "reduce .items[] as $x (0; . + $x)"}, "items": [1, 2]});
     let err = handler(input).await.unwrap_err();
     let msg = err.to_string();
     assert!(
@@ -164,14 +165,104 @@ async fn jq_unsupported_syntax_returns_error() {
 }
 
 #[tokio::test]
-async fn jq_map_syntax_returns_error() {
+async fn jq_array_index_bracket_on_key() {
     let reg = registry();
     let handler = reg.get_handler("json::jq").unwrap();
-    let input = json!({"args": {"expr": "map(.x)"}, "items": [{"x": 1}]});
+    let input = json!({"args": {"expr": ".items[2]"}, "items": ["a", "b", "c"]});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!("c"));
+}
+
+#[tokio::test]
+async fn jq_nested_array_index() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".matrix[1][0]"}, "matrix": [[1, 2], [3, 4]]});
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!(3));
+}
+
+#[tokio::test]
+async fn jq_select_filters_array_with_comparison() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | select(.value > 1)"},
+        "items": [{"value": 1}, {"value": 2}, {"value": 3}]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([{"value": 2}, {"value": 3}]));
+}
+
+#[tokio::test]
+async fn jq_select_filters_array_with_equality() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | select(.status == \"done\")"},
+        "items": [{"status": "done"}, {"status": "open"}]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([{"status": "done"}]));
+}
+
+#[tokio::test]
+async fn jq_select_truthy_without_operator() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | select(.flag)"},
+        "items": [{"flag": true}, {"flag": false}, {"flag": null}]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([{"flag": true}]));
+}
+
+#[tokio::test]
+async fn jq_map_transforms_array() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | map(.value)"},
+        "items": [{"value": 1}, {"value": 2}]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([1, 2]));
+}
+
+#[tokio::test]
+async fn jq_map_errors_on_non_array() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({"args": {"expr": ".item | map(.value)"}, "item": {"value": 1}});
     let err = handler(input).await.unwrap_err();
-    let msg = err.to_string();
-    assert!(
-        msg.contains("json::jq only supports"),
-        "expected unsupported-syntax error, got: {msg}"
-    );
+    assert!(err.to_string().contains("requires an array"));
+}
+
+#[tokio::test]
+async fn jq_pipe_select_and_map_combined() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | select(.active == true) | map(.value)"},
+        "items": [
+            {"active": true, "value": 1},
+            {"active": false, "value": 2},
+            {"active": true, "value": 3}
+        ]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([1, 3]));
+}
+
+#[tokio::test]
+async fn jq_map_then_select_on_scalars() {
+    let reg = registry();
+    let handler = reg.get_handler("json::jq").unwrap();
+    let input = json!({
+        "args": {"expr": ".items | map(.value) | select(. > 1)"},
+        "items": [{"value": 1}, {"value": 2}, {"value": 3}]
+    });
+    let result = handler(input).await.unwrap();
+    assert_eq!(result, json!([2, 3]));
 }

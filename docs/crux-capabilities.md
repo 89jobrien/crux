@@ -73,7 +73,7 @@ Two registry methods exist for registering handlers:
 | `git::status`       | `git status --porcelain`                                                    |
 | `json::pick`        | Extract named fields from input object                                      |
 | `json::merge`       | Merge static `with` object into input                                       |
-| `json::jq`          | Dot-path traversal only (not full jq)                                       |
+| `json::jq`          | Dot-path, `[idx]` indexing, `\|` pipes, `select(cond)`, `map(expr)` (not full jq) |
 | `ctrl::noop`        | Pass input through unchanged                                                |
 | `ctrl::log`         | Log to stderr and pass through                                              |
 | `ctrl::assert`      | Assert `args.condition` is truthy or fail                                   |
@@ -175,4 +175,4 @@ Doob backlog processing and prioritization.
 | `route_on_confidence`  | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76) |
 | `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84) |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
-| `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
+| `json::jq`             | Supports dot-path, `[idx]`/`[i][j]` indexing, `\|` pipes, `select(cond)` (comparison ops `== != > < >= <=` or bare truthy test), and `map(expr)` (#70). Still no full jq: no `reduce`, `foreach`, string/math builtins beyond `keys`/`length`/`type`/`first`/`last`/`has()`, no variable bindings (`as $x`), no array/object construction literals, and `select`/`map` only operate on the current array value (no stream semantics). |
