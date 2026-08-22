@@ -8,53 +8,8 @@ use serde_json::{Value, json};
 #[cfg(feature = "baml")]
 use crate::registry::{collect_handler_names, resolve_plugins_path};
 
-/// A rule mapping goal keywords to a handler step sequence.
-pub struct PlanRule {
-    pub keywords: Vec<String>,
-    pub steps: Vec<String>,
-}
-
-impl PlanRule {
-    pub fn new(
-        keywords: impl IntoIterator<Item = impl Into<String>>,
-        steps: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Self {
-        Self {
-            keywords: keywords.into_iter().map(Into::into).collect(),
-            steps: steps.into_iter().map(Into::into).collect(),
-        }
-    }
-
-    fn matches(&self, goal_lower: &str) -> bool {
-        self.keywords
-            .iter()
-            .all(|kw| goal_lower.contains(kw.to_lowercase().as_str()))
-    }
-}
-
-/// Deterministic rule-based planner (no network, no API key).
-pub struct RulePlanner {
-    rules: Vec<PlanRule>,
-    default_steps: Vec<String>,
-}
-
-impl RulePlanner {
-    pub fn new(rules: Vec<PlanRule>, default_steps: Vec<String>) -> Self {
-        Self {
-            rules,
-            default_steps,
-        }
-    }
-
-    pub fn plan(&self, goal: &str) -> Vec<String> {
-        let lower = goal.to_lowercase();
-        self.rules
-            .iter()
-            .find(|r| r.matches(&lower))
-            .map(|r| r.steps.clone())
-            .unwrap_or_else(|| self.default_steps.clone())
-    }
-}
+/// Canonical `PlanRule` / `RulePlanner` definitions live in `crux-types`.
+pub use crux_types::planner::{PlanRule, RulePlanner};
 
 /// Build the default RulePlanner and return the step sequence for `goal`.
 pub fn rule_planner_steps(goal: &str) -> Vec<String> {

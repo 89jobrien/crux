@@ -16,6 +16,7 @@ pub mod crux_value;
 pub mod emission;
 pub mod error;
 pub mod id;
+pub mod planner;
 pub mod recovery;
 pub mod step;
 pub mod task;
