@@ -85,6 +85,15 @@ impl ExprContext {
         }
     }
 
+    /// Resolve an expression to a bool (for `until:`, `condition:`, `break_if:`).
+    pub fn eval_bool(&self, expr: &str) -> Result<bool, ExprError> {
+        let value = self.eval(expr)?;
+        match value {
+            Value::Bool(b) => Ok(b),
+            _ => Err(ExprError::NotBoolean),
+        }
+    }
+
     fn resolve_path(&self, path: &str) -> Result<Value, ExprError> {
         if path == "input" {
             return Ok(self.input.clone());
@@ -173,6 +182,8 @@ pub enum ExprError {
     UnknownPath(String),
     #[error("value is not numeric")]
     NotNumeric,
+    #[error("value is not a boolean")]
+    NotBoolean,
     /// Step exists but produced no confidence score (e.g. a `handler_value` handler).
     /// Using such a step as input to `route_on_confidence` is a pipeline authoring error.
     #[error("step '{0}' produced no confidence score — use a handler that emits confidence")]

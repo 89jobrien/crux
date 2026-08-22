@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, OnErrorDef, PipeNode, PipelineDef, RouteNode,
-    SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
+    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, OnErrorDef, PipeNode, PipelineDef, PollNode,
+    RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -146,15 +146,37 @@ impl Runner {
             expr_ctx.vars.insert(name.clone(), resolved);
         }
 
-        let mut last_output = input;
+        self.execute_steps_with_ctx(ctx, steps, input, &mut expr_ctx)
+            .await
+    }
 
-        for step_def in steps {
-            last_output = self
-                .execute_step(ctx, step_def, &last_output, &mut expr_ctx)
-                .await?;
-        }
+    /// Run a list of steps against an already-built `ExprContext`, without creating
+    /// a fresh one or resolving `vars:`. Used both by [`Self::execute_steps`] (the
+    /// top-level pipeline body) and by loop constructs (`poll`, `for_each`, `while`,
+    /// `repeat`) that need their nested `steps:` block to share the outer scope's
+    /// `vars`/`steps` map while adding per-iteration `iter.*` bindings.
+    // Returns a boxed future: this method participates in a recursion cycle
+    // (loop constructs call it, which calls execute_step, which calls back into
+    // loop-construct executors), and `async fn` cannot recurse without indirection.
+    fn execute_steps_with_ctx<'a>(
+        &'a self,
+        ctx: &'a mut CruxCtx,
+        steps: &'a [StepDef],
+        input: Value,
+        expr_ctx: &'a mut ExprContext,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, CruxErr>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let mut last_output = input;
 
-        Ok(last_output)
+            for step_def in steps {
+                last_output = self
+                    .execute_step(ctx, step_def, &last_output, expr_ctx)
+                    .await?;
+            }
+
+            Ok(last_output)
+        })
     }
 
     async fn execute_step(
@@ -189,7 +211,70 @@ impl Runner {
                 self.execute_speculate_step(ctx, node, current_input, expr_ctx)
                     .await
             }
+            StepDef::Poll(node) => {
+                self.execute_poll_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
         }
+    }
+
+    /// Execute a `poll:` node — do-while semantics (#83). Runs `steps:` at least
+    /// once, then repeats until `until:` is truthy or `max_attempts` is reached.
+    /// Each iteration's output is recorded as a traced sub-step named
+    /// `<poll>[<index>]` (0-based) so the trace shows exactly how many attempts ran.
+    async fn execute_poll_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &PollNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let mut last_output = current_input.clone();
+        let mut index: u32 = 0;
+
+        loop {
+            let iter_output = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await?;
+
+            // Record the iteration itself as a traced sub-step (#83). The nested
+            // steps above are already individually traced; this marker makes the
+            // iteration boundary visible in the trace.
+            let label = format!("{}[{}]", node.poll, index);
+            let marker_value = iter_output.clone();
+            ctx.step(
+                &label,
+                move || async move { Ok::<Value, CruxErr>(marker_value) },
+            )
+            .await?;
+
+            last_output = iter_output;
+            index += 1;
+
+            let done = expr_ctx
+                .eval_bool(&node.until)
+                .map_err(|e| CruxErr::step_failed(&node.poll, e.to_string()))?;
+            if done {
+                break;
+            }
+            if let Some(max) = node.max_attempts
+                && index >= max
+            {
+                break;
+            }
+            if let Some(ms) = node.interval_ms {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            node.poll.clone(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
     }
 
     /// Execute a `step:` node — resolves the handler, expands args, runs via `ctx.step()`.

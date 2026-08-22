@@ -75,8 +75,14 @@ pub async fn build_registry(
 /// Collect all handler/arm/stage names referenced in the pipeline.
 pub fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
     let mut names = Vec::new();
+    collect_handler_names_into(&pipeline.steps, &mut names);
+    names.sort();
+    names.dedup();
+    names
+}
 
-    for step in &pipeline.steps {
+fn collect_handler_names_into(steps: &[StepDef], names: &mut Vec<String>) {
+    for step in steps {
         match step {
             StepDef::Step(node) => {
                 names.push(node.handler.clone().unwrap_or_else(|| node.step.clone()));
@@ -98,12 +104,11 @@ pub fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
             StepDef::Speculate(node) => {
                 names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
             }
+            StepDef::Poll(node) => {
+                collect_handler_names_into(&node.steps, names);
+            }
         }
     }
-
-    names.sort();
-    names.dedup();
-    names
 }
 
 /// Warn if the pipeline uses LLM handlers but no API keys are set.

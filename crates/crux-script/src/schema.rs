@@ -88,6 +88,22 @@ pub enum StepDef {
     JoinAll(JoinAllNode),
     RouteOnConfidence(RouteNode),
     Speculate(SpeculateNode),
+    Poll(PollNode),
+}
+
+/// A `poll:` node — do-while semantics (#83). Runs `steps:` at least once, then
+/// repeats until `until:` evaluates truthy or `max_attempts` is reached, waiting
+/// `interval_ms` between iterations. Each iteration is recorded as its own traced
+/// sub-step named `<poll>[<index>]` (0-based).
+#[derive(Debug, Clone, Deserialize)]
+pub struct PollNode {
+    pub poll: String,
+    pub steps: Vec<StepDef>,
+    pub until: String,
+    #[serde(default)]
+    pub max_attempts: Option<u32>,
+    #[serde(default)]
+    pub interval_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
