@@ -2,18 +2,18 @@
 crate: crux-stdlib
 total: 1
 by_status:
-  open: 1
-  done: 0
+  open: 0
+  done: 1
 items:
   - id: 70
-    status: open
+    status: done
     priority: medium
     area: json
     title: "Extend json::jq beyond dot-path"
-    location: "src/json.rs::register:289"
+    location: "src/json.rs::eval_jq"
 ---
 
 # TODO: crux-stdlib
 
-- [ ] **#70** Extend `json::jq` beyond dot-path — add filters, pipes,
-  `select()`, `map()`
+- [x] **#70** Extend `json::jq` beyond dot-path — added `[idx]` indexing,
+  `|` pipes, `select(cond)`, `map(expr)`
