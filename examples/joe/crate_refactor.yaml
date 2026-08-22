@@ -24,9 +24,14 @@ steps:
           cmd: "cargo nextest run --no-fail-fast"
         # `cargo nextest run --no-fail-fast` -- failing test names + spans
       - step: dep_graph_analysis
-        handler: review::arch_boundary_check
-        # query cargo metadata for cycles, over-coupled crates,
-        # missing hexagonal boundaries
+        handler: shell::capture
+        args:
+          cmd: "cargo tree --workspace --duplicates"
+        # No dedicated dep-graph handler exists yet (see docs/crux-capabilities.md
+        # Known Gaps); this composes the real `cargo tree` dependency resolver to
+        # surface duplicate/over-coupled crates instead of reusing
+        # review::arch_boundary_check, which only checks import boundaries, not
+        # the dependency graph itself.
       - step: arch_boundary_check
         handler: review::arch_boundary_check
         # scan for domain crates importing adapter crates (hexagonal violation)
