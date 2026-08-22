@@ -39,9 +39,17 @@ impl ExprContext {
         let trimmed = expr.trim();
 
         // Fast path: entire string is a single template — return typed value.
+        //
+        // The `!inner.contains("}}")` guard matters: `"{{ a }} vs {{ b }}"` also
+        // starts with `{{` and ends with `}}`, and without it would be read as
+        // one template whose path is the nonsense `a }} vs {{ b`. That fails to
+        // resolve, and expansion being best-effort, the string would silently
+        // survive as literal text. Two templates belong on the interpolation
+        // path below.
         if let Some(inner) = trimmed
             .strip_prefix("{{")
             .and_then(|s| s.strip_suffix("}}"))
+            && !inner.contains("}}")
         {
             return self.resolve_path(inner.trim());
         }
@@ -133,11 +141,20 @@ impl ExprContext {
 }
 
 /// Walk a dot-separated key path into a JSON value, returning the nested value if found.
+///
+/// A segment that parses as an integer indexes an array, so the arms of a
+/// `join_all` -- whose output is a positional array -- are addressable as
+/// `{{ steps.fan.output.0 }}`. Object keys that happen to look numeric still
+/// win: the key lookup is tried first.
 fn json_get(value: &Value, path: &str) -> Option<Value> {
     let mut current = value;
     let mut owned;
     for key in path.split('.') {
-        match current.get(key) {
+        let next = match current.get(key) {
+            Some(v) => Some(v),
+            None => key.parse::<usize>().ok().and_then(|i| current.get(i)),
+        };
+        match next {
             Some(v) => {
                 owned = v.clone();
                 current = &owned;

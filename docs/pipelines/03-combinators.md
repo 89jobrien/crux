@@ -107,6 +107,65 @@ previous step.
 Ranges must cover `[0.0, 1.0]` with no gaps or overlaps. The previous
 step must emit confidence via `HandlerOutput::with_confidence`.
 
+## Referencing earlier steps
+
+Any `args:` value can interpolate a `{{ ... }}` expression, resolved
+against the pipeline input and the steps that have run so far. This
+works in a plain `step:`, in a `join_all` arm, in a `pipe` stage, and in
+a `route_on_confidence` branch.
+
+| Path | Resolves to |
+| --- | --- |
+| `{{ input }}` | the whole pipeline input |
+| `{{ input.field.sub }}` | a dot-path into the input |
+| `{{ steps.<name>.output }}` | that step's full output |
+| `{{ steps.<name>.output.field }}` | a dot-path into its output |
+| `{{ steps.<name>.confidence }}` | its confidence score |
+
+A path segment that is a number indexes an array. A `join_all` output is
+a positional array in arm order, so that is how you reach one arm:
+
+```yaml
+- join_all: gather
+  arms:
+    - step: baseline
+      handler: shell::capture
+      args:
+        cmd: "echo baseline"
+    - step: candidate
+      handler: shell::capture
+      args:
+        cmd: "echo candidate"
+
+- step: compare
+  handler: ctrl::log
+  args:
+    summary: "{{ steps.gather.output.0.stdout }} vs {{ steps.gather.output.1.stdout }}"
+```
+
+A `pipe` records each stage under its own label as it completes, so a
+later stage can name an earlier one, and so can any step after the pipe:
+
+```yaml
+- pipe: analyze
+  stages:
+    - step: parse
+      handler: shell::capture
+      args:
+        cmd: "echo 42"
+    - step: report
+      handler: ctrl::log
+      args:
+        parsed: "{{ steps.parse.output.stdout }}"
+```
+
+Two things to know. A whole-string template (`"{{ x }}"`) returns the
+typed JSON value; a template embedded in surrounding text interpolates
+to a string. And expansion is best-effort: a path that does not resolve
+leaves the original text in place rather than failing the step, which is
+what lets a pipeline carrying `{{ input.thing }}` still run with no
+input at all.
+
 ## Nesting
 
 Combinators nest inside each other:

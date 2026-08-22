@@ -199,6 +199,8 @@ error when the file is a Cruxfile:
 - **`--replay`.** Replay matches steps against a previous trace, which is
   a single-pipeline notion. Use it on the pipeline files a target calls.
 
+Both now warn rather than being silently dropped.
+
 `--save-trace` does work, and writes one file per target, suffixed with
 the target name:
 

@@ -1,17 +1,31 @@
 use crux_runtime::prelude::CruxErr;
 use crux_runtime::types::evolution::EvolutionOutcome;
 use crux_runtime::types::harness::{HarnessDiff, HarnessProfile};
-use crux_script::HandlerRegistry;
+use crux_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel, SideEffect};
 use serde_json::Value;
 
 /// Register harness step handlers.
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value("harness::evolve", |input: Value| async move {
-        handle_evolve(input).await
-    });
-    registry.handler_value("harness::canary", |input: Value| async move {
-        handle_canary(input).await
-    });
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("harness::evolve")
+            .describe("Propose a HarnessDiff against a base profile and return both.")
+            .args(ArgSchema::new().required("base_profile", ArgType::Object))
+            .risk(RiskLevel::Low)
+            .side_effects(vec![])
+            .capabilities(vec![])
+            .deterministic(true),
+        |input: Value| async move { handle_evolve(input).await },
+    );
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("harness::canary")
+            .describe("Score a candidate profile against the baseline and decide its fate.")
+            .args(ArgSchema::new().required("candidate_profile", ArgType::Object))
+            .risk(RiskLevel::Medium)
+            .side_effects(vec![SideEffect::Process])
+            .capabilities(vec![])
+            .deterministic(true),
+        |input: Value| async move { handle_canary(input).await },
+    );
 }
 
 async fn handle_evolve(input: Value) -> Result<Value, CruxErr> {

@@ -1,0 +1,16 @@
+pipeline: enrich_health
+# Input: { function: "AssessHealth", input: { name, pushed_at, commit_dates, open_issues } }
+# Output: { health: "...", confidence: 0.0 }
+#
+# Run:
+#   crux run examples/enrich_health.crux examples/input_enrich_health.json
+budget: { calls: 2 }
+
+steps:
+  - step: assess
+    handler: llm::extract
+    args:
+      function: AssessHealth
+
+  - step: log
+    handler: ctrl::log

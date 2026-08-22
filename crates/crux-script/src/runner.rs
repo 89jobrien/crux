@@ -1,4 +1,5 @@
 /// Pipeline runner — interprets a parsed YAML pipeline against CruxCtx + HandlerRegistry.
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
@@ -282,10 +283,14 @@ impl Runner {
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
 
-        // Stage args expand against the pre-pipe context: they are static, and a
-        // stage's own output is not recorded under its name, so a later stage
-        // cannot reference an earlier one within the same pipe.
-        let ectx: &ExprContext = expr_ctx;
+        // Stages run sequentially, so each one's result is recorded here as it
+        // completes and a later stage can reference an earlier one by label.
+        // Seeded with the steps known before the pipe started. Args are expanded
+        // inside the stage rather than up front so those references resolve.
+        let scope: Arc<Mutex<StageScope>> = Arc::new(Mutex::new(StageScope {
+            input: expr_ctx.input.clone(),
+            steps: expr_ctx.steps.clone(),
+        }));
 
         #[allow(clippy::type_complexity)]
         let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
@@ -295,17 +300,37 @@ impl Runner {
             .map(|(arm, cell)| {
                 let handler = registry.get_handler(arm.handler_name()).cloned();
                 let name_owned = arm.handler_name().to_string();
-                let static_args = arm.args().cloned().map(|a| expand_args(a, ectx));
+                let label = arm.label().to_string();
+                let raw_args = arm.args().cloned();
                 let cell = Arc::clone(cell);
+                let scope = Arc::clone(&scope);
                 let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
                     Box::new(move |v: Value| {
                         Box::pin(async move {
                             let h = handler.ok_or_else(|| {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
-                            let input = merge_args(v, static_args);
+                            // Snapshot and release the lock before awaiting.
+                            let args = raw_args.map(|a| {
+                                let ectx = {
+                                    let scope = scope.lock().unwrap();
+                                    ExprContext {
+                                        input: scope.input.clone(),
+                                        steps: scope.steps.clone(),
+                                    }
+                                };
+                                expand_args(a, &ectx)
+                            });
+                            let input = merge_args(v, args);
                             let out = h(input).await?;
                             *cell.lock().unwrap() = out.confidence;
+                            scope.lock().unwrap().steps.insert(
+                                label,
+                                StepResult {
+                                    output: out.value.clone(),
+                                    confidence: out.confidence,
+                                },
+                            );
                             Ok(out.value)
                         }) as BoxFut<Value>
                     });
@@ -315,6 +340,13 @@ impl Runner {
 
         let input = current_input.clone();
         let result = ctx.pipe(&node.pipe, input, stages).await?;
+
+        // Lift stage results into the outer scope so steps after the pipe can
+        // reference an individual stage, not just the pipe's final output.
+        let stage_steps = std::mem::take(&mut scope.lock().unwrap().steps);
+        for (label, step) in stage_steps {
+            expr_ctx.steps.entry(label).or_insert(step);
+        }
 
         // Use the last stage's confidence (pipeline is sequential).
         // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
@@ -499,6 +531,15 @@ impl Runner {
         );
         Ok(result)
     }
+}
+
+/// Expression scope shared across the stages of one `pipe:`.
+///
+/// Stages run in sequence, so each records its result here on completion and
+/// the next expands its args against the accumulated set.
+struct StageScope {
+    input: Value,
+    steps: HashMap<String, StepResult>,
 }
 
 /// Recursively expand `{{ expr }}` templates in all string leaves of a JSON value.

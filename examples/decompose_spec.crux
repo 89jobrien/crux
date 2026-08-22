@@ -1,0 +1,19 @@
+pipeline: decompose_spec
+# Break an implementation plan into discrete, ordered tasks.
+#
+# Input: { text: "<the plan, as markdown>" }
+# Output: { tasks: [{ id, name, title, ... }] }
+#
+# Run:
+#   crux run examples/decompose_spec.crux examples/input_decompose.json
+budget: { calls: 2 }
+
+steps:
+  - step: decompose
+    handler: llm::decompose
+    # Reads `text` from the pipeline input directly.
+
+  - step: log
+    handler: ctrl::log
+    args:
+      pretty: true

@@ -1,0 +1,34 @@
+pipeline: plugin_plan
+# Read a plan document off disk and decompose it into tasks.
+#
+# The same job as decompose_spec.crux, but sourcing the text from a file
+# instead of inlining it in the fixture.
+#
+# Input: { file: "<path to a markdown plan>" }
+# Output: { tasks: [{ id, name, title, ... }] }
+#
+# Run:
+#   crux run examples/plugin_plan.crux examples/input_plugin_plan.json
+budget: { calls: 3 }
+
+steps:
+  - step: read_plan
+    handler: fs::read
+    args:
+      path: "{{ input.file }}"
+    # -> { content, path }
+
+  - step: as_spec
+    handler: json::merge
+    args:
+      with:
+        text: "{{ steps.read_plan.output.content }}"
+    # llm::decompose reads `text` at the top level, so lift `content` into it.
+
+  - step: decompose
+    handler: llm::decompose
+
+  - step: log
+    handler: ctrl::log
+    args:
+      pretty: true

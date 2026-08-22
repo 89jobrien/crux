@@ -154,7 +154,3 @@ Doob backlog processing and prioritization.
 | `speculate: pick_best` | Arms that don't emit `score` all tie at 0.0 (stub) (#68)                           |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
-| expression paths       | `steps.<n>.output[.field]` / `.confidence` only; no array indexing, so an individual `join_all` arm is not addressable |
-| `pipe:` stages         | Stage outputs are not recorded under their own names, so one stage cannot reference another |
-| `harness::evolve`      | Registered without `HandlerMetadata`, so its args are not validated               |
-| `harness::canary`      | Registered without `HandlerMetadata`, so its args are not validated               |

@@ -135,7 +135,27 @@ fn normalize_args(args: Vec<String>, is_file: impl Fn(&str) -> bool) -> Vec<Stri
     out
 }
 
+/// Restore the default SIGPIPE disposition.
+///
+/// Rust's runtime ignores SIGPIPE, so a write to a closed pipe surfaces as an
+/// `io::Error` that `println!` turns into a panic. That makes the ordinary
+/// `crux lint -n | head` print a backtrace. Restoring the default lets the
+/// process die quietly on the signal, the way every other CLI does.
+#[cfg(unix)]
+fn restore_sigpipe() {
+    // SAFETY: `signal` with SIG_DFL is async-signal-safe and this runs before
+    // any thread is spawned.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_sigpipe() {}
+
 fn main() {
+    restore_sigpipe();
+
     let argv = normalize_args(std::env::args().collect(), |p| {
         std::path::Path::new(p).is_file()
     });

@@ -29,6 +29,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Cruxfile chapter in the pipeline guide (`docs/pipelines/07-cruxfiles.md`), covering
   targets, dependency resolution, fail-fast, per-target budgets, and the shorthand
 - Input fixtures for the harness examples (`examples/harness/input_harness_*.json`)
+- Array indexing in expression paths -- `{{ steps.fan.output.0 }}` reaches one arm of a
+  `join_all`, whose output is a positional array
+- `pipe:` stages are recorded under their own labels, so a stage can reference an earlier
+  stage and steps after the pipe can reference any of them
+- `HandlerMetadata` for `harness::evolve` and `harness::canary`, so their args are validated
+- `examples/enrich_health.crux`, `examples/decompose_spec.crux` and
+  `examples/plugin_plan.crux`, the pipelines three existing input fixtures were written for
+- An expression reference in the combinators chapter (`docs/pipelines/03-combinators.md`)
 
 ### Changed
 
@@ -61,6 +69,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on a default build
 - All five `examples/harness/*.crux` pipelines failed at runtime. They now run on a
   default build, with input fixtures added alongside them
+- A string of exactly two adjacent templates (`"{{ a }} vs {{ b }}"`) starts with `{{` and
+  ends with `}}`, so the whole-string fast path read it as one template with the nonsense
+  path `a }} vs {{ b`. Expansion being best-effort, the string silently survived as literal
+  text rather than erroring
+- `crux run` panicked with a backtrace on a malformed pipeline, an unreadable input file,
+  invalid input JSON, or a bad replay trace. All are reported as errors now
+- `crux <target> | head` panicked on SIGPIPE; the default disposition is restored at startup
+- `--replay` and `--input` were silently dropped on the Cruxfile path; both warn now
 
 ### Removed
 

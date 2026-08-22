@@ -59,6 +59,16 @@ fn select_target_name<'a>(cfg: &'a RunConfig<'_>) -> Option<&'a str> {
 /// dispatch over the parsed `contents` and config.
 fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>) {
     if crux_script::is_cruxfile(contents) {
+        // Both are single-pipeline notions: targets run with a null input, and
+        // replay matches a trace against one pipeline's steps.
+        if cfg.replay_path.is_some() {
+            eprintln!("[crux] warning: --replay ignored: Cruxfile targets are not replayable");
+        }
+        if let Some(input) = cfg.input_flag {
+            eprintln!(
+                "[crux] warning: --input {input} ignored: Cruxfile targets take no JSON input"
+            );
+        }
         let target_name = select_target_name(cfg).map(String::from);
         if cfg.dry_run {
             cmd_dry_run_cruxfile(contents, pipeline_path, target_name.as_deref());
@@ -89,12 +99,20 @@ pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
         return;
     };
 
-    let contents = std::fs::read_to_string(&pipeline_path).unwrap_or_else(|e| {
-        eprintln!("error: cannot read {pipeline_path}: {e}");
-        std::process::exit(1);
-    });
+    let contents = std::fs::read_to_string(&pipeline_path)
+        .unwrap_or_else(|e| die(&format!("cannot read {pipeline_path}"), e));
 
     dispatch_on_contents(&contents, &pipeline_path, cfg);
+}
+
+/// Print an error and exit 1.
+///
+/// Bad input from the user -- an unparseable pipeline, malformed JSON, an
+/// unwritable trace path -- is a normal outcome for a CLI, not a bug. These
+/// used to be `expect` calls, which met a typo with a panic and a backtrace.
+fn die(context: &str, err: impl std::fmt::Display) -> ! {
+    eprintln!("error: {context}: {err}");
+    std::process::exit(1);
 }
 
 /// Resolve a target's execution order, listing the available targets on failure.
@@ -116,10 +134,8 @@ fn execution_order_or_exit<'a>(
 
 /// Print Cruxfile execution plan without running.
 fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
-    let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
-        eprintln!("error: failed to parse {path}: {e}");
-        std::process::exit(1);
-    });
+    let cruxfile = crux_script::load_cruxfile(contents)
+        .unwrap_or_else(|e| die(&format!("cannot parse {path}"), e));
 
     let target = target_name.unwrap_or(&cruxfile.default);
 
@@ -163,10 +179,8 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
 
 /// Print pipeline execution plan without running.
 fn cmd_dry_run_pipeline(contents: &str, path: &str) {
-    let pipeline = crux_script::load(contents).unwrap_or_else(|e| {
-        eprintln!("error: failed to parse {path}: {e}");
-        std::process::exit(1);
-    });
+    let pipeline =
+        crux_script::load(contents).unwrap_or_else(|e| die(&format!("cannot parse {path}"), e));
 
     let handlers = collect_handler_names(&pipeline);
     println!(
@@ -186,10 +200,8 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let verbose = cfg.verbose;
     let save_trace_path = cfg.save_trace_path;
     let strict = cfg.strict;
-    let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
-        eprintln!("error: failed to parse {path}: {e}");
-        std::process::exit(1);
-    });
+    let cruxfile = crux_script::load_cruxfile(contents)
+        .unwrap_or_else(|e| die(&format!("cannot parse {path}"), e));
 
     let target = target_name.unwrap_or(&cruxfile.default);
 
@@ -209,7 +221,8 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     }
 
     // Build registry once using an empty pipeline (all handlers registered).
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt =
+        tokio::runtime::Runtime::new().unwrap_or_else(|e| die("cannot start the tokio runtime", e));
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
         budget: None,
@@ -295,9 +308,11 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
 
         if let Some(trace_dir) = save_trace_path {
             let trace_file = format!("{trace_dir}.{target_name}.json");
-            let trace_json =
-                serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-            std::fs::write(&trace_file, trace_json).expect("failed to write trace file");
+            let trace_json = serde_json::to_string_pretty(&crux)
+                .unwrap_or_else(|e| die("cannot serialize trace", e));
+            if let Err(e) = std::fs::write(&trace_file, trace_json) {
+                die(&format!("cannot write {trace_file}"), e);
+            }
             if !quiet {
                 eprintln!("[crux] trace saved to {trace_file}");
             }
@@ -349,20 +364,23 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let save_trace_path = cfg.save_trace_path;
     let strict = cfg.strict;
     let input: Value = if let Some(path) = input_path {
-        let contents = std::fs::read_to_string(path).expect("failed to read input file");
-        serde_json::from_str(&contents).expect("invalid JSON input")
+        let contents = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| die(&format!("cannot read input file {path}"), e));
+        serde_json::from_str(&contents)
+            .unwrap_or_else(|e| die(&format!("invalid JSON in {path}"), e))
     } else {
         Value::Null
     };
 
     let pipeline = if pipeline_path == "-" {
         let mut buf = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buf)
-            .expect("failed to read stdin");
-        crux_script::load(&buf).expect("failed to parse pipeline from stdin")
+        if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+            die("cannot read stdin", e);
+        }
+        crux_script::load(&buf).unwrap_or_else(|e| die("cannot parse pipeline from stdin", e))
     } else {
-        crux_script::load_file(pipeline_path).expect("failed to load pipeline")
+        crux_script::load_file(pipeline_path)
+            .unwrap_or_else(|e| die(&format!("cannot load {pipeline_path}"), e))
     };
 
     warn_missing_env(&pipeline);
@@ -372,13 +390,16 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         _ => ReplayMode::Strict,
     };
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt =
+        tokio::runtime::Runtime::new().unwrap_or_else(|e| die("cannot start the tokio runtime", e));
     let registry = rt.block_on(build_registry(&pipeline, plugins_path, strict));
     let runner = crux_script::Runner::new(Arc::new(registry));
 
     let previous: Option<Crux<Value>> = replay_path.map(|path| {
-        let contents = std::fs::read_to_string(path).expect("failed to read replay trace");
-        serde_json::from_str(&contents).expect("invalid replay trace JSON")
+        let contents = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| die(&format!("cannot read replay trace {path}"), e));
+        serde_json::from_str(&contents)
+            .unwrap_or_else(|e| die(&format!("invalid replay trace JSON in {path}"), e))
     });
 
     let start = Instant::now();
@@ -390,8 +411,11 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let elapsed = start.elapsed();
 
     if let Some(path) = save_trace_path {
-        let trace_json = serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-        std::fs::write(path, trace_json).expect("failed to write trace file");
+        let trace_json = serde_json::to_string_pretty(&crux)
+            .unwrap_or_else(|e| die("cannot serialize trace", e));
+        if let Err(e) = std::fs::write(path, trace_json) {
+            die(&format!("cannot write {path}"), e);
+        }
         if !quiet {
             eprintln!("[crux] trace saved to {path}");
         }

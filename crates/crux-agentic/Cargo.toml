@@ -38,6 +38,9 @@ serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [[bin]]
 name = "crux"
 path = "src/bin/crux/main.rs"

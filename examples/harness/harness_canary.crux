@@ -29,10 +29,10 @@ steps:
   - step: diff_metrics
     handler: llm::extract
     args:
-      input: "{{ steps.run_canary.output }}"
+      input: "baseline={{ steps.run_canary.output.0 }} candidate={{ steps.run_canary.output.1 }}"
       function: CompareMetrics
     # Compare p95 latency, error rate, resource usage.
-    # join_all output is a positional array: [baseline, candidate].
+    # join_all output is a positional array, indexed in arm order.
 
   - step: promote_decision
     handler: harness::canary
