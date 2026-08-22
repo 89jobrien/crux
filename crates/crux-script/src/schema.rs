@@ -24,6 +24,10 @@ pub enum ArmDef {
         handler: Option<String>,
         #[serde(default)]
         args: Option<serde_json::Value>,
+        /// If true, a failure in this arm does not abort the surrounding `join_all`
+        /// or `pipe`; the arm's slot is filled with an error-describing value instead (#80).
+        #[serde(default)]
+        allow_failure: bool,
     },
 }
 
@@ -49,6 +53,15 @@ impl ArmDef {
         match self {
             ArmDef::Name(_) => None,
             ArmDef::Step { args, .. } => args.as_ref(),
+        }
+    }
+
+    /// Whether a failure in this arm should be tolerated rather than aborting
+    /// the surrounding combinator (#80). Bare-name arms never opt in.
+    pub fn allow_failure(&self) -> bool {
+        match self {
+            ArmDef::Name(_) => false,
+            ArmDef::Step { allow_failure, .. } => *allow_failure,
         }
     }
 }
@@ -84,6 +97,10 @@ pub struct StepNode {
     /// descriptive error even though the handler itself succeeded.
     #[serde(default)]
     pub expect: Option<ExpectDef>,
+    /// If true, a failing handler does not abort the pipeline; the step's output
+    /// becomes an error-describing value and execution continues (#80).
+    #[serde(default)]
+    pub allow_failure: bool,
 }
 
 /// Declarative assertions checked against a step's output value after execution.

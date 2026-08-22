@@ -213,13 +213,29 @@ impl Runner {
         // Confidence is captured via a shared cell since ctx.step() only returns the value.
         let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
         let cc = confidence_cell.clone();
-        let handler_out = ctx
+        let step_result = ctx
             .step(&node.step, move || async move {
                 let raw = handler(input).await?;
                 *cc.lock().unwrap() = raw.confidence;
                 Ok::<Value, CruxErr>(raw.value)
             })
-            .await?;
+            .await;
+
+        let handler_out = match step_result {
+            Ok(v) => v,
+            Err(e) if node.allow_failure => {
+                let failed_val = failed_allowed_value(&e);
+                expr_ctx.steps.insert(
+                    node.step.clone(),
+                    StepResult {
+                        output: failed_val.clone(),
+                        confidence: None,
+                    },
+                );
+                return Ok(failed_val);
+            }
+            Err(e) => return Err(e),
+        };
 
         if let Some(expect) = &node.expect {
             check_expect(&node.step, &handler_out, expect)?;
@@ -351,12 +367,18 @@ impl Runner {
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
+                let allow_failure = arm.allow_failure();
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    let out = h(input).await?;
-                    *cell.lock().unwrap() = out.confidence;
-                    Ok(out.value)
+                    match h(input).await {
+                        Ok(out) => {
+                            *cell.lock().unwrap() = out.confidence;
+                            Ok(out.value)
+                        }
+                        Err(e) if allow_failure => Ok(failed_allowed_value(&e)),
+                        Err(e) => Err(e),
+                    }
                 });
                 (arm.label(), fut)
             })
@@ -518,6 +540,16 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
         ),
         other => other,
     }
+}
+
+/// Build the placeholder output value for a step/arm whose failure was tolerated
+/// via `allow_failure: true` (#80). Carries enough metadata for downstream
+/// expressions/consumers to detect and inspect the failure without a panic.
+fn failed_allowed_value(err: &CruxErr) -> Value {
+    serde_json::json!({
+        "status": "failed_allowed",
+        "error": err.to_string(),
+    })
 }
 
 /// Evaluate a step's `expect:` clause against its handler output.
