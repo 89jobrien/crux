@@ -1,4 +1,4 @@
-# Handoff — crux (2026-08-17)
+# Handoff — crux (2026-08-22)
 
 **Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
@@ -7,9 +7,20 @@ EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bri
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| crux-task-impl | p1 | open | Implement crux-task crate (10-task plan) |
+| uncommitted-work | P1 | open | Uncommitted changes (3 files) |
 
 ## Log
+
+- 20260822.234500: GitHub issue triage-and-fix pass: closed 24 issues across bug fixes, feature completion,
+and stale issue cleanup. Bug fixes: #91 (BudgetTracker bounds), #68/#9 (speculate
+tie-break ordering), #75/#76 (confidence validation range), #103 (expr.rs strip
+whitespace). Feature completions: full crux-script control-flow batch #79-89, #71 (CLI
+JSON output), #70 (json::jq extensions), #69 (BAML function audit), #26 (PlanRule
+dedup). Infrastructure: #12 (examples cleanup: joe/ctrl::noop rewiring), plus 10 issues
+closed as stale/duplicate/already-resolved (#8,14,15,17,11,10,7,27,13,67). Filed 2
+follow-up issues: #104 (crux schema command), #105 (serde-saphyr parser bug).
+All 776 tests pass (cargo nextest), 0 clippy warnings. Workspace version 0.3.1.
+HEAD: 86408da (merge #12).
 
 - 20260708:000000: Heavy refactor session across crux runtime and stdlib components:
 IOSP decomposition — extracted magic numbers into named constants (crux-agentic).
@@ -59,4 +70,3 @@ crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 
 0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
 baseline written to .health-baseline.json.
 
-- 20260504:224027: handjobs triage — 0 open items, 0 GH issues synced

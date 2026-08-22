@@ -1,31 +1,38 @@
 project: crux
 id: crux
-updated: 2026-08-17
+updated: 2026-08-22
 items:
-- id: crux-task-impl
+- id: uncommitted-work
   doob_uuid: null
-  name: null
-  priority: p1
+  name: uncommitted-work
+  priority: P1
   status: open
-  title: Implement crux-task crate (10-task plan)
-  description: |
-    Design and plan complete. 10 tasks ready for execution:
-    1. Wire types in crux-types (Priority, TaskLabel, DependencyKind)
-    2. Scaffold crux-task crate
-    3. TaskManager core (add/get/list/update/stats)
-    4. Dependency methods + cycle detection
-    4a. Property tests for graph invariants
-    5. SqliteBackend
-    5a. Conformance test suite for RegistryBackend
-    6. CLI binary (crux-task)
-    7. Pipeline step handlers in crux-agentic
-    8. Integration workflow test
-    Design: docs/designs/2026-07-01-crux-task-design.md
-    Plan: docs/plans/2026-07-01-crux-task.md
-  files: []
+  title: Uncommitted changes (3 files)
+  description: |-
+    Working tree has uncommitted changes:
+    .ctx/HANDOFF.crux.crux.yaml
+    .ctx/HANDOFF.md
+    .taskit/
+  files:
+  - .ctx/HANDOFF.crux.crux.yaml
+  - .ctx/HANDOFF.md
+  - .taskit/
   completed: null
   extra: []
 log:
+- date: '20260822.234500'
+  summary: |
+    GitHub issue triage-and-fix pass: closed 24 issues across bug fixes, feature completion,
+    and stale issue cleanup. Bug fixes: #91 (BudgetTracker bounds), #68/#9 (speculate
+    tie-break ordering), #75/#76 (confidence validation range), #103 (expr.rs strip
+    whitespace). Feature completions: full crux-script control-flow batch #79-89, #71 (CLI
+    JSON output), #70 (json::jq extensions), #69 (BAML function audit), #26 (PlanRule
+    dedup). Infrastructure: #12 (examples cleanup: joe/ctrl::noop rewiring), plus 10 issues
+    closed as stale/duplicate/already-resolved (#8,14,15,17,11,10,7,27,13,67). Filed 2
+    follow-up issues: #104 (crux schema command), #105 (serde-saphyr parser bug).
+    All 776 tests pass (cargo nextest), 0 clippy warnings. Workspace version 0.3.1.
+    HEAD: 86408da (merge #12).
+  commits: []
 - date: 20260708:000000
   summary: |
     Heavy refactor session across crux runtime and stdlib components:
@@ -141,5 +148,3 @@ log:
 - date: 2026-05-04
   summary: reviewed CI workflow — no changes made this session
   commits: []
-description: |
-  An agentic DSL for Rust — inspectable, serializable, replayable agent execution. Rust-embedded DSL (macros, traits, types) for writing agentic programs where every step, branch, delegation, and failure is a first-class value.
