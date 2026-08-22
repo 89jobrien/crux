@@ -29,7 +29,7 @@ fn collect_handler_names(pipeline: &crux_script::schema::PipelineDef) -> Vec<Str
             StepDef::Speculate(node) => {
                 names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
             }
-            StepDef::Poll(_) => {}
+            StepDef::Poll(_) | StepDef::ForEach(_) => {}
         }
     }
     names.sort();

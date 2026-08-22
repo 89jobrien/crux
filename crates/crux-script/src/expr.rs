@@ -15,6 +15,15 @@ pub struct StepResult {
     pub confidence: Option<f32>,
 }
 
+/// Per-iteration bindings exposed inside a loop construct's `steps:` block
+/// (`for_each`, `while`, `repeat`, #84/#89) via `{{ iter.index }}` and
+/// `{{ iter.<name> }}`.
+#[derive(Debug, Clone, Default)]
+pub struct IterFrame {
+    pub index: usize,
+    pub values: HashMap<String, Value>,
+}
+
 /// Evaluation context holding pipeline state.
 pub struct ExprContext {
     pub input: Value,
@@ -22,6 +31,9 @@ pub struct ExprContext {
     /// Pipeline-level `vars:` bindings (#85), resolved once up front. Referenced
     /// from any step via `{{ vars.NAME }}` / `{{ vars.NAME.field }}`.
     pub vars: HashMap<String, Value>,
+    /// Current loop iteration bindings, if evaluation is happening inside a loop
+    /// construct's body (#84/#89). `None` outside any loop.
+    pub iter: Option<IterFrame>,
 }
 
 impl ExprContext {
@@ -30,6 +42,7 @@ impl ExprContext {
             input,
             steps: HashMap::new(),
             vars: HashMap::new(),
+            iter: None,
         }
     }
 
@@ -103,6 +116,30 @@ impl ExprContext {
         if let Some(rest) = path.strip_prefix("input.") {
             return json_get(&self.input, rest)
                 .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
+        }
+
+        // `iter.index` — 0-based loop counter; `iter.<name>` / `iter.<name>.<sub>` —
+        // the current item binding from a `for_each`/`while`/`repeat` loop (#84/#89).
+        if let Some(rest) = path.strip_prefix("iter.") {
+            let frame = self
+                .iter
+                .as_ref()
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            if rest == "index" {
+                return Ok(Value::Number(serde_json::Number::from(frame.index)));
+            }
+            let mut parts = rest.splitn(2, '.');
+            let name = parts.next().unwrap_or("");
+            let value = frame
+                .values
+                .get(name)
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            return match parts.next() {
+                Some(sub) => {
+                    json_get(value, sub).ok_or_else(|| ExprError::UnknownPath(path.to_string()))
+                }
+                None => Ok(value.clone()),
+            };
         }
 
         // `vars.<name>` — full value; `vars.<name>.<subfield>...` — dot-path into it.

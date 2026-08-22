@@ -5,11 +5,12 @@ use crux_runtime::prelude::*;
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::expr::IterFrame;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, OnErrorDef, PipeNode, PipelineDef, PollNode,
-    RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
+    BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
+    PipelineDef, PollNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -215,7 +216,104 @@ impl Runner {
                 self.execute_poll_step(ctx, node, current_input, expr_ctx)
                     .await
             }
+            StepDef::ForEach(node) => {
+                self.execute_for_each_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
         }
+    }
+
+    /// Execute a `for_each:` node — maps `steps:` over each item in `items:` (#84).
+    ///
+    /// `items:` is evaluated once against the outer scope to produce the array.
+    /// Each iteration binds `{{ iter.<as> }}` and `{{ iter.index }}`, runs the
+    /// nested `steps:` block, and records the iteration as a traced sub-step named
+    /// `<for_each>[<index>]`. `break_if:` (evaluated after each iteration) stops
+    /// the loop early.
+    ///
+    /// Iterations run sequentially even when `parallel: true` — `CruxCtx` is a
+    /// single mutable trace recorder in this crate's architecture (unlike
+    /// `join_all`, whose arms don't touch `ctx` until the runtime's own internal
+    /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
+    /// sound without a `crux-runtime` change, which is out of scope here.
+    /// `parallel`/`max_concurrency` are accepted for forward compatibility.
+    async fn execute_for_each_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &ForEachNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.label();
+        let binding = node.binding();
+
+        let items_value = expr_ctx
+            .eval(&node.items)
+            .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+        let items = items_value.as_array().cloned().ok_or_else(|| {
+            CruxErr::step_failed(
+                label,
+                format!("items: did not resolve to an array: {items_value}"),
+            )
+        })?;
+
+        let mut last_output = current_input.clone();
+
+        for (index, item) in items.iter().enumerate() {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::from([(binding.to_string(), item.clone())]),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
     }
 
     /// Execute a `poll:` node — do-while semantics (#83). Runs `steps:` at least

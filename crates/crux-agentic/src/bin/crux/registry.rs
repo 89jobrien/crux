@@ -107,6 +107,9 @@ fn collect_handler_names_into(steps: &[StepDef], names: &mut Vec<String>) {
             StepDef::Poll(node) => {
                 collect_handler_names_into(&node.steps, names);
             }
+            StepDef::ForEach(node) => {
+                collect_handler_names_into(&node.steps, names);
+            }
         }
     }
 }

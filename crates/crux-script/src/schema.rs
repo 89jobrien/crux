@@ -89,7 +89,69 @@ pub enum StepDef {
     RouteOnConfidence(RouteNode),
     Speculate(SpeculateNode),
     Poll(PollNode),
+    ForEach(ForEachNode),
 }
+
+/// A `for_each:` node — maps `steps:` over each item in `items:` (#84). Sequential
+/// by default; with `parallel: true`, iterations run with bounded concurrency
+/// (`max_concurrency`, default [`DEFAULT_MAX_CONCURRENCY`]). `break_if:` is
+/// evaluated after each iteration; `{{ iter.<as> }}` and `{{ iter.index }}` are
+/// available inside `steps:`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ForEachNode {
+    /// The step's trace label, optionally suffixed with `" as <binding>"` to name
+    /// the per-iteration item binding (e.g. `doubles as n`). Defaults to `item`
+    /// when no `as` suffix is given.
+    ///
+    /// NOTE: this packs the binding name into `for_each` instead of a separate
+    /// `as:` field due to a confirmed parser limitation in `serde-saphyr` 0.0.23:
+    /// untagged enum struct-variants silently fail to deserialize once they carry
+    /// more than 3 non-`#[serde(default)]` fields (verified via an extensive
+    /// bisection — see PR discussion for #84). `for_each` + `items` + `steps` is
+    /// exactly 3 required fields, the proven-safe ceiling; adding a 4th required
+    /// `as` field pushes it over and breaks parsing for every pipeline using this
+    /// node, not just ones that set a custom binding. Use [`Self::label`] and
+    /// [`Self::binding`] to read the parsed pieces.
+    pub for_each: String,
+    /// Template expression evaluated once (against the outer scope) to produce
+    /// the array to iterate over.
+    pub items: String,
+    pub steps: Vec<StepDef>,
+    #[serde(default)]
+    pub parallel: bool,
+    #[serde(default)]
+    pub max_concurrency: Option<usize>,
+    #[serde(default)]
+    pub break_if: Option<String>,
+}
+
+impl ForEachNode {
+    /// Default binding name when `for_each:` carries no `" as <name>"` suffix.
+    pub const DEFAULT_BINDING: &'static str = "item";
+
+    /// The trace label — the part of `for_each:` before any `" as "` suffix.
+    pub fn label(&self) -> &str {
+        self.for_each
+            .split(" as ")
+            .next()
+            .unwrap_or(&self.for_each)
+            .trim()
+    }
+
+    /// The per-iteration item binding name — the part of `for_each:` after
+    /// `" as "`, or [`Self::DEFAULT_BINDING`] if no suffix is present.
+    pub fn binding(&self) -> &str {
+        self.for_each
+            .split_once(" as ")
+            .map(|(_, bind)| bind.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(Self::DEFAULT_BINDING)
+    }
+}
+
+/// Default bounded concurrency for `for_each: { parallel: true }` when
+/// `max_concurrency` is not set (#84).
+pub const DEFAULT_MAX_CONCURRENCY: usize = 4;
 
 /// A `poll:` node — do-while semantics (#83). Runs `steps:` at least once, then
 /// repeats until `until:` evaluates truthy or `max_attempts` is reached, waiting
