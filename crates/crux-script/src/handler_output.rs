@@ -3,8 +3,13 @@ use serde_json::Value;
 
 /// Carries the handler's output value and an optional confidence score.
 ///
-/// Handlers that do not have a meaningful confidence score return `None`; the
-/// runner treats that as `1.0` via [`HandlerOutput::confidence_or_default`].
+/// Handlers that do not have a meaningful confidence score return `None`. Previously
+/// [`HandlerOutput::confidence_or_default`] silently treated that as `1.0`, which made
+/// unscored handlers look maximally confident to any consumer relying on the default
+/// (e.g. `route_on_confidence`). To avoid that false signal, `None` now defaults to
+/// `0.5` (a neutral midpoint) instead of `1.0`. This is a behavior change but is less
+/// invasive than making every `None`-confidence caller handle a hard error, since the
+/// only in-crate callers of this method were tests (see #75, #76).
 #[derive(Debug, Clone)]
 pub struct HandlerOutput {
     pub value: Value,
@@ -32,9 +37,13 @@ impl HandlerOutput {
         Self { value, confidence }
     }
 
-    /// Returns the confidence score, defaulting to `1.0` when absent.
+    /// Returns the confidence score, defaulting to `0.5` (neutral) when absent.
+    ///
+    /// Prior to #76 this defaulted to `1.0`, which silently made unscored handlers
+    /// look maximally confident. `0.5` signals "unknown" without biasing routing
+    /// decisions toward either extreme.
     pub fn confidence_or_default(&self) -> f32 {
-        self.confidence.unwrap_or(1.0)
+        self.confidence.unwrap_or(0.5)
     }
 }
 
@@ -67,7 +76,19 @@ mod tests {
     fn from_value_has_no_confidence() {
         let out = HandlerOutput::from(json!({ "x": 1 }));
         assert!(out.confidence.is_none());
-        assert_eq!(out.confidence_or_default(), 1.0);
+        assert_eq!(out.confidence_or_default(), 0.5);
+    }
+
+    /// Regression test for #76: `None` confidence must NOT silently present as
+    /// maximal (`1.0`) confidence — it should default to a neutral `0.5`.
+    #[test]
+    fn none_confidence_defaults_to_neutral_not_maximal() {
+        let out = HandlerOutput::new(json!("unscored"));
+        assert_eq!(
+            out.confidence_or_default(),
+            0.5,
+            "None confidence must default to neutral 0.5, not maximal 1.0 (#76)"
+        );
     }
 
     #[test]
@@ -81,7 +102,7 @@ mod tests {
     fn nan_confidence_becomes_none() {
         let out = HandlerOutput::with_confidence(json!("x"), f32::NAN);
         assert!(out.confidence.is_none());
-        assert_eq!(out.confidence_or_default(), 1.0);
+        assert_eq!(out.confidence_or_default(), 0.5);
     }
 
     #[test]

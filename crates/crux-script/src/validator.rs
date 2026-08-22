@@ -164,6 +164,10 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
             StepDef::JoinAll(n) => n.join_all.as_str(),
             StepDef::RouteOnConfidence(n) => n.route_on_confidence.as_str(),
             StepDef::Speculate(n) => n.speculate.as_str(),
+            StepDef::Poll(n) => n.poll.as_str(),
+            StepDef::ForEach(n) => n.label(),
+            StepDef::While(n) => n.r#while.as_str(),
+            StepDef::Repeat(n) => n.repeat.as_str(),
         };
         if !seen_names.insert(step_name.to_string()) {
             report.push(ValidationDiagnostic::error(
@@ -233,10 +237,43 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
                     );
                 }
             }
+            StepDef::Poll(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
+            StepDef::ForEach(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
+            StepDef::While(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
+            StepDef::Repeat(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
         }
     }
 
     report
+}
+
+/// Recursively validate a loop construct's nested `steps:` block, prefixing any
+/// diagnostics with the parent location (e.g. `steps[0].steps[1]`).
+fn validate_nested_steps(
+    report: &mut ValidationReport,
+    registry: &HandlerRegistry,
+    parent_location: &str,
+    steps: &[StepDef],
+) {
+    let nested_pipeline = PipelineDef {
+        pipeline: parent_location.to_string(),
+        budget: None,
+        vars: None,
+        steps: steps.to_vec(),
+    };
+    let nested_report = validate_pipeline(&nested_pipeline, registry);
+    for mut diag in nested_report.diagnostics {
+        diag.location = format!("{parent_location}.{}", diag.location);
+        report.push(diag);
+    }
 }
 
 /// Validate a Cruxfile: each target's steps, dependency references, cycles, and default target.
@@ -264,6 +301,7 @@ pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> 
         let pipeline = PipelineDef {
             pipeline: name.clone(),
             budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
+            vars: None,
             steps: target.steps.clone(),
         };
         let target_report = validate_pipeline(&pipeline, registry);

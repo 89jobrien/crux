@@ -2,13 +2,16 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::expr::IterFrame;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, JoinAllNode, PipeNode, PipelineDef, RouteNode, SpeculateMode,
-    SpeculateNode, StepDef, StepNode, TargetDef,
+    BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
+    PipelineDef, PollNode, RepeatNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode,
+    TargetDef, WhileNode,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -95,8 +98,9 @@ impl Runner {
             ctx.set_budget(budget_from_def(budget_def));
         }
 
+        let empty_vars = IndexMap::new();
         let result = self
-            .execute_steps(&mut ctx, &target.steps, Value::Null)
+            .execute_steps(&mut ctx, &target.steps, Value::Null, &empty_vars)
             .await;
         ctx.finalize(result)
     }
@@ -119,7 +123,11 @@ impl Runner {
             ctx.replay_from(prev);
         }
 
-        let result = self.execute_steps(&mut ctx, &pipeline.steps, input).await;
+        let empty_vars = IndexMap::new();
+        let vars = pipeline.vars.as_ref().unwrap_or(&empty_vars);
+        let result = self
+            .execute_steps(&mut ctx, &pipeline.steps, input, vars)
+            .await;
         ctx.finalize(result)
     }
 
@@ -128,17 +136,49 @@ impl Runner {
         ctx: &mut CruxCtx,
         steps: &[StepDef],
         input: Value,
+        vars: &IndexMap<String, Value>,
     ) -> Result<Value, CruxErr> {
         let mut expr_ctx = ExprContext::new(input.clone());
-        let mut last_output = input;
 
-        for step_def in steps {
-            last_output = self
-                .execute_step(ctx, step_def, &last_output, &mut expr_ctx)
-                .await?;
+        // Resolve vars: (#85) once, up front, in declaration order so a var may
+        // reference input.* or an earlier-declared var. Steps see the fully
+        // resolved map via `{{ vars.NAME }}`.
+        for (name, raw) in vars {
+            let resolved = expand_args(raw.clone(), &expr_ctx);
+            expr_ctx.vars.insert(name.clone(), resolved);
         }
 
-        Ok(last_output)
+        self.execute_steps_with_ctx(ctx, steps, input, &mut expr_ctx)
+            .await
+    }
+
+    /// Run a list of steps against an already-built `ExprContext`, without creating
+    /// a fresh one or resolving `vars:`. Used both by [`Self::execute_steps`] (the
+    /// top-level pipeline body) and by loop constructs (`poll`, `for_each`, `while`,
+    /// `repeat`) that need their nested `steps:` block to share the outer scope's
+    /// `vars`/`steps` map while adding per-iteration `iter.*` bindings.
+    // Returns a boxed future: this method participates in a recursion cycle
+    // (loop constructs call it, which calls execute_step, which calls back into
+    // loop-construct executors), and `async fn` cannot recurse without indirection.
+    fn execute_steps_with_ctx<'a>(
+        &'a self,
+        ctx: &'a mut CruxCtx,
+        steps: &'a [StepDef],
+        input: Value,
+        expr_ctx: &'a mut ExprContext,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, CruxErr>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let mut last_output = input;
+
+            for step_def in steps {
+                last_output = self
+                    .execute_step(ctx, step_def, &last_output, expr_ctx)
+                    .await?;
+            }
+
+            Ok(last_output)
+        })
     }
 
     async fn execute_step(
@@ -173,7 +213,323 @@ impl Runner {
                 self.execute_speculate_step(ctx, node, current_input, expr_ctx)
                     .await
             }
+            StepDef::Poll(node) => {
+                self.execute_poll_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::ForEach(node) => {
+                self.execute_for_each_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::While(node) => {
+                self.execute_while_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::Repeat(node) => {
+                self.execute_repeat_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
         }
+    }
+
+    /// Execute a `while:` node — pre-condition loop (#89). `condition:` is
+    /// checked before each iteration (including the first); the loop runs only
+    /// while it's truthy. Each iteration is a traced sub-step named
+    /// `<while>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_while_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &WhileNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.r#while.as_str();
+        let mut last_output = current_input.clone();
+        let mut index: usize = 0;
+
+        loop {
+            let cont = expr_ctx
+                .eval_bool(&node.condition)
+                .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+            if !cont {
+                break;
+            }
+
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+            index += 1;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `repeat:` node — fixed-count loop (#89). Runs `steps:` exactly
+    /// `count` times. Each iteration is a traced sub-step named
+    /// `<repeat>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_repeat_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &RepeatNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.repeat.as_str();
+        let mut last_output = current_input.clone();
+
+        for index in 0..node.count as usize {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `for_each:` node — maps `steps:` over each item in `items:` (#84).
+    ///
+    /// `items:` is evaluated once against the outer scope to produce the array.
+    /// Each iteration binds `{{ iter.<as> }}` and `{{ iter.index }}`, runs the
+    /// nested `steps:` block, and records the iteration as a traced sub-step named
+    /// `<for_each>[<index>]`. `break_if:` (evaluated after each iteration) stops
+    /// the loop early.
+    ///
+    /// Iterations run sequentially even when `parallel: true` — `CruxCtx` is a
+    /// single mutable trace recorder in this crate's architecture (unlike
+    /// `join_all`, whose arms don't touch `ctx` until the runtime's own internal
+    /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
+    /// sound without a `crux-runtime` change, which is out of scope here.
+    /// `parallel`/`max_concurrency` are accepted for forward compatibility.
+    async fn execute_for_each_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &ForEachNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.label();
+        let binding = node.binding();
+
+        let items_value = expr_ctx
+            .eval(&node.items)
+            .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+        let items = items_value.as_array().cloned().ok_or_else(|| {
+            CruxErr::step_failed(
+                label,
+                format!("items: did not resolve to an array: {items_value}"),
+            )
+        })?;
+
+        let mut last_output = current_input.clone();
+
+        for (index, item) in items.iter().enumerate() {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::from([(binding.to_string(), item.clone())]),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `poll:` node — do-while semantics (#83). Runs `steps:` at least
+    /// once, then repeats until `until:` is truthy or `max_attempts` is reached.
+    /// Each iteration's output is recorded as a traced sub-step named
+    /// `<poll>[<index>]` (0-based) so the trace shows exactly how many attempts ran.
+    async fn execute_poll_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &PollNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let mut last_output = current_input.clone();
+        let mut index: u32 = 0;
+
+        loop {
+            let iter_output = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await?;
+
+            // Record the iteration itself as a traced sub-step (#83). The nested
+            // steps above are already individually traced; this marker makes the
+            // iteration boundary visible in the trace.
+            let label = format!("{}[{}]", node.poll, index);
+            let marker_value = iter_output.clone();
+            ctx.step(
+                &label,
+                move || async move { Ok::<Value, CruxErr>(marker_value) },
+            )
+            .await?;
+
+            last_output = iter_output;
+            index += 1;
+
+            let done = expr_ctx
+                .eval_bool(&node.until)
+                .map_err(|e| CruxErr::step_failed(&node.poll, e.to_string()))?;
+            if done {
+                break;
+            }
+            if let Some(max) = node.max_attempts
+                && index >= max
+            {
+                break;
+            }
+            if let Some(ms) = node.interval_ms {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            node.poll.clone(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
     }
 
     /// Execute a `step:` node — resolves the handler, expands args, runs via `ctx.step()`.
@@ -209,19 +565,92 @@ impl Runner {
             current_input.clone()
         };
 
-        // Run the handler inside ctx.step() so replay can skip it entirely.
-        // Confidence is captured via a shared cell since ctx.step() only returns the value.
-        let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
-        let cc = confidence_cell.clone();
-        let handler_out = ctx
-            .step(&node.step, move || async move {
-                let raw = handler(input).await?;
-                *cc.lock().unwrap() = raw.confidence;
-                Ok::<Value, CruxErr>(raw.value)
-            })
-            .await?;
+        // Retry-with-backoff (#79): attempt 1 (initial) plus `retry.count` more,
+        // each recorded as its own traced sub-step so replay/inspection can see
+        // exactly which attempts ran and failed.
+        let (max_attempts, delay_ms) = match &node.retry {
+            Some(r) => (r.count + 1, r.delay_ms),
+            None => (1, 0),
+        };
 
-        let confidence = *confidence_cell.lock().unwrap();
+        let mut last_err: Option<CruxErr> = None;
+        let mut success: Option<(Value, Option<f32>)> = None;
+        for attempt in 0..max_attempts {
+            let step_label = if node.retry.is_some() {
+                format!("{}::attempt{}", node.step, attempt + 1)
+            } else {
+                node.step.clone()
+            };
+            match run_step_once(
+                ctx,
+                &step_label,
+                handler.clone(),
+                input.clone(),
+                node.timeout_ms,
+            )
+            .await
+            {
+                Ok(ok) => {
+                    success = Some(ok);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt + 1 < max_attempts && delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+
+        let (handler_out, confidence) = match success {
+            Some(ok) => ok,
+            None => {
+                let e = last_err.expect("loop runs at least once, so failure implies an error");
+
+                // on_error (#88): active recovery, tried before falling back to
+                // allow_failure's passive tolerance.
+                if let Some(on_err) = &node.on_error {
+                    match self
+                        .run_on_error(ctx, &node.step, on_err, current_input, expr_ctx)
+                        .await
+                    {
+                        Ok(v) => (v, None),
+                        Err(e2) => {
+                            if node.allow_failure {
+                                let failed_val = failed_allowed_value(&e2);
+                                expr_ctx.steps.insert(
+                                    node.step.clone(),
+                                    StepResult {
+                                        output: failed_val.clone(),
+                                        confidence: None,
+                                    },
+                                );
+                                return Ok(failed_val);
+                            }
+                            return Err(e2);
+                        }
+                    }
+                } else if node.allow_failure {
+                    let failed_val = failed_allowed_value(&e);
+                    expr_ctx.steps.insert(
+                        node.step.clone(),
+                        StepResult {
+                            output: failed_val.clone(),
+                            confidence: None,
+                        },
+                    );
+                    return Ok(failed_val);
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+
+        if let Some(expect) = &node.expect {
+            check_expect(&node.step, &handler_out, expect)?;
+        }
+
         expr_ctx.steps.insert(
             node.step.clone(),
             StepResult {
@@ -230,6 +659,43 @@ impl Runner {
             },
         );
         Ok(handler_out)
+    }
+
+    /// Run a step's `on_error:` fallback handler (#88) as a traced sub-step named
+    /// `<step>::on_error`. Static args are expanded against the current `ExprContext`,
+    /// same as a normal step's `args`.
+    async fn run_on_error(
+        &self,
+        ctx: &mut CruxCtx,
+        step_name: &str,
+        on_err: &OnErrorDef,
+        current_input: &Value,
+        expr_ctx: &ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let handler = self
+            .registry
+            .get_handler(&on_err.handler)
+            .ok_or_else(|| {
+                CruxErr::step_failed(
+                    step_name,
+                    format!("on_error handler not found: {}", on_err.handler),
+                )
+            })?
+            .clone();
+
+        let input = merge_args(
+            current_input.clone(),
+            on_err
+                .args
+                .as_ref()
+                .map(|a| expand_args(a.clone(), expr_ctx)),
+        );
+
+        let label = format!("{step_name}::on_error");
+        ctx.step(&label, move || async move {
+            handler(input).await.map(|o| o.value)
+        })
+        .await
     }
 
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
@@ -347,12 +813,18 @@ impl Runner {
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
+                let allow_failure = arm.allow_failure();
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    let out = h(input).await?;
-                    *cell.lock().unwrap() = out.confidence;
-                    Ok(out.value)
+                    match h(input).await {
+                        Ok(out) => {
+                            *cell.lock().unwrap() = out.confidence;
+                            Ok(out.value)
+                        }
+                        Err(e) if allow_failure => Ok(failed_allowed_value(&e)),
+                        Err(e) => Err(e),
+                    }
                 });
                 (arm.label(), fut)
             })
@@ -514,6 +986,103 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
         ),
         other => other,
     }
+}
+
+/// Run a single handler invocation through `ctx.step()`, applying an optional
+/// per-attempt timeout (#81) and capturing the confidence score via a shared cell
+/// (since `ctx.step()` only returns the value). Used directly for non-retrying
+/// steps, and once per attempt for steps with a `retry:` policy (#79).
+async fn run_step_once(
+    ctx: &mut CruxCtx,
+    step_label: &str,
+    handler: crate::registry::BoxHandler,
+    input: Value,
+    timeout_ms: Option<u64>,
+) -> Result<(Value, Option<f32>), CruxErr> {
+    let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let cc = confidence_cell.clone();
+    let step_name_owned = step_label.to_string();
+    let result = ctx
+        .step(step_label, move || async move {
+            let fut = async move {
+                let raw = handler(input).await?;
+                *cc.lock().unwrap() = raw.confidence;
+                Ok::<Value, CruxErr>(raw.value)
+            };
+            match timeout_ms {
+                Some(ms) => {
+                    match tokio::time::timeout(std::time::Duration::from_millis(ms), fut).await {
+                        Ok(res) => res,
+                        Err(_) => Err(CruxErr::step_failed(
+                            &step_name_owned,
+                            format!("step timed out after {ms}ms"),
+                        )),
+                    }
+                }
+                None => fut.await,
+            }
+        })
+        .await;
+    result.map(|v| (v, *confidence_cell.lock().unwrap()))
+}
+
+/// Build the placeholder output value for a step/arm whose failure was tolerated
+/// via `allow_failure: true` (#80). Carries enough metadata for downstream
+/// expressions/consumers to detect and inspect the failure without a panic.
+fn failed_allowed_value(err: &CruxErr) -> Value {
+    serde_json::json!({
+        "status": "failed_allowed",
+        "error": err.to_string(),
+    })
+}
+
+/// Evaluate a step's `expect:` clause against its handler output.
+///
+/// Looks up `exit_code`, `stdout`, `stderr` fields on the output value (the
+/// convention used by shell-style handlers). Any configured check that fails
+/// produces a descriptive `CruxErr::StepFailed`. Checks not configured in the
+/// `expect:` block are skipped.
+fn check_expect(step_name: &str, output: &Value, expect: &ExpectDef) -> Result<(), CruxErr> {
+    if let Some(expected_code) = expect.exit_code {
+        let actual = output.get("exit_code").and_then(|v| v.as_i64());
+        if actual != Some(expected_code) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.exit_code mismatch: expected {expected_code}, got {}",
+                    actual
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "<missing>".to_string())
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stdout_contains {
+        let actual = output.get("stdout").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stdout_contains mismatch: stdout did not contain {needle:?} (stdout was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stderr_contains {
+        let actual = output.get("stderr").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stderr_contains mismatch: stderr did not contain {needle:?} (stderr was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Merge static step args into handler input under the "args" key.

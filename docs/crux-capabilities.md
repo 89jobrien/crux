@@ -10,11 +10,42 @@ Native support status for crux-script pipeline step types and handlers.
 | Sequential pipe    | `pipe:` + `stages:`                | Supported                                                       |
 | Parallel fan-out   | `join_all:` + `arms:`              | Supported                                                       |
 | Speculate (race)   | `speculate:` + `mode: first_ok`    | Supported                                                       |
-| Speculate (pick)   | `speculate:` + `mode: pick_best`   | Partial -- requires `score` field in output                     |
+| Speculate (pick)   | `speculate:` + `mode: pick_best`   | Supported -- uses `score` field if present, else deterministic fallback by output length (#68) |
 | Confidence routing | `route_on_confidence:` + `routes:` | Supported -- handlers must use `HandlerOutput::with_confidence` |
 | Delegation         | `delegate:`                        | Partial -- parses but no agents pre-registered                  |
+| Post-step assertions | `step:` + `expect:`               | Supported -- `exit_code`, `stdout_contains`, `stderr_contains`  |
+| Tolerated failure  | `step:`/arm + `allow_failure: true`| Supported -- failing step/arm output becomes an error-describing value instead of aborting |
+| Per-step timeout   | `step:` + `timeout_ms:`            | Supported -- wraps the handler in `tokio::time::timeout`         |
+| Retry with backoff | `step:` + `retry: {count, delay_ms}` | Supported -- each attempt traced as `<step>::attempt<N>`       |
+| Error recovery     | `step:` + `on_error: {handler, args}` | Supported -- runs after retries are exhausted, before `allow_failure` |
+| Pipeline variables | `vars:` (pipeline-level)           | Supported -- resolved once up front, referenced as `{{ vars.NAME }}` |
+| Do-while loop      | `poll:` + `steps:` + `until:`      | Supported -- runs at least once; each iteration traced as `<poll>[<index>]` |
+| Map over collection | `for_each:` + `items:` + `steps:` | Supported -- see note below on the `for_each: "<label> as <binding>"` syntax; `parallel: true` currently still runs sequentially |
+| Pre-condition loop | `while:` + `condition:` + `steps:` | Supported -- condition checked before every iteration            |
+| Fixed-count loop   | `repeat:` + `count:` + `steps:`    | Supported                                                        |
 
-Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`.
+All four loop constructs (`poll`, `for_each`, `while`, `repeat`) support an optional
+`break_if:` expression (evaluated after each iteration) and expose `{{ iter.index }}`
+inside their `steps:` block.
+
+**`for_each:` binding-name syntax note**: due to a confirmed parser limitation in
+`serde-saphyr` 0.0.23 (untagged enum struct-variants silently fail to deserialize once
+they carry more than 3 non-`#[serde(default)]` fields), the per-item binding name is
+packed into the `for_each:` label instead of a separate `as:` field:
+
+```yaml
+- for_each: doubles as n   # binds {{ iter.n }}; omit " as <name>" to default to {{ iter.item }}
+  items: "{{ input.numbers }}"
+  steps:
+    - step: doubled
+      handler: double_item
+      args:
+        value: "{{ iter.n }}"
+```
+
+Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`. Loop iterations
+tick the pipeline budget automatically since each iteration's nested steps (and the
+per-iteration trace marker) go through the normal `ctx.step()` path.
 
 ### Handler Registration
 
@@ -23,7 +54,8 @@ Two registry methods exist for registering handlers:
 - `registry.handler(name, f)` -- handler returns `HandlerOutput`
   (with optional confidence)
 - `registry.handler_value(name, f)` -- handler returns plain `Value`
-  (auto-wrapped, confidence defaults to 1.0)
+  (auto-wrapped, no confidence score; `HandlerOutput::confidence_or_default()`
+  now returns a neutral `0.5` for these, not `1.0` -- see #76)
 
 ## Native Handlers
 
@@ -140,6 +172,7 @@ Doob backlog processing and prioritization.
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `rx::install`          | installs scripts in a local registry (#66)                                         |
 | `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents (#67) |
-| `route_on_confidence`  | `handler_value` handlers default to 1.0; use `handler` + `HandlerOutput` to emit   |
+| `route_on_confidence`  | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76) |
+| `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84) |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
