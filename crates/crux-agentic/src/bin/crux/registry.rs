@@ -133,18 +133,23 @@ pub fn warn_missing_env(pipeline: &PipelineDef) {
     }
 }
 
-/// Print a full execution trace with step details.
-pub fn print_trace(crux: &Crux<Value>, elapsed: std::time::Duration) {
-    println!("Pipeline: {}", crux.agent);
-    println!(
-        "Status:   {}",
+/// Render the full trace envelope (pipeline info, per-step status, timing, output) as text.
+///
+/// Pure: no I/O. Used for `--verbose`/`-v` output.
+pub fn render_trace(crux: &Crux<Value>, elapsed: std::time::Duration) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("Pipeline: {}\n", crux.agent));
+    out.push_str(&format!(
+        "Status:   {}\n",
         if crux.value().is_ok() { "OK" } else { "FAILED" }
-    );
-    println!("Duration: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
-    println!("Steps:    {}", crux.steps.len());
-    println!();
+    ));
+    out.push_str(&format!(
+        "Duration: {:.1}ms\n",
+        elapsed.as_secs_f64() * 1000.0
+    ));
+    out.push_str(&format!("Steps:    {}\n\n", crux.steps.len()));
 
-    println!("Trace:");
+    out.push_str("Trace:\n");
     for (i, step) in crux.steps.iter().enumerate() {
         let status = match step.status {
             StepStatus::Ok => "OK",
@@ -158,24 +163,26 @@ pub fn print_trace(crux: &Crux<Value>, elapsed: std::time::Duration) {
             StepKind::Branch => " [branch]",
             StepKind::Speculation => " [speculate]",
         };
-        println!(
-            "  {:>2}. [{:>4}] {}{} ({}ms)",
+        out.push_str(&format!(
+            "  {:>2}. [{:>4}] {}{} ({}ms)\n",
             i + 1,
             status,
             step.name,
             kind,
             step.duration_ms
-        );
+        ));
     }
 
-    println!();
+    out.push('\n');
     match crux.value() {
         Ok(v) => {
             let pretty = serde_json::to_string_pretty(v).unwrap_or_default();
-            println!("Output:\n{pretty}");
+            out.push_str(&format!("Output:\n{pretty}\n"));
         }
         Err(e) => {
-            println!("Error: {e}");
+            out.push_str(&format!("Error: {e}\n"));
         }
     }
+
+    out
 }

@@ -6,7 +6,18 @@ use crux_runtime::prelude::*;
 use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
 use serde_json::{Value, json};
 
-use crate::registry::{build_registry, collect_handler_names, print_trace, warn_missing_env};
+use crate::registry::{build_registry, collect_handler_names, render_trace, warn_missing_env};
+
+/// Render the default (non-verbose) `crux run` output: raw JSON of the result value.
+///
+/// Pure: no I/O. On success, returns the compact JSON encoding of the value. On
+/// failure, returns the error message (printed to stderr by the caller).
+fn render_default_output(crux: &Crux<Value>) -> Result<String, String> {
+    match crux.value() {
+        Ok(v) => Ok(serde_json::to_string(v).unwrap_or_default()),
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 /// Shared config for the `run` subcommand, replacing positional arg sprawl.
 pub struct RunConfig<'a> {
@@ -380,10 +391,13 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     }
 
     if verbose {
-        print_trace(&crux, elapsed);
+        print!("{}", render_trace(&crux, elapsed));
+        if crux.value().is_err() {
+            std::process::exit(1);
+        }
     } else if !quiet {
-        match crux.value() {
-            Ok(v) => println!("{}", serde_json::to_string(v).unwrap_or_default()),
+        match render_default_output(&crux) {
+            Ok(json) => println!("{json}"),
             Err(e) => {
                 eprintln!("{e}");
                 std::process::exit(1);
@@ -408,4 +422,43 @@ fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
             }))
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crux_runtime::prelude::CruxId;
+
+    fn ok_crux(v: Value) -> Crux<Value> {
+        Crux {
+            id: CruxId::new(),
+            agent: "test-agent".to_string(),
+            value: Ok(v),
+            steps: vec![],
+            children: vec![],
+            started_at: chrono::Utc::now(),
+            finished_at: None,
+        }
+    }
+
+    #[test]
+    fn default_output_is_raw_json_of_result() {
+        let crux = ok_crux(json!({"answer": 42}));
+        let out = render_default_output(&crux).expect("ok result");
+        assert_eq!(out, r#"{"answer":42}"#);
+        // No trace envelope framing should leak into the default output.
+        assert!(!out.contains("Pipeline:"));
+        assert!(!out.contains("Trace:"));
+    }
+
+    #[test]
+    fn verbose_output_is_full_trace_envelope() {
+        let crux = ok_crux(json!({"answer": 42}));
+        let out = render_trace(&crux, std::time::Duration::from_millis(5));
+        assert!(out.contains("Pipeline:"));
+        assert!(out.contains("Status:   OK"));
+        assert!(out.contains("Trace:"));
+        assert!(out.contains("Output:"));
+        assert!(out.contains(r#""answer": 42"#));
+    }
 }
