@@ -101,6 +101,11 @@ pub struct StepNode {
     /// becomes an error-describing value and execution continues (#80).
     #[serde(default)]
     pub allow_failure: bool,
+    /// Per-step wall-clock timeout, independent of any pipeline-level budget (#81).
+    /// If the handler does not complete within this many milliseconds, the step
+    /// fails with a timeout error.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Declarative assertions checked against a step's output value after execution.

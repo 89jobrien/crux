@@ -213,11 +213,28 @@ impl Runner {
         // Confidence is captured via a shared cell since ctx.step() only returns the value.
         let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
         let cc = confidence_cell.clone();
+        let timeout_ms = node.timeout_ms;
+        let step_name_owned = node.step.clone();
         let step_result = ctx
             .step(&node.step, move || async move {
-                let raw = handler(input).await?;
-                *cc.lock().unwrap() = raw.confidence;
-                Ok::<Value, CruxErr>(raw.value)
+                let fut = async move {
+                    let raw = handler(input).await?;
+                    *cc.lock().unwrap() = raw.confidence;
+                    Ok::<Value, CruxErr>(raw.value)
+                };
+                match timeout_ms {
+                    Some(ms) => {
+                        match tokio::time::timeout(std::time::Duration::from_millis(ms), fut).await
+                        {
+                            Ok(res) => res,
+                            Err(_) => Err(CruxErr::step_failed(
+                                &step_name_owned,
+                                format!("step timed out after {ms}ms"),
+                            )),
+                        }
+                    }
+                    None => fut.await,
+                }
             })
             .await;
 
