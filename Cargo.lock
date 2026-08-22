@@ -569,6 +569,7 @@ version = "0.3.1"
 dependencies = [
  "crux-agentic",
  "crux-runtime",
+ "crux-types",
  "indoc",
  "insta",
  "serde",
