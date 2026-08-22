@@ -7,6 +7,11 @@ pub struct PipelineDef {
     pub pipeline: String,
     #[serde(default)]
     pub budget: Option<BudgetDef>,
+    /// Pipeline-level variable bindings (#85), resolved once before any step runs.
+    /// Values may reference `{{ input.* }}` (and earlier-declared vars); once
+    /// resolved they're available to every step as `{{ vars.NAME }}`.
+    #[serde(default)]
+    pub vars: Option<IndexMap<String, serde_json::Value>>,
     pub steps: Vec<StepDef>,
 }
 

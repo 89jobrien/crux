@@ -264,6 +264,7 @@ pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> 
         let pipeline = PipelineDef {
             pipeline: name.clone(),
             budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
+            vars: None,
             steps: target.steps.clone(),
         };
         let target_report = validate_pipeline(&pipeline, registry);

@@ -19,6 +19,9 @@ pub struct StepResult {
 pub struct ExprContext {
     pub input: Value,
     pub steps: HashMap<String, StepResult>,
+    /// Pipeline-level `vars:` bindings (#85), resolved once up front. Referenced
+    /// from any step via `{{ vars.NAME }}` / `{{ vars.NAME.field }}`.
+    pub vars: HashMap<String, Value>,
 }
 
 impl ExprContext {
@@ -26,6 +29,7 @@ impl ExprContext {
         Self {
             input,
             steps: HashMap::new(),
+            vars: HashMap::new(),
         }
     }
 
@@ -90,6 +94,22 @@ impl ExprContext {
         if let Some(rest) = path.strip_prefix("input.") {
             return json_get(&self.input, rest)
                 .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
+        }
+
+        // `vars.<name>` — full value; `vars.<name>.<subfield>...` — dot-path into it.
+        if let Some(rest) = path.strip_prefix("vars.") {
+            let mut parts = rest.splitn(2, '.');
+            let name = parts.next().unwrap_or("");
+            let value = self
+                .vars
+                .get(name)
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            return match parts.next() {
+                Some(sub) => {
+                    json_get(value, sub).ok_or_else(|| ExprError::UnknownPath(path.to_string()))
+                }
+                None => Ok(value.clone()),
+            };
         }
 
         const MAX_PATH_SEGMENTS: usize = 3;

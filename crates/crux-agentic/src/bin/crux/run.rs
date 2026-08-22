@@ -127,6 +127,7 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
             let tmp = PipelineDef {
                 pipeline: name.to_string(),
                 budget: None,
+                vars: None,
                 steps: target_def.steps.clone(),
             };
             let handlers = collect_handler_names(&tmp);
@@ -195,6 +196,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
         budget: None,
+        vars: None,
         steps: vec![],
     };
     let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path, false));
@@ -206,6 +208,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         let tmp_pipeline = PipelineDef {
             pipeline: String::new(),
             budget: None,
+            vars: None,
             steps: tgt.steps.clone(),
         };
         for name in collect_handler_names(&tmp_pipeline) {

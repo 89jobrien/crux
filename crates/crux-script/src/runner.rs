@@ -2,6 +2,7 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::expr::{ExprContext, ExprError, StepResult};
@@ -95,8 +96,9 @@ impl Runner {
             ctx.set_budget(budget_from_def(budget_def));
         }
 
+        let empty_vars = IndexMap::new();
         let result = self
-            .execute_steps(&mut ctx, &target.steps, Value::Null)
+            .execute_steps(&mut ctx, &target.steps, Value::Null, &empty_vars)
             .await;
         ctx.finalize(result)
     }
@@ -119,7 +121,11 @@ impl Runner {
             ctx.replay_from(prev);
         }
 
-        let result = self.execute_steps(&mut ctx, &pipeline.steps, input).await;
+        let empty_vars = IndexMap::new();
+        let vars = pipeline.vars.as_ref().unwrap_or(&empty_vars);
+        let result = self
+            .execute_steps(&mut ctx, &pipeline.steps, input, vars)
+            .await;
         ctx.finalize(result)
     }
 
@@ -128,8 +134,18 @@ impl Runner {
         ctx: &mut CruxCtx,
         steps: &[StepDef],
         input: Value,
+        vars: &IndexMap<String, Value>,
     ) -> Result<Value, CruxErr> {
         let mut expr_ctx = ExprContext::new(input.clone());
+
+        // Resolve vars: (#85) once, up front, in declaration order so a var may
+        // reference input.* or an earlier-declared var. Steps see the fully
+        // resolved map via `{{ vars.NAME }}`.
+        for (name, raw) in vars {
+            let resolved = expand_args(raw.clone(), &expr_ctx);
+            expr_ctx.vars.insert(name.clone(), resolved);
+        }
+
         let mut last_output = input;
 
         for step_def in steps {
