@@ -4,7 +4,7 @@
 //! It has no runtime, no async, no LLM dependencies. Designed for
 //! cross-workspace consumption (e.g., minibox trace storage).
 
-// TODO(#75): schema/runtime split — push all combinators into a crux-schema crate
+// TODO(#97): schema/runtime split — push all combinators into a crux-schema crate
 //   (no tokio, no LLM deps) so external consumers (minibox, slash, braid) can use
 //   crux traces without pulling the full runtime
 

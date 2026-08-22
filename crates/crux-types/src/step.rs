@@ -1,14 +1,14 @@
 /// A single recorded step in an agent's execution.
 use std::collections::HashMap;
 
-// TODO(#76): streaming step subscriptions — formalize `events: Vec<Value>` as a
+// TODO(#94): streaming step subscriptions — formalize `events: Vec<Value>` as a
 //   broadcast channel (Step::events_subscribe()) for real-time trace consumption
 //   without waiting for step completion (cf. romp)
 
-// TODO(#79): cited findings on failures — add a `cited_reason` field with source
+// TODO(#95): cited findings on failures — add a `cited_reason` field with source
 //   traceability (file, symbol, line) for richer failure diagnostics (cf. devloop)
 
-// TODO(#81): step output type safety — step outputs are all `Value` today; explore
+// TODO(#96): step output type safety — step outputs are all `Value` today; explore
 //   generic `Step<T>` or a typed-output registry to catch mismatches at compile time
 
 /// Shared mutable output map for `pipe()` stages — maps alias names to their outputs.

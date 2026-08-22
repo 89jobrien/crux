@@ -121,7 +121,7 @@ impl ExprContext {
                     .steps
                     .get(*name)
                     .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
-                // TODO(review): trim_start_matches strips repeated "output." prefixes;
+                // TODO(#103): trim_start_matches strips repeated "output." prefixes;
                 //   use strip_prefix("output.").unwrap_or(rest) for single-strip
                 let field_path = rest.trim_start_matches("output.");
                 json_get(&step.output, field_path)

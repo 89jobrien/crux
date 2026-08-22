@@ -2,7 +2,7 @@
 //!
 //! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
 
-// TODO(#72): planner-based action dispatch — refactor step/delegate/speculate to return
+// TODO(#100): planner-based action dispatch — refactor step/delegate/speculate to return
 //   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
 //   simulation, and side-effect-free testing
 

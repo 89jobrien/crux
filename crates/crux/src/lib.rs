@@ -6,7 +6,7 @@
 pub use crux_derive::{agent, evolve, harness};
 pub use crux_runtime::*;
 
-// TODO(#83): trace visualization / export — add a Crux<T>::to_mermaid() or similar
+// TODO(#98): trace visualization / export — add a Crux<T>::to_mermaid() or similar
 //   to render execution traces as diagrams for debugging and documentation
 
 #[cfg(feature = "script")]

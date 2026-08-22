@@ -3,7 +3,7 @@
 /// Agents have typed inputs and outputs, a name, and optional lifecycle hooks.
 /// You rarely implement this directly — the `#[crux::agent]` macro generates
 /// an impl from a free function.
-// TODO(#80): token-shape step priority — infer priority from naming convention
+// TODO(#93): token-shape step priority — infer priority from naming convention
 //   (ALL_CAPS -> Max, TitleCase -> High, snake_case -> Lowest) as lightweight
 //   scheduling hints (cf. slash)
 use serde::{Serialize, de::DeserializeOwned};

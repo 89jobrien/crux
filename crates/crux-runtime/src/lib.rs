@@ -2,7 +2,7 @@
 //!
 //! Core runtime providing `CruxCtx`, `Agent` trait, `TaskRegistry`,
 //! replay, hooks, delegation, speculation, and governance primitives.
-// TODO(#78): EDDOS-style event aggregation — unify heterogeneous step types into a
+// TODO(#92): EDDOS-style event aggregation — unify heterogeneous step types into a
 //   typed event stream (MPSC -> enrichment -> batching -> broadcast) for analytics,
 //   replay filtering, and multi-agent coordination (cf. devloop)
 #[macro_use]
