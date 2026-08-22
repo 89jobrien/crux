@@ -90,6 +90,37 @@ pub enum StepDef {
     Speculate(SpeculateNode),
     Poll(PollNode),
     ForEach(ForEachNode),
+    While(WhileNode),
+    Repeat(RepeatNode),
+}
+
+/// A `while:` node — pre-condition loop (#89). `condition:` is evaluated before
+/// each iteration (including the first) and the loop runs only while it's truthy.
+/// Shares tracing/budget design with `poll:` (#83) and `for_each:` (#84): each
+/// iteration is a traced sub-step named `<while>[<index>]`, and `break_if:`
+/// (evaluated after each iteration) can stop the loop early. `{{ iter.index }}`
+/// is available inside `steps:`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WhileNode {
+    pub r#while: String,
+    pub steps: Vec<StepDef>,
+    pub condition: String,
+    #[serde(default)]
+    pub break_if: Option<String>,
+}
+
+/// A `repeat:` node — fixed-count loop (#89). Runs `steps:` exactly `count`
+/// times. Shares tracing/budget design with `poll:` (#83) and `for_each:` (#84):
+/// each iteration is a traced sub-step named `<repeat>[<index>]`, and
+/// `break_if:` can stop the loop early. `{{ iter.index }}` is available inside
+/// `steps:`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RepeatNode {
+    pub repeat: String,
+    pub steps: Vec<StepDef>,
+    pub count: u32,
+    #[serde(default)]
+    pub break_if: Option<String>,
 }
 
 /// A `for_each:` node — maps `steps:` over each item in `items:` (#84). Sequential

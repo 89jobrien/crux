@@ -10,7 +10,8 @@ use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
     BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
-    PipelineDef, PollNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
+    PipelineDef, PollNode, RepeatNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode,
+    TargetDef, WhileNode,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -220,7 +221,163 @@ impl Runner {
                 self.execute_for_each_step(ctx, node, current_input, expr_ctx)
                     .await
             }
+            StepDef::While(node) => {
+                self.execute_while_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::Repeat(node) => {
+                self.execute_repeat_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
         }
+    }
+
+    /// Execute a `while:` node — pre-condition loop (#89). `condition:` is
+    /// checked before each iteration (including the first); the loop runs only
+    /// while it's truthy. Each iteration is a traced sub-step named
+    /// `<while>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_while_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &WhileNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.r#while.as_str();
+        let mut last_output = current_input.clone();
+        let mut index: usize = 0;
+
+        loop {
+            let cont = expr_ctx
+                .eval_bool(&node.condition)
+                .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+            if !cont {
+                break;
+            }
+
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+            index += 1;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `repeat:` node — fixed-count loop (#89). Runs `steps:` exactly
+    /// `count` times. Each iteration is a traced sub-step named
+    /// `<repeat>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_repeat_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &RepeatNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.repeat.as_str();
+        let mut last_output = current_input.clone();
+
+        for index in 0..node.count as usize {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
     }
 
     /// Execute a `for_each:` node — maps `steps:` over each item in `items:` (#84).

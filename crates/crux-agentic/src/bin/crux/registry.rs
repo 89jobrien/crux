@@ -110,6 +110,12 @@ fn collect_handler_names_into(steps: &[StepDef], names: &mut Vec<String>) {
             StepDef::ForEach(node) => {
                 collect_handler_names_into(&node.steps, names);
             }
+            StepDef::While(node) => {
+                collect_handler_names_into(&node.steps, names);
+            }
+            StepDef::Repeat(node) => {
+                collect_handler_names_into(&node.steps, names);
+            }
         }
     }
 }

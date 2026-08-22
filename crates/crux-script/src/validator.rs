@@ -166,6 +166,8 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
             StepDef::Speculate(n) => n.speculate.as_str(),
             StepDef::Poll(n) => n.poll.as_str(),
             StepDef::ForEach(n) => n.label(),
+            StepDef::While(n) => n.r#while.as_str(),
+            StepDef::Repeat(n) => n.repeat.as_str(),
         };
         if !seen_names.insert(step_name.to_string()) {
             report.push(ValidationDiagnostic::error(
@@ -239,6 +241,12 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
                 validate_nested_steps(&mut report, registry, &location, &node.steps);
             }
             StepDef::ForEach(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
+            StepDef::While(node) => {
+                validate_nested_steps(&mut report, registry, &location, &node.steps);
+            }
+            StepDef::Repeat(node) => {
                 validate_nested_steps(&mut report, registry, &location, &node.steps);
             }
         }
