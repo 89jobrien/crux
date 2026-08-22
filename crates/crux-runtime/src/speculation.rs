@@ -406,6 +406,50 @@ mod tests {
         assert_eq!(result.as_str().unwrap(), "a");
     }
 
+    #[tokio::test]
+    async fn pick_best_multiple_arms_without_score_resolve_deterministically() {
+        // Issue #68: arms with no "score" field must not silently tie at 0.0
+        // and win arbitrarily by iteration order. The fallback (byte-length of
+        // serialized output) must deterministically pick the same winner
+        // regardless of arm order.
+        let mut ctx_a = CruxCtx::new("test");
+        let arms_a = vec![
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+        ];
+        let result_a = SpeculationBuilder::new(&mut ctx_a, "spec", arms_a)
+            .pick_best()
+            .await
+            .unwrap();
+
+        let mut ctx_b = CruxCtx::new("test");
+        let arms_b = vec![
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+        ];
+        let result_b = SpeculationBuilder::new(&mut ctx_b, "spec", arms_b)
+            .pick_best()
+            .await
+            .unwrap();
+
+        // Same logical winner regardless of arm order -- not an arbitrary
+        // first-wins tie at score 0.0.
+        assert_eq!(result_a["answer"], result_b["answer"]);
+        assert_eq!(
+            result_a["answer"].as_str().unwrap(),
+            "a much longer answer",
+            "expected the longest-serialized arm to win deterministically"
+        );
+    }
+
     // first_ok tests
 
     #[tokio::test]
