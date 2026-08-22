@@ -112,6 +112,20 @@ pub struct StepNode {
     /// `<step>::attempt<N>`.
     #[serde(default)]
     pub retry: Option<RetryDef>,
+    /// Fallback/cleanup handler run when the step fails after any configured
+    /// retries are exhausted (#88). If the fallback succeeds, its output becomes
+    /// the step's output and the pipeline continues normally. If it also fails,
+    /// `allow_failure` (if set) still applies to the fallback's error.
+    #[serde(default)]
+    pub on_error: Option<OnErrorDef>,
+}
+
+/// A fallback handler invocation run when a step's handler (and retries) fail (#88).
+#[derive(Debug, Clone, Deserialize)]
+pub struct OnErrorDef {
+    pub handler: String,
+    #[serde(default)]
+    pub args: Option<serde_json::Value>,
 }
 
 /// Retry-with-backoff policy for a single step (#79).

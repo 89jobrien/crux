@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, PipeNode, PipelineDef, RouteNode,
+    BudgetDef, DelegateNode, ExpectDef, JoinAllNode, OnErrorDef, PipeNode, PipelineDef, RouteNode,
     SpeculateMode, SpeculateNode, StepDef, StepNode, TargetDef,
 };
 
@@ -251,7 +251,31 @@ impl Runner {
             Some(ok) => ok,
             None => {
                 let e = last_err.expect("loop runs at least once, so failure implies an error");
-                if node.allow_failure {
+
+                // on_error (#88): active recovery, tried before falling back to
+                // allow_failure's passive tolerance.
+                if let Some(on_err) = &node.on_error {
+                    match self
+                        .run_on_error(ctx, &node.step, on_err, current_input, expr_ctx)
+                        .await
+                    {
+                        Ok(v) => (v, None),
+                        Err(e2) => {
+                            if node.allow_failure {
+                                let failed_val = failed_allowed_value(&e2);
+                                expr_ctx.steps.insert(
+                                    node.step.clone(),
+                                    StepResult {
+                                        output: failed_val.clone(),
+                                        confidence: None,
+                                    },
+                                );
+                                return Ok(failed_val);
+                            }
+                            return Err(e2);
+                        }
+                    }
+                } else if node.allow_failure {
                     let failed_val = failed_allowed_value(&e);
                     expr_ctx.steps.insert(
                         node.step.clone(),
@@ -261,8 +285,9 @@ impl Runner {
                         },
                     );
                     return Ok(failed_val);
+                } else {
+                    return Err(e);
                 }
-                return Err(e);
             }
         };
 
@@ -278,6 +303,43 @@ impl Runner {
             },
         );
         Ok(handler_out)
+    }
+
+    /// Run a step's `on_error:` fallback handler (#88) as a traced sub-step named
+    /// `<step>::on_error`. Static args are expanded against the current `ExprContext`,
+    /// same as a normal step's `args`.
+    async fn run_on_error(
+        &self,
+        ctx: &mut CruxCtx,
+        step_name: &str,
+        on_err: &OnErrorDef,
+        current_input: &Value,
+        expr_ctx: &ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let handler = self
+            .registry
+            .get_handler(&on_err.handler)
+            .ok_or_else(|| {
+                CruxErr::step_failed(
+                    step_name,
+                    format!("on_error handler not found: {}", on_err.handler),
+                )
+            })?
+            .clone();
+
+        let input = merge_args(
+            current_input.clone(),
+            on_err
+                .args
+                .as_ref()
+                .map(|a| expand_args(a.clone(), expr_ctx)),
+        );
+
+        let label = format!("{step_name}::on_error");
+        ctx.step(&label, move || async move {
+            handler(input).await.map(|o| o.value)
+        })
+        .await
     }
 
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
