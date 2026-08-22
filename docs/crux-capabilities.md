@@ -162,7 +162,7 @@ Doob backlog processing and prioritization.
 
 | Kind             | What it does                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------ |
-| `llm::extract`   | BAML structured extraction (3 functions: `ExtractEntities`, `Summarize`, `Classify`) |
+| `llm::extract`   | BAML structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
 | `llm::decompose` | BAML spec decomposition into task list                                               |
 | `llm::plan`      | BAML pipeline generation from natural language goal                                  |
 
@@ -171,8 +171,6 @@ Doob backlog processing and prioritization.
 | Area                   | Gap                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `rx::install`          | installs scripts in a local registry (#66)                                         |
-| `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents (#67) |
 | `route_on_confidence`  | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76) |
 | `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84) |
-| `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Supports dot-path, `[idx]`/`[i][j]` indexing, `\|` pipes, `select(cond)` (comparison ops `== != > < >= <=` or bare truthy test), and `map(expr)` (#70). Still no full jq: no `reduce`, `foreach`, string/math builtins beyond `keys`/`length`/`type`/`first`/`last`/`has()`, no variable bindings (`as $x`), no array/object construction literals, and `select`/`map` only operate on the current array value (no stream semantics). |

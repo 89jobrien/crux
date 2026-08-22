@@ -145,6 +145,136 @@ async fn classify_ci_failure_is_wired() {
 }
 
 #[tokio::test]
+async fn describe_project_returns_structured_output() {
+    let (_server, registry) = make_mock_registry().await;
+    let input = json!({
+        "function": "DescribeProject",
+        "input": {
+            "name": "crux",
+            "language": "Rust",
+            "readme": "An agentic DSL for Rust.",
+            "commits": ["feat: add extract handler"]
+        }
+    });
+
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
+
+    assert!(
+        result.get("description").and_then(|v| v.as_str()).is_some(),
+        "result must contain 'description' string"
+    );
+}
+
+#[tokio::test]
+async fn assess_health_returns_structured_output() {
+    let (_server, registry) = make_mock_registry().await;
+    let input = json!({
+        "function": "AssessHealth",
+        "input": {
+            "name": "crux",
+            "pushed_at": "2026-08-01T00:00:00Z",
+            "commit_dates": ["2026-08-01", "2026-07-28"],
+            "open_issues": 4
+        }
+    });
+
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
+
+    assert!(
+        result.get("status").and_then(|v| v.as_str()).is_some(),
+        "result must contain 'status' string"
+    );
+    let confidence = result
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .expect("result must contain 'confidence' float");
+    assert!((0.0..=1.0).contains(&confidence));
+}
+
+#[tokio::test]
+async fn classify_project_returns_structured_output() {
+    let (_server, registry) = make_mock_registry().await;
+    let input = json!({
+        "function": "ClassifyProject",
+        "input": {
+            "name": "crux",
+            "description": "An agentic DSL for Rust",
+            "language": "Rust",
+            "topics": ["agents", "dsl"],
+            "commits": ["feat: add extract handler"]
+        }
+    });
+
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
+
+    assert!(
+        result.get("category").and_then(|v| v.as_str()).is_some(),
+        "result must contain 'category' string"
+    );
+    let confidence = result
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .expect("result must contain 'confidence' float");
+    assert!((0.0..=1.0).contains(&confidence));
+}
+
+#[tokio::test]
+async fn generate_changelog_returns_structured_output() {
+    let (_server, registry) = make_mock_registry().await;
+    let input = json!({
+        "function": "GenerateChangelog",
+        "input": {
+            "name": "crux",
+            "commits": ["feat: add extract handler", "fix: clippy warning"]
+        }
+    });
+
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
+
+    assert!(
+        result.get("summary").and_then(|v| v.as_str()).is_some(),
+        "result must contain 'summary' string"
+    );
+    let highlights = result
+        .get("highlights")
+        .and_then(|v| v.as_array())
+        .expect("result must contain 'highlights' array");
+    assert!(!highlights.is_empty());
+}
+
+#[tokio::test]
+async fn suggest_related_returns_structured_output() {
+    let (_server, registry) = make_mock_registry().await;
+    let input = json!({
+        "function": "SuggestRelated",
+        "input": {
+            "name": "crux",
+            "description": "An agentic DSL for Rust",
+            "category": "library",
+            "all_projects": ["minibox", "devkit", "braid", "crux"]
+        }
+    });
+
+    let result = invoke(&registry, input)
+        .await
+        .expect("llm::extract should succeed");
+
+    let related = result
+        .get("related")
+        .and_then(|v| v.as_array())
+        .expect("result must contain 'related' array");
+    assert!(!related.is_empty());
+}
+
+#[tokio::test]
 async fn unknown_function_returns_error() {
     let (_server, registry) = make_mock_registry().await;
     let input = json!({
