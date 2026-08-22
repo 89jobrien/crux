@@ -141,6 +141,5 @@ Doob backlog processing and prioritization.
 | `rx::install`          | installs scripts in a local registry (#66)                                         |
 | `delegate:`            | Schema parses, runner dispatches, but `register_all` pre-registers no agents (#67) |
 | `route_on_confidence`  | `handler_value` handlers default to 1.0; use `handler` + `HandlerOutput` to emit   |
-| `speculate: pick_best` | Arms that don't emit `score` all tie at 0.0 (stub) (#68)                           |
 | `llm::extract`         | Only 3 BAML functions wired; other function names fail (#69)                       |
 | `json::jq`             | Dot-path only -- no filters, pipes, `select()`, `map()` (#70)                      |
