@@ -106,6 +106,22 @@ pub struct StepNode {
     /// fails with a timeout error.
     #[serde(default)]
     pub timeout_ms: Option<u64>,
+    /// Retry-with-backoff policy (#79). On failure, the step is retried up to
+    /// `count` additional times with `delay_ms` between attempts. Each attempt
+    /// (including the initial one) is recorded as its own traced sub-step named
+    /// `<step>::attempt<N>`.
+    #[serde(default)]
+    pub retry: Option<RetryDef>,
+}
+
+/// Retry-with-backoff policy for a single step (#79).
+#[derive(Debug, Clone, Deserialize)]
+pub struct RetryDef {
+    /// Number of additional attempts after the initial one.
+    pub count: u32,
+    /// Delay between attempts, in milliseconds.
+    #[serde(default)]
+    pub delay_ms: u64,
 }
 
 /// Declarative assertions checked against a step's output value after execution.

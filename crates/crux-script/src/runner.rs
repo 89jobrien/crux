@@ -209,56 +209,67 @@ impl Runner {
             current_input.clone()
         };
 
-        // Run the handler inside ctx.step() so replay can skip it entirely.
-        // Confidence is captured via a shared cell since ctx.step() only returns the value.
-        let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
-        let cc = confidence_cell.clone();
-        let timeout_ms = node.timeout_ms;
-        let step_name_owned = node.step.clone();
-        let step_result = ctx
-            .step(&node.step, move || async move {
-                let fut = async move {
-                    let raw = handler(input).await?;
-                    *cc.lock().unwrap() = raw.confidence;
-                    Ok::<Value, CruxErr>(raw.value)
-                };
-                match timeout_ms {
-                    Some(ms) => {
-                        match tokio::time::timeout(std::time::Duration::from_millis(ms), fut).await
-                        {
-                            Ok(res) => res,
-                            Err(_) => Err(CruxErr::step_failed(
-                                &step_name_owned,
-                                format!("step timed out after {ms}ms"),
-                            )),
-                        }
-                    }
-                    None => fut.await,
-                }
-            })
-            .await;
+        // Retry-with-backoff (#79): attempt 1 (initial) plus `retry.count` more,
+        // each recorded as its own traced sub-step so replay/inspection can see
+        // exactly which attempts ran and failed.
+        let (max_attempts, delay_ms) = match &node.retry {
+            Some(r) => (r.count + 1, r.delay_ms),
+            None => (1, 0),
+        };
 
-        let handler_out = match step_result {
-            Ok(v) => v,
-            Err(e) if node.allow_failure => {
-                let failed_val = failed_allowed_value(&e);
-                expr_ctx.steps.insert(
-                    node.step.clone(),
-                    StepResult {
-                        output: failed_val.clone(),
-                        confidence: None,
-                    },
-                );
-                return Ok(failed_val);
+        let mut last_err: Option<CruxErr> = None;
+        let mut success: Option<(Value, Option<f32>)> = None;
+        for attempt in 0..max_attempts {
+            let step_label = if node.retry.is_some() {
+                format!("{}::attempt{}", node.step, attempt + 1)
+            } else {
+                node.step.clone()
+            };
+            match run_step_once(
+                ctx,
+                &step_label,
+                handler.clone(),
+                input.clone(),
+                node.timeout_ms,
+            )
+            .await
+            {
+                Ok(ok) => {
+                    success = Some(ok);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt + 1 < max_attempts && delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
             }
-            Err(e) => return Err(e),
+        }
+
+        let (handler_out, confidence) = match success {
+            Some(ok) => ok,
+            None => {
+                let e = last_err.expect("loop runs at least once, so failure implies an error");
+                if node.allow_failure {
+                    let failed_val = failed_allowed_value(&e);
+                    expr_ctx.steps.insert(
+                        node.step.clone(),
+                        StepResult {
+                            output: failed_val.clone(),
+                            confidence: None,
+                        },
+                    );
+                    return Ok(failed_val);
+                }
+                return Err(e);
+            }
         };
 
         if let Some(expect) = &node.expect {
             check_expect(&node.step, &handler_out, expect)?;
         }
 
-        let confidence = *confidence_cell.lock().unwrap();
         expr_ctx.steps.insert(
             node.step.clone(),
             StepResult {
@@ -557,6 +568,44 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
         ),
         other => other,
     }
+}
+
+/// Run a single handler invocation through `ctx.step()`, applying an optional
+/// per-attempt timeout (#81) and capturing the confidence score via a shared cell
+/// (since `ctx.step()` only returns the value). Used directly for non-retrying
+/// steps, and once per attempt for steps with a `retry:` policy (#79).
+async fn run_step_once(
+    ctx: &mut CruxCtx,
+    step_label: &str,
+    handler: crate::registry::BoxHandler,
+    input: Value,
+    timeout_ms: Option<u64>,
+) -> Result<(Value, Option<f32>), CruxErr> {
+    let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let cc = confidence_cell.clone();
+    let step_name_owned = step_label.to_string();
+    let result = ctx
+        .step(step_label, move || async move {
+            let fut = async move {
+                let raw = handler(input).await?;
+                *cc.lock().unwrap() = raw.confidence;
+                Ok::<Value, CruxErr>(raw.value)
+            };
+            match timeout_ms {
+                Some(ms) => {
+                    match tokio::time::timeout(std::time::Duration::from_millis(ms), fut).await {
+                        Ok(res) => res,
+                        Err(_) => Err(CruxErr::step_failed(
+                            &step_name_owned,
+                            format!("step timed out after {ms}ms"),
+                        )),
+                    }
+                }
+                None => fut.await,
+            }
+        })
+        .await;
+    result.map(|v| (v, *confidence_cell.lock().unwrap()))
 }
 
 /// Build the placeholder output value for a step/arm whose failure was tolerated
