@@ -1,0 +1,4 @@
+{
+  "history_cmd": "diff-1 memory+256MB applied; diff-2 network=true applied; diff-3 syscall+connect applied",
+  "approval_cmd": "diff-1 auto-approved; diff-2 approved-by=operator; diff-3 no-record"
+}

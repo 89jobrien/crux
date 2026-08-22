@@ -22,15 +22,18 @@ steps:
       - step: match_approvals
         handler: llm::extract
         args:
-          input: "diffs={{ steps.gather.diff_history.output }} approvals={{ steps.gather.approval_log.output }}"
+          input: "{{ steps.gather.output }}"
           function: MatchApprovals
-        # Cross-reference each applied diff with its approval record
+        # Cross-reference each applied diff with its approval record.
+        # join_all output is a positional array: [diff_history, approval_log].
       - step: flag_anomalies
         handler: llm::extract
         args:
-          input: "{{ steps.analyze.match_approvals }}"
+          input: "{{ steps.gather.output }}"
           function: FlagAnomalies
-        # Detect: unapproved changes, policy bypasses, repeated rollbacks
+        # Detect: unapproved changes, policy bypasses, repeated rollbacks.
+        # Stages cannot reference each other -- a pipe's stage outputs are not
+        # recorded under their own names, only the pipe as a whole.
 
   - route_on_confidence: report
     value: "{{ steps.analyze.confidence }}"

@@ -1,0 +1,10 @@
+{
+  "base_profile": {
+    "id": "default-v1",
+    "resources": { "memory_mb": 512, "cpu_millicores": 1000, "timeout_seconds": 300 },
+    "network_access": false,
+    "allowed_syscalls": ["read", "write", "mmap"]
+  },
+  "within_hard_caps": true,
+  "metrics_cmd": "oom_kills=2 p95_latency_ms=880 cpu_saturation=0.71"
+}

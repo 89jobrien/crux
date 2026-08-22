@@ -1,0 +1,13 @@
+{
+  "base_profile": {
+    "id": "default-v1",
+    "resources": { "memory_mb": 512, "cpu_millicores": 1000, "timeout_seconds": 300 },
+    "network_access": false,
+    "allowed_syscalls": ["read", "write", "mmap"]
+  },
+  "within_hard_caps": true,
+  "policy_findings": [
+    { "tier": "advisory", "rule": "memory-cap", "message": "+256MB stays under the 2GB hard cap" },
+    { "tier": "advisory", "rule": "syscall-set", "message": "allowed_syscalls unchanged" }
+  ]
+}

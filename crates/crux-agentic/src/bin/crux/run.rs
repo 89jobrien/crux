@@ -3,10 +3,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, schema::CruxfileDef, schema::PipelineDef};
-use serde_json::{Value, json};
+use crux_script::{TargetResolver, schema::CruxfileDef, schema::PipelineDef};
+use serde_json::Value;
 
-use crate::registry::{build_registry, collect_handler_names, print_trace, warn_missing_env};
+use crate::registry::{
+    build_registry, collect_handler_names, print_trace, register_stub_handler, warn_missing_env,
+};
 
 /// Shared config for the `run` subcommand, replacing positional arg sprawl.
 pub struct RunConfig<'a> {
@@ -409,19 +411,4 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         eprintln!("{e}");
         std::process::exit(1);
     }
-}
-
-fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
-    let n = name.clone();
-    reg.handler_value(name, move |_input: Value| {
-        let handler_name = n.clone();
-        async move {
-            eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-            Ok(json!({
-                "_stub": handler_name,
-                "confidence": 0.5,
-                "score": 0.5,
-            }))
-        }
-    });
 }

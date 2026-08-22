@@ -1,0 +1,9 @@
+{
+  "previous_profile": {
+    "id": "default-v0",
+    "resources": { "memory_mb": 512, "cpu_millicores": 1000, "timeout_seconds": 300 },
+    "network_access": false,
+    "allowed_syscalls": ["read", "write", "mmap"]
+  },
+  "health_cmd": "oom_events=4 restarts=3 p99_latency_ms=1840"
+}

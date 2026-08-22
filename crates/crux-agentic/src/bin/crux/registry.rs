@@ -1,7 +1,7 @@
 use crux_plugin::bridge::register_plugins;
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, schema::PipelineDef, schema::StepDef};
+use crux_script::{HandlerOutput, HandlerRegistry, schema::PipelineDef, schema::StepDef};
 use serde_json::{Value, json};
 
 /// Resolve the plugins.toml path from an explicit flag or the default location.
@@ -43,18 +43,7 @@ pub async fn build_registry(
             if strict {
                 unregistered.insert(name);
             } else {
-                let n = name.clone();
-                reg.handler_value(name, move |_input: Value| {
-                    let handler_name = n.clone();
-                    async move {
-                        eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-                        Ok(json!({
-                            "_stub": handler_name,
-                            "confidence": 0.5,
-                            "score": 0.5,
-                        }))
-                    }
-                });
+                register_stub_handler(&mut reg, name);
             }
         }
     }
@@ -70,6 +59,33 @@ pub async fn build_registry(
     }
 
     reg
+}
+
+/// Register a placeholder for a handler with no builtin.
+///
+/// The stub emits a mid-range confidence rather than none, so a pipeline whose
+/// `route_on_confidence` keys off a feature-gated handler (`llm::extract`
+/// without `--features baml`, say) still routes instead of failing. Registering
+/// via `handler` rather than `handler_value` is what makes that confidence
+/// visible to `{{ steps.<name>.confidence }}` -- `handler_value` sets it to
+/// `None` and the expression errors.
+pub fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
+    const STUB_CONFIDENCE: f32 = 0.5;
+    let n = name.clone();
+    reg.handler(name, move |_input: Value| {
+        let handler_name = n.clone();
+        async move {
+            eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
+            Ok(HandlerOutput::with_confidence(
+                json!({
+                    "_stub": handler_name,
+                    "confidence": STUB_CONFIDENCE,
+                    "score": STUB_CONFIDENCE,
+                }),
+                STUB_CONFIDENCE,
+            ))
+        }
+    });
 }
 
 /// Collect all handler/arm/stage names referenced in the pipeline.
@@ -177,5 +193,34 @@ pub fn print_trace(crux: &Crux<Value>, elapsed: std::time::Duration) {
         Err(e) => {
             println!("Error: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The stub is what an unregistered handler resolves to on a default build
+    /// (`llm::extract` without `--features baml`, for instance). It must carry a
+    /// real confidence, not just mention one in its payload: registering via
+    /// `handler_value` would set `HandlerOutput::confidence` to `None` and make
+    /// `{{ steps.<name>.confidence }}` fail, taking down any pipeline that routes
+    /// on a feature-gated handler.
+    #[tokio::test]
+    async fn stub_handler_emits_routable_confidence() {
+        let mut reg = HandlerRegistry::new();
+        register_stub_handler(&mut reg, "llm::extract".to_string());
+
+        let handler = reg
+            .get_handler("llm::extract")
+            .expect("stub must be registered");
+        let out = handler(Value::Null).await.expect("stub must not fail");
+
+        assert_eq!(
+            out.confidence,
+            Some(0.5),
+            "stub must expose confidence on HandlerOutput, not only inside its JSON"
+        );
+        assert_eq!(out.value["_stub"].as_str(), Some("llm::extract"));
     }
 }

@@ -282,6 +282,11 @@ impl Runner {
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
 
+        // Stage args expand against the pre-pipe context: they are static, and a
+        // stage's own output is not recorded under its name, so a later stage
+        // cannot reference an earlier one within the same pipe.
+        let ectx: &ExprContext = expr_ctx;
+
         #[allow(clippy::type_complexity)]
         let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
             .stages
@@ -290,7 +295,7 @@ impl Runner {
             .map(|(arm, cell)| {
                 let handler = registry.get_handler(arm.handler_name()).cloned();
                 let name_owned = arm.handler_name().to_string();
-                let static_args = arm.args().cloned();
+                let static_args = arm.args().cloned().map(|a| expand_args(a, ectx));
                 let cell = Arc::clone(cell);
                 let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
                     Box::new(move |v: Value| {
@@ -338,13 +343,16 @@ impl Runner {
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
 
+        // All arms start from the same context, so args expand up front.
+        let ectx: &ExprContext = expr_ctx;
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
             .zip(confidence_cells.iter())
             .map(|(arm, cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
-                let input = merge_args(current_input.clone(), arm.args().cloned());
+                let args = arm.args().cloned().map(|a| expand_args(a, ectx));
+                let input = merge_args(current_input.clone(), args);
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
@@ -402,6 +410,7 @@ impl Runner {
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
 
+        let ectx: &ExprContext = expr_ctx;
         let routes: Vec<ConfidenceRoute<'_, Value>> = node
             .routes
             .iter()
@@ -409,7 +418,8 @@ impl Runner {
             .map(|(branch, cell)| {
                 let range = parse_range(&branch.range);
                 let handler = self.registry.get_handler(&branch.handler).cloned();
-                let input = merge_args(current_input.clone(), branch.args.clone());
+                let args = branch.args.clone().map(|a| expand_args(a, ectx));
+                let input = merge_args(current_input.clone(), args);
                 let handler_name = branch.handler.clone();
                 let cell = Arc::clone(cell);
                 let fut: BoxFut<Value> = Box::pin(async move {

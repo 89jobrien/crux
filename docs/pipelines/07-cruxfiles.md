@@ -208,10 +208,12 @@ crux ci --save-trace target/ci-trace
 ```
 
 `--strict` also works, and is worth knowing about: without it, a handler
-that isn't registered gets a stub that returns
-`{"_stub": ..., "confidence": 0.5}` and a warning on stderr. With it, an
-unregistered handler is a hard error listing every name that failed to
-resolve. Prefer `--strict` in CI.
+that isn't registered gets a stub returning `{"_stub": ...}` at
+confidence 0.5, plus a warning on stderr. That mid-range confidence is
+deliberate -- it keeps a `route_on_confidence` keyed off a feature-gated
+handler routing instead of failing. With `--strict`, an unregistered
+handler is a hard error listing every name that failed to resolve.
+Prefer `--strict` in CI.
 
 ## Discovery
 

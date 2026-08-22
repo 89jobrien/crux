@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unaffected
 - Cruxfile chapter in the pipeline guide (`docs/pipelines/07-cruxfiles.md`), covering
   targets, dependency resolution, fail-fast, per-target budgets, and the shorthand
+- Input fixtures for the harness examples (`examples/harness/input_harness_*.json`)
 
 ### Changed
 
@@ -51,6 +52,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   implemented; both now build on registered handlers
 - Template delimiter in `crux-script` docs and `CONFORMANCE.md` was written `${{ ... }}`;
   the runtime accepts `{{ ... }}`
+- `{{ ... }}` templates in `join_all` arm, `pipe` stage and `route_on_confidence` branch
+  args were never expanded -- only plain `step:` args were. Nested args reached their
+  handler as the literal template string
+- The stub injected for an unregistered handler emitted `confidence` inside its JSON but
+  registered via `handler_value`, which sets `HandlerOutput::confidence` to `None`. Any
+  pipeline routing on a feature-gated handler failed with "produced no confidence score"
+  on a default build
+- All five `examples/harness/*.crux` pipelines failed at runtime. They now run on a
+  default build, with input fixtures added alongside them
 
 ### Removed
 

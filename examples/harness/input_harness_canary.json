@@ -1,0 +1,8 @@
+{
+  "base_profile": {
+    "id": "default-v1",
+    "resources": { "memory_mb": 512, "cpu_millicores": 1000, "timeout_seconds": 300 },
+    "network_access": false,
+    "allowed_syscalls": ["read", "write", "mmap"]
+  }
+}
