@@ -187,9 +187,7 @@ impl ExprContext {
                     .steps
                     .get(*name)
                     .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
-                // TODO(#103): trim_start_matches strips repeated "output." prefixes;
-                //   use strip_prefix("output.").unwrap_or(rest) for single-strip
-                let field_path = rest.trim_start_matches("output.");
+                let field_path = rest.strip_prefix("output.").unwrap_or(rest);
                 json_get(&step.output, field_path)
                     .ok_or_else(|| ExprError::UnknownPath(path.to_string()))
             }
@@ -225,4 +223,31 @@ pub enum ExprError {
     /// Using such a step as input to `route_on_confidence` is a pipeline authoring error.
     #[error("step '{0}' produced no confidence score — use a handler that emits confidence")]
     NoConfidence(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Regression test for #103: a step output containing a field literally named
+    /// "output" nested under the "output." namespace (i.e. `output.output.something`)
+    /// must resolve via a single strip of the leading "output." prefix, not a repeated
+    /// strip of every "output." occurrence.
+    #[test]
+    fn steps_output_dot_path_strips_prefix_once() {
+        let mut ctx = ExprContext::new(Value::Null);
+        ctx.steps.insert(
+            "s1".to_string(),
+            StepResult {
+                output: json!({ "output": { "something": "value" } }),
+                confidence: None,
+            },
+        );
+
+        let result = ctx
+            .resolve_path("steps.s1.output.output.something")
+            .expect("path should resolve");
+        assert_eq!(result, json!("value"));
+    }
 }
