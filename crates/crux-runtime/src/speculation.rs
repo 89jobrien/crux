@@ -415,7 +415,10 @@ mod tests {
         let mut ctx_a = CruxCtx::new("test");
         let arms_a = vec![
             ok_arm("first", serde_json::json!({"answer": "short"})),
-            ok_arm("second", serde_json::json!({"answer": "a much longer answer"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
             ok_arm("third", serde_json::json!({"answer": "mid-length"})),
         ];
         let result_a = SpeculationBuilder::new(&mut ctx_a, "spec", arms_a)
@@ -426,7 +429,10 @@ mod tests {
         let mut ctx_b = CruxCtx::new("test");
         let arms_b = vec![
             ok_arm("third", serde_json::json!({"answer": "mid-length"})),
-            ok_arm("second", serde_json::json!({"answer": "a much longer answer"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
             ok_arm("first", serde_json::json!({"answer": "short"})),
         ];
         let result_b = SpeculationBuilder::new(&mut ctx_b, "spec", arms_b)
