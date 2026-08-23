@@ -61,7 +61,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crux       = { version = "0.2", features = ["tokio-runtime", "redb"] }
+crux       = { version = "0.3", features = ["tokio-runtime", "redb"] }
 tokio       = { version = "1",   features = ["full"] }
 serde       = { version = "1",   features = ["derive"] }
 serde_json  = "1"

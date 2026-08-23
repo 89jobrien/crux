@@ -5,7 +5,7 @@
 Build the pipeline runner from source:
 
 ```bash
-cargo build -p crux-agentic --bin crux --release
+cargo build -p crux-cli --bin crux --release
 ```
 
 The binary lands at `target/release/crux`. Add it to your PATH or

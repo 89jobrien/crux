@@ -259,7 +259,7 @@ pub enum TaskStatus { Pending, Running, Done, Failed }
 ## Feature flags
 
 ```toml
-crux = { version = "0.2", features = ["redb", "tracing", "script"] }
+crux = { version = "0.3", features = ["redb", "tracing", "script"] }
 ```
 
 | Flag            | Turns on                                        |
@@ -267,6 +267,7 @@ crux = { version = "0.2", features = ["redb", "tracing", "script"] }
 | `tokio-runtime` | Async support (tokio + futures). On by default. |
 | `redb`          | `RedbBackend` for persistent task registry.     |
 | `tracing`       | Instrument with tracing spans.                  |
+| `script`        | Re-exports `crux-script` for pipeline execution. |
 | `script`        | Re-export `crux-script` for pipeline execution. |
 
 ## Prelude
