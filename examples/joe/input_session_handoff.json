@@ -7,27 +7,27 @@
   "pending_todos": [
     {
       "id": "todo-001",
-      "repo": "crux",
       "title": "Replace ctrl::noop placeholders in example pipelines",
-      "priority": "P2",
+      "priority": "medium",
       "status": "pending",
-      "created": "2026-06-28"
+      "created_at": "2026-06-28T00:00:00Z",
+      "metadata": { "repo": "crux" }
     },
     {
       "id": "todo-002",
-      "repo": "minibox",
       "title": "Fix cross-compile CI for musl target",
-      "priority": "P1",
+      "priority": "high",
       "status": "pending",
-      "created": "2026-06-25"
+      "created_at": "2026-06-25T00:00:00Z",
+      "metadata": { "repo": "minibox" }
     },
     {
       "id": "todo-003",
-      "repo": "crux",
       "title": "Add redb feature gate to CI matrix",
-      "priority": "P3",
+      "priority": "low",
       "status": "pending",
-      "created": "2026-06-29"
+      "created_at": "2026-06-29T00:00:00Z",
+      "metadata": { "repo": "crux" }
     }
   ],
   "stale_worktrees": [

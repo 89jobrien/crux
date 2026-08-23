@@ -35,18 +35,15 @@ enum Cli {
         #[arg(default_value = ".")]
         root: String,
     },
-    /// Validate a .crux pipeline file without executing it
-    Check {
-        /// Pipeline file(s) to validate
-        #[arg(required = true)]
-        pipelines: Vec<String>,
-    },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
         /// Pipeline/Cruxfile path ("-" for stdin). If omitted, discovers Cruxfile in cwd.
         pipeline: Option<String>,
         /// Optional: target name (for Cruxfile) or input JSON file (for pipeline)
         target_or_input: Option<String>,
+        /// Validate the pipeline without executing it
+        #[arg(long)]
+        check: bool,
         /// Target to run from a Cruxfile (alternative to positional)
         #[arg(long)]
         target: Option<String>,
@@ -106,10 +103,10 @@ fn main() {
 
     match cli {
         Cli::List { root } => cmd_list(&root),
-        Cli::Check { pipelines } => check::cmd_check(&pipelines),
         Cli::Run {
             pipeline,
             target_or_input,
+            check,
             target,
             input,
             plugins,
@@ -123,6 +120,7 @@ fn main() {
         } => run::cmd_run_dispatch(&run::RunConfig {
             pipeline_arg: pipeline.as_deref(),
             target_or_input: target_or_input.as_deref(),
+            check,
             target_flag: target.as_deref(),
             input_flag: input.as_deref(),
             plugins_path: plugins.as_deref(),

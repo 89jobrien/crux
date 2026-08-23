@@ -1,16 +1,12 @@
-# Handoff — crux (2026-08-22)
-
-**Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
-EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
-
-## Items
+# Handoff — crux (2026-08-23)
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (3 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (8 files) |
 
 ## Log
 
+- 20260823.081522: done=2 running=0 pending=12 blocked=0 [b325364, fdb8eac, 7c60192, 86408da, b5690fe, 527e6f3, 7f47698, 3d7b638, d5a2e9f, f016db5]
 - 20260822.234500: GitHub issue triage-and-fix pass: closed 24 issues across bug fixes, feature completion,
 and stale issue cleanup. Bug fixes: #91 (BudgetTracker bounds), #68/#9 (speculate
 tie-break ordering), #75/#76 (confidence validation range), #103 (expr.rs strip
@@ -58,15 +54,4 @@ db-arg pattern matching sqlite:: handlers), &Path vs &str mismatch. SOLID review
 added ISP note for RegistryBackend reuse. Testing philosophy review added 2 tasks:
 property tests (Task 4a) and conformance suite (Task 5a). No implementation code
 written — design-only session.
-
-- 20260628:000000: Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
-concrete nu rewrites; added heredoc git-commit + gh api --jq exceptions to coursers
-rules; smoke tests 5/5 pass, archived. Dead code audit + removal: dropped crux-improve
-crate (650 lines, 0 external callers), crux-agentic shell shim, duplicate crux-baml
-dev-dep. develop -> main merge: fixed dirty Cargo.lock, resolved remote divergence on
-origin/main. Memory banking: populated .ctx/memory-bank/ with 6 standard files +
-patterns.md + mistakes.md. Pattern learner: 11 patterns extracted (skill co-occurrence,
-crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
-0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
-baseline written to .health-baseline.json.
 

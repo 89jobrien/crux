@@ -23,6 +23,7 @@ fn render_default_output(crux: &Crux<Value>) -> Result<String, String> {
 pub struct RunConfig<'a> {
     pub pipeline_arg: Option<&'a str>,
     pub target_or_input: Option<&'a str>,
+    pub check: bool,
     pub target_flag: Option<&'a str>,
     pub input_flag: Option<&'a str>,
     pub plugins_path: Option<&'a str>,
@@ -88,10 +89,19 @@ fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>
 /// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
 pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
     let Some(pipeline_path) = resolve_pipeline_path(cfg.pipeline_arg) else {
+        if cfg.check {
+            eprintln!("error: --check does not support stdin ('-') pipelines");
+            std::process::exit(1);
+        }
         // stdin path — always a regular pipeline
         cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
         return;
     };
+
+    if cfg.check {
+        crate::check::cmd_check(&[pipeline_path]);
+        return;
+    }
 
     let contents = std::fs::read_to_string(&pipeline_path).unwrap_or_else(|e| {
         eprintln!("error: cannot read {pipeline_path}: {e}");
