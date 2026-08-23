@@ -30,12 +30,12 @@ build-locked:
 
 # Build with all features (baml, plugins)
 build-full:
-    cargo build --all-targets -p crux-agentic --features baml
+    cargo build --all-targets -p crux-cli --features baml
 
 # Build dev binary with all features and install to cargo bin
 build-dev:
-    cargo build -p crux-agentic --features baml
-    cargo install --path crates/crux-agentic --features baml
+    cargo build -p crux-cli --features baml
+    cargo install --path crates/crux-cli --features baml
 
 # Run developer setup (auto-detects shell)
 setup:
@@ -104,7 +104,7 @@ lint-crux:
         echo "No .crux files found"
         exit 0
     fi
-    cargo run --quiet -p crux-agentic --features baml --bin crux -- check $files
+    cargo run --quiet -p crux-cli --features baml --bin crux -- check $files
 
 # Demo replay: fresh run vs cached replay with timing comparison
 replay-demo:

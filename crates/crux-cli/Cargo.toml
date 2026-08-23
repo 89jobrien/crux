@@ -1,6 +1,6 @@
 [package]
-name = "crux-agentic"
-description = "Built-in step handlers for crux-script pipelines"
+name = "crux-cli"
+description = "Command-line interface for crux pipelines"
 version.workspace = true
 edition.workspace = true
 readme = "../../README.md"
@@ -13,21 +13,20 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-baml = ["dep:crux-baml"]
-docker = ["dep:bollard", "dep:futures"]
+baml = ["crux-agentic/baml", "dep:crux-baml"]
 
 [dependencies]
-bollard = { version = "0.20", optional = true }
 chrono = { workspace = true }
-crux-baml = { workspace = true, optional = true } #unified
-crux-model = { workspace = true } #unified
-crux-plugin = { workspace = true } #unified
-crux-runtime = { workspace = true } #unified
+clap = { workspace = true }
+crux-agentic = { workspace = true }
+crux-baml = { workspace = true, optional = true }
+crux-model = { workspace = true }
+crux-plugin = { workspace = true }
+crux-runtime = { workspace = true }
 crux-task = { workspace = true }
 crux-types = { workspace = true }
-crux-script = { workspace = true } #unified
-crux-stdlib = { workspace = true } #unified
-futures = { workspace = true, optional = true }
+crux-script = { workspace = true }
+crux-stdlib = { workspace = true }
 ignore = "0.4"
 reqwest = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -36,6 +35,10 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+
+[[bin]]
+name = "crux"
+path = "src/bin/crux/main.rs"
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -21,6 +21,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 crux-agentic = { path = "crates/crux-agentic", version = "0.3.1" }
 crux-baml = { path = "crates/crux-baml", version = "0.3.1" }
+crux-cli = { path = "crates/crux-cli", version = "0.3.1" }
 
 # Internal crates
 crux-domain = { path = "crates/crux-domain", version = "0.3.1" }

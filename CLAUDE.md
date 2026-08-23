@@ -43,6 +43,8 @@ Crates in `crates/`:
   `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
 - **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
+- **`crux-cli`** -- `crux` CLI binary (`run`/`plan`/`check` subcommands), depends on `crux-agentic`
+  for handlers/registry.
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
   harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
 - **`crux-script`** -- YAML-driven pipeline scripting.

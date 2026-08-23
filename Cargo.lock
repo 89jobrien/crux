@@ -488,7 +488,6 @@ version = "0.3.1"
 dependencies = [
  "bollard",
  "chrono",
- "clap",
  "crux-baml",
  "crux-model",
  "crux-plugin",
@@ -520,6 +519,33 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tokio",
+]
+
+[[package]]
+name = "crux-cli"
+version = "0.3.1"
+dependencies = [
+ "chrono",
+ "clap",
+ "crux-agentic",
+ "crux-baml",
+ "crux-model",
+ "crux-plugin",
+ "crux-runtime",
+ "crux-script",
+ "crux-stdlib",
+ "crux-task",
+ "crux-types",
+ "ignore",
+ "proptest",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror",
  "tokio",
 ]
 
