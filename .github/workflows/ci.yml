@@ -30,6 +30,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Stub generated modules for fmt
+        run: |
+          for crate in crux-agentic crux-baml; do
+            mkdir -p "crates/$crate/src/baml_client"
+            printf '\n' > "crates/$crate/src/baml_client/mod.rs"
+          done
+
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
