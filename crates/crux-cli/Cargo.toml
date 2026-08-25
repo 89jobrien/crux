@@ -20,20 +20,11 @@ chrono = { workspace = true }
 clap = { workspace = true }
 crux-agentic = { workspace = true }
 crux-baml = { workspace = true, optional = true }
-crux-model = { workspace = true }
 crux-plugin = { workspace = true }
 crux-runtime = { workspace = true }
-crux-task = { workspace = true }
 crux-types = { workspace = true }
 crux-script = { workspace = true }
-crux-stdlib = { workspace = true }
-ignore = "0.4"
-reqwest = { workspace = true }
-rusqlite = { version = "0.32", features = ["bundled"] }
-serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
