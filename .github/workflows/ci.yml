@@ -25,8 +25,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Install taskit
-        run: cargo install taskit || cargo install --path .
+        run: cargo install taskit
 
       - name: Run CI pipeline
         run: taskit ci --fail-fast
