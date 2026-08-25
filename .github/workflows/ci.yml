@@ -23,6 +23,11 @@ jobs:
 
       - uses: taiki-e/install-action@nextest
 
+      - name: Install required taskit tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-deny,cargo-machete
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Install protoc
