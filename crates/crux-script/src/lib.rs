@@ -47,7 +47,7 @@ pub enum LoadError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
-pub use handler_output::HandlerOutput;
+pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use metadata::{
     ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect,
 };

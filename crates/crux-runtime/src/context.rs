@@ -2,9 +2,9 @@
 ///
 /// Dependency inversion: Agent::run depends on this trait, not on CruxCtx directly.
 /// CruxCtx is the production adapter. Tests can substitute a mock or no-op context.
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
-use crate::types::budget::Budget;
+use crate::types::budget::{Budget, HandlerUsage};
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
 use crate::types::step::Step;
@@ -87,6 +87,15 @@ pub trait Context: Send {
 
     /// Record budget consumption.
     fn consume_budget(&mut self, amount: u64);
+
+    /// Reserve one actual handler invocation against the step budget.
+    fn begin_budgeted_step(&mut self) -> Result<(), CruxErr>;
+
+    /// Record usage reported by a completed handler invocation.
+    fn record_handler_usage(&mut self, step: &str, usage: HandlerUsage) -> Result<(), CruxErr>;
+
+    /// Record elapsed handler time against the duration budget.
+    fn record_budget_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
 
     /// Get the current budget.
     fn budget(&self) -> &Budget;

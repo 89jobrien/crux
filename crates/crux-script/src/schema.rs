@@ -1,6 +1,34 @@
+use crux_runtime::prelude::UsdAmount;
 /// YAML schema types for pipeline definitions.
 use indexmap::IndexMap;
 use serde::Deserialize;
+
+/// Human-facing presentation metadata for CLI pipeline output.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PipelineDisplayDef {
+    /// Optional title used instead of the stable pipeline identifier.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Controls whether successful final values appear in summary mode.
+    #[serde(default)]
+    pub output: DisplayOutput,
+    /// Maps stable trace step names to human-facing labels.
+    #[serde(default)]
+    pub steps: IndexMap<String, String>,
+}
+
+/// Successful final-value visibility in the smart summary renderer.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DisplayOutput {
+    /// Show semantic values and suppress successful shell result envelopes.
+    #[default]
+    Auto,
+    /// Always show the successful final value.
+    Always,
+    /// Never show a successful final value.
+    Never,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PipelineDef {
@@ -12,6 +40,9 @@ pub struct PipelineDef {
     /// resolved they're available to every step as `{{ vars.NAME }}`.
     #[serde(default)]
     pub vars: Option<IndexMap<String, serde_json::Value>>,
+    /// Optional human-facing presentation metadata.
+    #[serde(default)]
+    pub display: Option<PipelineDisplayDef>,
     pub steps: Vec<StepDef>,
 }
 
@@ -74,6 +105,8 @@ impl ArmDef {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BudgetDef {
     pub tokens: Option<u64>,
+    pub steps: Option<u64>,
+    pub usd: Option<UsdAmount>,
     pub calls: Option<u64>,
     pub duration_ms: Option<u64>,
     pub cost_cents: Option<u64>,
@@ -143,6 +176,8 @@ pub struct ForEachNode {
     /// `as` field pushes it over and breaks parsing for every pipeline using this
     /// node, not just ones that set a custom binding. Use [`Self::label`] and
     /// [`Self::binding`] to read the parsed pieces.
+    // TODO(automation-8): Remove the encoded `" as "` workaround after upgrading or replacing
+    // serde-saphyr with a parser that supports the intended untagged node shape.
     pub for_each: String,
     /// Template expression evaluated once (against the outer scope) to produce
     /// the array to iterate over.
@@ -351,6 +386,22 @@ steps:
             "duration_ms should be present"
         );
         assert_eq!(budget.duration_ms.unwrap(), 900_000);
+    }
+
+    #[test]
+    fn canonical_usd_and_step_budget_parses() {
+        let yaml = r#"
+pipeline: test
+budget:
+  usd: 1.25
+  steps: 8
+steps:
+  - step: s1
+"#;
+        let def: PipelineDef = serde_saphyr::from_str(yaml).expect("parse");
+        let budget = def.budget.expect("budget should be present");
+        assert_eq!(budget.steps, Some(8));
+        assert_eq!(budget.usd.map(UsdAmount::micros), Some(1_250_000));
     }
 
     #[test]

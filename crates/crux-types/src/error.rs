@@ -21,6 +21,19 @@ pub enum CruxErr {
         limit: u64,
         actual: u64,
     },
+    UnreportedCost {
+        step: String,
+        source: Option<Box<CruxErr>>,
+    },
+    StepBudgetExceeded {
+        limit: u64,
+        attempted: u64,
+    },
+    UsdBudgetExceeded {
+        limit_micros: u64,
+        actual_micros: u64,
+        source: Option<Box<CruxErr>>,
+    },
     Delegation {
         to: String,
         source: Box<CruxErr>,
@@ -61,9 +74,18 @@ impl CruxErr {
         match self {
             Self::StepFailed { step, .. }
             | Self::LowConfidence { step, .. }
-            | Self::ReplayMismatch { step, .. } => Some(step),
+            | Self::ReplayMismatch { step, .. }
+            | Self::UnreportedCost { step, .. } => Some(step),
             Self::Delegation { source, .. } => source.failed_step(),
-            Self::BudgetExceeded { .. } | Self::Cancelled { .. } | Self::Denied { .. } => None,
+            Self::UsdBudgetExceeded {
+                source: Some(source),
+                ..
+            } => source.failed_step(),
+            Self::BudgetExceeded { .. }
+            | Self::StepBudgetExceeded { .. }
+            | Self::UsdBudgetExceeded { source: None, .. }
+            | Self::Cancelled { .. }
+            | Self::Denied { .. } => None,
         }
     }
 
@@ -72,6 +94,9 @@ impl CruxErr {
         match self {
             Self::StepFailed { .. } => true,
             Self::BudgetExceeded { .. } => false,
+            Self::UnreportedCost { .. }
+            | Self::StepBudgetExceeded { .. }
+            | Self::UsdBudgetExceeded { .. } => false,
             Self::LowConfidence { .. } => true,
             Self::Delegation { source, .. } => source.is_transient(),
             Self::Cancelled { .. } => false,
@@ -103,6 +128,25 @@ impl std::fmt::Display for CruxErr {
                 f,
                 "budget exceeded: {budget_kind:?} limit={limit}, used={actual}"
             ),
+            Self::UnreportedCost { step, .. } => {
+                write!(f, "handler '{step}' did not report USD cost")
+            }
+            Self::StepBudgetExceeded { limit, attempted } => write!(
+                f,
+                "step budget exceeded: limit={limit}, attempted={attempted}"
+            ),
+            Self::UsdBudgetExceeded {
+                limit_micros,
+                actual_micros,
+                ..
+            } => write!(
+                f,
+                "USD budget exceeded: limit=${}.{:06}, used=${}.{:06}",
+                limit_micros / 1_000_000,
+                limit_micros % 1_000_000,
+                actual_micros / 1_000_000,
+                actual_micros % 1_000_000
+            ),
             Self::Delegation { to, source } => {
                 write!(f, "delegation to '{to}' failed: {source}")
             }
@@ -131,6 +175,9 @@ impl miette::Diagnostic for CruxErr {
             Self::StepFailed { .. } => "crux::step_failed",
             Self::LowConfidence { .. } => "crux::low_confidence",
             Self::BudgetExceeded { .. } => "crux::budget_exceeded",
+            Self::UnreportedCost { .. } => "crux::unreported_cost",
+            Self::StepBudgetExceeded { .. } => "crux::step_budget_exceeded",
+            Self::UsdBudgetExceeded { .. } => "crux::usd_budget_exceeded",
             Self::Delegation { .. } => "crux::delegation",
             Self::Cancelled { .. } => "crux::cancelled",
             Self::ReplayMismatch { .. } => "crux::replay_mismatch",
@@ -145,7 +192,14 @@ impl miette::Diagnostic for CruxErr {
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
         let help: Option<&str> = match self {
-            Self::BudgetExceeded { .. } => Some("increase the budget or reduce step count"),
+            Self::BudgetExceeded { .. } => Some("increase the budget or reduce usage"),
+            Self::UnreportedCost { .. } => {
+                Some("register the handler as metered or explicitly free before using a USD budget")
+            }
+            Self::StepBudgetExceeded { .. } => {
+                Some("increase budget.steps or reduce handler attempts")
+            }
+            Self::UsdBudgetExceeded { .. } => Some("increase budget.usd or reduce handler cost"),
             Self::ReplayMismatch { .. } => Some("clear the replay cache or use lenient mode"),
             Self::LowConfidence { .. } => Some("lower the threshold or improve the step output"),
             Self::Denied { .. } => Some("check planner policy or use PassthroughPlanner"),
@@ -156,7 +210,15 @@ impl miette::Diagnostic for CruxErr {
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
         match self {
-            Self::Delegation { source, .. } => Some(Box::new(std::iter::once(
+            Self::Delegation { source, .. }
+            | Self::UnreportedCost {
+                source: Some(source),
+                ..
+            }
+            | Self::UsdBudgetExceeded {
+                source: Some(source),
+                ..
+            } => Some(Box::new(std::iter::once(
                 source.as_ref() as &dyn miette::Diagnostic
             ))),
             _ => None,

@@ -533,6 +533,7 @@ dependencies = [
  "crux-runtime",
  "crux-script",
  "crux-types",
+ "miette",
  "proptest",
  "serde_json",
  "tempfile",

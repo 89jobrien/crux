@@ -220,6 +220,8 @@ impl CruxCtx {
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.
+    // TODO(automation-13): Unify EventPipeline and crux-types EventSink emissions, then attach
+    // the unified sink in CLI runs so agent events and traces share one ordered stream.
     pub fn set_event_sender(&mut self, sender: EventSender) {
         self.event_sender = Some(sender);
     }
@@ -449,7 +451,7 @@ impl CruxCtx {
             if range.contains(confidence) {
                 trace_route!(name, confidence, label);
                 let step_name = format!("{name}::{label}");
-                let val = self.step(&step_name, move || fut).await?;
+                let val = self.step_budgeted(&step_name, move || fut).await?;
                 // If the handler output is a JSON object with a "confidence" field
                 // (finite f32 in [0.0, 1.0]), propagate it to the recorded step so
                 // that route_on_confidence can act on meaningful handler-reported scores.
@@ -490,7 +492,7 @@ impl CruxCtx {
         for (stage_name, f) in stages {
             let step_name = format!("{name}::{stage_name}");
             let val = current;
-            current = self.step(&step_name, move || f(val)).await?;
+            current = self.step_budgeted(&step_name, move || f(val)).await?;
         }
         Ok(current)
     }
@@ -597,6 +599,9 @@ impl CruxCtx {
             .collect();
 
         let live_indices: Vec<usize> = live_futs.iter().map(|(i, _)| *i).collect();
+        for _ in &live_indices {
+            self.budget_tracker.begin_step()?;
+        }
         let futs_only: Vec<_> = live_futs.into_iter().map(|(_, f)| f).collect();
 
         let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
@@ -875,6 +880,7 @@ impl CruxCtx {
         name: &str,
         confidence: f32,
         content_hash: Option<u64>,
+        budgeted: bool,
         f: F,
     ) -> Result<T, CruxErr>
     where
@@ -953,8 +959,21 @@ impl CruxCtx {
             });
         }
 
+        if budgeted {
+            self.budget_tracker.begin_step()?;
+        }
+
         self.execute_single(name, confidence, input_hash, content_hash, f)
             .await
+    }
+
+    pub async fn step_budgeted<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        self.step_inner(name, 1.0, None, true, f).await
     }
 
     /// Record the outcome of a stream drain and return the final value (or error).
@@ -1030,7 +1049,7 @@ impl Context for CruxCtx {
         K: serde::Serialize + Sync,
     {
         let content_hash = Some(crate::recorder::hash_content(key));
-        self.step_inner(name, 1.0, content_hash, f).await
+        self.step_inner(name, 1.0, content_hash, false, f).await
     }
 
     async fn step_with_confidence<F, Fut, T>(
@@ -1044,7 +1063,7 @@ impl Context for CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.step_inner(name, confidence, None, f).await
+        self.step_inner(name, confidence, None, false, f).await
     }
 
     async fn step_retryable<F, Fut, T>(
@@ -1184,6 +1203,22 @@ impl Context for CruxCtx {
 
     fn consume_budget(&mut self, amount: u64) {
         self.budget_tracker.consume(amount);
+    }
+
+    fn begin_budgeted_step(&mut self) -> Result<(), CruxErr> {
+        self.budget_tracker.begin_step()
+    }
+
+    fn record_handler_usage(
+        &mut self,
+        step: &str,
+        usage: crate::types::budget::HandlerUsage,
+    ) -> Result<(), CruxErr> {
+        self.budget_tracker.record_handler_usage(step, usage)
+    }
+
+    fn record_budget_duration(&mut self, duration: std::time::Duration) -> Result<(), CruxErr> {
+        self.budget_tracker.record_duration(duration)
     }
 
     fn budget(&self) -> &Budget {
@@ -1534,6 +1569,25 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("budget exceeded"));
+    }
+
+    #[test]
+    fn typed_budget_methods_account_independent_dimensions() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::combined(vec![
+            Budget::steps(1),
+            Budget::usd(crate::types::budget::UsdAmount::ZERO),
+        ]));
+
+        assert!(ctx.begin_budgeted_step().is_ok());
+        assert!(
+            ctx.record_handler_usage("free", crate::types::budget::HandlerUsage::free())
+                .is_ok()
+        );
+        assert!(matches!(
+            ctx.begin_budgeted_step(),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
     }
 
     #[tokio::test]

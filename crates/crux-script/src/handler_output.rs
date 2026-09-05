@@ -1,3 +1,4 @@
+use crux_runtime::prelude::{CruxErr, HandlerUsage};
 /// Output from a pipeline handler — value plus optional confidence score.
 use serde_json::Value;
 
@@ -14,6 +15,63 @@ use serde_json::Value;
 pub struct HandlerOutput {
     pub value: Value,
     pub confidence: Option<f32>,
+}
+
+/// A handler outcome paired with usage reported for the invocation.
+#[derive(Debug, Clone)]
+pub struct HandlerExecution {
+    pub outcome: Result<HandlerOutput, CruxErr>,
+    pub usage: HandlerUsage,
+}
+
+impl HandlerExecution {
+    pub fn success(output: HandlerOutput, usage: HandlerUsage) -> Self {
+        Self {
+            outcome: Ok(output),
+            usage,
+        }
+    }
+
+    pub fn failure(error: CruxErr, usage: HandlerUsage) -> Self {
+        Self {
+            outcome: Err(error),
+            usage,
+        }
+    }
+
+    pub fn free(outcome: Result<HandlerOutput, CruxErr>) -> Self {
+        Self {
+            outcome,
+            usage: HandlerUsage::free(),
+        }
+    }
+
+    pub fn unreported(outcome: Result<HandlerOutput, CruxErr>) -> Self {
+        Self {
+            outcome,
+            usage: HandlerUsage::unreported(),
+        }
+    }
+
+    pub fn is_ok(&self) -> bool {
+        self.outcome.is_ok()
+    }
+
+    pub fn is_err(&self) -> bool {
+        self.outcome.is_err()
+    }
+
+    pub fn unwrap(self) -> HandlerOutput {
+        self.outcome.unwrap()
+    }
+
+    pub fn unwrap_err(self) -> CruxErr {
+        self.outcome.unwrap_err()
+    }
+
+    pub fn expect_err(self, message: &str) -> CruxErr {
+        self.outcome.expect_err(message)
+    }
 }
 
 impl HandlerOutput {
@@ -70,6 +128,7 @@ impl From<Value> for HandlerOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crux_runtime::prelude::{HandlerUsage, UsdAmount};
     use serde_json::json;
 
     #[test]
@@ -77,6 +136,18 @@ mod tests {
         let out = HandlerOutput::from(json!({ "x": 1 }));
         assert!(out.confidence.is_none());
         assert_eq!(out.confidence_or_default(), 0.5);
+    }
+
+    #[test]
+    fn execution_preserves_usage_for_success_and_failure() {
+        let usage = HandlerUsage::metered(10, UsdAmount::from_micros(25));
+        let success = HandlerExecution::success(HandlerOutput::new(json!(1)), usage);
+        let failure = HandlerExecution::failure(CruxErr::step_failed("x", "boom"), usage);
+
+        assert_eq!(success.usage, usage);
+        assert_eq!(failure.usage, usage);
+        assert!(success.outcome.is_ok());
+        assert!(failure.outcome.is_err());
     }
 
     /// Regression test for #76: `None` confidence must NOT silently present as

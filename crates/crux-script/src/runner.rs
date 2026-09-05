@@ -692,13 +692,14 @@ impl Runner {
         );
 
         let label = format!("{step_name}::on_error");
-        ctx.step(&label, move || async move {
-            handler(input).await.map(|o| o.value)
-        })
-        .await
+        run_step_once(ctx, &label, handler, input, None)
+            .await
+            .map(|(value, _)| value)
     }
 
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
+    // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
+    // DelegateNode budgets instead of recording delegation as an ordinary parent step.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -747,17 +748,26 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .stages
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         #[allow(clippy::type_complexity)]
         let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
             .stages
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((arm, cell), usage_cell)| {
                 let handler = registry.get_handler(arm.handler_name()).cloned();
                 let name_owned = arm.handler_name().to_string();
+                // TODO(automation-9): Apply the same expression expansion semantics to pipe,
+                // join, route, and speculate arguments that top-level handler steps receive.
                 let static_args = arm.args().cloned();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
                     Box::new(move |v: Value| {
                         Box::pin(async move {
@@ -765,7 +775,11 @@ impl Runner {
                                 CruxErr::step_failed(&name_owned, "handler not found")
                             })?;
                             let input = merge_args(v, static_args);
-                            let out = h(input).await?;
+                            let started = std::time::Instant::now();
+                            let execution = h(input).await;
+                            *usage_cell.lock().unwrap() =
+                                Some((execution.usage, started.elapsed()));
+                            let out = execution.outcome?;
                             *cell.lock().unwrap() = out.confidence;
                             Ok(out.value)
                         }) as BoxFut<Value>
@@ -775,7 +789,14 @@ impl Runner {
             .collect();
 
         let input = current_input.clone();
-        let result = ctx.pipe(&node.pipe, input, stages).await?;
+        let result = ctx.pipe(&node.pipe, input, stages).await;
+        record_usage_cells(
+            ctx,
+            node.stages.iter().map(|arm| arm.label()),
+            &usage_cells,
+            result.as_ref().err(),
+        )?;
+        let result = result?;
 
         // Use the last stage's confidence (pipeline is sequential).
         // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
@@ -803,21 +824,31 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((arm, cell), usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let allow_failure = arm.allow_failure();
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    match h(input).await {
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    match execution.outcome {
                         Ok(out) => {
                             *cell.lock().unwrap() = out.confidence;
                             Ok(out.value)
@@ -830,7 +861,14 @@ impl Runner {
             })
             .collect();
 
-        let results = ctx.join_all(&node.join_all, arms).await?;
+        let results = ctx.join_all(&node.join_all, arms).await;
+        record_usage_cells(
+            ctx,
+            node.arms.iter().map(|arm| arm.label()),
+            &usage_cells,
+            results.as_ref().err(),
+        )?;
+        let results = results?;
         let output = Value::Array(results);
 
         // Average confidence across arms that provided a score; None if none did.
@@ -873,21 +911,31 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .routes
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let routes: Vec<ConfidenceRoute<'_, Value>> = node
             .routes
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(branch, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((branch, cell), usage_cell)| {
                 let range = parse_range(&branch.range);
                 let handler = self.registry.get_handler(&branch.handler).cloned();
                 let input = merge_args(current_input.clone(), branch.args.clone());
                 let handler_name = branch.handler.clone();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&handler_name, "handler not found"))?;
-                    let out = h(input).await?;
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    let out = execution.outcome?;
                     *cell.lock().unwrap() = out.confidence;
                     Ok(out.value)
                 });
@@ -897,7 +945,14 @@ impl Runner {
 
         let result = ctx
             .route_on_confidence(&node.route_on_confidence, confidence, routes)
-            .await?;
+            .await;
+        record_usage_cells(
+            ctx,
+            node.routes.iter().map(|branch| branch.label.as_str()),
+            &usage_cells,
+            result.as_ref().err(),
+        )?;
+        let result = result?;
 
         // Use the matched branch's handler confidence; fall back to the routing score.
         let handler_confidence = confidence_cells
@@ -924,17 +979,27 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
-            .map(|arm| {
+            .zip(usage_cells.iter())
+            .map(|(arm, usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    h(input).await.map(|o| o.value)
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    execution.outcome.map(|o| o.value)
                 });
                 (arm.label(), fut)
             })
@@ -947,10 +1012,17 @@ impl Runner {
                     .pick_best_by(|v: &Value| {
                         v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32
                     })
-                    .await?
+                    .await
             }
-            SpeculateMode::FirstOk => builder.first_ok().await?,
+            SpeculateMode::FirstOk => builder.first_ok().await,
         };
+        record_usage_cells(
+            ctx,
+            node.arms.iter().map(|arm| arm.label()),
+            &usage_cells,
+            result.as_ref().err(),
+        )?;
+        let result = result?;
 
         expr_ctx.steps.insert(
             node.speculate.clone(),
@@ -961,6 +1033,30 @@ impl Runner {
         );
         Ok(result)
     }
+}
+
+type UsageCell = Arc<Mutex<Option<(HandlerUsage, std::time::Duration)>>>;
+
+// TODO(automation-6): Require metered usage from cost-bearing shell, plugin, and LLM handlers
+// and fail closed before work starts when token or USD accounting is unavailable.
+fn record_usage_cells<'a>(
+    ctx: &mut CruxCtx,
+    labels: impl Iterator<Item = &'a str>,
+    cells: &[UsageCell],
+    source: Option<&CruxErr>,
+) -> Result<(), CruxErr> {
+    for (label, cell) in labels.zip(cells) {
+        if let Some((usage, duration)) = cell.lock().unwrap().take() {
+            ctx.record_budget_duration(duration)?;
+            if let Err(mut error) = ctx.record_handler_usage(label, usage) {
+                if let Some(source) = source {
+                    attach_budget_source(&mut error, source.clone());
+                }
+                return Err(error);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Recursively expand `{{ expr }}` templates in all string leaves of a JSON value.
@@ -999,13 +1095,18 @@ async fn run_step_once(
     input: Value,
     timeout_ms: Option<u64>,
 ) -> Result<(Value, Option<f32>), CruxErr> {
+    let started = std::time::Instant::now();
     let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let usage_cell: Arc<Mutex<Option<HandlerUsage>>> = Arc::new(Mutex::new(None));
     let cc = confidence_cell.clone();
+    let uc = usage_cell.clone();
     let step_name_owned = step_label.to_string();
     let result = ctx
-        .step(step_label, move || async move {
+        .step_budgeted(step_label, move || async move {
             let fut = async move {
-                let raw = handler(input).await?;
+                let execution = handler(input).await;
+                *uc.lock().unwrap() = Some(execution.usage);
+                let raw = execution.outcome?;
                 *cc.lock().unwrap() = raw.confidence;
                 Ok::<Value, CruxErr>(raw.value)
             };
@@ -1023,7 +1124,32 @@ async fn run_step_once(
             }
         })
         .await;
+    ctx.record_budget_duration(started.elapsed())?;
+    let usage = usage_cell
+        .lock()
+        .unwrap()
+        .unwrap_or_else(HandlerUsage::unreported);
+    if let Err(mut accounting_error) = ctx.record_handler_usage(step_label, usage) {
+        if let Err(source) = result {
+            attach_budget_source(&mut accounting_error, source);
+        }
+        return Err(accounting_error);
+    }
     result.map(|v| (v, *confidence_cell.lock().unwrap()))
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
+    }
 }
 
 /// Build the placeholder output value for a step/arm whose failure was tolerated
@@ -1102,16 +1228,20 @@ fn budget_from_def(def: &BudgetDef) -> Budget {
     if let Some(tokens) = def.tokens {
         budgets.push(Budget::tokens(tokens));
     }
-    if let Some(calls) = def.calls {
-        budgets.push(Budget::calls(calls));
+    if let Some(steps) = def.steps.or(def.calls) {
+        budgets.push(Budget::steps(steps));
     }
     if let Some(duration_ms) = def.duration_ms {
         budgets.push(Budget::duration(std::time::Duration::from_millis(
             duration_ms,
         )));
     }
-    if let Some(cost_cents) = def.cost_cents {
-        budgets.push(Budget::cost_cents(cost_cents));
+    if let Some(usd) = def.usd {
+        budgets.push(Budget::usd(usd));
+    } else if let Some(cost_cents) = def.cost_cents {
+        budgets.push(Budget::usd(UsdAmount::from_micros(
+            cost_cents.saturating_mul(10_000),
+        )));
     }
     match budgets.as_slice() {
         [] => Budget::default(),

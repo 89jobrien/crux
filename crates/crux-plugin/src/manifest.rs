@@ -26,6 +26,8 @@ pub struct PluginEntry {
     /// Path to the plugin binary (absolute or on PATH).
     pub path: String,
     /// Environment variables to pass to the plugin process.
+    // TODO(automation-15): Replace plaintext manifest secrets with inherited or explicitly
+    // injected environment references, and redact values from diagnostics and traces.
     #[serde(default)]
     pub env: HashMap<String, String>,
 }

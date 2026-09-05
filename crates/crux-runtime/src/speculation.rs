@@ -8,6 +8,7 @@ use std::pin::Pin;
 
 use chrono::Utc;
 
+use crate::context::Context;
 use crate::ctx::CruxCtx;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepStatus};
@@ -72,6 +73,7 @@ where
         // Run all arms, collect results
         let mut completed: Vec<(String, Result<T, CruxErr>)> = Vec::new();
         for arm in self.arms {
+            self.ctx.begin_budgeted_step()?;
             let result = arm.fut.await;
             completed.push((arm.name, result));
         }
@@ -222,6 +224,7 @@ where
 
         let mut last_err = None;
         for arm in self.arms {
+            self.ctx.begin_budgeted_step()?;
             match arm.fut.await {
                 Ok(val) => {
                     self.ctx.push_step(Step {

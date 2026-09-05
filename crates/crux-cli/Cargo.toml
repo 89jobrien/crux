@@ -22,8 +22,9 @@ crux-agentic = { workspace = true }
 crux-baml = { workspace = true, optional = true }
 crux-plugin = { workspace = true }
 crux-runtime = { workspace = true }
-crux-types = { workspace = true }
+crux-types = { workspace = true, features = ["miette"] }
 crux-script = { workspace = true }
+miette = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 

@@ -35,7 +35,7 @@
     {
       "name": "crux-runtime-context",
       "path": "crates/crux-runtime/src/context.rs",
-      "hash": "0f49b8b5845045e69bb2a9ff1b738ff2918b128b302698a592eea7ddd846e926"
+      "hash": "e38ffc97c7772dd9d4a8a2b30c28a5e4785b2855de437144fe6f32a9d5365223"
     },
     {
       "name": "crux-types-emission",

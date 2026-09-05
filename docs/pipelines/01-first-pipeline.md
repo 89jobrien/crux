@@ -18,6 +18,12 @@ Create a file called `hello.crux`:
 ```yaml
 pipeline: hello
 budget: { calls: 3 }
+display:
+  title: Hello Pipeline
+  output: auto
+  steps:
+    greet: Greeting
+    timestamp: Timestamp
 
 steps:
   - step: greet
@@ -30,15 +36,14 @@ steps:
     args:
       cmd: "date -u +%Y-%m-%dT%H:%M:%SZ"
 
-  - step: log_output
-    handler: ctrl::log
 ```
 
-Every `.crux` file has three parts:
+Every `.crux` file has four parts:
 
 - **`pipeline:`** -- a name for the pipeline
 - **`budget:`** -- limits on how many steps can run (`calls`, `tokens`,
   `duration_ms`, `cost_cents`)
+- **`display:`** -- optional human-facing title, labels, and output visibility
 - **`steps:`** -- an ordered list of steps to execute
 
 ## Run it
@@ -50,32 +55,24 @@ crux run hello.crux
 Output looks like:
 
 ```text
-Pipeline: hello
-Status:   OK
-Duration: 42.1ms
-Steps:    3
+Hello Pipeline  PASS  42ms
 
-Trace:
-   1. [  OK] greet (12ms)
-   2. [  OK] timestamp (8ms)
-   3. [  OK] log_output (0ms)
+  ✓ Greeting                                       12ms
+  ✓ Timestamp                                       8ms
 
-Output:
-{
-  "exit_code": 0,
-  "stdout": "2026-05-25T12:00:00Z\n",
-  "stderr": ""
-}
+2/2 checks passed
 ```
 
-The trace shows every step, its status, and wall-clock duration. The
-output is the return value of the last step.
+The summary shows every step, its status, and wall-clock duration. Successful shell output is
+hidden in `auto` mode; semantic pipeline results remain visible.
 
 ## Verbosity
 
 ```bash
-crux run hello.crux -q    # quiet: status line only
-crux run hello.crux -v    # verbose: full step output at each stage
+crux run hello.crux          # concise human-readable summary
+crux run hello.crux -v       # full trace and raw final output
+crux run hello.crux --json   # compact result JSON for scripts
+crux run hello.crux -q       # errors only
 ```
 
 ## Passing input

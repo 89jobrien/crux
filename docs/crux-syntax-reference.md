@@ -270,6 +270,29 @@ crux = { version = "0.3", features = ["redb", "tracing", "script"] }
 | `script`        | Re-exports `crux-script` for pipeline execution. |
 | `script`        | Re-export `crux-script` for pipeline execution. |
 
+## Pipeline display metadata
+
+```yaml
+pipeline: ci
+display:
+  title: Project CI
+  output: auto # auto | always | never
+  steps:
+    fmt_check: Formatting
+    test: Tests
+```
+
+Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
+unchanged in saved traces and replay matching. `output` affects concise summary mode; `-v` always
+includes the complete final value.
+
+```text
+crux run pipeline.crux          # concise summary
+crux run pipeline.crux -v       # verbose trace and raw output
+crux run pipeline.crux --json   # compact JSON result
+crux run pipeline.crux -q       # errors only
+```
+
 ## Prelude
 
 ```rust

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crux_runtime::prelude::{Agent, CruxCtx, CruxErr};
 use serde_json::Value;
 
-use crate::handler_output::HandlerOutput;
+use crate::handler_output::{HandlerExecution, HandlerOutput};
 use crate::metadata::HandlerMetadata;
 
 /// Type-erased async handler: Value in, HandlerOutput out.
@@ -16,11 +16,8 @@ use crate::metadata::HandlerMetadata;
 /// (equivalent to confidence `1.0`). Use [`HandlerRegistry::handler`] for handlers
 /// that emit confidence, or [`HandlerRegistry::handler_value`] for simple handlers
 /// that return a plain `Value` (auto-wrapped for backward compatibility).
-pub type BoxHandler = Arc<
-    dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
-        + Send
-        + Sync,
->;
+pub type BoxHandler =
+    Arc<dyn Fn(Value) -> Pin<Box<dyn Future<Output = HandlerExecution> + Send>> + Send + Sync>;
 
 /// Type-erased agent runner: runs a registered agent with Value input, returns Value output.
 /// The function receives the input and returns a future that resolves to the output.
@@ -78,8 +75,13 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers
-            .insert(name, Arc::new(move |v| Box::pin(f(v))));
+        self.handlers.insert(
+            name,
+            Arc::new(move |v| {
+                let fut = f(v);
+                Box::pin(async move { HandlerExecution::unreported(fut.await) })
+            }),
+        );
     }
 
     /// Register a handler that returns a plain [`Value`], without a confidence score.
@@ -102,8 +104,9 @@ impl HandlerRegistry {
             name,
             Arc::new(move |v| {
                 let fut = f(v);
-                Box::pin(async move { fut.await.map(HandlerOutput::from) })
-                    as Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
+                Box::pin(
+                    async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
+                ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
             }),
         );
     }
@@ -124,10 +127,60 @@ impl HandlerRegistry {
             name,
             Arc::new(move |v| {
                 let fut = f(v);
-                Box::pin(async move { fut.await.map(HandlerOutput::from) })
-                    as Pin<Box<dyn Future<Output = Result<HandlerOutput, CruxErr>> + Send>>
+                Box::pin(
+                    async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
+                ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
             }),
         );
+    }
+
+    pub fn handler_free<F, Fut>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
+    {
+        let name = name.into();
+        self.handlers.insert(
+            name,
+            Arc::new(move |v| {
+                let fut = f(v);
+                Box::pin(async move { HandlerExecution::free(fut.await) })
+            }),
+        );
+    }
+
+    pub fn handler_metered<F, Fut>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = HandlerExecution> + Send + 'static,
+    {
+        self.handlers
+            .insert(name.into(), Arc::new(move |v| Box::pin(f(v))));
+    }
+
+    pub fn handler_value_free<F, Fut>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+    {
+        let name = name.into();
+        self.handlers.insert(
+            name,
+            Arc::new(move |v| {
+                let fut = f(v);
+                Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
+            }),
+        );
+    }
+
+    pub fn handler_value_free_with_metadata<F, Fut>(&mut self, meta: HandlerMetadata, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+    {
+        let name = meta.name.clone();
+        self.metadata.insert(name.clone(), meta);
+        self.handler_value_free(name, f);
     }
 
     /// Register a crux Agent by name for delegation.

@@ -54,10 +54,13 @@ enum Cli {
         #[arg(long)]
         plugins: Option<String>,
         /// Suppress all output except errors
-        #[arg(short, long)]
+        #[arg(short, long, conflicts_with_all = ["verbose", "json"])]
         quiet: bool,
-        /// Show full trace envelope (pipeline info, steps, timing)
-        #[arg(short, long)]
+        /// Emit only the compact JSON result for machine consumption
+        #[arg(long, conflicts_with_all = ["quiet", "verbose"])]
+        json: bool,
+        /// Show the full trace envelope and raw final output
+        #[arg(short, long, conflicts_with_all = ["quiet", "json"])]
         verbose: bool,
         /// Print execution plan without running anything
         #[arg(short = 'n', long)]
@@ -111,6 +114,7 @@ fn main() {
             input,
             plugins,
             quiet,
+            json,
             verbose,
             dry_run,
             replay,
@@ -125,6 +129,7 @@ fn main() {
             input_flag: input.as_deref(),
             plugins_path: plugins.as_deref(),
             quiet,
+            json,
             verbose,
             dry_run,
             replay_path: replay.as_deref(),
@@ -185,7 +190,20 @@ fn cmd_list(root: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::plan::*;
+    use super::{Cli, plan::*};
+    use clap::Parser;
+
+    #[test]
+    fn run_accepts_json_output_mode() {
+        let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json"]);
+        assert!(matches!(cli, Ok(Cli::Run { json: true, .. })));
+    }
+
+    #[test]
+    fn run_rejects_conflicting_output_modes() {
+        let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json", "--verbose"]);
+        assert!(cli.is_err());
+    }
 
     #[test]
     fn plan_subcommand_with_rule_planner_prints_steps() {

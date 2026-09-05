@@ -1,7 +1,10 @@
 use crux_plugin::bridge::register_plugins;
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, schema::PipelineDef, schema::StepDef};
+use crux_script::{
+    HandlerRegistry,
+    schema::{DisplayOutput, PipelineDef, PipelineDisplayDef, StepDef},
+};
 use serde_json::{Value, json};
 
 /// Resolve the plugins.toml path from an explicit flag or the default location.
@@ -147,12 +150,98 @@ pub fn warn_missing_env(pipeline: &PipelineDef) {
     }
 }
 
+fn display_title<'a>(crux: &'a Crux<Value>, display: Option<&'a PipelineDisplayDef>) -> &'a str {
+    display
+        .and_then(|metadata| metadata.title.as_deref())
+        .unwrap_or(&crux.agent)
+}
+
+fn display_step_name<'a>(name: &'a str, display: Option<&'a PipelineDisplayDef>) -> &'a str {
+    display
+        .and_then(|metadata| metadata.steps.get(name))
+        .map(String::as_str)
+        .unwrap_or(name)
+}
+
+fn format_duration(duration: std::time::Duration) -> String {
+    if duration.as_secs() >= 1 {
+        format!("{:.2}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
+}
+
+fn is_shell_result(value: &Value) -> bool {
+    value.as_object().is_some_and(|object| {
+        object.contains_key("exit_code")
+            && object.contains_key("stdout")
+            && object.contains_key("stderr")
+    })
+}
+
+fn should_render_output(value: &Value, display: Option<&PipelineDisplayDef>) -> bool {
+    match display.map_or(DisplayOutput::Auto, |metadata| metadata.output) {
+        DisplayOutput::Auto => !is_shell_result(value),
+        DisplayOutput::Always => true,
+        DisplayOutput::Never => false,
+    }
+}
+
+/// Render concise human-facing pipeline output for the default CLI mode.
+pub fn render_summary(
+    crux: &Crux<Value>,
+    elapsed: std::time::Duration,
+    display: Option<&PipelineDisplayDef>,
+) -> String {
+    let mut out = String::new();
+    let status = if crux.value().is_ok() { "PASS" } else { "FAIL" };
+    let title = display_title(crux, display);
+    out.push_str(&format!(
+        "{title}  {status}  {}\n\n",
+        format_duration(elapsed)
+    ));
+
+    for step in &crux.steps {
+        let icon = match step.status {
+            StepStatus::Ok => "✓",
+            StepStatus::Err => "✗",
+            StepStatus::Rejected => "·",
+            StepStatus::Skipped => "-",
+        };
+        let name = display_step_name(&step.name, display);
+        let duration = format_duration(std::time::Duration::from_millis(step.duration_ms));
+        out.push_str(&format!("  {icon} {name:<42} {duration:>8}\n"));
+    }
+
+    let passed = crux
+        .steps
+        .iter()
+        .filter(|step| step.status == StepStatus::Ok)
+        .count();
+    out.push_str(&format!("\n{passed}/{} checks passed\n", crux.steps.len()));
+
+    match crux.value() {
+        Ok(value) if should_render_output(value, display) => {
+            let pretty = serde_json::to_string_pretty(value).unwrap_or_default();
+            out.push_str(&format!("\nOutput:\n{pretty}\n"));
+        }
+        Ok(_) => {}
+        Err(_) => {}
+    }
+
+    out
+}
+
 /// Render the full trace envelope (pipeline info, per-step status, timing, output) as text.
 ///
 /// Pure: no I/O. Used for `--verbose`/`-v` output.
-pub fn render_trace(crux: &Crux<Value>, elapsed: std::time::Duration) -> String {
+pub fn render_trace(
+    crux: &Crux<Value>,
+    elapsed: std::time::Duration,
+    display: Option<&PipelineDisplayDef>,
+) -> String {
     let mut out = String::new();
-    out.push_str(&format!("Pipeline: {}\n", crux.agent));
+    out.push_str(&format!("Pipeline: {}\n", display_title(crux, display)));
     out.push_str(&format!(
         "Status:   {}\n",
         if crux.value().is_ok() { "OK" } else { "FAILED" }
@@ -177,25 +266,21 @@ pub fn render_trace(crux: &Crux<Value>, elapsed: std::time::Duration) -> String 
             StepKind::Branch => " [branch]",
             StepKind::Speculation => " [speculate]",
         };
+        let name = display_step_name(&step.name, display);
         out.push_str(&format!(
             "  {:>2}. [{:>4}] {}{} ({}ms)\n",
             i + 1,
             status,
-            step.name,
+            name,
             kind,
             step.duration_ms
         ));
     }
 
     out.push('\n');
-    match crux.value() {
-        Ok(v) => {
-            let pretty = serde_json::to_string_pretty(v).unwrap_or_default();
-            out.push_str(&format!("Output:\n{pretty}\n"));
-        }
-        Err(e) => {
-            out.push_str(&format!("Error: {e}\n"));
-        }
+    if let Ok(v) = crux.value() {
+        let pretty = serde_json::to_string_pretty(v).unwrap_or_default();
+        out.push_str(&format!("Output:\n{pretty}\n"));
     }
 
     out
