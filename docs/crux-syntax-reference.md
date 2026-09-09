@@ -78,7 +78,7 @@ x.on_budget_exceeded(handler);
 // Configuration
 x.set_max_retries(5);
 x.set_budget(Budget::tokens(4000));
-x.consume_budget(100);
+x.consume_budget(100); // deprecated; prefer typed accounting
 
 // Inspection
 x.budget();            // &Budget
@@ -157,9 +157,17 @@ pub enum CruxErr {
     StepFailed { step: String, source_msg: String },
     LowConfidence { step: String, score: f32, threshold: f32 },
     BudgetExceeded { budget_kind: BudgetKind, limit: u64, actual: u64 },
+    UnreportedCost { step: String, source: Option<Box<CruxErr>> },
+    StepBudgetExceeded { limit: u64, attempted: u64 },
+    UsdBudgetExceeded {
+        limit_micros: u64,
+        actual_micros: u64,
+        source: Option<Box<CruxErr>>,
+    },
     Delegation { to: String, source: Box<CruxErr> },
     Cancelled { reason: String },
     ReplayMismatch { step: String, expected: u64, actual: u64 },
+    Denied { step: String, reason: String },
 }
 
 CruxErr::step_failed(name, msg);
@@ -167,6 +175,11 @@ CruxErr::low_confidence(name, score, threshold);
 err.failed_step() -> Option<&str>;
 err.is_transient() -> bool;
 ```
+
+`UnreportedCost`, `StepBudgetExceeded`, and `UsdBudgetExceeded` are
+non-transient. With the `miette` feature they expose dedicated diagnostic codes
+and remediation help; related handler failures are retained in the optional
+`source` fields.
 
 ## `Agent` trait
 
@@ -206,21 +219,55 @@ pub enum Recovery<T> {
 ```rust
 pub enum Budget {
     Tokens { limit: u64 },
-    Calls { limit: u64 },
+    Steps { limit: u64 },
+    Calls { limit: u64 },             // compatibility alias for steps
     Duration { limit_ms: u64 },
-    CostCents { limit: u64 },
+    Usd { limit_micros: u64 },
+    CostCents { limit: u64 },         // compatibility alias for USD
     Combined { budgets: Vec<Budget> },
 }
 
 Budget::tokens(4000);
-Budget::calls(20);
+Budget::steps(20);
 Budget::duration(Duration::from_secs(30));
-Budget::cost_cents(500);
+Budget::usd(UsdAmount::from_micros(5_000_000));
 Budget::combined(vec![...]);
+
+// Compatibility constructors:
+Budget::calls(20);
+Budget::cost_cents(500);
 
 budget.kind() -> BudgetKind;
 budget.limit() -> u64;
 ```
+
+`UsdAmount` is fixed-point USD in integer microdollars and provides `ZERO`,
+`from_micros`, `micros`, and `checked_add`. `HandlerUsage` reports one
+invocation tokens and optional USD through `free`, `metered`, or `unreported`.
+`BudgetUsage` aggregates `steps`, `tokens`, `duration_ms`, and USD.
+
+```rust
+use crux::types::budget::BudgetTracker;
+
+let mut tracker = BudgetTracker::new(Budget::combined(vec![
+    Budget::steps(2),
+    Budget::usd(UsdAmount::from_micros(500_000)),
+]));
+tracker.begin_step()?;
+tracker.record_duration(Duration::from_millis(25))?;
+tracker.record_handler_usage(
+    "classify",
+    HandlerUsage::metered(120, UsdAmount::from_micros(250_000)),
+)?;
+let totals: BudgetUsage = tracker.usage();
+```
+
+Exact limits succeed. Step limits are checked before dispatch; duration, tokens,
+and USD are recorded after completion, making those dimensions soft caps. Under
+a USD budget, unreported cost fails closed even when the handler fails; explicit
+free usage reports zero. The deprecated compatibility `consume(amount)` method
+applies only to steps. Pipeline `delegate` nodes remain an exception: their
+nested budget is ignored and delegated work is not charged to pipeline usage.
 
 ## `TaskRegistry`
 
@@ -259,7 +306,7 @@ pub enum TaskStatus { Pending, Running, Done, Failed }
 ## Feature flags
 
 ```toml
-crux = { version = "0.3", features = ["redb", "tracing", "script"] }
+crux = { version = "0.4", features = ["redb", "tracing", "script"] }
 ```
 
 | Flag            | Turns on                                        |
