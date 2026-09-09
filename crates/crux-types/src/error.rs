@@ -166,7 +166,22 @@ impl std::fmt::Display for CruxErr {
     }
 }
 
-impl std::error::Error for CruxErr {}
+impl std::error::Error for CruxErr {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Delegation { source, .. }
+            | Self::UnreportedCost {
+                source: Some(source),
+                ..
+            }
+            | Self::UsdBudgetExceeded {
+                source: Some(source),
+                ..
+            } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 #[cfg(feature = "miette")]
 impl miette::Diagnostic for CruxErr {
@@ -229,6 +244,7 @@ impl miette::Diagnostic for CruxErr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error as _;
 
     #[test]
     fn failed_step_traverses_delegation() {
@@ -257,5 +273,90 @@ mod tests {
         let json = serde_json::to_string(&err).unwrap();
         let back: CruxErr = serde_json::from_str(&json).unwrap();
         assert_eq!(back.failed_step(), Some("fetch"));
+    }
+
+    #[test]
+    fn accounting_errors_round_trip_with_sources() {
+        let errors = [
+            CruxErr::UnreportedCost {
+                step: "legacy".into(),
+                source: Some(Box::new(CruxErr::step_failed("legacy", "failed"))),
+            },
+            CruxErr::StepBudgetExceeded {
+                limit: 2,
+                attempted: 3,
+            },
+            CruxErr::UsdBudgetExceeded {
+                limit_micros: 10,
+                actual_micros: 11,
+                source: Some(Box::new(CruxErr::step_failed("paid", "failed"))),
+            },
+        ];
+
+        for error in errors {
+            let json = serde_json::to_string(&error).unwrap();
+            let decoded: CruxErr = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                serde_json::to_value(&decoded).unwrap(),
+                serde_json::to_value(&error).unwrap()
+            );
+            assert!(!decoded.is_transient());
+        }
+
+        let unreported = CruxErr::UnreportedCost {
+            step: "legacy".into(),
+            source: Some(Box::new(CruxErr::step_failed("legacy", "failed"))),
+        };
+        assert_eq!(unreported.failed_step(), Some("legacy"));
+        assert_eq!(
+            unreported.source().unwrap().to_string(),
+            "step 'legacy' failed: failed"
+        );
+
+        let usd = CruxErr::UsdBudgetExceeded {
+            limit_micros: 10,
+            actual_micros: 11,
+            source: Some(Box::new(CruxErr::step_failed("paid", "failed"))),
+        };
+        assert_eq!(usd.failed_step(), Some("paid"));
+        assert_eq!(
+            usd.source().unwrap().to_string(),
+            "step 'paid' failed: failed"
+        );
+    }
+
+    #[cfg(feature = "miette")]
+    #[test]
+    fn accounting_errors_expose_miette_code_help_and_related_source() {
+        use miette::Diagnostic as _;
+
+        let errors = [
+            CruxErr::UnreportedCost {
+                step: "legacy".into(),
+                source: Some(Box::new(CruxErr::step_failed("legacy", "failed"))),
+            },
+            CruxErr::StepBudgetExceeded {
+                limit: 2,
+                attempted: 3,
+            },
+            CruxErr::UsdBudgetExceeded {
+                limit_micros: 10,
+                actual_micros: 11,
+                source: Some(Box::new(CruxErr::step_failed("paid", "failed"))),
+            },
+        ];
+        let expected_codes = [
+            "crux::unreported_cost",
+            "crux::step_budget_exceeded",
+            "crux::usd_budget_exceeded",
+        ];
+
+        for (error, expected_code) in errors.iter().zip(expected_codes) {
+            assert_eq!(error.code().unwrap().to_string(), expected_code);
+            assert!(error.help().is_some());
+        }
+        assert_eq!(errors[0].related().unwrap().count(), 1);
+        assert!(errors[1].related().is_none());
+        assert_eq!(errors[2].related().unwrap().count(), 1);
     }
 }
