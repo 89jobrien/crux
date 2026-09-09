@@ -19,7 +19,7 @@ async fn llm_stream_missing_prompt_returns_error() {
     let mut reg = HandlerRegistry::new();
     crux_agentic::register_all(&mut reg);
     let handler = reg.get_handler("llm::stream").unwrap();
-    let result = handler(json!({})).await;
+    let result = handler(json!({})).await.outcome;
     assert!(result.is_err(), "missing prompt should return error");
     let msg = result.unwrap_err().to_string();
     assert!(

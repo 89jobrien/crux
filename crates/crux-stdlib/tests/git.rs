@@ -12,7 +12,7 @@ fn registry() -> HandlerRegistry {
 async fn staged_files_returns_array() {
     let reg = registry();
     let handler = reg.get_handler("git::staged_files").unwrap();
-    let result = handler(json!({})).await.unwrap();
+    let result = handler(json!({})).await.outcome.unwrap();
     assert!(result["files"].is_array());
 }
 
@@ -20,7 +20,7 @@ async fn staged_files_returns_array() {
 async fn status_returns_clean_field() {
     let reg = registry();
     let handler = reg.get_handler("git::status").unwrap();
-    let result = handler(json!({})).await.unwrap();
+    let result = handler(json!({})).await.outcome.unwrap();
     assert!(result["clean"].is_boolean());
     assert!(result["porcelain"].is_string());
 }
@@ -29,7 +29,7 @@ async fn status_returns_clean_field() {
 async fn log_returns_commits() {
     let reg = registry();
     let handler = reg.get_handler("git::log").unwrap();
-    let result = handler(json!({"args": {"n": 3}})).await.unwrap();
+    let result = handler(json!({"args": {"n": 3}})).await.outcome.unwrap();
     let commits = result["commits"].as_array().unwrap();
     assert!(!commits.is_empty());
     let first = &commits[0];
@@ -41,6 +41,6 @@ async fn log_returns_commits() {
 async fn diff_returns_string() {
     let reg = registry();
     let handler = reg.get_handler("git::diff").unwrap();
-    let result = handler(json!({})).await.unwrap();
+    let result = handler(json!({})).await.outcome.unwrap();
     assert!(result["diff"].is_string());
 }

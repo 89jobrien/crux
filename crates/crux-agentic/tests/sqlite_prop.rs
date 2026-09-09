@@ -49,6 +49,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
 
             let query = reg.get_handler("sqlite::query_one").unwrap();
@@ -59,6 +60,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
             prop_assert_eq!(result["row"]["name"].as_str().unwrap(), name.as_str());
             Ok(())
@@ -83,6 +85,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
 
             reg.get_handler("sqlite::update").unwrap()(json!({
@@ -93,6 +96,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
 
             let result = reg.get_handler("sqlite::query_one").unwrap()(json!({
@@ -102,6 +106,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
             prop_assert_eq!(result["row"]["name"].as_str().unwrap(), updated.as_str());
             Ok(())
@@ -125,6 +130,7 @@ proptest! {
                     }
                 }))
                 .await
+                .outcome
                 .unwrap();
             }
 
@@ -135,6 +141,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
             let count = result["rows"].as_array().unwrap().len();
             prop_assert_eq!(count, n);
@@ -157,6 +164,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
 
             reg.get_handler("sqlite::delete").unwrap()(json!({
@@ -166,6 +174,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
 
             let result = reg.get_handler("sqlite::query_many").unwrap()(json!({
@@ -175,6 +184,7 @@ proptest! {
                 }
             }))
             .await
+            .outcome
             .unwrap();
             let count = result["rows"].as_array().unwrap().len();
             prop_assert_eq!(count, 0);

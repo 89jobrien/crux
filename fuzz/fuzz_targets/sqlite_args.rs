@@ -23,9 +23,8 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
     if let Ok(conn) = Connection::open(db_file.path()) {
-        let _ = conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v TEXT);",
-        );
+        let _ =
+            conn.execute_batch("CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v TEXT);");
     }
 
     // Inject db path into input if args.db is missing
@@ -33,7 +32,11 @@ fuzz_target!(|data: &[u8]| {
     if let Some(args) = patched.get_mut("args") {
         if args.get("db").is_none() {
             args["db"] = serde_json::Value::String(
-                db_file.path().to_str().unwrap_or("/tmp/fuzz.db").to_string(),
+                db_file
+                    .path()
+                    .to_str()
+                    .unwrap_or("/tmp/fuzz.db")
+                    .to_string(),
             );
         }
     }
@@ -56,7 +59,7 @@ fuzz_target!(|data: &[u8]| {
         "sqlite::upsert",
     ] {
         if let Some(handler) = registry.get_handler(name) {
-            let _ = rt.block_on(handler(patched.clone()));
+            let _ = rt.block_on(handler(patched.clone())).outcome;
         }
     }
 });
