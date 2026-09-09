@@ -6,11 +6,10 @@ use crux_runtime::prelude::*;
 use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
 use serde_json::{Value, json};
 
-use crate::registry::{
-    build_registry, collect_handler_names, render_summary, render_trace, warn_missing_env,
-};
+use crate::output::{render_summary, render_trace};
+use crate::registry::{build_registry, collect_handler_names, warn_missing_env};
 
-/// Render the default (non-verbose) `crux run` output: raw JSON of the result value.
+/// Render compact result JSON for the compatibility default and explicit `--json` mode.
 ///
 /// Pure: no I/O. On success, returns the compact JSON encoding of the value. On
 /// failure, returns the error message (printed to stderr by the caller).
@@ -30,6 +29,7 @@ pub struct RunConfig<'a> {
     pub input_flag: Option<&'a str>,
     pub plugins_path: Option<&'a str>,
     pub quiet: bool,
+    pub summary: bool,
     pub json: bool,
     pub verbose: bool,
     pub dry_run: bool,
@@ -41,6 +41,7 @@ pub struct RunConfig<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OutputMode {
+    DefaultJson,
     Summary,
     Verbose,
     Json,
@@ -50,12 +51,14 @@ enum OutputMode {
 fn output_mode(config: &RunConfig<'_>) -> OutputMode {
     if config.verbose {
         OutputMode::Verbose
+    } else if config.summary {
+        OutputMode::Summary
     } else if config.json {
         OutputMode::Json
     } else if config.quiet {
         OutputMode::Quiet
     } else {
-        OutputMode::Summary
+        OutputMode::DefaultJson
     }
 }
 
@@ -460,6 +463,14 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
                 render_trace(&crux, elapsed, pipeline.display.as_ref())
             );
         }
+        OutputMode::DefaultJson => match render_default_output(&crux) {
+            Ok(json) => println!("{json}"),
+            Err(_) => {
+                if let Err(error) = crux.value() {
+                    render_human_error(error);
+                }
+            }
+        },
         OutputMode::Json => match crux.value() {
             Ok(_) => println!("{}", render_default_output(&crux).unwrap_or_default()),
             Err(error) => render_json_error(error),
@@ -478,7 +489,10 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     }
 
     if let Err(error) = crux.value() {
-        if !matches!(output_mode(cfg), OutputMode::Json | OutputMode::Quiet) {
+        if !matches!(
+            output_mode(cfg),
+            OutputMode::DefaultJson | OutputMode::Json | OutputMode::Quiet
+        ) {
             render_human_error(error);
         }
         std::process::exit(1);
@@ -559,6 +573,7 @@ mod tests {
             input_flag: None,
             plugins_path: None,
             quiet: false,
+            summary: false,
             json: false,
             verbose: false,
             dry_run: false,
@@ -570,10 +585,14 @@ mod tests {
     }
 
     #[test]
-    fn output_mode_defaults_to_summary_and_preserves_explicit_modes() {
+    fn output_mode_defaults_to_json_and_preserves_explicit_modes() {
         let mut cfg = config();
+        assert_eq!(output_mode(&cfg), OutputMode::DefaultJson);
+
+        cfg.summary = true;
         assert_eq!(output_mode(&cfg), OutputMode::Summary);
 
+        cfg.summary = false;
         cfg.json = true;
         assert_eq!(output_mode(&cfg), OutputMode::Json);
 
@@ -627,7 +646,7 @@ mod tests {
         let crux = ok_crux(json!({"answer": 42}));
         let out = render_default_output(&crux).expect("ok result");
         assert_eq!(out, r#"{"answer":42}"#);
-        // No trace envelope framing should leak into the default output.
+        // No trace envelope framing should leak into compact JSON output.
         assert!(!out.contains("Pipeline:"));
         assert!(!out.contains("Trace:"));
     }

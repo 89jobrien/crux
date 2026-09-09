@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod output;
 mod plan;
 mod registry;
 mod run;
@@ -54,13 +55,16 @@ enum Cli {
         #[arg(long)]
         plugins: Option<String>,
         /// Suppress all output except errors
-        #[arg(short, long, conflicts_with_all = ["verbose", "json"])]
+        #[arg(short, long, conflicts_with_all = ["summary", "verbose", "json"])]
         quiet: bool,
-        /// Emit only the compact JSON result for machine consumption
-        #[arg(long, conflicts_with_all = ["quiet", "verbose"])]
+        /// Render a concise human-readable pipeline summary
+        #[arg(long, conflicts_with_all = ["quiet", "verbose", "json"])]
+        summary: bool,
+        /// Explicitly select compact JSON (also the compatibility default)
+        #[arg(long, conflicts_with_all = ["quiet", "summary", "verbose"])]
         json: bool,
         /// Show the full trace envelope and raw final output
-        #[arg(short, long, conflicts_with_all = ["quiet", "json"])]
+        #[arg(short, long, conflicts_with_all = ["quiet", "summary", "json"])]
         verbose: bool,
         /// Print execution plan without running anything
         #[arg(short = 'n', long)]
@@ -114,6 +118,7 @@ fn main() {
             input,
             plugins,
             quiet,
+            summary,
             json,
             verbose,
             dry_run,
@@ -129,6 +134,7 @@ fn main() {
             input_flag: input.as_deref(),
             plugins_path: plugins.as_deref(),
             quiet,
+            summary,
             json,
             verbose,
             dry_run,
