@@ -119,7 +119,7 @@ use crux_domain::pipeline::EventSender;
 use crux_domain::plan_result::PlanResult;
 use crux_domain::planner::{PassthroughPlanner, Planner};
 
-use crate::context::Context;
+use crate::context::{BudgetedInvocation, Context, InvocationMeter};
 use crate::hooks::HookRegistry;
 use crate::recorder::{StepRecord, StepRecorder};
 use crate::replay::{ReplayCache, ReplayResult, deserialize_replay};
@@ -130,6 +130,14 @@ use crate::types::id::CruxId;
 use crate::types::recovery::Recovery;
 
 const DEFAULT_MAX_RETRIES: u32 = 3;
+
+fn strictest_step_limit(budget: &Budget) -> Option<u64> {
+    match budget {
+        Budget::Steps { limit } | Budget::Calls { limit } => Some(*limit),
+        Budget::Combined { budgets } => budgets.iter().filter_map(strictest_step_limit).min(),
+        _ => None,
+    }
+}
 
 pub struct CruxCtx {
     id: CruxId,
@@ -599,9 +607,7 @@ impl CruxCtx {
             .collect();
 
         let live_indices: Vec<usize> = live_futs.iter().map(|(i, _)| *i).collect();
-        for _ in &live_indices {
-            self.budget_tracker.begin_step()?;
-        }
+        self.reserve_budgeted_steps(live_indices.len())?;
         let futs_only: Vec<_> = live_futs.into_iter().map(|(_, f)| f).collect();
 
         let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
@@ -967,6 +973,45 @@ impl CruxCtx {
             .await
     }
 
+    pub(crate) fn begin_budgeted_step(&mut self) -> Result<(), CruxErr> {
+        self.budget_tracker.begin_step()
+    }
+
+    fn reserve_budgeted_steps(&mut self, count: usize) -> Result<(), CruxErr> {
+        let count = u64::try_from(count).unwrap_or(u64::MAX);
+        let attempted = self.budget_tracker.usage().steps.saturating_add(count);
+        if let Some(limit) = strictest_step_limit(self.budget_tracker.budget())
+            && attempted > limit
+        {
+            return Err(CruxErr::StepBudgetExceeded { limit, attempted });
+        }
+        for _ in 0..count {
+            self.budget_tracker.begin_step()?;
+        }
+        Ok(())
+    }
+
+    /// Execute one replay-aware step and reserve one live invocation.
+    ///
+    /// Unlike [`Context::step`], this method increments the typed step budget
+    /// immediately before live work starts. Replay hits return cached output without
+    /// reserving budget or polling `f`; pre-execution rejection also leaves `f`
+    /// untouched. Handler integrations should normally use [`InvocationMeter`] so
+    /// they can distinguish those cases before recording duration and usage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crux_runtime::prelude::{Budget, Context, CruxCtx};
+    ///
+    /// # async fn example() -> Result<(), crux_runtime::prelude::CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// ctx.set_budget(Budget::steps(1));
+    /// let value = ctx.step_budgeted("fetch", || async { Ok(42_u32) }).await?;
+    /// assert_eq!(value, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn step_budgeted<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
     where
         F: FnOnce() -> Fut + Send,
@@ -1028,6 +1073,64 @@ impl CruxCtx {
                 Err(CruxErr::step_failed(name, "stream yielded no items"))
             }
         }
+    }
+}
+
+impl InvocationMeter for CruxCtx {
+    async fn invoke_budgeted_step<F, Fut, T>(&mut self, name: &str, f: F) -> BudgetedInvocation<T>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let executed = std::sync::Arc::new(AtomicBool::new(false));
+        let live = std::sync::Arc::clone(&executed);
+        let outcome = self
+            .step_budgeted(name, move || {
+                live.store(true, Ordering::Release);
+                f()
+            })
+            .await;
+        BudgetedInvocation {
+            outcome,
+            executed: executed.load(Ordering::Acquire),
+        }
+    }
+
+    fn record_invocation_usage(
+        &mut self,
+        step: &str,
+        usage: crate::types::budget::HandlerUsage,
+        duration: std::time::Duration,
+    ) -> Result<(), CruxErr> {
+        use crate::types::budget::{HandlerUsage, UsdAmount};
+
+        let mut violation = self.budget_tracker.record_duration(duration).err();
+        let cost_report = HandlerUsage {
+            tokens: 0,
+            usd: usage.usd,
+        };
+        if let Err(error) = self.budget_tracker.record_handler_usage(step, cost_report)
+            && violation.is_none()
+        {
+            violation = Some(error);
+        }
+        let token_report = HandlerUsage {
+            tokens: usage.tokens,
+            usd: Some(UsdAmount::ZERO),
+        };
+        if let Err(error) = self.budget_tracker.record_handler_usage(step, token_report)
+            && violation.is_none()
+        {
+            violation = Some(error);
+        }
+        violation.map_or(Ok(()), Err)
+    }
+
+    fn budget_usage(&self) -> crate::types::budget::BudgetUsage {
+        self.budget_tracker.usage()
     }
 }
 
@@ -1203,22 +1306,6 @@ impl Context for CruxCtx {
 
     fn consume_budget(&mut self, amount: u64) {
         self.budget_tracker.consume(amount);
-    }
-
-    fn begin_budgeted_step(&mut self) -> Result<(), CruxErr> {
-        self.budget_tracker.begin_step()
-    }
-
-    fn record_handler_usage(
-        &mut self,
-        step: &str,
-        usage: crate::types::budget::HandlerUsage,
-    ) -> Result<(), CruxErr> {
-        self.budget_tracker.record_handler_usage(step, usage)
-    }
-
-    fn record_budget_duration(&mut self, duration: std::time::Duration) -> Result<(), CruxErr> {
-        self.budget_tracker.record_duration(duration)
     }
 
     fn budget(&self) -> &Budget {
@@ -1581,8 +1668,12 @@ mod tests {
 
         assert!(ctx.begin_budgeted_step().is_ok());
         assert!(
-            ctx.record_handler_usage("free", crate::types::budget::HandlerUsage::free())
-                .is_ok()
+            ctx.record_invocation_usage(
+                "free",
+                crate::types::budget::HandlerUsage::free(),
+                std::time::Duration::ZERO,
+            )
+            .is_ok()
         );
         assert!(matches!(
             ctx.begin_budgeted_step(),
@@ -2104,6 +2195,29 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("budget exceeded"));
+    }
+
+    #[tokio::test]
+    async fn join_all_insufficient_step_budget_does_not_charge_undispatched_arms() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::steps(1));
+
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { panic!("should not run") })),
+                    ("b", Box::pin(async { panic!("should not run") })),
+                ],
+            )
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::StepBudgetExceeded { .. })));
+        let value = ctx
+            .step_budgeted("after", || async { Ok(7_i32) })
+            .await
+            .expect("failed join must not consume the remaining invocation");
+        assert_eq!(value, 7);
     }
 
     #[tokio::test]

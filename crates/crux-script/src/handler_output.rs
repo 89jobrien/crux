@@ -17,7 +17,25 @@ pub struct HandlerOutput {
     pub confidence: Option<f32>,
 }
 
-/// A handler outcome paired with usage reported for the invocation.
+/// A handler outcome paired with usage reported for the same invocation.
+///
+/// Usage is preserved even when `outcome` is an error, allowing the runner to
+/// account failed paid calls exactly once.
+///
+/// # Examples
+///
+/// ```
+/// use crux_runtime::prelude::{CruxErr, HandlerUsage, UsdAmount};
+/// use crux_script::{HandlerExecution, HandlerOutput};
+/// use serde_json::json;
+///
+/// let usage = HandlerUsage::metered(12, UsdAmount::from_micros(34));
+/// let ok = HandlerExecution::success(HandlerOutput::new(json!("ok")), usage);
+/// let failed = HandlerExecution::failure(CruxErr::step_failed("llm", "failed"), usage);
+/// assert!(ok.is_ok());
+/// assert!(failed.is_err());
+/// assert_eq!(failed.usage, usage);
+/// ```
 #[derive(Debug, Clone)]
 pub struct HandlerExecution {
     pub outcome: Result<HandlerOutput, CruxErr>,
@@ -25,6 +43,7 @@ pub struct HandlerExecution {
 }
 
 impl HandlerExecution {
+    /// Construct a successful metered execution.
     pub fn success(output: HandlerOutput, usage: HandlerUsage) -> Self {
         Self {
             outcome: Ok(output),
@@ -32,6 +51,7 @@ impl HandlerExecution {
         }
     }
 
+    /// Construct a failed metered execution without discarding usage.
     pub fn failure(error: CruxErr, usage: HandlerUsage) -> Self {
         Self {
             outcome: Err(error),
@@ -39,6 +59,7 @@ impl HandlerExecution {
         }
     }
 
+    /// Construct an explicitly free execution (`usd = Some(0)`).
     pub fn free(outcome: Result<HandlerOutput, CruxErr>) -> Self {
         Self {
             outcome,
@@ -46,6 +67,7 @@ impl HandlerExecution {
         }
     }
 
+    /// Construct a legacy execution whose USD cost is unknown.
     pub fn unreported(outcome: Result<HandlerOutput, CruxErr>) -> Self {
         Self {
             outcome,
@@ -53,22 +75,39 @@ impl HandlerExecution {
         }
     }
 
+    /// Return whether the handler outcome succeeded.
     pub fn is_ok(&self) -> bool {
         self.outcome.is_ok()
     }
 
+    /// Return whether the handler outcome failed.
     pub fn is_err(&self) -> bool {
         self.outcome.is_err()
     }
 
+    /// Return the successful output.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the handler outcome is an error.
     pub fn unwrap(self) -> HandlerOutput {
         self.outcome.unwrap()
     }
 
+    /// Return the handler error.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the handler outcome succeeded.
     pub fn unwrap_err(self) -> CruxErr {
         self.outcome.unwrap_err()
     }
 
+    /// Return the handler error using `message` if the outcome succeeded.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `message` when the handler outcome succeeded.
     pub fn expect_err(self, message: &str) -> CruxErr {
         self.outcome.expect_err(message)
     }
