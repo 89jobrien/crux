@@ -17,7 +17,7 @@ Create a file called `hello.crux`:
 
 ```yaml
 pipeline: hello
-budget: { calls: 3 }
+budget: { steps: 3 }
 display:
   title: Hello Pipeline
   output: auto
@@ -41,15 +41,15 @@ steps:
 Every `.crux` file has four parts:
 
 - **`pipeline:`** -- a name for the pipeline
-- **`budget:`** -- limits on how many steps can run (`calls`, `tokens`,
-  `duration_ms`, `cost_cents`)
+- **`budget:`** -- optional limits measured independently: handler attempts (`steps`),
+  model tokens (`tokens`), wall-clock milliseconds (`duration_ms`), and dollars (`usd`)
 - **`display:`** -- optional human-facing title, labels, and output visibility
 - **`steps:`** -- an ordered list of steps to execute
 
 ## Run it
 
 ```bash
-crux run hello.crux
+crux run hello.crux --summary
 ```
 
 Output looks like:
@@ -69,10 +69,11 @@ hidden in `auto` mode; semantic pipeline results remain visible.
 ## Verbosity
 
 ```bash
-crux run hello.crux          # concise human-readable summary
-crux run hello.crux -v       # full trace and raw final output
-crux run hello.crux --json   # compact result JSON for scripts
-crux run hello.crux -q       # errors only
+crux run hello.crux           # compact result JSON (compatibility default)
+crux run hello.crux --summary # concise human-readable summary
+crux run hello.crux -v        # full trace and raw final output
+crux run hello.crux --json    # explicitly select compact result JSON
+crux run hello.crux -q        # errors only
 ```
 
 ## Passing input
@@ -89,9 +90,9 @@ without it.
 
 ## What just happened
 
-Each step ran in order. The output of one step becomes the input to
-the next. `ctrl::log` printed the current state to stderr and passed
-it through unchanged. The whole run was traced into a `Crux<T>` value
-internally -- the same structure you get from `#[crux::agent]` in Rust.
+The two shell steps ran in order, with each output becoming the next step input.
+`--summary` used the display metadata for the title and step labels while hiding the final
+shell envelope in `auto` mode. The whole run was traced into a `Crux<T>` value internally --
+the same structure you get from `#[crux::agent]` in Rust.
 
 Next: [Handlers](./02-handlers.md) -- what you can do in each step.

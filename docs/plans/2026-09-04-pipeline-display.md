@@ -1,9 +1,21 @@
 # Plan: Pipeline Display Metadata and Smart Rendering
 
+## Contents
+
+- [Goal](#goal)
+- [Context Map](#context-map)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Preconditions](#preconditions)
+- [Tasks](#tasks)
+- [Compatibility Notes](#compatibility-notes)
+- [Completion Criteria](#completion-criteria)
+
 ## Goal
 
-Make plain `crux run` render a concise pipeline summary, preserve `-v` as full verbose mode,
-provide raw machine output through `--json`, and let pipelines declare friendly display labels.
+Preserve compact result JSON for plain `crux run`, add `--summary` for a concise pipeline summary,
+preserve `-v` as full verbose mode, retain `--json` as an explicit compatibility flag, and let
+pipelines declare friendly display labels.
 
 ## Context Map
 
@@ -14,24 +26,24 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 | `crates/crux-script/src/schema.rs` | Pipeline YAML schema | Add `PipelineDisplayDef`, `DisplayOutput`, and `PipelineDef::display` |
 | `crates/crux-script/tests/pipeline.rs` | Schema integration tests | Cover display parsing and defaults |
 | `crates/crux-script/src/validator.rs` | Nested pipeline construction | Initialize `display` in direct `PipelineDef` literals |
-| `crates/crux-cli/src/bin/crux/registry.rs` | Human-readable rendering | Add smart summary and metadata-aware verbose trace |
-| `crates/crux-cli/src/bin/crux/run.rs` | Output-mode dispatch | Route default, verbose, JSON, and quiet output |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI definition | Add `--json` and output-mode conflicts |
+| `crates/crux-cli/src/bin/crux/output.rs` | Human-readable rendering | Add smart summary and metadata-aware verbose trace |
+| `crates/crux-cli/src/bin/crux/run.rs` | Output-mode dispatch | Route default JSON, summary, verbose, explicit JSON, and quiet output |
+| `crates/crux-cli/src/bin/crux/main.rs` | CLI definition | Add `--summary` and output-mode conflicts |
 | `crates/crux-cli/src/bin/crux/check.rs` | Validation registry setup | Initialize `display` in its `PipelineDef` literal |
 | `docs/pipelines/01-first-pipeline.md` | Pipeline walkthrough | Document display metadata and all output modes |
 | `docs/crux-syntax-reference.md` | Syntax reference | Add the `display` schema |
 | `pipelines/crux/ci.crux` in `/Users/joe/dev/bamlish` | Bamlish CI pipeline | Add labels and remove redundant `ctrl::log` |
-| `xtask/src/main.rs` in `/Users/joe/dev/bamlish` | Bamlish Crux launcher | Use `crux-cli` and default summary mode |
+| `xtask/src/main.rs` in `/Users/joe/dev/bamlish` | Bamlish Crux launcher | Use `crux-cli` and explicit summary mode |
 
 ### Dependencies
 
 - `crux-script::schema::PipelineDef` is consumed by the runner, validator, checker, and CLI.
 - `crux-cli::run` loads `PipelineDef`, executes it, then passes `PipelineDef::display` and the
   resulting `Crux<Value>` to the selected renderer.
-- `crux-cli::registry` reads runtime `Step` values and resolves presentation labels from the
+- `crux-cli::output` reads runtime `Step` values and resolves presentation labels from the
   display metadata without changing the trace wire format.
 - Bamlish supplies metadata in `pipelines/crux/ci.crux`; `cargo xtask crux-ci` invokes the Crux
-  CLI without `-v`, so it receives the smart default summary.
+  CLI with `--summary`, so it receives the concise summary.
 
 ### Existing Test Coverage
 
@@ -42,14 +54,14 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 ### Reference Patterns
 
 - `BudgetDef` in `crates/crux-script/src/schema.rs` is the nearest optional pipeline-level schema.
-- `render_trace` in `crates/crux-cli/src/bin/crux/registry.rs` is the existing pure renderer.
+- `render_trace` in `crates/crux-cli/src/bin/crux/output.rs` is the existing pure renderer.
 - `Cli::Run` in `crates/crux-cli/src/bin/crux/main.rs` owns current `-q` and `-v` flags.
 - `docs/pipelines/01-first-pipeline.md` already documents output examples and verbosity.
 
 ### Risk
 
 - `PipelineDef` is public; every direct struct literal must initialize the additive field.
-- Plain `crux run` changes from raw JSON to text; scripts must migrate to `crux run --json`.
+- Plain `crux run` remains compact JSON; `--summary` is opt-in and `--json` remains a supported alias.
 - `-v` must retain the complete trace and raw result regardless of pipeline display settings.
 - Runtime trace serialization must remain unchanged; display metadata stays in `crux-script`.
 - Cruxfile targets do not retain a single result value; reject `--json` for Cruxfiles rather than
@@ -209,10 +221,10 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
    git commit -m "refactor: initialize optional pipeline display metadata"
    ```
 
-### Task 3: Add the Smart Summary Renderer
+### Task 3: Add the Opt-In Summary Renderer
 
 **Crate**: `crux-cli`
-**File(s)**: `crates/crux-cli/src/bin/crux/registry.rs`, `crates/crux-cli/src/bin/crux/run.rs`
+**File(s)**: `crates/crux-cli/src/bin/crux/output.rs`, `crates/crux-cli/src/bin/crux/run.rs`
 **Run**: `cargo nextest run -p crux-cli summary_output`
 
 1. Replace the inline test module's imports in `crates/crux-cli/src/bin/crux/run.rs` with:
@@ -296,7 +308,7 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 3. Run `cargo nextest run -p crux-cli summary_output`.
    Expected: compilation fails because `render_summary` does not exist.
 
-4. Change the import in `crates/crux-cli/src/bin/crux/registry.rs` to:
+4. Change the import in `crates/crux-cli/src/bin/crux/output.rs` to:
 
    ```rust
    use crux_script::{
@@ -432,161 +444,27 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 10. Stage only the two task files and commit:
 
    ```text
-   git add crates/crux-cli/src/bin/crux/registry.rs crates/crux-cli/src/bin/crux/run.rs
+   git add crates/crux-cli/src/bin/crux/output.rs crates/crux-cli/src/bin/crux/run.rs
    git commit -m "feat(crux-cli): add smart pipeline summary"
    ```
 
-### Task 4: Add Explicit JSON Output Mode
+### Task 4: Preserve JSON and Add Explicit Summary Mode
 
 **Crate**: `crux-cli`
 **File(s)**: `crates/crux-cli/src/bin/crux/main.rs`, `crates/crux-cli/src/bin/crux/run.rs`
 **Run**: `cargo nextest run -p crux-cli output_mode`
 
-1. Add this enum and selector after `RunConfig` in `crates/crux-cli/src/bin/crux/run.rs`:
-
-   ```rust
-   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-   enum OutputMode {
-       Summary,
-       Verbose,
-       Json,
-       Quiet,
-   }
-
-   fn output_mode(config: &RunConfig<'_>) -> OutputMode {
-       if config.verbose {
-           OutputMode::Verbose
-       } else if config.json {
-           OutputMode::Json
-       } else if config.quiet {
-           OutputMode::Quiet
-       } else {
-           OutputMode::Summary
-       }
-   }
-   ```
-
-2. Add `pub json: bool,` between `quiet` and `verbose` in `RunConfig`.
-
-3. Add a `config` test helper and failing mode test in the inline test module:
-
-   ```rust
-   fn config() -> RunConfig<'static> {
-       RunConfig {
-           pipeline_arg: Some("pipeline.crux"),
-           target_or_input: None,
-           check: false,
-           target_flag: None,
-           input_flag: None,
-           plugins_path: None,
-           quiet: false,
-           json: false,
-           verbose: false,
-           dry_run: false,
-           replay_path: None,
-           replay_mode_str: "strict",
-           save_trace_path: None,
-           strict: false,
-       }
-   }
-
-   #[test]
-   fn output_mode_defaults_to_summary_and_preserves_explicit_modes() {
-       let mut cfg = config();
-       assert_eq!(output_mode(&cfg), OutputMode::Summary);
-
-       cfg.json = true;
-       assert_eq!(output_mode(&cfg), OutputMode::Json);
-
-       cfg.json = false;
-       cfg.verbose = true;
-       assert_eq!(output_mode(&cfg), OutputMode::Verbose);
-
-       cfg.verbose = false;
-       cfg.quiet = true;
-       assert_eq!(output_mode(&cfg), OutputMode::Quiet);
-   }
-   ```
-
-4. In `Cli::Run` in `crates/crux-cli/src/bin/crux/main.rs`, replace the output flags with:
-
-   ```rust
-   /// Suppress all output except errors.
-   #[arg(short, long, conflicts_with_all = ["verbose", "json"])]
-   quiet: bool,
-   /// Emit only the compact JSON result for machine consumption.
-   #[arg(long, conflicts_with_all = ["quiet", "verbose"])]
-   json: bool,
-   /// Show the full trace envelope and raw final output.
-   #[arg(short, long, conflicts_with_all = ["quiet", "json"])]
-   verbose: bool,
-   ```
-
-5. Destructure `json` in the `Cli::Run` match and pass it into `RunConfig` between `quiet` and
-   `verbose`.
-
-6. Import `render_summary` beside `render_trace` at the top of `run.rs`:
-
-   ```rust
-   use crate::registry::{
-       build_registry, collect_handler_names, render_summary, render_trace, warn_missing_env,
-   };
-   ```
-
-7. Replace the regular pipeline output branch in `cmd_run` with:
-
-   ```rust
-   match output_mode(cfg) {
-       OutputMode::Verbose => {
-           print!("{}", render_trace(&crux, elapsed, pipeline.display.as_ref()));
-       }
-       OutputMode::Json => match render_default_output(&crux) {
-           Ok(json) => println!("{json}"),
-           Err(error) => eprintln!("{error}"),
-       },
-       OutputMode::Summary => {
-           print!("{}", render_summary(&crux, elapsed, pipeline.display.as_ref()));
-       }
-       OutputMode::Quiet => {
-           if let Err(error) = crux.value() {
-               eprintln!("{error}");
-           }
-       }
-   }
-
-   if crux.value().is_err() {
-       std::process::exit(1);
-   }
-   ```
-
-8. At the start of `cmd_run_cruxfile`, after loading the Cruxfile, reject unsupported JSON mode:
-
-   ```rust
-   if cfg.json {
-       eprintln!("error: --json is not supported for Cruxfile targets");
-       std::process::exit(2);
-   }
-   ```
-
-9. Rename `default_output_is_raw_json_of_result` to `json_output_is_raw_result` without changing
-   its assertions. Update the verbose renderer test call to pass display metadata.
-
-10. Run:
-
-   ```text
-   cargo nextest run -p crux-cli output_mode
-   cargo nextest run -p crux-cli
-   cargo clippy -p crux-cli --all-targets -- -D warnings
-   cargo fmt --all --check
-   ```
-
-11. Run `git branch --show-current`; require `feat/pipeline-display`.
-12. Stage only the two task files and commit:
-
-   ```text
-   git add crates/crux-cli/src/bin/crux/main.rs crates/crux-cli/src/bin/crux/run.rs
-   git commit -m "feat(crux-cli): make JSON output explicit"
-   ```
+1. Add `DefaultJson`, `Summary`, `Verbose`, `Json`, and `Quiet` output modes. Select
+   `DefaultJson` when no output flag is present.
+2. Add `--summary` as the explicit prose mode. Retain `--json` as a supported explicit alias for
+   the compact compatibility default. Make summary, JSON, verbose, and quiet mutually exclusive.
+3. Keep unflagged successful regular-pipeline output as compact result JSON. Use human diagnostics
+   for unflagged failures and structured diagnostics for explicit `--json` failures.
+4. Reject explicit `--json` for Cruxfile targets with exit code 2; unflagged Cruxfile execution
+   keeps its existing aggregate status output.
+5. Add process-level tests for every success mode, budget failures, invalid flag combinations,
+   unsupported Cruxfile JSON, stderr uniqueness, and exit codes.
+6. Run the crate tests, Clippy, and formatting gates before committing.
 
 ### Task 5: Document Display Metadata and Output Modes
 
@@ -605,9 +483,9 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
        timestamp: Timestamp
    ```
 
-   Remove the `log_output` step because default summary rendering no longer needs `ctrl::log`.
+   Remove the `log_output` step because summary rendering no longer needs `ctrl::log`.
 
-2. Replace the default output example with:
+2. Add the explicit summary output example:
 
    ```text
    Hello Pipeline  PASS  42ms
@@ -621,10 +499,11 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 3. Replace the verbosity examples with:
 
    ```text
-   crux run hello.crux          # concise human-readable summary
-   crux run hello.crux -v       # full trace and raw final output
-   crux run hello.crux --json   # compact result JSON for scripts
-   crux run hello.crux -q       # errors only
+   crux run hello.crux           # compact result JSON (compatibility default)
+   crux run hello.crux --summary # concise human-readable summary
+   crux run hello.crux -v        # full trace and raw final output
+   crux run hello.crux --json    # explicitly select compact result JSON
+   crux run hello.crux -q        # errors only
    ```
 
 4. Add this section to `docs/crux-syntax-reference.md`:
@@ -643,14 +522,14 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
    ```
 
    Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
-   unchanged in saved traces and replay matching. `output` affects concise summary mode; `-v`
+   unchanged in saved traces and replay matching. `output` affects `--summary` mode; `-v`
    always includes the complete final value.
    ```
 
 5. Update `docs/designs/2026-09-04-pipeline-display-design.md` to explicitly state that `--json`
    is supported for regular pipelines only and Cruxfile JSON aggregation is out of scope.
 
-6. Run `mdbook build docs` and `just ci`; verify both exit code 0.
+6. Run `mdbook build` from the repository root and `just ci`; verify both exit code 0.
 7. Run `git branch --show-current`; require `feat/pipeline-display`.
 8. Stage only the three documentation files and commit:
 
@@ -783,8 +662,8 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 
 ## Compatibility Notes
 
-- This is an intentional CLI behavior change: scripts parsing plain `crux run` output must add
-  `--json`.
+- Plain `crux run` retains compact result JSON for compatibility; `--summary` opts into prose and
+  `--json` remains accepted for migration-safe explicitness.
 - `-v` remains the diagnostic mode and always includes the complete trace and raw final result.
 - `--save-trace` JSON and replay matching remain byte-shape compatible because display metadata is
   never copied into `Crux<Value>`.
@@ -793,7 +672,7 @@ provide raw machine output through `--json`, and let pipelines declare friendly 
 ## Completion Criteria
 
 - Display metadata parses with defaults and does not alter trace serialization.
-- Plain pipeline execution matches the approved concise visual layout.
-- `-v`, `--json`, and `-q` have distinct, tested behavior.
+- `crux run --summary` matches the approved concise visual layout; unflagged output stays JSON.
+- `--summary`, `-v`, `--json`, and `-q` have distinct, process-tested behavior.
 - Bamlish CI shows eight friendly checks once, with no duplicate conformance output.
 - Crux and Bamlish quality gates pass without staging unrelated dirty files.
