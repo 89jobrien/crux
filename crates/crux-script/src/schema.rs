@@ -1,4 +1,4 @@
-use crux_runtime::prelude::UsdAmount;
+use crux_types::budget::UsdAmount;
 /// YAML schema types for pipeline definitions.
 use indexmap::IndexMap;
 use serde::Deserialize;

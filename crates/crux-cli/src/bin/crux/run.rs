@@ -491,7 +491,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     if let Err(error) = crux.value() {
         if !matches!(
             output_mode(cfg),
-            OutputMode::DefaultJson | OutputMode::Json | OutputMode::Quiet
+            OutputMode::DefaultJson | OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
         ) {
             render_human_error(error);
         }

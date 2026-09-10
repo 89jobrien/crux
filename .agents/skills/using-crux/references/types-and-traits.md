@@ -57,7 +57,7 @@ known usage, and `unreported()` leaves USD unknown. `BudgetUsage` aggregates
 applies elapsed time; and `usage()` returns the aggregate. Exact limits succeed.
 USD budgets fail closed with `UnreportedCost` when USD is absent, and a
 post-execution USD overage returns `UsdBudgetExceeded`. The compatibility
-`consume(amount)` path is deprecated in 0.4 and applies only to step consumption;
+`consume(amount)` compatibility path applies its scalar to every configured counter;
 new code should use the typed methods. Serializable `RecoveryKind` is `Retry`,
 `Skip`, `Propagate`, or `Continue`.
 

@@ -265,8 +265,9 @@ let totals: BudgetUsage = tracker.usage();
 Exact limits succeed. Step limits are checked before dispatch; duration, tokens,
 and USD are recorded after completion, making those dimensions soft caps. Under
 a USD budget, unreported cost fails closed even when the handler fails; explicit
-free usage reports zero. The deprecated compatibility `consume(amount)` method
-applies only to steps. Pipeline `delegate` nodes remain an exception: their
+free usage reports zero. The compatibility `consume(amount)` method applies the
+scalar to every configured counter for historical source compatibility; it does
+not update typed `BudgetUsage`. Pipeline `delegate` nodes remain an exception: their
 nested budget is ignored and delegated work is not charged to pipeline usage.
 
 ## `TaskRegistry`
@@ -334,9 +335,9 @@ unchanged in saved traces and replay matching. `output` affects concise summary 
 includes the complete final value.
 
 ```text
-crux run pipeline.crux          # concise summary
+crux run pipeline.crux          # compact JSON result
 crux run pipeline.crux -v       # verbose trace and raw output
-crux run pipeline.crux --json   # compact JSON result
+crux run pipeline.crux --summary # concise human summary
 crux run pipeline.crux -q       # errors only
 ```
 

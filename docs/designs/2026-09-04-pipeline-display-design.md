@@ -8,8 +8,8 @@ and quiet modes.
 
 ## Approved Approach
 
-Combine declarative pipeline display metadata with a smart default renderer. Keep `-v` as the
-full trace and raw-output mode, and move the current machine-readable result to `--json`.
+Combine declarative pipeline display metadata with an opt-in smart summary renderer. Keep `-v` as the
+full trace and raw-output mode, keep compact JSON as the default, and expose summary via `--summary`.
 
 ## Context Map
 
@@ -44,7 +44,7 @@ full trace and raw-output mode, and move the current machine-readable result to 
 ### Risk
 
 - `PipelineDef` is public; adding an optional field requires updating direct struct literals.
-- Default output changes from raw JSON to human-readable text; scripts must opt into `--json`.
+- Default output remains compact JSON; humans opt into `--summary` for concise text.
 - `-v` remains verbose and continues to include the full trace and raw result.
 - Saved trace JSON remains unchanged because display metadata is not added to runtime trace types.
 
@@ -143,9 +143,9 @@ display:
    shell envelope.
 6. Preserve structured semantic results in `auto` mode under an `Output` section.
 7. `crux run -v` renders the full trace and raw final output regardless of display visibility.
-8. `crux run --json` emits only the compact JSON result previously emitted by default.
+8. Both default mode and `crux run --json` emit only the compact JSON result.
 9. `--quiet`, saved traces, and exit codes remain unchanged.
-10. `--json`, `--verbose`, and `--quiet` are mutually exclusive output modes.
+10. `--summary`, `--json`, `--verbose`, and `--quiet` are mutually exclusive output modes.
 11. Cruxfile execution rejects `--json` because targets do not currently expose one aggregate
     result value.
 
@@ -167,7 +167,7 @@ display:
 ## Risk
 
 - [x] Public API change: additive optional field on `PipelineDef` and `json` on `RunConfig`.
-- [x] CLI compatibility change: callers consuming raw default output must add `--json`.
+- [x] CLI compatibility preserved: callers consuming raw default output continue to receive JSON.
 - [ ] Serialization format change: runtime traces are unchanged.
 - [ ] New external dependency: none.
 - [ ] Feature flag required: no.

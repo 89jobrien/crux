@@ -34,7 +34,7 @@ async fn shell_exec_nonzero_does_not_fail() {
 async fn shell_capture_failure_reports_zero_usd() {
     let reg = registry();
     let handler = reg.get_handler("shell::capture").unwrap();
-    let execution = handler(json!({ "args": { "cmd": "exit 1" } })).await;
+    let execution = handler(json!({ "args": {} })).await;
     assert_eq!(execution.usage.usd.map(|amount| amount.micros()), Some(0));
     assert!(execution.outcome.is_err());
 }

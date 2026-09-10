@@ -187,9 +187,9 @@ fail-closed accounting, compatibility aliases, and Miette CLI diagnostics.
 5. `begin_step` checks `used + 1` before mutating. `record_handler_usage` first rejects `usd: None`
    when a USD counter exists, then adds token and USD values with checked arithmetic. Equality is
    allowed; values greater than limits return errors after recording actual usage.
-6. Keep `consume(u64)` with `#[deprecated(note = "use typed budget accounting methods")]` and map
-   it only to repeated step consumption. Typed counters must remain monotonic when compatibility and
-   typed calls are mixed; the scalar path never fabricates token, duration, or USD usage.
+6. Keep `consume(u64)` as a compatibility shim that applies its scalar to every configured counter.
+   Typed counters must remain monotonic when compatibility and typed calls are mixed; the scalar path
+   does not update typed `BudgetUsage` or fabricate reported handler usage.
 7. Add these `CruxErr` variants and update `Display`, `failed_step`, `is_transient`, Serde tests,
    and exhaustive matches:
 

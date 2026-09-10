@@ -414,12 +414,21 @@ impl BudgetTracker {
     /// An attempt exactly at the configured limit succeeds. A rejected attempt
     /// does not increment typed usage.
     pub fn begin_step(&mut self) -> Result<(), CruxErr> {
+        self.reserve_steps(1)
+    }
+
+    /// Atomically reserves `count` handler attempts against the actual step counter.
+    ///
+    /// This checks legacy scalar consumption and typed reservations together. If the
+    /// complete batch would exceed the step limit, neither the counter nor typed usage
+    /// is changed.
+    pub fn reserve_steps(&mut self, count: u64) -> Result<(), CruxErr> {
         if let Some(counter) = self
             .counters
             .iter_mut()
             .find(|counter| counter.kind == BudgetKind::Steps)
         {
-            let attempted = counter.used.saturating_add(1);
+            let attempted = counter.used.saturating_add(count);
             if attempted > counter.limit {
                 return Err(CruxErr::StepBudgetExceeded {
                     limit: counter.limit,
@@ -428,7 +437,7 @@ impl BudgetTracker {
             }
             counter.used = attempted;
         }
-        self.usage.steps = self.usage.steps.saturating_add(1);
+        self.usage.steps = self.usage.steps.saturating_add(count);
         Ok(())
     }
 
@@ -537,11 +546,11 @@ impl BudgetTracker {
         self.usage
     }
 
-    /// Records `amount` of consumption against every tracked dimension.
-    /// Callers currently report a single scalar amount of work done (e.g.
-    /// one step, one call); that amount is applied uniformly to each
-    /// dimension so each one is still checked against its own limit rather
-    /// than a meaningless combined total.
+    /// Compatibility scalar accounting applied to every tracked dimension.
+    ///
+    /// This preserves the historical behavior for legacy callers. New code should
+    /// use [`Self::reserve_steps`], [`Self::record_handler_usage`], and
+    /// [`Self::record_duration`] so unlike units are never conflated.
     pub fn consume(&mut self, amount: u64) {
         for counter in &mut self.counters {
             counter.used = counter.used.saturating_add(amount);
@@ -700,6 +709,26 @@ mod tests {
             Err(CruxErr::UnreportedCost { .. })
         ));
         assert_eq!(unreported.usage().tokens, 3);
+    }
+
+    #[test]
+    fn reserve_steps_is_atomic_against_legacy_counter_usage() {
+        let mut tracker = BudgetTracker::new(Budget::steps(2));
+        tracker.consume(1);
+
+        assert!(matches!(
+            tracker.reserve_steps(2),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 2,
+                attempted: 3,
+            })
+        ));
+        assert_eq!(tracker.remaining(), 1);
+        assert_eq!(tracker.usage().steps, 0);
+
+        tracker.reserve_steps(1).unwrap();
+        assert_eq!(tracker.remaining(), 0);
+        assert_eq!(tracker.usage().steps, 1);
     }
 
     #[test]

@@ -63,8 +63,8 @@ the completed invocation may exceed the configured amount once before execution 
 
 ### Risk
 
-- Existing `BudgetTracker::consume(u64)` cannot enforce mixed dimensions correctly; retain it only
-  as a deprecated compatibility path and stop using it in pipeline execution.
+- Existing `BudgetTracker::consume(u64)` conflates dimensions; retain it only as a compatibility
+  path with its historical all-counter behavior and stop using it in pipeline execution.
 - Existing handler registration APIs cannot report usage. They remain source-compatible but yield
   unreported cost under a USD budget.
 - A post-execution USD report creates a soft cap, not a pre-authorized hard cap.
@@ -146,8 +146,9 @@ pub fn record_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
 pub fn usage(&self) -> BudgetUsage;
 ```
 
-In 0.4, `consume(u64)` is a deprecated compatibility shim that maps only to step
-consumption; typed accounting never derives token, duration, or USD usage from that scalar.
+In 0.4, `consume(u64)` remains a compatibility shim that applies its scalar to every
+configured counter, preserving historical behavior. It does not update typed `BudgetUsage`; new
+code uses the dimension-specific methods.
 
 ### Domain Errors in `crux-types`
 
@@ -174,16 +175,19 @@ All three implement Miette diagnostic codes and contextual help through the exis
 
 ### Runtime Port in `crux-runtime`
 
-The `Context` trait gains typed accounting methods:
+The narrow `InvocationMeter` port owns live invocation reservation and completed usage recording:
 
 ```rust
-fn begin_budgeted_step(&mut self) -> Result<(), CruxErr>;
-fn record_handler_usage(&mut self, step: &str, usage: HandlerUsage) -> Result<(), CruxErr>;
-fn record_budget_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
+fn reserve_invocations(&mut self, count: u64) -> Result<(), CruxErr>;
+fn invoke_budgeted_step(...) -> impl Future<Output = BudgetedInvocation<T>> + Send;
+fn record_invocation_usage(
+    &mut self, step: &str, usage: HandlerUsage, duration: Duration,
+) -> Result<(), CruxErr>;
 ```
 
-In 0.4, the legacy `consume_budget(u64)` method remains as a deprecated source-compatibility
-shim and routes only to step consumption.
+`CruxCtx` is the production adapter. Script helpers depend on `InvocationMeter` where they do not
+need trace combinators. The legacy `Context::consume_budget(u64)` shim retains scalar compatibility
+semantics by applying consumption to every configured counter.
 
 ### Handler Boundary in `crux-script`
 
@@ -233,8 +237,9 @@ Compatibility behavior:
 
 ## Execution Semantics
 
-1. Before every actual handler invocation, including retries and parallel arms, call
-   `begin_budgeted_step`. Control nodes and skipped branches consume no steps.
+1. Before every actual handler invocation, including retries and parallel arms, reserve through
+   `InvocationMeter`; batch reservations are atomic. Control nodes and skipped branches consume no
+   steps.
 2. Execute the handler and retain both its outcome and usage report.
 3. Record elapsed duration and reported tokens by their own dimensions.
 4. If a USD budget is active and `usage.usd` is absent, return `UnreportedCost`; preserve an

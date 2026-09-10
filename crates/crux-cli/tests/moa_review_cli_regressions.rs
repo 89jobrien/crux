@@ -75,6 +75,23 @@ fn budget_failure_has_one_diagnostic_and_exit_one() {
 }
 
 #[test]
+fn summary_failure_prints_exactly_one_diagnostic() {
+    let (_dir, path) = pipeline(
+        "pipeline: summary-failure\nbudget: { steps: 0 }\nsteps:\n  - step: blocked\n    handler: ctrl::noop\n",
+    );
+
+    let output = run(&path, &["--summary"]);
+    let stdout = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(text(&output.stderr), "");
+    assert_eq!(
+        stdout.matches("step budget exceeded").count(),
+        1,
+        "{stdout}"
+    );
+}
+
+#[test]
 fn invalid_output_flags_exit_two_with_one_parser_error() {
     let (_dir, path) = pipeline(EMPTY_PIPELINE);
     let output = run(&path, &["--summary", "--verbose"]);

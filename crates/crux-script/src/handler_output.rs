@@ -1,4 +1,5 @@
-use crux_runtime::prelude::{CruxErr, HandlerUsage};
+use crux_types::budget::HandlerUsage;
+use crux_types::error::CruxErr;
 /// Output from a pipeline handler — value plus optional confidence score.
 use serde_json::Value;
 
@@ -25,7 +26,8 @@ pub struct HandlerOutput {
 /// # Examples
 ///
 /// ```
-/// use crux_runtime::prelude::{CruxErr, HandlerUsage, UsdAmount};
+/// use crux_types::budget::{HandlerUsage, UsdAmount};
+/// use crux_types::error::CruxErr;
 /// use crux_script::{HandlerExecution, HandlerOutput};
 /// use serde_json::json;
 ///
@@ -167,7 +169,7 @@ impl From<Value> for HandlerOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crux_runtime::prelude::{HandlerUsage, UsdAmount};
+    use crux_types::budget::{HandlerUsage, UsdAmount};
     use serde_json::json;
 
     #[test]

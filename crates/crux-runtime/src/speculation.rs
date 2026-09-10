@@ -83,7 +83,7 @@ where
         // Run all arms, collect results
         let mut completed: Vec<(String, Result<T, CruxErr>)> = Vec::new();
         for arm in self.arms {
-            self.ctx.begin_budgeted_step()?;
+            self.ctx.reserve_invocations(1)?;
             let result = arm.fut.await;
             if let Some((usage, duration)) = report(&arm.name)
                 && let Err(mut accounting_error) =
@@ -251,7 +251,7 @@ where
 
         let mut last_err = None;
         for arm in self.arms {
-            self.ctx.begin_budgeted_step()?;
+            self.ctx.reserve_invocations(1)?;
             let result = arm.fut.await;
             if let Some((usage, duration)) = report(&arm.name)
                 && let Err(mut accounting_error) =

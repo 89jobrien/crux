@@ -2,6 +2,9 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use crux_types::budget::{Budget, HandlerUsage, UsdAmount};
+use crux_types::crux_value::Crux;
+use crux_types::error::CruxErr;
 use indexmap::IndexMap;
 use serde_json::Value;
 
@@ -1067,21 +1070,23 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
 /// per-attempt timeout (#81) and capturing the confidence score via a shared cell
 /// (since `ctx.step()` only returns the value). Used directly for non-retrying
 /// steps, and once per attempt for steps with a `retry:` policy (#79).
-async fn run_step_once(
-    ctx: &mut CruxCtx,
+async fn run_step_once<M: InvocationMeter>(
+    ctx: &mut M,
     step_label: &str,
     handler: crate::registry::BoxHandler,
     input: Value,
     timeout_ms: Option<u64>,
 ) -> Result<(Value, Option<f32>), CruxErr> {
-    let started = std::time::Instant::now();
+    let started_cell: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
     let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
     let usage_cell: Arc<Mutex<Option<HandlerUsage>>> = Arc::new(Mutex::new(None));
+    let sc = started_cell.clone();
     let cc = confidence_cell.clone();
     let uc = usage_cell.clone();
     let step_name_owned = step_label.to_string();
     let invocation = ctx
         .invoke_budgeted_step(step_label, move || async move {
+            *sc.lock().unwrap() = Some(std::time::Instant::now());
             let fut = async move {
                 let execution = handler(input).await;
                 *uc.lock().unwrap() = Some(execution.usage);
@@ -1113,9 +1118,12 @@ async fn run_step_once(
         .lock()
         .unwrap()
         .unwrap_or_else(HandlerUsage::unreported);
-    if let Err(mut accounting_error) =
-        ctx.record_invocation_usage(step_label, usage, started.elapsed())
-    {
+    let duration = started_cell
+        .lock()
+        .unwrap()
+        .expect("executed invocation records its live start")
+        .elapsed();
+    if let Err(mut accounting_error) = ctx.record_invocation_usage(step_label, usage, duration) {
         if let Err(source) = invocation.outcome {
             attach_budget_source(&mut accounting_error, source);
         }
@@ -1261,6 +1269,71 @@ fn parse_range(s: &str) -> ConfidenceRange {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    struct DelayedMeter {
+        duration: Option<std::time::Duration>,
+    }
+
+    impl InvocationMeter for DelayedMeter {
+        fn invoke_budgeted_step<'a, F, Fut, T>(
+            &'a mut self,
+            _name: &'a str,
+            f: F,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+        where
+            F: FnOnce() -> Fut + Send + 'a,
+            Fut: std::future::Future<Output = Result<T, CruxErr>> + Send + 'a,
+            T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+        {
+            Box::pin(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                BudgetedInvocation {
+                    outcome: f().await,
+                    executed: true,
+                }
+            })
+        }
+
+        fn reserve_invocations(&mut self, _count: u64) -> Result<(), CruxErr> {
+            Ok(())
+        }
+
+        fn record_invocation_usage(
+            &mut self,
+            _step: &str,
+            _usage: HandlerUsage,
+            duration: std::time::Duration,
+        ) -> Result<(), CruxErr> {
+            self.duration = Some(duration);
+            Ok(())
+        }
+
+        fn budget_usage(&self) -> crux_types::budget::BudgetUsage {
+            crux_types::budget::BudgetUsage::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn invocation_duration_starts_when_live_handler_closure_begins() {
+        let mut meter = DelayedMeter { duration: None };
+        let handler: crate::registry::BoxHandler = Arc::new(|_input| {
+            Box::pin(async {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                crate::HandlerExecution::free(Ok(crate::HandlerOutput::new(Value::Null)))
+            })
+        });
+
+        run_step_once(&mut meter, "timed", handler, Value::Null, None)
+            .await
+            .unwrap();
+
+        let duration = meter.duration.expect("duration recorded");
+        assert!(duration >= std::time::Duration::from_millis(5));
+        assert!(
+            duration < std::time::Duration::from_millis(30),
+            "{duration:?}"
+        );
+    }
 
     /// Build a minimal pipeline with a single step that calls a counting handler.
     fn counting_pipeline() -> (PipelineDef, HandlerRegistry, Arc<AtomicU32>) {
@@ -1422,6 +1495,121 @@ mod tests {
             })
         ));
         assert_eq!(unselected.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn selected_route_reserves_step_before_handler_invocation() {
+        let selected_calls = Arc::new(AtomicU32::new(0));
+        let calls = selected_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_value_free("selected", move |input: Value| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: route_steps\nbudget: { steps: 1 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: selected\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
+        assert_eq!(selected_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_paid_join_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_join\nbudget: { usd: 0 }\nsteps:\n  - join_all: work\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_route_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_route\nbudget: { usd: 0 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: paid_failure\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_speculation_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_speculation\nbudget: { usd: 0 }\nsteps:\n  - speculate: work\n    mode: first_ok\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
     }
 
     #[tokio::test]

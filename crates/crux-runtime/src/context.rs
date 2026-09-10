@@ -22,15 +22,18 @@ pub struct BudgetedInvocation<T> {
 /// Narrow accounting port for runtime-owned handler invocations.
 pub trait InvocationMeter: Send {
     /// Execute a replay-aware step while identifying whether its closure ran.
-    fn invoke_budgeted_step<F, Fut, T>(
-        &mut self,
-        name: &str,
+    fn invoke_budgeted_step<'a, F, Fut, T>(
+        &'a mut self,
+        name: &'a str,
         f: F,
-    ) -> impl Future<Output = BudgetedInvocation<T>> + Send
+    ) -> std::pin::Pin<Box<dyn Future<Output = BudgetedInvocation<T>> + Send + 'a>>
     where
-        F: FnOnce() -> Fut + Send,
-        Fut: Future<Output = Result<T, CruxErr>> + Send,
-        T: serde::Serialize + serde::de::DeserializeOwned + Send;
+        F: FnOnce() -> Fut + Send + 'a,
+        Fut: Future<Output = Result<T, CruxErr>> + Send + 'a,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a;
+
+    /// Atomically reserve a batch of live handler invocations.
+    fn reserve_invocations(&mut self, count: u64) -> Result<(), CruxErr>;
 
     /// Record every dimension reported by a completed invocation atomically.
     ///
@@ -122,7 +125,7 @@ pub trait Context: Send {
     /// Set a custom budget.
     fn set_budget(&mut self, budget: Budget);
 
-    /// Record budget consumption.
+    /// Apply compatibility scalar consumption to every configured budget counter.
     fn consume_budget(&mut self, amount: u64);
 
     /// Get the current budget.

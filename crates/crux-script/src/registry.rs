@@ -4,7 +4,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crux_runtime::prelude::{Agent, CruxCtx, CruxErr};
+use crux_runtime::prelude::{Agent, CruxCtx};
+use crux_types::error::CruxErr;
 use serde_json::Value;
 
 use crate::handler_output::{HandlerExecution, HandlerOutput};
@@ -176,7 +177,8 @@ impl HandlerRegistry {
     /// # Examples
     ///
     /// ```
-    /// use crux_runtime::prelude::{CruxErr, HandlerUsage, UsdAmount};
+    /// use crux_types::budget::{HandlerUsage, UsdAmount};
+    /// use crux_types::error::CruxErr;
     /// use crux_script::{HandlerExecution, HandlerRegistry};
     ///
     /// let mut registry = HandlerRegistry::new();
@@ -282,7 +284,7 @@ impl Default for HandlerRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crux_runtime::prelude::{HandlerUsage, UsdAmount};
+    use crux_types::budget::{HandlerUsage, UsdAmount};
     use serde_json::json;
 
     #[tokio::test]
