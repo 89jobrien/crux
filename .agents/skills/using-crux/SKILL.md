@@ -12,7 +12,7 @@ Executions produce an inspectable, serializable, replayable `Crux<T>` trace.
 
 - Rust edition: 2024
 - MSRV: 1.89.0
-- Workspace version: 0.3.1
+- Workspace version: 0.4.0
 - License: MIT
 - Repository: `https://github.com/89jobrien/crux`
 

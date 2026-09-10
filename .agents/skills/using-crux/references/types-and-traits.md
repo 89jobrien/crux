@@ -15,23 +15,50 @@ failure-causing steps.
 `Delegation`, `Branch`, or `Speculation`; `StepStatus` is `Ok`, `Err`,
 `Rejected`, or `Skipped`.
 
-`CruxErr` variants are `StepFailed { step, source_msg }`, `LowConfidence`,
-`BudgetExceeded { budget_kind, limit, actual }`, `Delegation { to, source }`,
-`Cancelled`, `ReplayMismatch { step, expected, actual }`, and `Denied`.
+`CruxErr` variants are `StepFailed`, `LowConfidence`, `BudgetExceeded`,
+`UnreportedCost { step, source }`, `StepBudgetExceeded { limit, attempted }`,
+`UsdBudgetExceeded { limit_micros, actual_micros, source }`, `Delegation`,
+`Cancelled`, `ReplayMismatch`, and `Denied`. Accounting errors are
+non-transient. `failed_step()` returns the handler name for `UnreportedCost` and
+follows a related source for USD overage; limit-only errors have no step name.
 
 `Budget` uses struct variants and these constructors:
 
 ```rust
+use std::time::Duration;
+
+Budget::steps(5);
 Budget::tokens(10_000);
+Budget::duration(Duration::from_secs(60));
+Budget::usd(UsdAmount::from_micros(1_000_000));
+Budget::combined(vec![
+    Budget::steps(5),
+    Budget::usd(UsdAmount::from_micros(1_000_000)),
+]);
+
+// Compatibility constructors:
 Budget::calls(5);
-Budget::duration(std::time::Duration::from_secs(60));
 Budget::cost_cents(100);
-Budget::combined(vec![Budget::calls(5), Budget::tokens(10_000)]);
 ```
 
-`BudgetTracker::consume(amount)` applies one scalar amount to every combined
-leaf. Exceeded means usage is greater than a limit. It does not measure tokens,
-time, calls, or cost automatically. Serializable `RecoveryKind` is `Retry`,
+`Budget` and `BudgetKind` include canonical `Steps` and `Usd` variants alongside
+`Tokens`, `Duration`, `Combined`, and the compatibility `Calls`/`CostCents`
+variants. `UsdAmount` stores non-negative USD in integer microdollars (six
+fractional decimal places); `ZERO`, `from_micros`, `micros`, and `checked_add`
+avoid floating-point accounting.
+
+`HandlerUsage { tokens, usd }` represents one completed handler invocation.
+`HandlerUsage::free()` reports explicit zero USD, `metered(tokens, usd)` reports
+known usage, and `unreported()` leaves USD unknown. `BudgetUsage` aggregates
+`steps`, `tokens`, `duration_ms`, and optional USD.
+
+`BudgetTracker::begin_step()` reserves an invocation before dispatch;
+`record_handler_usage(step, usage)` applies token/USD usage; `record_duration()`
+applies elapsed time; and `usage()` returns the aggregate. Exact limits succeed.
+USD budgets fail closed with `UnreportedCost` when USD is absent, and a
+post-execution USD overage returns `UsdBudgetExceeded`. The compatibility
+`consume(amount)` path is deprecated in 0.4 and applies only to step consumption;
+new code should use the typed methods. Serializable `RecoveryKind` is `Retry`,
 `Skip`, `Propagate`, or `Continue`.
 
 ## Runtime API

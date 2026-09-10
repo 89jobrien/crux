@@ -54,9 +54,18 @@ Only handlers registered with `handler` and returning confidence can supply
 ## Execution controls
 
 Normal steps support retries, timeout, tolerated failure, postconditions, and a
-fallback handler. Pipeline budget fields are parsed but are not automatically
-metered or enforced; never present them as cost, token, call, or duration guards.
-Use `timeout_ms` for an enforced step timeout.
+fallback handler. Pipeline budgets enforce `steps`, `tokens`, `duration_ms`, and
+`usd`; `calls` and `cost_cents` are compatibility spellings for `steps` and USD.
+A step is reserved before each actual handler invocation. Duration, tokens, and
+USD are recorded after a completed invocation, so those dimensions are soft
+caps: the invocation that crosses a limit completes, but the next sequential
+invocation does not start. Equality with a limit succeeds.
+
+USD budgets fail closed when a handler does not report cost. Register known-free
+handlers explicitly so they report zero rather than unknown cost. `delegate`
+nodes are the exception: their nested `budget` is currently ignored and delegated
+agent work is not metered against the pipeline budget. Use `timeout_ms` for an
+enforced per-step wall-clock timeout.
 
 ## Checklist
 

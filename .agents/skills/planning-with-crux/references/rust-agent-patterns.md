@@ -23,7 +23,7 @@ The facade prelude imports `Context`, which supplies step methods.
 ```rust
 let parsed = x.try_step("parse", || async { serde_json::from_str::<Value>(&raw) }).await?;
 let body = x.step_keyed("fetch", &url, || async move { Ok(downloaded) }).await?;
-let label = x.step_with_confidence("classify", 0.85, || async { Ok("safe") }).await?;
+let label = x.step_with_confidence("classify", 0.85, || async { Ok("safe".to_owned()) }).await?;
 ```
 
 Use `step_retryable` when a hook may return `Recovery::Retry`; a single-shot
@@ -65,9 +65,9 @@ not an `AllSpeculationsFailed` variant.
 ```rust
 let action = x.route_on_confidence("decide", score, vec![
     (ConfidenceRange::exclusive(0.0, 0.5), "review",
-     Box::pin(async { Ok::<_, CruxErr>("review") })),
+     Box::pin(async { Ok::<_, CruxErr>("review".to_owned()) })),
     (ConfidenceRange::inclusive(0.5, 1.0), "accept",
-     Box::pin(async { Ok::<_, CruxErr>("accept") })),
+     Box::pin(async { Ok::<_, CruxErr>("accept".to_owned()) })),
 ]).await?;
 ```
 
@@ -82,8 +82,10 @@ let child = x.delegate::<WorkerAgent>("work", input)
     .await?;
 ```
 
-The child inherits the planner and receives the budget, but usage is not
-automatic. A delegation step and child snapshot are recorded.
+The child inherits the planner and receives its runtime budget. A delegation
+step and child snapshot are recorded. In YAML pipelines, however, a `delegate`
+node budget is currently ignored and its work is not charged to the pipeline
+budget tracker.
 
 ## Recovery
 

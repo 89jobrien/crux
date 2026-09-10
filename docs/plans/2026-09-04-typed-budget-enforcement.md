@@ -1,5 +1,25 @@
 # Plan: Typed USD and Step Budget Enforcement
 
+## Table of contents
+
+- [Goal](#goal)
+- [Context Map](#context-map)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Tasks](#tasks)
+  - [Task 1: Add Fixed-Point USD and Typed Usage](#task-1-add-fixed-point-usd-and-typed-usage)
+  - [Task 2: Make Budget Tracking Dimension-Specific](#task-2-make-budget-tracking-dimension-specific)
+  - [Task 3: Parse Canonical and Compatibility Budget Fields](#task-3-parse-canonical-and-compatibility-budget-fields)
+  - [Task 4: Add Metered Handler Execution Reports](#task-4-add-metered-handler-execution-reports)
+  - [Task 5: Extend the Runtime Accounting Port](#task-5-extend-the-runtime-accounting-port)
+  - [Task 6: Enforce Usage for Plain Steps, Retries, and Fallbacks](#task-6-enforce-usage-for-plain-steps-retries-and-fallbacks)
+  - [Task 7: Enforce Usage Across Combinators](#task-7-enforce-usage-across-combinators)
+  - [Task 8: Mark Shell Handlers Explicitly Free](#task-8-mark-shell-handlers-explicitly-free)
+  - [Task 9: Render Budget Errors with Miette](#task-9-render-budget-errors-with-miette)
+  - [Task 10: Adopt Canonical Budget Syntax in Bamlish](#task-10-adopt-canonical-budget-syntax-in-bamlish)
+- [Compatibility Contract](#compatibility-contract)
+- [Completion Criteria](#completion-criteria)
+
 ## Goal
 
 Enforce `budget: { usd, steps }` with handler-reported cost, actual invocation counting,
@@ -168,7 +188,8 @@ fail-closed accounting, compatibility aliases, and Miette CLI diagnostics.
    when a USD counter exists, then adds token and USD values with checked arithmetic. Equality is
    allowed; values greater than limits return errors after recording actual usage.
 6. Keep `consume(u64)` with `#[deprecated(note = "use typed budget accounting methods")]` and map
-   it only to repeated step consumption.
+   it only to repeated step consumption. Typed counters must remain monotonic when compatibility and
+   typed calls are mixed; the scalar path never fabricates token, duration, or USD usage.
 7. Add these `CruxErr` variants and update `Display`, `failed_step`, `is_transient`, Serde tests,
    and exhaustive matches:
 
@@ -309,9 +330,10 @@ fail-closed accounting, compatibility aliases, and Miette CLI diagnostics.
 
 1. Add one metering test each for `pipe`, `join_all`, `route_on_confidence`, and `speculate`.
    Assert actual handler invocations, not control nodes or skipped routes, consume steps.
-2. For `pipe`, wrap each stage future with a usage cell; record each completed stage immediately
-   after `ctx.pipe` returns.
-3. For `join_all`, call `begin_budgeted_step` once per live arm before dispatch. Store each arm's
+2. For `pipe`, execute through a sequential metering boundary and record each completed stage before
+   dispatching the next stage. Stop immediately after the first accounting violation.
+3. For `join_all`, reserve all live-arm steps atomically before dispatch so a rejected batch leaves no
+   partial charge. Store each arm's
    report in an indexed cell. Await `ctx.join_all` without `?`, record every populated report, then
    propagate the combinator result.
 4. For routing, call `begin_budgeted_step` only inside the selected route future and record only its
@@ -402,16 +424,22 @@ fail-closed accounting, compatibility aliases, and Miette CLI diagnostics.
 ## Compatibility Contract
 
 - `calls` remains accepted as a compatibility spelling for `steps`.
-- `cost_cents` remains accepted and converts exactly to USD microdollars.
+- `cost_cents` remains accepted and converts exactly to USD microdollars with checked
+  multiplication; overflow is rejected during validation.
 - Canonical and compatibility spellings for one dimension cannot appear together.
 - Existing handler APIs compile unchanged but are intentionally unreported under USD budgets.
 - Existing serialized `Budget` and `CruxErr` variants remain deserializable.
 
 ## Completion Criteria
 
-- Every actual handler invocation, including failed retries, consumes one step.
+- Every actual handler invocation, including failed retries, consumes one step; rejected batch
+  reservations leave no partial charge.
+- Sequential usage is enforced before the next invocation, while every completed parallel report is
+  retained before returning a violation.
 - Free handlers explicitly report zero; missing cost fails closed under USD limits.
 - USD equality succeeds and post-execution overspend fails with actual usage retained.
 - Miette renders human diagnostics once; JSON mode remains machine-readable.
+- YAML `delegate` node budgets remain an explicit exception: they are parsed but ignored and
+  delegated work is not charged to pipeline usage.
 - Bamlish CI uses `{ usd: 0.00, steps: 8 }` without deleting checks or budget metadata.
 - Crux and Bamlish quality gates pass.

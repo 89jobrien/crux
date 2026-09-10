@@ -38,14 +38,22 @@ the routing score, and speculation has no aggregate score. Pipeline `pick_best`
 reads numeric output `score`; missing scores become `0.0` and ties favor the
 first arm.
 
-## Budget limitation
+## Budget enforcement
 
-The schema accepts `tokens`, `calls`, `duration_ms`, and `cost_cents`, and the
-runner installs a `Budget`. Execution does not automatically call
-`consume_budget`, count handlers, measure duration, read token use, or track
-cost. Pipeline budgets are therefore not effective runtime limits. Delegate
-budgets are also ignored by the pipeline runner. Use `timeout_ms` for an
-enforced per-step wall-clock timeout.
+The canonical fields are `steps`, `tokens`, `duration_ms`, and `usd`; `calls`
+and `cost_cents` remain compatibility spellings. Each actual registered-handler
+invocation consumes one step before dispatch. A step above the limit is rejected
+without running. Completed invocations then report duration, tokens, and USD;
+equality is allowed, while overage rejects the result and prevents the next
+sequential invocation. Parallel work already dispatched may complete and report
+usage, so post-execution dimensions are soft caps.
+
+USD budgets fail closed: absent cost is `UnreportedCost`, while an
+explicitly free handler reports `Some(UsdAmount::ZERO)`. This applies on both
+successful and failed handler outcomes. The current exception is a `delegate`
+node: its nested budget is parsed but ignored, and delegated agent work is not
+charged to the pipeline tracker. Use `timeout_ms` for an enforced per-step
+wall-clock timeout.
 
 Default registration includes stdlib, analysis, CI, container, harness, review,
 rx, SQLite, task, triage, and raw LLM handlers. `docker` selects Bollard instead

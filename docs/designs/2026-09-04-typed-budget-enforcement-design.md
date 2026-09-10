@@ -1,5 +1,18 @@
 # Design: Typed USD and Step Budget Enforcement
 
+## Table of contents
+
+- [Goal](#goal)
+- [Approved Approach](#approved-approach)
+- [Context Map](#context-map)
+- [Crate Ownership](#crate-ownership)
+- [Public API](#public-api)
+- [Execution Semantics](#execution-semantics)
+- [CLI Error Adapter](#cli-error-adapter)
+- [Data Flow](#data-flow)
+- [Out of Scope](#out-of-scope)
+- [Risk](#risk)
+
 ## Goal
 
 Enforce pipeline budgets expressed as maximum USD spend and actual handler invocations, with
@@ -133,7 +146,8 @@ pub fn record_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
 pub fn usage(&self) -> BudgetUsage;
 ```
 
-`consume(u64)` remains deprecated and maps to step consumption only.
+In 0.4, `consume(u64)` is a deprecated compatibility shim that maps only to step
+consumption; typed accounting never derives token, duration, or USD usage from that scalar.
 
 ### Domain Errors in `crux-types`
 
@@ -168,7 +182,8 @@ fn record_handler_usage(&mut self, step: &str, usage: HandlerUsage) -> Result<()
 fn record_budget_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
 ```
 
-The legacy `consume_budget(u64)` method remains deprecated for source compatibility.
+In 0.4, the legacy `consume_budget(u64)` method remains as a deprecated source-compatibility
+shim and routes only to step consumption.
 
 ### Handler Boundary in `crux-script`
 
@@ -211,7 +226,8 @@ pub steps: Option<u64>,
 Compatibility behavior:
 
 - `calls` maps to `steps` when `steps` is absent.
-- `cost_cents` maps exactly to USD micro-units when `usd` is absent.
+- `cost_cents` maps exactly to USD micro-units with checked multiplication when `usd` is absent;
+  overflow is rejected as invalid configuration.
 - Supplying both canonical and legacy forms for one dimension is a validation error.
 - USD input accepts non-negative values with at most six decimal places.
 
@@ -227,6 +243,11 @@ Compatibility behavior:
    `UsdBudgetExceeded` and rejects the handler result.
 6. A failed attempt still consumes one step and its reported cost.
 7. Explicit-free handlers report `Some(UsdAmount::ZERO)` and remain valid under a zero-USD budget.
+8. Record each completed sequential invocation before dispatching the next. Parallel work records
+   every completed report before returning the primary violation; already-dispatched arms can
+   overshoot a soft cap.
+9. YAML `delegate` nodes are the current exception: their nested budget is ignored and delegated
+   agent work is not charged to the pipeline tracker.
 
 ## CLI Error Adapter
 
