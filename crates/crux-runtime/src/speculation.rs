@@ -8,8 +8,9 @@ use std::pin::Pin;
 
 use chrono::Utc;
 
-use crate::context::Context;
+use crate::context::InvocationMeter;
 use crate::ctx::CruxCtx;
+use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepStatus};
 
@@ -67,6 +68,15 @@ where
     where
         F: Fn(&T) -> f32,
     {
+        self.pick_best_by_metered(f, |_| None).await
+    }
+
+    /// Run all arms while recording each completed arm before starting the next.
+    pub async fn pick_best_by_metered<F, R>(self, f: F, mut report: R) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> f32,
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
         trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
@@ -75,6 +85,15 @@ where
         for arm in self.arms {
             self.ctx.begin_budgeted_step()?;
             let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
             completed.push((arm.name, result));
         }
 
@@ -219,13 +238,31 @@ where
 
     /// Return the first arm that succeeds. Failed arms recorded as Rejected.
     pub async fn first_ok(self) -> Result<T, CruxErr> {
+        self.first_ok_metered(|_| None).await
+    }
+
+    /// Return the first successful arm, accounting each completed attempt immediately.
+    pub async fn first_ok_metered<R>(self, mut report: R) -> Result<T, CruxErr>
+    where
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
         trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
         for arm in self.arms {
             self.ctx.begin_budgeted_step()?;
-            match arm.fut.await {
+            let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
+            match result {
                 Ok(val) => {
                     self.ctx.push_step(Step {
                         name: format!("{}::{}", self.name, arm.name),
@@ -268,6 +305,20 @@ where
         }
 
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
+    }
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
     }
 }
 

@@ -276,6 +276,15 @@ fn validate_budget(
             "budget cannot specify both 'usd' and compatibility field 'cost_cents'",
         ));
     }
+    if budget
+        .cost_cents
+        .is_some_and(|cents| cents.checked_mul(10_000).is_none())
+    {
+        report.push(ValidationDiagnostic::error(
+            format!("{location}.cost_cents"),
+            "cost_cents budget is too large to convert exactly to microdollars",
+        ));
+    }
 }
 
 /// Recursively validate a loop construct's nested `steps:` block, prefixing any

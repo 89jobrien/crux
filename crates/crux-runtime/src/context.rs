@@ -4,10 +4,47 @@
 /// CruxCtx is the production adapter. Tests can substitute a mock or no-op context.
 use std::{future::Future, time::Duration};
 
-use crate::types::budget::{Budget, HandlerUsage};
+use crate::types::budget::{Budget, BudgetUsage, HandlerUsage};
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
 use crate::types::step::Step;
+
+/// Result of a budgeted invocation, including whether live work started.
+///
+/// Replay hits and pre-execution budget rejections set `executed` to `false`, so
+/// callers can avoid charging duration or synthesizing missing usage reports.
+#[derive(Debug)]
+pub struct BudgetedInvocation<T> {
+    pub outcome: Result<T, CruxErr>,
+    pub executed: bool,
+}
+
+/// Narrow accounting port for runtime-owned handler invocations.
+pub trait InvocationMeter: Send {
+    /// Execute a replay-aware step while identifying whether its closure ran.
+    fn invoke_budgeted_step<F, Fut, T>(
+        &mut self,
+        name: &str,
+        f: F,
+    ) -> impl Future<Output = BudgetedInvocation<T>> + Send
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send;
+
+    /// Record every dimension reported by a completed invocation atomically.
+    ///
+    /// All counters are updated before the primary violation is returned.
+    fn record_invocation_usage(
+        &mut self,
+        step: &str,
+        usage: HandlerUsage,
+        duration: Duration,
+    ) -> Result<(), CruxErr>;
+
+    /// Return aggregate usage recorded by this meter.
+    fn budget_usage(&self) -> BudgetUsage;
+}
 
 pub trait Context: Send {
     /// Execute a named step, recording it in the trace.
@@ -87,15 +124,6 @@ pub trait Context: Send {
 
     /// Record budget consumption.
     fn consume_budget(&mut self, amount: u64);
-
-    /// Reserve one actual handler invocation against the step budget.
-    fn begin_budgeted_step(&mut self) -> Result<(), CruxErr>;
-
-    /// Record usage reported by a completed handler invocation.
-    fn record_handler_usage(&mut self, step: &str, usage: HandlerUsage) -> Result<(), CruxErr>;
-
-    /// Record elapsed handler time against the duration budget.
-    fn record_budget_duration(&mut self, duration: Duration) -> Result<(), CruxErr>;
 
     /// Get the current budget.
     fn budget(&self) -> &Budget;

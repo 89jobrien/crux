@@ -1,5 +1,6 @@
 use crux_script::{
-    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel, validate_pipeline,
+    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel, validate_cruxfile,
+    validate_pipeline,
 };
 use serde_json::Value;
 
@@ -216,4 +217,47 @@ steps:
     let report = validate_pipeline(&pipeline, &registry());
     assert_eq!(report.error_count(), 1);
     assert!(report.diagnostics[0].message.contains("overlap"));
+}
+
+#[test]
+fn budget_alias_conflicts_are_rejected_in_pipeline_and_cruxfile() {
+    let pipeline = crux_script::load(
+        "pipeline: aliases\nbudget:\n  steps: 1\n  calls: 1\n  usd: 1\n  cost_cents: 100\nsteps: []\n",
+    )
+    .unwrap();
+    let report = validate_pipeline(&pipeline, &registry());
+    assert_eq!(report.error_count(), 2);
+
+    let cruxfile = crux_script::load_cruxfile(
+        "project: aliases\ndefault: check\ntargets:\n  check:\n    budget:\n      steps: 1\n      calls: 1\n      usd: 1\n      cost_cents: 100\n    steps: []\n",
+    )
+    .unwrap();
+    let report = validate_cruxfile(&cruxfile, &registry());
+    assert_eq!(report.error_count(), 2);
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .all(|d| d.location.starts_with("targets.check.budget"))
+    );
+}
+
+#[test]
+fn cost_cents_overflow_is_rejected_in_pipeline_and_cruxfile() {
+    let overflow = u64::MAX / 10_000 + 1;
+    let pipeline = crux_script::load(&format!(
+        "pipeline: overflow\nbudget:\n  cost_cents: {overflow}\nsteps: []\n"
+    ))
+    .unwrap();
+    let report = validate_pipeline(&pipeline, &registry());
+    assert_eq!(report.error_count(), 1);
+    assert!(report.diagnostics[0].message.contains("too large"));
+
+    let cruxfile = crux_script::load_cruxfile(&format!(
+        "project: overflow\ndefault: check\nbudget:\n  cost_cents: {overflow}\ntargets:\n  check:\n    steps: []\n"
+    ))
+    .unwrap();
+    let report = validate_cruxfile(&cruxfile, &registry());
+    assert_eq!(report.error_count(), 1);
+    assert!(report.diagnostics[0].message.contains("too large"));
 }
