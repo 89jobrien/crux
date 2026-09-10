@@ -331,13 +331,15 @@ display:
 ```
 
 Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
-unchanged in saved traces and replay matching. `output` affects concise summary mode; `-v` always
-includes the complete final value.
+unchanged in saved traces and replay matching. `output` affects both default summary and verbose
+output. `auto` renders useful successful shell stdout as plain text, `always` includes final output,
+and `never` suppresses it; semantic values remain pretty JSON.
 
 ```text
-crux run pipeline.crux          # compact JSON result
-crux run pipeline.crux -v       # verbose trace and raw output
-crux run pipeline.crux --summary # concise human summary
+crux run pipeline.crux          # concise human summary
+crux run pipeline.crux -v       # verbose trace and humanized output
+crux run pipeline.crux --summary # explicit summary alias
+crux run pipeline.crux --json   # compact machine result
 crux run pipeline.crux -q       # errors only
 ```
 

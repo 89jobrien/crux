@@ -30,7 +30,9 @@ fn success_modes_preserve_stream_and_exit_contracts() {
 
     let default = run(&path, &[]);
     assert!(default.status.success());
-    assert_eq!(text(&default.stdout), "null\n");
+    assert!(text(&default.stdout).contains("contract  PASS"));
+    assert!(text(&default.stdout).contains("0/0 checks passed"));
+    assert_ne!(text(&default.stdout), "null\n");
     assert_eq!(text(&default.stderr), "");
 
     let summary = run(&path, &["--summary"]);
@@ -57,20 +59,71 @@ fn success_modes_preserve_stream_and_exit_contracts() {
 }
 
 #[test]
+fn default_and_verbose_humanize_successful_shell_output() {
+    let (_dir, path) = pipeline(
+        r#"pipeline: shell-output
+steps:
+  - step: build
+    handler: shell::capture
+    args:
+      cmd: "printf 'Compiling crux\nFinished test profile\n'; printf 'warning: build noise\n' >&2"
+"#,
+    );
+
+    let default = run(&path, &[]);
+    let default_stdout = text(&default.stdout);
+    assert!(default.status.success());
+    assert!(
+        default_stdout.contains("shell-output  PASS"),
+        "{default_stdout}"
+    );
+    assert!(
+        default_stdout.contains("Output:\nCompiling crux\nFinished test profile\n"),
+        "{default_stdout}"
+    );
+    assert!(!default_stdout.contains("exit_code"), "{default_stdout}");
+    assert!(
+        !default_stdout.contains("warning: build noise"),
+        "{default_stdout}"
+    );
+    assert!(!default_stdout.contains(r"\n"), "{default_stdout}");
+
+    let verbose = run(&path, &["--verbose"]);
+    let verbose_stdout = text(&verbose.stdout);
+    assert!(verbose.status.success());
+    assert!(
+        verbose_stdout.contains("Pipeline: shell-output"),
+        "{verbose_stdout}"
+    );
+    assert!(verbose_stdout.contains("Trace:"), "{verbose_stdout}");
+    assert!(
+        verbose_stdout.contains("Output:\nCompiling crux\nFinished test profile\n"),
+        "{verbose_stdout}"
+    );
+    assert!(!verbose_stdout.contains("exit_code"), "{verbose_stdout}");
+    assert!(
+        !verbose_stdout.contains("warning: build noise"),
+        "{verbose_stdout}"
+    );
+    assert!(!verbose_stdout.contains(r"\n"), "{verbose_stdout}");
+    assert_eq!(text(&verbose.stderr), "");
+}
+
+#[test]
 fn budget_failure_has_one_diagnostic_and_exit_one() {
     let (_dir, path) = pipeline(
         "pipeline: budget-failure\nbudget: { steps: 0 }\nsteps:\n  - step: blocked\n    handler: ctrl::noop\n",
     );
 
     let output = run(&path, &[]);
-    let stderr = text(&output.stderr);
+    let stdout = text(&output.stdout);
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(text(&output.stdout), "");
-    assert!(stderr.contains("step budget exceeded"), "{stderr}");
+    assert_eq!(text(&output.stderr), "");
+    assert!(stdout.contains("budget-failure  FAIL"), "{stdout}");
     assert_eq!(
-        stderr.matches("step budget exceeded").count(),
+        stdout.matches("step budget exceeded").count(),
         1,
-        "{stderr}"
+        "{stdout}"
     );
 }
 

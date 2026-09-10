@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use crate::output::{render_summary, render_trace};
 use crate::registry::{build_registry, collect_handler_names, warn_missing_env};
 
-/// Render compact result JSON for the compatibility default and explicit `--json` mode.
+/// Render compact result JSON for explicit `--json` mode.
 ///
 /// Pure: no I/O. On success, returns the compact JSON encoding of the value. On
 /// failure, returns the error message (printed to stderr by the caller).
@@ -41,7 +41,6 @@ pub struct RunConfig<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OutputMode {
-    DefaultJson,
     Summary,
     Verbose,
     Json,
@@ -58,7 +57,7 @@ fn output_mode(config: &RunConfig<'_>) -> OutputMode {
     } else if config.quiet {
         OutputMode::Quiet
     } else {
-        OutputMode::DefaultJson
+        OutputMode::Summary
     }
 }
 
@@ -463,14 +462,6 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
                 render_trace(&crux, elapsed, pipeline.display.as_ref())
             );
         }
-        OutputMode::DefaultJson => match render_default_output(&crux) {
-            Ok(json) => println!("{json}"),
-            Err(_) => {
-                if let Err(error) = crux.value() {
-                    render_human_error(error);
-                }
-            }
-        },
         OutputMode::Json => match crux.value() {
             Ok(_) => println!("{}", render_default_output(&crux).unwrap_or_default()),
             Err(error) => render_json_error(error),
@@ -491,7 +482,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     if let Err(error) = crux.value() {
         if !matches!(
             output_mode(cfg),
-            OutputMode::DefaultJson | OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
+            OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
         ) {
             render_human_error(error);
         }
@@ -585,9 +576,9 @@ mod tests {
     }
 
     #[test]
-    fn output_mode_defaults_to_json_and_preserves_explicit_modes() {
+    fn output_mode_defaults_to_summary_and_preserves_explicit_modes() {
         let mut cfg = config();
-        assert_eq!(output_mode(&cfg), OutputMode::DefaultJson);
+        assert_eq!(output_mode(&cfg), OutputMode::Summary);
 
         cfg.summary = true;
         assert_eq!(output_mode(&cfg), OutputMode::Summary);
@@ -625,7 +616,7 @@ mod tests {
         assert!(out.contains("Formatting"));
         assert!(out.contains("1/1 checks passed"));
         assert!(!out.contains("exit_code"));
-        assert!(!out.contains("all checks passed"));
+        assert!(out.contains("Output:\nall checks passed\n"), "{out}");
     }
 
     #[test]

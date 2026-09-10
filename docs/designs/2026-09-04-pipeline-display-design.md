@@ -8,8 +8,9 @@ and quiet modes.
 
 ## Approved Approach
 
-Combine declarative pipeline display metadata with an opt-in smart summary renderer. Keep `-v` as the
-full trace and raw-output mode, keep compact JSON as the default, and expose summary via `--summary`.
+Combine declarative pipeline display metadata with a smart summary renderer as the default. Keep
+`--summary` as an explicit alias, `--json` as compact machine output, and make `-v` retain metadata
+and trace detail while applying the same final-value presentation rules.
 
 ## Context Map
 
@@ -44,8 +45,8 @@ full trace and raw-output mode, keep compact JSON as the default, and expose sum
 ### Risk
 
 - `PipelineDef` is public; adding an optional field requires updating direct struct literals.
-- Default output remains compact JSON; humans opt into `--summary` for concise text.
-- `-v` remains verbose and continues to include the full trace and raw result.
+- Default output is the concise human summary; machine consumers opt into `--json`.
+- `-v` remains verbose, but honors output visibility and humanizes successful shell results.
 - Saved trace JSON remains unchanged because display metadata is not added to runtime trace types.
 
 ## Crate Ownership
@@ -127,8 +128,8 @@ display:
 
 - `title` overrides the pipeline identifier in human-readable output.
 - `steps` maps stable trace step names to presentation labels.
-- `output: auto` hides successful shell result envelopes but retains semantic output in summary mode.
-- `output: always` includes final output in summary mode.
+- `output: auto` renders useful successful shell stdout without its envelope and retains semantic JSON.
+- `output: always` includes final output in summary and verbose modes.
 - `output: never` suppresses successful final output entirely.
 - Failure diagnostics are always shown regardless of output mode.
 
@@ -137,13 +138,13 @@ display:
 1. Plain `crux run` renders a compact title, status, and total duration header.
 2. Render one aligned row per trace step using metadata labels when available.
 3. Render a final `N/N checks passed` line for successful pipelines.
-4. In `auto` mode, detect shell result objects by `exit_code`, `stdout`, and `stderr`; suppress
-   them on success.
+4. In `auto` mode, detect successful shell result objects by `exit_code`, `stdout`, and `stderr`;
+   render non-empty stdout as plain text and suppress the envelope and captured stderr.
 5. On failure, print only the failing step's useful error text, without serializing the full
    shell envelope.
 6. Preserve structured semantic results in `auto` mode under an `Output` section.
-7. `crux run -v` renders the full trace and raw final output regardless of display visibility.
-8. Both default mode and `crux run --json` emit only the compact JSON result.
+7. `crux run -v` renders metadata and the full trace, then honors `auto`, `always`, or `never` for final output.
+8. Default mode and `--summary` render concise text; only `crux run --json` emits compact JSON.
 9. `--quiet`, saved traces, and exit codes remain unchanged.
 10. `--summary`, `--json`, `--verbose`, and `--quiet` are mutually exclusive output modes.
 11. Cruxfile execution rejects `--json` because targets do not currently expose one aggregate
@@ -167,7 +168,7 @@ display:
 ## Risk
 
 - [x] Public API change: additive optional field on `PipelineDef` and `json` on `RunConfig`.
-- [x] CLI compatibility preserved: callers consuming raw default output continue to receive JSON.
+- [x] Intentional CLI contract: human summary is default and machine consumers use `--json`.
 - [ ] Serialization format change: runtime traces are unchanged.
 - [ ] New external dependency: none.
 - [ ] Feature flag required: no.

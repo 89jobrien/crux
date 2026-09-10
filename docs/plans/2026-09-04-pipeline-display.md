@@ -13,9 +13,9 @@
 
 ## Goal
 
-Preserve compact result JSON for plain `crux run`, add `--summary` for a concise pipeline summary,
-preserve `-v` as full verbose mode, retain `--json` as an explicit compatibility flag, and let
-pipelines declare friendly display labels.
+Make plain `crux run` and `--summary` produce a concise pipeline summary, preserve `-v` as
+metadata-rich trace mode with humanized output, reserve `--json` for compact machine results, and
+let pipelines declare friendly display labels.
 
 ## Context Map
 
@@ -27,13 +27,13 @@ pipelines declare friendly display labels.
 | `crates/crux-script/tests/pipeline.rs` | Schema integration tests | Cover display parsing and defaults |
 | `crates/crux-script/src/validator.rs` | Nested pipeline construction | Initialize `display` in direct `PipelineDef` literals |
 | `crates/crux-cli/src/bin/crux/output.rs` | Human-readable rendering | Add smart summary and metadata-aware verbose trace |
-| `crates/crux-cli/src/bin/crux/run.rs` | Output-mode dispatch | Route default JSON, summary, verbose, explicit JSON, and quiet output |
+| `crates/crux-cli/src/bin/crux/run.rs` | Output-mode dispatch | Route default summary, verbose, explicit JSON, and quiet output |
 | `crates/crux-cli/src/bin/crux/main.rs` | CLI definition | Add `--summary` and output-mode conflicts |
 | `crates/crux-cli/src/bin/crux/check.rs` | Validation registry setup | Initialize `display` in its `PipelineDef` literal |
 | `docs/pipelines/01-first-pipeline.md` | Pipeline walkthrough | Document display metadata and all output modes |
 | `docs/crux-syntax-reference.md` | Syntax reference | Add the `display` schema |
 | `pipelines/crux/ci.crux` in `/Users/joe/dev/bamlish` | Bamlish CI pipeline | Add labels and remove redundant `ctrl::log` |
-| `xtask/src/main.rs` in `/Users/joe/dev/bamlish` | Bamlish Crux launcher | Use `crux-cli` and explicit summary mode |
+| `xtask/src/main.rs` in `/Users/joe/dev/bamlish` | Bamlish Crux launcher | Use the `crux-cli` summary default |
 
 ### Dependencies
 
@@ -43,12 +43,12 @@ pipelines declare friendly display labels.
 - `crux-cli::output` reads runtime `Step` values and resolves presentation labels from the
   display metadata without changing the trace wire format.
 - Bamlish supplies metadata in `pipelines/crux/ci.crux`; `cargo xtask crux-ci` invokes the Crux
-  CLI with `--summary`, so it receives the concise summary.
+  CLI with the default mode or `--summary`, so it receives the concise summary.
 
 ### Existing Test Coverage
 
 - `crates/crux-script/tests/pipeline.rs` covers YAML loading and pipeline execution.
-- Inline tests in `crates/crux-cli/src/bin/crux/run.rs` cover raw JSON and verbose rendering.
+- Inline tests in `crates/crux-cli/src/bin/crux/run.rs` cover explicit JSON and verbose rendering.
 - No current test covers display metadata, smart shell-output suppression, or `--json` parsing.
 
 ### Reference Patterns
@@ -61,8 +61,8 @@ pipelines declare friendly display labels.
 ### Risk
 
 - `PipelineDef` is public; every direct struct literal must initialize the additive field.
-- Plain `crux run` remains compact JSON; `--summary` is opt-in and `--json` remains a supported alias.
-- `-v` must retain the complete trace and raw result regardless of pipeline display settings.
+- Plain `crux run` defaults to the summary; `--summary` is an alias and `--json` is explicitly machine-readable.
+- `-v` retains the complete trace while honoring display visibility and humanizing shell output.
 - Runtime trace serialization must remain unchanged; display metadata stays in `crux-script`.
 - Cruxfile targets do not retain a single result value; reject `--json` for Cruxfiles rather than
   inventing an aggregate wire format in this change.
@@ -137,7 +137,7 @@ pipelines declare friendly display labels.
        /// Optional title used instead of the stable pipeline identifier.
        #[serde(default)]
        pub title: Option<String>,
-       /// Controls whether successful final values appear in summary mode.
+       /// Controls whether successful final values appear in human output modes.
        #[serde(default)]
        pub output: DisplayOutput,
        /// Maps stable trace step names to human-facing labels.
@@ -145,11 +145,11 @@ pipelines declare friendly display labels.
        pub steps: IndexMap<String, String>,
    }
 
-   /// Successful final-value visibility in the smart summary renderer.
+   /// Successful final-value visibility in summary and verbose renderers.
    #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
    #[serde(rename_all = "snake_case")]
    pub enum DisplayOutput {
-       /// Show semantic values and suppress successful shell result envelopes.
+       /// Show semantic JSON and useful successful shell stdout without its envelope.
        #[default]
        Auto,
        /// Always show the successful final value.
@@ -353,7 +353,7 @@ pipelines declare friendly display labels.
 
    fn should_render_output(value: &Value, display: Option<&PipelineDisplayDef>) -> bool {
        match display.map_or(DisplayOutput::Auto, |metadata| metadata.output) {
-           DisplayOutput::Auto => !is_shell_result(value),
+           DisplayOutput::Auto => successful_shell_stdout(value).is_none_or(|stdout| !stdout.is_empty()),
            DisplayOutput::Always => true,
            DisplayOutput::Never => false,
        }
@@ -407,8 +407,8 @@ pipelines declare friendly display labels.
    }
    ```
 
-6. Change `render_trace` to accept metadata and resolve friendly names while preserving all raw
-   output:
+6. Change `render_trace` to accept metadata, resolve friendly names, honor output visibility, and
+   humanize successful shell stdout:
 
    ```rust
    pub fn render_trace(
@@ -425,8 +425,8 @@ pipelines declare friendly display labels.
    let name = display_step_name(&step.name, display);
    ```
 
-   Then pass `name` instead of `step.name` to that `format!`. Do not apply `DisplayOutput` to
-   `render_trace`; verbose mode always includes the complete raw `Output` section.
+   Then pass `name` instead of `step.name` to that `format!`. Apply `DisplayOutput` to
+`render_trace`; verbose mode includes a humanized `Output` section when display policy allows it.
 
 7. Update the existing verbose test call to pass `Some(&display_metadata())` and assert both
    `Trace:` and `Output:` remain present.
@@ -454,12 +454,12 @@ pipelines declare friendly display labels.
 **File(s)**: `crates/crux-cli/src/bin/crux/main.rs`, `crates/crux-cli/src/bin/crux/run.rs`
 **Run**: `cargo nextest run -p crux-cli output_mode`
 
-1. Add `DefaultJson`, `Summary`, `Verbose`, `Json`, and `Quiet` output modes. Select
-   `DefaultJson` when no output flag is present.
-2. Add `--summary` as the explicit prose mode. Retain `--json` as a supported explicit alias for
-   the compact compatibility default. Make summary, JSON, verbose, and quiet mutually exclusive.
-3. Keep unflagged successful regular-pipeline output as compact result JSON. Use human diagnostics
-   for unflagged failures and structured diagnostics for explicit `--json` failures.
+1. Add `Summary`, `Verbose`, `Json`, and `Quiet` output modes. Select `Summary` when no output
+   flag is present.
+2. Keep `--summary` as an explicit alias for the prose default. Reserve `--json` for compact
+   machine output. Make summary, JSON, verbose, and quiet mutually exclusive.
+3. Render unflagged regular pipelines as concise summaries with exactly one inline failure
+   diagnostic; use structured diagnostics for explicit `--json` failures.
 4. Reject explicit `--json` for Cruxfile targets with exit code 2; unflagged Cruxfile execution
    keeps its existing aggregate status output.
 5. Add process-level tests for every success mode, budget failures, invalid flag combinations,
@@ -499,9 +499,9 @@ pipelines declare friendly display labels.
 3. Replace the verbosity examples with:
 
    ```text
-   crux run hello.crux           # compact result JSON (compatibility default)
-   crux run hello.crux --summary # concise human-readable summary
-   crux run hello.crux -v        # full trace and raw final output
+   crux run hello.crux           # concise human-readable summary (default)
+   crux run hello.crux --summary # explicit alias for the default summary
+   crux run hello.crux -v        # metadata, full trace, and humanized output
    crux run hello.crux --json    # explicitly select compact result JSON
    crux run hello.crux -q        # errors only
    ```
@@ -522,8 +522,8 @@ pipelines declare friendly display labels.
    ```
 
    Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
-   unchanged in saved traces and replay matching. `output` affects `--summary` mode; `-v`
-   always includes the complete final value.
+   unchanged in saved traces and replay matching. `output` affects both summary and verbose modes;
+   useful successful shell stdout is rendered without its envelope.
    ```
 
 5. Update `docs/designs/2026-09-04-pipeline-display-design.md` to explicitly state that `--json`
@@ -662,9 +662,8 @@ pipelines declare friendly display labels.
 
 ## Compatibility Notes
 
-- Plain `crux run` retains compact result JSON for compatibility; `--summary` opts into prose and
-  `--json` remains accepted for migration-safe explicitness.
-- `-v` remains the diagnostic mode and always includes the complete trace and raw final result.
+- Plain `crux run` and `--summary` render prose; `--json` explicitly selects compact machine output.
+- `-v` remains diagnostic mode with the complete trace and display-aware, humanized final output.
 - `--save-trace` JSON and replay matching remain byte-shape compatible because display metadata is
   never copied into `Crux<Value>`.
 - `--json` is rejected for Cruxfile targets until a separate aggregate result schema is designed.
@@ -672,7 +671,7 @@ pipelines declare friendly display labels.
 ## Completion Criteria
 
 - Display metadata parses with defaults and does not alter trace serialization.
-- `crux run --summary` matches the approved concise visual layout; unflagged output stays JSON.
+- Plain `crux run` and `crux run --summary` match the approved concise visual layout.
 - `--summary`, `-v`, `--json`, and `-q` have distinct, process-tested behavior.
 - Bamlish CI shows eight friendly checks once, with no duplicate conformance output.
 - Crux and Bamlish quality gates pass without staging unrelated dirty files.

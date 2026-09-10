@@ -9,7 +9,7 @@ pub struct PipelineDisplayDef {
     /// Optional title used instead of the stable pipeline identifier.
     #[serde(default)]
     pub title: Option<String>,
-    /// Controls whether successful final values appear in summary mode.
+    /// Controls whether successful final values appear in human output modes.
     #[serde(default)]
     pub output: DisplayOutput,
     /// Maps stable trace step names to human-facing labels.
@@ -17,11 +17,11 @@ pub struct PipelineDisplayDef {
     pub steps: IndexMap<String, String>,
 }
 
-/// Successful final-value visibility in the smart summary renderer.
+/// Successful final-value visibility in summary and verbose renderers.
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DisplayOutput {
-    /// Show semantic values and suppress successful shell result envelopes.
+    /// Show semantic JSON and useful successful shell stdout without its envelope.
     #[default]
     Auto,
     /// Always show the successful final value.

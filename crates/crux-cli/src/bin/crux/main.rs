@@ -57,13 +57,13 @@ enum Cli {
         /// Suppress all output except errors
         #[arg(short, long, conflicts_with_all = ["summary", "verbose", "json"])]
         quiet: bool,
-        /// Render a concise human-readable pipeline summary
+        /// Explicitly select the default concise human-readable summary
         #[arg(long, conflicts_with_all = ["quiet", "verbose", "json"])]
         summary: bool,
-        /// Explicitly select compact JSON (also the compatibility default)
+        /// Emit only the compact machine-readable JSON result
         #[arg(long, conflicts_with_all = ["quiet", "summary", "verbose"])]
         json: bool,
-        /// Show the full trace envelope and raw final output
+        /// Show pipeline metadata, full trace, and display-aware humanized output
         #[arg(short, long, conflicts_with_all = ["quiet", "summary", "json"])]
         verbose: bool,
         /// Print execution plan without running anything

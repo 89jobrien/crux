@@ -49,7 +49,7 @@ Every `.crux` file has four parts:
 ## Run it
 
 ```bash
-crux run hello.crux --summary
+crux run hello.crux
 ```
 
 Output looks like:
@@ -61,17 +61,21 @@ Hello Pipeline  PASS  42ms
   ✓ Timestamp                                       8ms
 
 2/2 checks passed
+
+Output:
+2026-09-10T12:00:00Z
 ```
 
-The summary shows every step, its status, and wall-clock duration. Successful shell output is
-hidden in `auto` mode; semantic pipeline results remain visible.
+The summary shows every step, its status, and wall-clock duration. In `auto` mode, useful
+successful shell stdout is printed as plain text while the `exit_code`/`stderr` envelope is hidden;
+semantic pipeline results remain pretty JSON.
 
 ## Verbosity
 
 ```bash
-crux run hello.crux           # compact result JSON (compatibility default)
-crux run hello.crux --summary # concise human-readable summary
-crux run hello.crux -v        # full trace and raw final output
+crux run hello.crux           # concise human-readable summary (default)
+crux run hello.crux --summary # explicit alias for the default summary
+crux run hello.crux -v        # metadata, trace, and humanized final output
 crux run hello.crux --json    # explicitly select compact result JSON
 crux run hello.crux -q        # errors only
 ```
@@ -91,8 +95,8 @@ without it.
 ## What just happened
 
 The two shell steps ran in order, with each output becoming the next step input.
-`--summary` used the display metadata for the title and step labels while hiding the final
-shell envelope in `auto` mode. The whole run was traced into a `Crux<T>` value internally --
+The default summary (also available as `--summary`) used the display metadata for the title and
+step labels while rendering useful shell stdout without its result envelope. The whole run was traced into a `Crux<T>` value internally --
 the same structure you get from `#[crux::agent]` in Rust.
 
 Next: [Handlers](./02-handlers.md) -- what you can do in each step.

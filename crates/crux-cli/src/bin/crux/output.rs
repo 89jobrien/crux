@@ -23,19 +23,38 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
-fn is_shell_result(value: &Value) -> bool {
-    value.as_object().is_some_and(|object| {
-        object.contains_key("exit_code")
-            && object.contains_key("stdout")
-            && object.contains_key("stderr")
-    })
+fn successful_shell_stdout(value: &Value) -> Option<&str> {
+    let object = value.as_object()?;
+    let is_shell_result = object.contains_key("exit_code")
+        && object.contains_key("stdout")
+        && object.contains_key("stderr");
+    if !is_shell_result || object.get("exit_code")?.as_i64()? != 0 {
+        return None;
+    }
+    object.get("stdout")?.as_str()
 }
 
 fn should_render_output(value: &Value, display: Option<&PipelineDisplayDef>) -> bool {
     match display.map_or(DisplayOutput::Auto, |metadata| metadata.output) {
-        DisplayOutput::Auto => !is_shell_result(value),
+        DisplayOutput::Auto => {
+            successful_shell_stdout(value).is_none_or(|stdout| !stdout.is_empty())
+        }
         DisplayOutput::Always => true,
         DisplayOutput::Never => false,
+    }
+}
+
+fn append_output(out: &mut String, value: &Value) {
+    out.push_str("\nOutput:\n");
+    if let Some(stdout) = successful_shell_stdout(value) {
+        out.push_str(stdout);
+        if !stdout.ends_with('\n') {
+            out.push('\n');
+        }
+    } else {
+        let pretty = serde_json::to_string_pretty(value).unwrap_or_default();
+        out.push_str(&pretty);
+        out.push('\n');
     }
 }
 
@@ -48,7 +67,7 @@ fn append_error(out: &mut String, error: &CruxErr) {
     }
 }
 
-/// Render concise human-facing pipeline output for explicit summary mode.
+/// Render concise human-facing pipeline output for default or explicit summary mode.
 pub fn render_summary(
     crux: &Crux<Value>,
     elapsed: std::time::Duration,
@@ -82,10 +101,7 @@ pub fn render_summary(
     out.push_str(&format!("\n{passed}/{} checks passed\n", crux.steps.len()));
 
     match crux.value() {
-        Ok(value) if should_render_output(value, display) => {
-            let pretty = serde_json::to_string_pretty(value).unwrap_or_default();
-            out.push_str(&format!("\nOutput:\n{pretty}\n"));
-        }
+        Ok(value) if should_render_output(value, display) => append_output(&mut out, value),
         Ok(_) => {}
         Err(error) => append_error(&mut out, error),
     }
@@ -136,10 +152,10 @@ pub fn render_trace(
         ));
     }
 
-    out.push('\n');
-    if let Ok(v) = crux.value() {
-        let pretty = serde_json::to_string_pretty(v).unwrap_or_default();
-        out.push_str(&format!("Output:\n{pretty}\n"));
+    if let Ok(value) = crux.value()
+        && should_render_output(value, display)
+    {
+        append_output(&mut out, value);
     }
 
     out
@@ -195,12 +211,12 @@ mod tests {
         let semantic = json!({"answer": 42});
 
         assert!(
-            !render_summary(
+            render_summary(
                 &crux(Ok(shell.clone()), vec![]),
                 std::time::Duration::ZERO,
                 Some(&display(DisplayOutput::Auto)),
             )
-            .contains("Output:")
+            .contains("Output:\nok\n")
         );
         assert!(
             render_summary(
@@ -221,6 +237,55 @@ mod tests {
         assert!(
             render_summary(&crux(Ok(semantic), vec![]), std::time::Duration::ZERO, None,)
                 .contains("Output:")
+        );
+    }
+
+    #[test]
+    fn verbose_renderer_humanizes_shell_output_and_honors_display_modes() {
+        let shell = json!({
+            "exit_code": 0,
+            "stdout": "Compiling crux\nFinished test profile\n",
+            "stderr": "warning: build noise\n"
+        });
+
+        for mode in [DisplayOutput::Auto, DisplayOutput::Always] {
+            let rendered = render_trace(
+                &crux(Ok(shell.clone()), vec![]),
+                std::time::Duration::ZERO,
+                Some(&display(mode)),
+            );
+            assert!(
+                rendered.contains("Output:\nCompiling crux\nFinished test profile\n"),
+                "{rendered}"
+            );
+            assert!(!rendered.contains("exit_code"), "{rendered}");
+            assert!(!rendered.contains("warning: build noise"), "{rendered}");
+            assert!(!rendered.contains(r"\n"), "{rendered}");
+        }
+
+        let hidden = render_trace(
+            &crux(Ok(shell), vec![]),
+            std::time::Duration::ZERO,
+            Some(&display(DisplayOutput::Never)),
+        );
+        assert!(!hidden.contains("Output:"), "{hidden}");
+    }
+
+    #[test]
+    fn verbose_renderer_keeps_semantic_json_pretty() {
+        let rendered = render_trace(
+            &crux(Ok(json!({"answer": 42})), vec![]),
+            std::time::Duration::ZERO,
+            Some(&display(DisplayOutput::Auto)),
+        );
+        assert!(
+            rendered.contains(
+                "Output:
+{
+  \"answer\": 42
+}"
+            ),
+            "{rendered}"
         );
     }
 
