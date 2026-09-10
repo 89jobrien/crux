@@ -288,6 +288,7 @@ async fn unknown_function_returns_error() {
 
     let err = handler(input)
         .await
+        .outcome
         .expect_err("unknown function should return an error");
 
     let msg = err.to_string();

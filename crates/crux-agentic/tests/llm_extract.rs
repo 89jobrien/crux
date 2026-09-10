@@ -22,7 +22,7 @@ async fn invoke(
     let handler = registry
         .get_handler("llm::extract")
         .expect("llm::extract handler must be registered");
-    Ok(handler(input).await?)
+    Ok(handler(input).await.outcome?)
 }
 
 /// Returns true when an OpenAI API key is available in the environment.
@@ -160,7 +160,7 @@ async fn classify_ci_failure_is_wired() {
         .get_handler("llm::extract")
         .expect("llm::extract handler must be registered");
 
-    let result = handler(input).await;
+    let result = handler(input).await.outcome;
     // Either succeeds (if API key available) OR fails with a BAML/API error.
     // It must NOT fail with "unknown BAML function 'ClassifyCIFailure'".
     if let Err(e) = result {
@@ -186,6 +186,7 @@ async fn unknown_function_returns_error() {
 
     let err = handler(input)
         .await
+        .outcome
         .expect_err("unknown function should return an error");
 
     let msg = err.to_string();

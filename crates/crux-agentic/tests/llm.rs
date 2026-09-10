@@ -67,6 +67,7 @@ async fn complete_openai_compat() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     assert_eq!(result["content"].as_str().unwrap(), "4");
@@ -88,6 +89,7 @@ async fn complete_anthropic_path() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     assert_eq!(result["content"].as_str().unwrap(), "4");
@@ -98,6 +100,6 @@ async fn complete_anthropic_path() {
 async fn complete_missing_prompt_errors() {
     let reg = registry();
     let handler = reg.get_handler("llm::invoke").unwrap();
-    let result = handler(json!({"args": {"model": "x"}})).await;
+    let result = handler(json!({"args": {"model": "x"}})).await.outcome;
     assert!(result.is_err());
 }

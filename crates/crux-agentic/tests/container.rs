@@ -26,7 +26,7 @@ async fn container_run_returns_container_id() {
             "profile_id": "default-v1"
         }
     });
-    let result = handler(input).await.unwrap();
+    let result = handler(input).await.outcome.unwrap();
     assert!(result.get("container_id").is_some());
 }
 
@@ -35,6 +35,6 @@ async fn container_wait_returns_state() {
     let reg = registry();
     let handler = reg.get_handler("container::wait").unwrap();
     let input = json!({"args": {"container_id": "mock-container-001"}});
-    let result = handler(input).await.unwrap();
+    let result = handler(input).await.outcome.unwrap();
     assert!(result.get("state").is_some());
 }
