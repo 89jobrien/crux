@@ -22,7 +22,7 @@ async fn invoke(
     let handler = registry
         .get_handler("llm::extract")
         .expect("llm::extract handler must be registered");
-    Ok(handler(input).await?)
+    Ok(handler(input).await.outcome?)
 }
 
 #[tokio::test]
@@ -135,7 +135,7 @@ async fn classify_ci_failure_is_wired() {
         .expect("llm::extract handler must be registered");
 
     let result = handler(input).await;
-    if let Err(e) = result {
+    if let Err(e) = result.outcome {
         let msg = e.to_string();
         assert!(
             !msg.contains("unknown BAML function"),
@@ -288,6 +288,7 @@ async fn unknown_function_returns_error() {
 
     let err = handler(input)
         .await
+        .outcome
         .expect_err("unknown function should return an error");
 
     let msg = err.to_string();

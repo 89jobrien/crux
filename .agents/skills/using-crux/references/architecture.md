@@ -1,134 +1,60 @@
-# Crux Architecture Reference
+# Crux architecture
 
-## Table of Contents
+## Boundaries
 
-1. [Hexagonal Design](#hexagonal-design)
-2. [SOLID Decomposition](#solid-decomposition)
-3. [Replay System](#replay-system)
-4. [Context Abstraction](#context-abstraction)
-5. [Pipeline Execution](#pipeline-execution)
+`crux-types` owns serializable wire data. `crux-domain` owns planning, action,
+and event vocabulary. `crux-runtime` owns execution and ports. `crux-script`
+interprets `.crux` definitions. `crux-stdlib`, `crux-agentic`, and optional
+`crux-baml` provide handlers. `crux-cli` builds the `crux` binary. The `crux`
+facade re-exports runtime and macros from package `crux-derive`.
 
----
+`CruxCtx` contains a `StepRecorder`, `HookRegistry`, `ReplayCache`,
+`BudgetTracker`, child traces, a planner, optional event sender, and shared
+step-output state. `Agent::run` receives `&mut CruxCtx` directly. The separate
+`Context` trait mirrors step, hook, budget, and streaming operations for code
+that chooses the abstraction; `Agent` is not generic over `Context`.
 
-## Hexagonal Design
+Persistence uses `RegistryBackend` (`get`, `put`, `list`, `cas`) with
+`InMemoryBackend` and optional `RedbBackend`. `TaskRegistry` adds typed lifecycle
+operations and bounded CAS retries.
 
-Crux follows ports-and-adapters (hexagonal) architecture. Domain logic lives
-in `crux-runtime`; external concerns are injected via trait ports.
+Safety and approval are separate:
 
-### Persistence Port
+- `SafetyPolicy::validate(diff, base) -> Result<(), SafetyViolation>` and
+  `requires_approval(diff) -> bool`.
+- `ApprovalGate::request_approval(request) -> ApprovalDecision`.
+- `GovernancePolicy` is a serializable struct, not a trait. It checks tools and
+  content and composes with most-restrictive-wins semantics.
 
-```
-RegistryBackend (trait)
-  ├── InMemoryBackend (default, always available)
-  └── RedbBackend (behind `redb` feature flag)
-```
+The terminal approval adapter is in `crux-agentic`; no runtime
+`AutoApproveGate` type exists.
 
-### Safety Port
+## Replay
 
-```
-SafetyPolicy (trait) → Approved | Rejected | RequiresApproval
-  └── ApprovalGate (trait) — called when RequiresApproval
-        ├── AutoApproveGate
-        └── TerminalApprovalGate
-```
+Each step gets an ordinal-derived `input_hash` from its name and ordinal.
+`step_keyed` also stores a content hash.
 
-### Handler Port (crux-script)
+- Strict replay checks ordinal, name, and hash and reports
+  `CruxErr::ReplayMismatch` on divergence.
+- Lenient replay first tries the ordinal and then scans forward by name. When
+  both sides have content hashes they must match. Hash divergence becomes a
+  live miss rather than an error.
 
-```
-HandlerRegistry
-  ├── handler(name, fn) → HandlerOutput (with confidence)
-  └── handler_value(name, fn) → Value (auto-wrapped, confidence = 1.0)
-```
+`replay_from` seeds top-level steps from `Crux<Value>`. `join_all` allocates all
+arm ordinals before dispatch and supports partial replay.
 
----
+## Pipeline execution
 
-## SOLID Decomposition
+`Runner` validates `PipelineDef`, creates `CruxCtx`, resolves `vars`, and
+executes `StepDef` variants. A pipeline `delegate` invokes an agent closure
+previously added with `HandlerRegistry::agent_fn`; no agents are built in.
 
-`CruxCtx` delegates to independently testable collaborators:
+Static `args` are merged under `args`. Expressions use `{{ input... }}`,
+`{{ steps.NAME.output... }}`, `{{ steps.NAME.confidence }}`,
+`{{ vars.NAME... }}`, and loop-local `{{ iter... }}`. A whole expression
+preserves its JSON type; embedded expressions produce text. Argument expansion
+preserves the original string when resolution fails.
 
-| Collaborator    | File           | Responsibility                                   |
-| --------------- | -------------- | ------------------------------------------------ |
-| `HookRegistry`  | `hooks.rs`     | Lifecycle hook dispatch (on_step_failure, etc.)   |
-| `StepRecorder`  | `recorder.rs`  | Appends steps to the trace                        |
-| `ReplayCache`   | `replay.rs`    | Step output cache with strict/lenient modes       |
-
-Each collaborator can be tested in isolation without constructing a full
-`CruxCtx`.
-
----
-
-## Replay System
-
-Steps are matched by name + ordinal hash (`hash_step_identity`).
-
-### Strict mode (default)
-
-Fails on mismatch. The step sequence must exactly match the prior trace.
-
-### Lenient mode
-
-Forward name scan when ordinal doesn't match. This is the designed recovery
-path for traces where step order has shifted — it is not a fallback, it is
-the primary mechanism for resilient replay.
-
-### Usage
-
-```rust
-let snapshot = prior_crux.to_snapshot()?;
-
-let mut ctx = CruxCtx::new("agent_name");
-ctx.set_replay_mode(ReplayMode::Lenient);
-ctx.replay_from(&snapshot);
-
-let result = AgentType::run(&mut ctx, input).await;
-```
-
----
-
-## Context Abstraction
-
-The `Context` trait (`context.rs`) is the DIP abstraction over `CruxCtx`
-for testability. `Agent::run` takes `&mut CruxCtx` directly — use the
-`Context` trait boundary to inject mocks in unit tests.
-
----
-
-## Pipeline Execution
-
-`crux-script` interprets `.crux` YAML files against `CruxCtx` +
-`HandlerRegistry`.
-
-```
-PipelineDef (schema.rs)
-  → Runner::run(pipeline, input) (runner.rs)
-    → CruxCtx created with pipeline name
-    → execute_steps() iterates StepDef variants
-    → Each step variant maps to CruxCtx combinator:
-        StepDef::Step      → ctx.step()
-        StepDef::Pipe      → ctx.pipe()
-        StepDef::JoinAll   → ctx.join_all()
-        StepDef::Speculate → ctx.speculate().pick_best_by() / .first_ok()
-        StepDef::RouteOnConfidence → ctx.route_on_confidence()
-        StepDef::Delegate  → ctx.step() (agent lookup)
-    → ctx.finalize(result) produces Crux<Value>
-```
-
-### Expression Context
-
-Template strings in step args (`{{ steps.X.output.field }}`,
-`{{ input.field }}`) are expanded via `ExprContext` before handler
-invocation. Expansion errors are silently ignored — the original string
-is preserved.
-
-### Handler Output
-
-```rust
-pub struct HandlerOutput {
-    pub value: Value,
-    pub confidence: Option<f32>,
-}
-```
-
-- `handler()` registered handlers return `HandlerOutput` directly
-- `handler_value()` registered handlers return plain `Value` (confidence
-  defaults to `None`, not 1.0 — `route_on_confidence` can distinguish)
+`handler` returns `HandlerOutput { value, confidence }`; `handler_value` wraps a
+plain value with no confidence. `confidence_or_default()` returns neutral `0.5`,
+but a route that references missing step confidence fails instead of using it.

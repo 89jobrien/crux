@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Host -> Plugin request.
+// TODO(automation-3): Version this protocol and add invocation IDs, streaming events,
+// metered usage, deadlines, cancellation, and structured errors for agent execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params")]
 pub enum Request {

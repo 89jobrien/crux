@@ -14,7 +14,7 @@ async fn compile_errors_parses_rustc_output() {
     let input = json!({
         "log": "error[E0308]: mismatched types\n --> src/main.rs:10:5\n"
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let errors = out.value["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0]["code"], "E0308");
@@ -26,7 +26,7 @@ async fn compile_errors_parses_rustc_output() {
 async fn compile_errors_empty_log() {
     let reg = registry();
     let h = reg.get_handler("ci::compile_errors").unwrap();
-    let out = h(json!({"log": ""})).await.unwrap();
+    let out = h(json!({"log": ""})).await.outcome.unwrap();
     assert_eq!(out.value["errors"].as_array().unwrap().len(), 0);
 }
 
@@ -37,7 +37,7 @@ async fn clippy_violations_parses_warnings() {
     let input = json!({
         "log": "warning: unused variable: `x`\n --> src/lib.rs:5:9\n = note: `#[warn(unused_variables)]`\n"
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let violations = out.value["violations"].as_array().unwrap();
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0]["file"], "src/lib.rs");
@@ -50,7 +50,7 @@ async fn nextest_failures_parses_test_names() {
     let input = json!({
         "log": "     FAIL [   0.123s] my-crate::tests::test_foo\n--- STDOUT: ---\nthread 'tests::test_foo' panicked at 'assert failed'\n"
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let failures = out.value["failures"].as_array().unwrap();
     assert_eq!(failures.len(), 1);
     assert!(
@@ -68,7 +68,7 @@ async fn deny_violations_parses_cargo_deny() {
     let input = json!({
         "log": "error[banned]: crate openssl is banned\nerror[license]: crate foo has unapproved license GPL-3.0\n"
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let violations = out.value["violations"].as_array().unwrap();
     assert_eq!(violations.len(), 2);
 }
@@ -85,7 +85,7 @@ async fn deduplicate_spans_merges_same_source_and_location() {
             {"source": "compile", "file": "src/b.rs", "line": 5, "message": "err3"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let deduped = out.value["errors"].as_array().unwrap();
     // compile:src/a.rs:10, clippy:src/a.rs:10, compile:src/b.rs:5
     assert_eq!(deduped.len(), 3);
@@ -103,7 +103,7 @@ async fn classify_severity_orders_correctly() {
             {"source": "deny", "message": "banned"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let ranked = out.value["ranked"].as_array().unwrap();
     assert_eq!(ranked[0]["source"], "compile");
     assert_eq!(ranked[1]["source"], "deny");
@@ -119,7 +119,7 @@ async fn score_fixability_emits_confidence() {
             {"source": "compile", "message": "missing lifetime"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert!(out.confidence.is_some());
     // 1 clippy out of 2 = 0.5
     assert_eq!(out.confidence.unwrap(), 0.5);

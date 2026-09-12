@@ -14,6 +14,7 @@ categories.workspace = true
 
 [dependencies]
 crux-runtime = { workspace = true } #unified
+crux-types = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 miette = { workspace = true }
 serde = { workspace = true }

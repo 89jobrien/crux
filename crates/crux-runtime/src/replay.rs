@@ -13,6 +13,8 @@ use crate::types::error::CruxErr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReplayMode {
     /// Ordinal-based lookup. Hash must match exactly or Mismatch is returned.
+    // TODO(automation-10): Introduce immutable pipeline versions and stable step IDs so strict
+    // replay survives safe edits without relying on brittle name and ordinal identity.
     #[default]
     Strict,
     /// By-name lookup with ordinal hint. If the name at the expected ordinal

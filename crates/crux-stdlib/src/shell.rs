@@ -12,12 +12,12 @@ use tokio::process::Command;
 use crate::error::{opt_str, require_str};
 
 pub fn register(registry: &mut HandlerRegistry) {
-    registry.handler_value_with_metadata(
+    registry.handler_value_free_with_metadata(
         shell_metadata("shell::exec", false),
         |input: Value| async move { run_shell(input, false).await },
     );
 
-    registry.handler_value_with_metadata(
+    registry.handler_value_free_with_metadata(
         shell_metadata("shell::capture", true),
         |input: Value| async move { run_shell(input, true).await },
     );
@@ -49,6 +49,8 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
     let cmd = require_str(&input, "cmd").map_err(CruxErr::from)?;
     let cwd = opt_str(&input, "cwd");
 
+    // TODO(automation-14): Add a typed argv process handler for untrusted automation input;
+    // never interpolate issue text, prompts, branch names, or paths into `sh -c` commands.
     let mut command = Command::new("sh");
     command.arg("-c").arg(cmd);
     if let Some(dir) = cwd {

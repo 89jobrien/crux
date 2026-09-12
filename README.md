@@ -1,6 +1,7 @@
-# crux
+# Crux
 
-Agentic workflows as YAML pipelines, backed by a typed Rust runtime.
+Agentic workflows as YAML pipelines and typed Rust agents, with every
+execution captured as an inspectable, serializable, and replayable trace.
 
 - **Write pipelines in YAML.** Define steps, fan-out, piping, and
   budgets in `.crux` files. The runtime handles execution, tracing,
@@ -29,6 +30,12 @@ steps:
       handler: ctrl::log
 ```
 
+Run it with the CLI:
+
+```bash
+crux run pipeline.crux
+```
+
 The same thing in Rust:
 
 ```rust
@@ -54,18 +61,39 @@ Either way, the returned `Crux<T>` is:
 
 ## Installation
 
-```toml
-[dependencies]
-crux = "0.2"
+Install the pipeline CLI:
+
+```bash
+cargo install --git https://github.com/89jobrien/crux --tag v0.3.1 crux-cli
 ```
 
-Requires Rust 1.88+ (edition 2024).
+Add the Rust DSL to a project:
+
+```toml
+[dependencies]
+crux = { git = "https://github.com/89jobrien/crux", tag = "v0.3.1" }
+```
+
+Requires Rust 1.89+ (edition 2024).
+
+The `crux` CLI can discover pipelines, validate or run `.crux` files and
+`Cruxfile` targets, replay saved traces, and generate pipelines from natural
+language goals:
+
+```bash
+crux list .
+crux run pipeline.crux --check
+crux run pipeline.crux --save-trace trace.json
+crux run pipeline.crux --replay trace.json
+crux plan --goal "summarize the latest release notes"
+```
 
 ## Crates
 
 | Crate                                 | Description                                             |
 | ------------------------------------- | ------------------------------------------------------- |
 | [`crux`](crates/crux)                 | Facade -- re-exports runtime + macros                   |
+| [`crux-cli`](crates/crux-cli)         | `crux` pipeline runner and planner                      |
 | [`crux-runtime`](crates/crux-runtime) | Core types, traits, and runtime                         |
 | [`crux-types`](crates/crux-types)     | Wire-format types (`Crux<T>`, `Step`, `Budget`)         |
 | [`crux-derive`](crates/crux-macros)   | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
@@ -82,12 +110,17 @@ Requires Rust 1.88+ (edition 2024).
 
 ## Feature flags
 
+The `crux` facade crate provides:
+
 | Flag            | Default | Description                        |
 | --------------- | ------- | ---------------------------------- |
 | `tokio-runtime` | yes     | Async support via tokio + futures  |
 | `redb`          | no      | Persistent `TaskRegistry` via redb |
 | `tracing`       | no      | Instrument with `tracing` spans    |
-| `baml`          | no      | BAML-backed LLM extraction         |
+| `script`        | no      | YAML pipeline parsing and types    |
+
+Build `crux-cli` with its `baml` feature to enable BAML-backed structured
+extraction and the LLM planner.
 
 ## Documentation
 

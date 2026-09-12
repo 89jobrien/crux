@@ -3,9 +3,10 @@ members = ["crates/*", "xtask"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.89.0"
+# TODO(automation-16): Align AGENTS.md and all toolchain documentation with the 1.89 MSRV.
 license = "MIT"
 authors = ["Joseph O'Brien"]
 repository = "https://github.com/89jobrien/crux"
@@ -19,22 +20,22 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-crux-agentic = { path = "crates/crux-agentic", version = "0.3.1" }
-crux-baml = { path = "crates/crux-baml", version = "0.3.1" }
-crux-cli = { path = "crates/crux-cli", version = "0.3.1" }
+crux-agentic = { path = "crates/crux-agentic", version = "0.4.0" }
+crux-baml = { path = "crates/crux-baml", version = "0.4.0" }
+crux-cli = { path = "crates/crux-cli", version = "0.4.0" }
 
 # Internal crates
-crux-domain = { path = "crates/crux-domain", version = "0.3.1" }
-crux-improve = { path = "crates/crux-improve", version = "0.3.1" }
-crux-derive = { path = "crates/crux-macros", version = "0.3.1" }
-crux-model = { path = "crates/crux-model", version = "0.3.1" }
-crux-planner = { path = "crates/crux-planner", version = "0.3.1" }
-crux-plugin = { path = "crates/crux-plugin", version = "0.3.1" }
-crux-runtime = { path = "crates/crux-runtime", version = "0.3.1" }
-crux-script = { path = "crates/crux-script", version = "0.3.1" }
-crux-stdlib = { path = "crates/crux-stdlib", version = "0.3.1" }
-crux-task = { path = "crates/crux-task", version = "0.3.1" }
-crux-types = { path = "crates/crux-types", version = "0.3.1" }
+crux-domain = { path = "crates/crux-domain", version = "0.4.0" }
+crux-improve = { path = "crates/crux-improve", version = "0.4.0" }
+crux-derive = { path = "crates/crux-macros", version = "0.4.0" }
+crux-model = { path = "crates/crux-model", version = "0.4.0" }
+crux-planner = { path = "crates/crux-planner", version = "0.4.0" }
+crux-plugin = { path = "crates/crux-plugin", version = "0.4.0" }
+crux-runtime = { path = "crates/crux-runtime", version = "0.4.0" }
+crux-script = { path = "crates/crux-script", version = "0.4.0" }
+crux-stdlib = { path = "crates/crux-stdlib", version = "0.4.0" }
+crux-task = { path = "crates/crux-task", version = "0.4.0" }
+crux-types = { path = "crates/crux-types", version = "0.4.0" }
 
 # Directories
 dirs = "6"

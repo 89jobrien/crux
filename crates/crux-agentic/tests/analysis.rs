@@ -21,7 +21,7 @@ async fn latency_profile_flags_slow_steps() {
              "completed_at": "2026-01-01T00:00:01Z"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let slow = out.value["slow_steps"].as_array().unwrap();
     assert_eq!(slow.len(), 1);
     assert_eq!(slow[0]["name"], "b");
@@ -31,7 +31,7 @@ async fn latency_profile_flags_slow_steps() {
 async fn latency_profile_empty_steps() {
     let reg = registry();
     let h = reg.get_handler("analysis::latency_profile").unwrap();
-    let out = h(json!({"steps": []})).await.unwrap();
+    let out = h(json!({"steps": []})).await.outcome.unwrap();
     assert_eq!(out.value["slow_steps"].as_array().unwrap().len(), 0);
 }
 
@@ -47,7 +47,7 @@ async fn token_spend_top3() {
             {"name": "d", "output": {"metadata": {"tokens": 50}}},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert_eq!(out.value["total"], 850);
     let top3 = out.value["top3"].as_array().unwrap();
     assert_eq!(top3[0], "b");
@@ -64,7 +64,7 @@ async fn failure_clusters_groups_by_kind() {
             {"name": "z", "status": "failed", "error": {"kind": "Timeout"}},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let clusters = out.value["clusters"].as_array().unwrap();
     assert_eq!(clusters.len(), 2);
 }
@@ -81,7 +81,7 @@ async fn replay_cache_hit_ratio() {
             {"name": "b", "cache_hit": true},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let by_step = out.value["by_step"].as_array().unwrap();
     let a = by_step.iter().find(|s| s["name"] == "a").unwrap();
     assert_eq!(a["hits"], 1);
@@ -97,7 +97,7 @@ async fn tighten_budget_emits_suggestion_above_threshold() {
         "token_spend": {"total": 900},
         "budget": {"tokens": 1000}
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert!(out.confidence.is_some());
     assert!(out.value.get("suggestion").is_some());
 }
@@ -111,7 +111,7 @@ async fn tighten_budget_skips_when_under_threshold() {
         "token_spend": {"total": 500},
         "budget": {"tokens": 1000}
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert!(out.value.get("suggestion").is_none());
 }
 
@@ -127,7 +127,7 @@ async fn tune_retry_suggests_backoff_for_flaky() {
             ]
         }
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let suggestions = out.value["suggestions"].as_array().unwrap();
     assert_eq!(suggestions.len(), 1);
     assert_eq!(suggestions[0]["step_name"], "flaky_step");
@@ -146,7 +146,7 @@ async fn compress_stages_flags_heavy() {
             "total": 600
         }
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let suggestions = out.value["suggestions"].as_array().unwrap();
     assert_eq!(suggestions.len(), 1);
     assert_eq!(suggestions[0]["stage"], "heavy");
@@ -157,7 +157,7 @@ async fn patch_schema_check_valid_yaml() {
     let reg = registry();
     let h = reg.get_handler("analysis::patch_schema_check").unwrap();
     let input = json!({"patch": "key: value\nlist:\n  - item1\n"});
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert_eq!(out.value["valid"], true);
 }
 
@@ -166,7 +166,7 @@ async fn patch_schema_check_invalid_yaml() {
     let reg = registry();
     let h = reg.get_handler("analysis::patch_schema_check").unwrap();
     let input = json!({"patch": "key: [invalid\n"});
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert_eq!(out.value["valid"], false);
 }
 
@@ -175,6 +175,6 @@ async fn patch_schema_check_empty() {
     let reg = registry();
     let h = reg.get_handler("analysis::patch_schema_check").unwrap();
     let input = json!({"patch": ""});
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert_eq!(out.value["valid"], false);
 }

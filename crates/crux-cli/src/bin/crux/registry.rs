@@ -1,7 +1,9 @@
 use crux_plugin::bridge::register_plugins;
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
-use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, schema::PipelineDef, schema::StepDef};
+use crux_script::{
+    HandlerRegistry,
+    schema::{PipelineDef, StepDef},
+};
 use serde_json::{Value, json};
 
 /// Resolve the plugins.toml path from an explicit flag or the default location.
@@ -145,58 +147,4 @@ pub fn warn_missing_env(pipeline: &PipelineDef) {
              or use `dotenvx run -- crux run ...`"
         );
     }
-}
-
-/// Render the full trace envelope (pipeline info, per-step status, timing, output) as text.
-///
-/// Pure: no I/O. Used for `--verbose`/`-v` output.
-pub fn render_trace(crux: &Crux<Value>, elapsed: std::time::Duration) -> String {
-    let mut out = String::new();
-    out.push_str(&format!("Pipeline: {}\n", crux.agent));
-    out.push_str(&format!(
-        "Status:   {}\n",
-        if crux.value().is_ok() { "OK" } else { "FAILED" }
-    ));
-    out.push_str(&format!(
-        "Duration: {:.1}ms\n",
-        elapsed.as_secs_f64() * 1000.0
-    ));
-    out.push_str(&format!("Steps:    {}\n\n", crux.steps.len()));
-
-    out.push_str("Trace:\n");
-    for (i, step) in crux.steps.iter().enumerate() {
-        let status = match step.status {
-            StepStatus::Ok => "OK",
-            StepStatus::Err => "ERR",
-            StepStatus::Rejected => "REJ",
-            StepStatus::Skipped => "SKIP",
-        };
-        let kind = match step.kind {
-            StepKind::Plain => "",
-            StepKind::Delegation => " [delegate]",
-            StepKind::Branch => " [branch]",
-            StepKind::Speculation => " [speculate]",
-        };
-        out.push_str(&format!(
-            "  {:>2}. [{:>4}] {}{} ({}ms)\n",
-            i + 1,
-            status,
-            step.name,
-            kind,
-            step.duration_ms
-        ));
-    }
-
-    out.push('\n');
-    match crux.value() {
-        Ok(v) => {
-            let pretty = serde_json::to_string_pretty(v).unwrap_or_default();
-            out.push_str(&format!("Output:\n{pretty}\n"));
-        }
-        Err(e) => {
-            out.push_str(&format!("Error: {e}\n"));
-        }
-    }
-
-    out
 }

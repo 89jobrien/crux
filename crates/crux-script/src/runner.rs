@@ -2,6 +2,9 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use crux_types::budget::{Budget, HandlerUsage, UsdAmount};
+use crux_types::crux_value::Crux;
+use crux_types::error::CruxErr;
 use indexmap::IndexMap;
 use serde_json::Value;
 
@@ -95,7 +98,10 @@ impl Runner {
         let mut ctx = CruxCtx::new(name);
 
         if let Some(budget_def) = budget_override.or(target.budget.as_ref()) {
-            ctx.set_budget(budget_from_def(budget_def));
+            match budget_from_def(budget_def) {
+                Ok(budget) => ctx.set_budget(budget),
+                Err(error) => return ctx.finalize(Err(error)),
+            }
         }
 
         let empty_vars = IndexMap::new();
@@ -115,7 +121,10 @@ impl Runner {
         let mut ctx = CruxCtx::new(&pipeline.pipeline);
 
         if let Some(budget_def) = &pipeline.budget {
-            ctx.set_budget(budget_from_def(budget_def));
+            match budget_from_def(budget_def) {
+                Ok(budget) => ctx.set_budget(budget),
+                Err(error) => return ctx.finalize(Err(error)),
+            }
         }
 
         if let Some(prev) = previous {
@@ -692,13 +701,14 @@ impl Runner {
         );
 
         let label = format!("{step_name}::on_error");
-        ctx.step(&label, move || async move {
-            handler(input).await.map(|o| o.value)
-        })
-        .await
+        run_step_once(ctx, &label, handler, input, None)
+            .await
+            .map(|(value, _)| value)
     }
 
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
+    // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
+    // DelegateNode budgets instead of recording delegation as an ordinary parent step.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -731,7 +741,7 @@ impl Runner {
         Ok(output)
     }
 
-    /// Execute a `pipe:` node — chains stages sequentially via `ctx.pipe()`.
+    /// Execute a `pipe:` node, accounting each sequential stage before the next.
     async fn execute_pipe_step(
         &self,
         ctx: &mut CruxCtx,
@@ -739,55 +749,31 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
-        let registry = self.registry.clone();
+        let mut output = current_input.clone();
+        let mut confidence = None;
 
-        // One confidence cell per stage; the last stage's confidence wins.
-        let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
-            .stages
-            .iter()
-            .map(|_| Arc::new(Mutex::new(None)))
-            .collect();
+        for stage in &node.stages {
+            let handler = self
+                .registry
+                .get_handler(stage.handler_name())
+                .ok_or_else(|| CruxErr::step_failed(stage.handler_name(), "handler not found"))?
+                .clone();
+            let input = merge_args(output, stage.args().cloned());
+            let step_name = format!("{}::{}", node.pipe, stage.label());
+            let (value, stage_confidence) =
+                run_step_once(ctx, &step_name, handler, input, None).await?;
+            output = value;
+            confidence = stage_confidence;
+        }
 
-        #[allow(clippy::type_complexity)]
-        let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
-            .stages
-            .iter()
-            .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
-                let handler = registry.get_handler(arm.handler_name()).cloned();
-                let name_owned = arm.handler_name().to_string();
-                let static_args = arm.args().cloned();
-                let cell = Arc::clone(cell);
-                let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
-                    Box::new(move |v: Value| {
-                        Box::pin(async move {
-                            let h = handler.ok_or_else(|| {
-                                CruxErr::step_failed(&name_owned, "handler not found")
-                            })?;
-                            let input = merge_args(v, static_args);
-                            let out = h(input).await?;
-                            *cell.lock().unwrap() = out.confidence;
-                            Ok(out.value)
-                        }) as BoxFut<Value>
-                    });
-                (arm.label(), stage_fn)
-            })
-            .collect();
-
-        let input = current_input.clone();
-        let result = ctx.pipe(&node.pipe, input, stages).await?;
-
-        // Use the last stage's confidence (pipeline is sequential).
-        // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
-        let confidence = confidence_cells.last().and_then(|c| *c.lock().unwrap());
         expr_ctx.steps.insert(
             node.pipe.clone(),
             StepResult {
-                output: result.clone(),
+                output: output.clone(),
                 confidence,
             },
         );
-        Ok(result)
+        Ok(output)
     }
 
     /// Execute a `join_all:` node — fans out arms concurrently via `ctx.join_all()`.
@@ -803,21 +789,31 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((arm, cell), usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let allow_failure = arm.allow_failure();
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    match h(input).await {
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    match execution.outcome {
                         Ok(out) => {
                             *cell.lock().unwrap() = out.confidence;
                             Ok(out.value)
@@ -830,7 +826,14 @@ impl Runner {
             })
             .collect();
 
-        let results = ctx.join_all(&node.join_all, arms).await?;
+        let results = ctx.join_all(&node.join_all, arms).await;
+        record_usage_cells(
+            ctx,
+            node.arms.iter().map(|arm| arm.label()),
+            &usage_cells,
+            results.as_ref().err(),
+        )?;
+        let results = results?;
         let output = Value::Array(results);
 
         // Average confidence across arms that provided a score; None if none did.
@@ -873,21 +876,31 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .routes
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let routes: Vec<ConfidenceRoute<'_, Value>> = node
             .routes
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(branch, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((branch, cell), usage_cell)| {
                 let range = parse_range(&branch.range);
                 let handler = self.registry.get_handler(&branch.handler).cloned();
                 let input = merge_args(current_input.clone(), branch.args.clone());
                 let handler_name = branch.handler.clone();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&handler_name, "handler not found"))?;
-                    let out = h(input).await?;
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    let out = execution.outcome?;
                     *cell.lock().unwrap() = out.confidence;
                     Ok(out.value)
                 });
@@ -897,7 +910,14 @@ impl Runner {
 
         let result = ctx
             .route_on_confidence(&node.route_on_confidence, confidence, routes)
-            .await?;
+            .await;
+        record_usage_cells(
+            ctx,
+            node.routes.iter().map(|branch| branch.label.as_str()),
+            &usage_cells,
+            result.as_ref().err(),
+        )?;
+        let result = result?;
 
         // Use the matched branch's handler confidence; fall back to the routing score.
         let handler_confidence = confidence_cells
@@ -924,33 +944,50 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
-            .map(|arm| {
+            .zip(usage_cells.iter())
+            .map(|(arm, usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    h(input).await.map(|o| o.value)
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    execution.outcome.map(|o| o.value)
                 });
                 (arm.label(), fut)
             })
             .collect();
 
         let builder = ctx.speculate(&node.speculate, arms);
+        let mut usage_iter = usage_cells.iter();
+        let report = move |_arm: &str| {
+            usage_iter
+                .next()
+                .and_then(|cell| cell.lock().unwrap().take())
+        };
         let result = match node.mode {
             SpeculateMode::PickBest => {
                 builder
-                    .pick_best_by(|v: &Value| {
-                        v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32
-                    })
-                    .await?
+                    .pick_best_by_metered(
+                        |v: &Value| v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32,
+                        report,
+                    )
+                    .await
             }
-            SpeculateMode::FirstOk => builder.first_ok().await?,
-        };
+            SpeculateMode::FirstOk => builder.first_ok_metered(report).await,
+        }?;
 
         expr_ctx.steps.insert(
             node.speculate.clone(),
@@ -961,6 +998,47 @@ impl Runner {
         );
         Ok(result)
     }
+}
+
+type UsageCell = Arc<Mutex<Option<(HandlerUsage, std::time::Duration)>>>;
+
+// TODO(automation-6): Require metered usage from cost-bearing shell, plugin, and LLM handlers
+// and fail closed before work starts when token or USD accounting is unavailable.
+fn record_usage_cells<'a, M: InvocationMeter>(
+    ctx: &mut M,
+    labels: impl Iterator<Item = &'a str>,
+    cells: &[UsageCell],
+    source: Option<&CruxErr>,
+) -> Result<(), CruxErr> {
+    let mut first_label = None;
+    let mut total_tokens = 0_u64;
+    let mut total_duration = std::time::Duration::ZERO;
+    let mut total_usd = Some(UsdAmount::ZERO);
+    for (label, cell) in labels.zip(cells) {
+        if let Some((usage, duration)) = cell.lock().unwrap().take() {
+            first_label.get_or_insert(label);
+            total_tokens = total_tokens.saturating_add(usage.tokens);
+            total_duration = total_duration.saturating_add(duration);
+            total_usd = match (total_usd, usage.usd) {
+                (Some(total), Some(amount)) => total.checked_add(amount),
+                _ => None,
+            };
+        }
+    }
+    let Some(label) = first_label else {
+        return Ok(());
+    };
+    let usage = HandlerUsage {
+        tokens: total_tokens,
+        usd: total_usd,
+    };
+    ctx.record_invocation_usage(label, usage, total_duration)
+        .map_err(|mut error| {
+            if let Some(source) = source {
+                attach_budget_source(&mut error, source.clone());
+            }
+            error
+        })
 }
 
 /// Recursively expand `{{ expr }}` templates in all string leaves of a JSON value.
@@ -992,20 +1070,27 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
 /// per-attempt timeout (#81) and capturing the confidence score via a shared cell
 /// (since `ctx.step()` only returns the value). Used directly for non-retrying
 /// steps, and once per attempt for steps with a `retry:` policy (#79).
-async fn run_step_once(
-    ctx: &mut CruxCtx,
+async fn run_step_once<M: InvocationMeter>(
+    ctx: &mut M,
     step_label: &str,
     handler: crate::registry::BoxHandler,
     input: Value,
     timeout_ms: Option<u64>,
 ) -> Result<(Value, Option<f32>), CruxErr> {
+    let started_cell: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
     let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let usage_cell: Arc<Mutex<Option<HandlerUsage>>> = Arc::new(Mutex::new(None));
+    let sc = started_cell.clone();
     let cc = confidence_cell.clone();
+    let uc = usage_cell.clone();
     let step_name_owned = step_label.to_string();
-    let result = ctx
-        .step(step_label, move || async move {
+    let invocation = ctx
+        .invoke_budgeted_step(step_label, move || async move {
+            *sc.lock().unwrap() = Some(std::time::Instant::now());
             let fut = async move {
-                let raw = handler(input).await?;
+                let execution = handler(input).await;
+                *uc.lock().unwrap() = Some(execution.usage);
+                let raw = execution.outcome?;
                 *cc.lock().unwrap() = raw.confidence;
                 Ok::<Value, CruxErr>(raw.value)
             };
@@ -1023,7 +1108,44 @@ async fn run_step_once(
             }
         })
         .await;
-    result.map(|v| (v, *confidence_cell.lock().unwrap()))
+    if !invocation.executed {
+        return invocation
+            .outcome
+            .map(|value| (value, *confidence_cell.lock().unwrap()));
+    }
+
+    let usage = usage_cell
+        .lock()
+        .unwrap()
+        .unwrap_or_else(HandlerUsage::unreported);
+    let duration = started_cell
+        .lock()
+        .unwrap()
+        .expect("executed invocation records its live start")
+        .elapsed();
+    if let Err(mut accounting_error) = ctx.record_invocation_usage(step_label, usage, duration) {
+        if let Err(source) = invocation.outcome {
+            attach_budget_source(&mut accounting_error, source);
+        }
+        return Err(accounting_error);
+    }
+    invocation
+        .outcome
+        .map(|v| (v, *confidence_cell.lock().unwrap()))
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
+    }
 }
 
 /// Build the placeholder output value for a step/arm whose failure was tolerated
@@ -1097,27 +1219,35 @@ fn merge_args(mut input: Value, args: Option<Value>) -> Value {
     input
 }
 
-fn budget_from_def(def: &BudgetDef) -> Budget {
+fn budget_from_def(def: &BudgetDef) -> Result<Budget, CruxErr> {
     let mut budgets = Vec::new();
     if let Some(tokens) = def.tokens {
         budgets.push(Budget::tokens(tokens));
     }
-    if let Some(calls) = def.calls {
-        budgets.push(Budget::calls(calls));
+    if let Some(steps) = def.steps.or(def.calls) {
+        budgets.push(Budget::steps(steps));
     }
     if let Some(duration_ms) = def.duration_ms {
         budgets.push(Budget::duration(std::time::Duration::from_millis(
             duration_ms,
         )));
     }
-    if let Some(cost_cents) = def.cost_cents {
-        budgets.push(Budget::cost_cents(cost_cents));
+    if let Some(usd) = def.usd {
+        budgets.push(Budget::usd(usd));
+    } else if let Some(cost_cents) = def.cost_cents {
+        let micros = cost_cents.checked_mul(10_000).ok_or_else(|| {
+            CruxErr::step_failed(
+                "budget",
+                "cost_cents budget is too large to convert exactly to microdollars",
+            )
+        })?;
+        budgets.push(Budget::usd(UsdAmount::from_micros(micros)));
     }
-    match budgets.as_slice() {
+    Ok(match budgets.as_slice() {
         [] => Budget::default(),
         [_] => budgets.into_iter().next().unwrap_or_default(),
         _ => Budget::combined(budgets),
-    }
+    })
 }
 
 /// Parse a range string like `[0.0, 0.5)` or `[0.8, 1.0]`.
@@ -1140,6 +1270,71 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    struct DelayedMeter {
+        duration: Option<std::time::Duration>,
+    }
+
+    impl InvocationMeter for DelayedMeter {
+        fn invoke_budgeted_step<'a, F, Fut, T>(
+            &'a mut self,
+            _name: &'a str,
+            f: F,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+        where
+            F: FnOnce() -> Fut + Send + 'a,
+            Fut: std::future::Future<Output = Result<T, CruxErr>> + Send + 'a,
+            T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+        {
+            Box::pin(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                BudgetedInvocation {
+                    outcome: f().await,
+                    executed: true,
+                }
+            })
+        }
+
+        fn reserve_invocations(&mut self, _count: u64) -> Result<(), CruxErr> {
+            Ok(())
+        }
+
+        fn record_invocation_usage(
+            &mut self,
+            _step: &str,
+            _usage: HandlerUsage,
+            duration: std::time::Duration,
+        ) -> Result<(), CruxErr> {
+            self.duration = Some(duration);
+            Ok(())
+        }
+
+        fn budget_usage(&self) -> crux_types::budget::BudgetUsage {
+            crux_types::budget::BudgetUsage::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn invocation_duration_starts_when_live_handler_closure_begins() {
+        let mut meter = DelayedMeter { duration: None };
+        let handler: crate::registry::BoxHandler = Arc::new(|_input| {
+            Box::pin(async {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                crate::HandlerExecution::free(Ok(crate::HandlerOutput::new(Value::Null)))
+            })
+        });
+
+        run_step_once(&mut meter, "timed", handler, Value::Null, None)
+            .await
+            .unwrap();
+
+        let duration = meter.duration.expect("duration recorded");
+        assert!(duration >= std::time::Duration::from_millis(5));
+        assert!(
+            duration < std::time::Duration::from_millis(30),
+            "{duration:?}"
+        );
+    }
+
     /// Build a minimal pipeline with a single step that calls a counting handler.
     fn counting_pipeline() -> (PipelineDef, HandlerRegistry, Arc<AtomicU32>) {
         let counter = Arc::new(AtomicU32::new(0));
@@ -1160,6 +1355,417 @@ mod tests {
         .expect("valid pipeline");
 
         (pipeline, reg, counter)
+    }
+
+    #[tokio::test]
+    async fn retry_accounts_failed_and_successful_attempts_exactly_once() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let called = attempts.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("flaky", move |input: Value| {
+            let called = called.clone();
+            async move {
+                let attempt = called.fetch_add(1, Ordering::SeqCst);
+                let usage = HandlerUsage::metered(0, UsdAmount::from_micros(1));
+                if attempt == 0 {
+                    crate::HandlerExecution::failure(
+                        CruxErr::step_failed("flaky", "first attempt"),
+                        usage,
+                    )
+                } else {
+                    crate::HandlerExecution::success(crate::HandlerOutput::new(input), usage)
+                }
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: retry_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - step: flaky\n    retry:\n      count: 1\n      delay_ms: 0\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn on_error_accounts_failed_primary_and_fallback_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("primary", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("primary", "failed"),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        registry.handler_metered("fallback", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: fallback_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - step: primary\n    on_error:\n      handler: fallback\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn join_accounts_every_completed_parallel_arm_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        for name in ["one", "two"] {
+            registry.handler_metered(name, |input: Value| async move {
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            });
+        }
+        let pipeline = crate::load(
+            "pipeline: join_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - join_all: both\n    arms: [one, two]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn route_accounts_only_the_selected_handler_once() {
+        let unselected = Arc::new(AtomicU32::new(0));
+        let low_calls = unselected.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_metered("high", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        registry.handler_metered("low", move |input: Value| {
+            let low_calls = low_calls.clone();
+            async move {
+                low_calls.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: route_meter\nbudget:\n  usd: 0\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 0.5)\"\n        label: low\n        handler: low\n      - range: \"[0.5, 1.0]\"\n        label: high\n        handler: high\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                ..
+            })
+        ));
+        assert_eq!(unselected.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn selected_route_reserves_step_before_handler_invocation() {
+        let selected_calls = Arc::new(AtomicU32::new(0));
+        let calls = selected_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_value_free("selected", move |input: Value| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: route_steps\nbudget: { steps: 1 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: selected\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
+        assert_eq!(selected_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_paid_join_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_join\nbudget: { usd: 0 }\nsteps:\n  - join_all: work\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_route_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_route\nbudget: { usd: 0 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: paid_failure\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_speculation_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_speculation\nbudget: { usd: 0 }\nsteps:\n  - speculate: work\n    mode: first_ok\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn legacy_budget_conversion_succeeds_for_pipeline_and_target() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(10_000)),
+            )
+        });
+        let runner = Runner::new(Arc::new(registry));
+        let pipeline = crate::load(
+            "pipeline: legacy\nbudget:\n  calls: 1\n  cost_cents: 1\nsteps:\n  - step: paid\n",
+        )
+        .unwrap();
+        assert!(runner.run(&pipeline, Value::Null).await.value().is_ok());
+
+        let cruxfile = crate::load_cruxfile(
+            "project: legacy\ndefault: check\ntargets:\n  check:\n    budget:\n      calls: 1\n      cost_cents: 1\n    steps:\n      - step: paid\n",
+        )
+        .unwrap();
+        let target = cruxfile.targets.get("check").unwrap();
+        assert!(
+            runner
+                .run_target(target, "check", None)
+                .await
+                .value()
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn run_target_rejects_cost_cents_overflow() {
+        let overflow = u64::MAX / 10_000 + 1;
+        let cruxfile = crate::load_cruxfile(&format!(
+            "project: overflow\ndefault: check\ntargets:\n  check:\n    budget:\n      cost_cents: {overflow}\n    steps: []\n"
+        ))
+        .unwrap();
+        let target = cruxfile.targets.get("check").unwrap();
+
+        let result = Runner::new(Arc::new(HandlerRegistry::new()))
+            .run_target(target, "check", None)
+            .await;
+
+        assert!(result.value().is_err());
+        assert!(
+            result
+                .value()
+                .unwrap_err()
+                .to_string()
+                .contains("cost_cents")
+        );
+    }
+
+    #[tokio::test]
+    async fn sequential_pipe_stops_after_first_over_budget_invocation() {
+        let later_calls = Arc::new(AtomicU32::new(0));
+        let later = later_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(2)),
+            )
+        });
+        registry.handler_metered("later", move |input: Value| {
+            let later = later.clone();
+            async move {
+                later.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: pipe_budget\nbudget:\n  usd: 0.000001\nsteps:\n  - pipe: sequence\n    stages: [paid, later]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded { .. })
+        ));
+        assert_eq!(later_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn sequential_speculation_stops_after_first_over_budget_invocation() {
+        let later_calls = Arc::new(AtomicU32::new(0));
+        let later = later_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |_input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(serde_json::json!({"score": 1})),
+                HandlerUsage::metered(0, UsdAmount::from_micros(2)),
+            )
+        });
+        registry.handler_metered("later", move |_input: Value| {
+            let later = later.clone();
+            async move {
+                later.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(serde_json::json!({"score": 2})),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: speculate_budget\nbudget:\n  usd: 0.000001\nsteps:\n  - speculate: choices\n    mode: pick_best\n    arms: [paid, later]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded { .. })
+        ));
+        assert_eq!(later_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn accounting_retains_all_dimensions_and_completed_reports_before_violation() {
+        let mut ctx = CruxCtx::new("meter");
+        ctx.set_budget(Budget::combined(vec![
+            Budget::duration(std::time::Duration::ZERO),
+            Budget::tokens(0),
+            Budget::usd(UsdAmount::ZERO),
+        ]));
+        let cells = vec![
+            Arc::new(Mutex::new(Some((
+                HandlerUsage::metered(2, UsdAmount::from_micros(3)),
+                std::time::Duration::from_millis(1),
+            )))),
+            Arc::new(Mutex::new(Some((
+                HandlerUsage::metered(5, UsdAmount::from_micros(7)),
+                std::time::Duration::from_millis(2),
+            )))),
+        ];
+
+        let error = record_usage_cells(&mut ctx, ["a", "b"].into_iter(), &cells, None)
+            .expect_err("completed usage must still report a violation");
+
+        assert!(error.to_string().to_lowercase().contains("duration"));
+        let usage = ctx.budget_usage();
+        assert_eq!(usage.duration_ms, 3);
+        assert_eq!(usage.tokens, 7);
+        assert_eq!(usage.usd.map(UsdAmount::micros), Some(10));
     }
 
     #[tokio::test]
@@ -1192,6 +1798,58 @@ mod tests {
             1,
             "handler should not re-execute during replay"
         );
+    }
+
+    #[tokio::test]
+    async fn replayed_step_under_usd_budget_consumes_no_usage() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let called = counter.clone();
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value_free("test::free", move |input: Value| {
+            let called = called.clone();
+            async move {
+                called.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: replay_budget\nbudget:\n  usd: 0\nsteps:\n  - step: free\n    handler: test::free\n",
+        )
+        .unwrap();
+        let runner = Runner::new(Arc::new(reg));
+
+        let first = runner.run(&pipeline, serde_json::json!({})).await;
+        assert!(first.value().is_ok());
+        let replayed = runner
+            .run_with_replay(&pipeline, serde_json::json!({}), &first, ReplayMode::Strict)
+            .await;
+
+        assert!(replayed.value().is_ok(), "{:?}", replayed.value());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert_eq!(replayed.steps[0].duration_ms, 0);
+    }
+
+    #[tokio::test]
+    async fn pre_execution_step_rejection_preserves_error_and_records_no_duration() {
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value_free("test::free", |input: Value| async move { Ok(input) });
+        let pipeline = crate::load(
+            "pipeline: rejected\nbudget:\n  steps: 0\n  usd: 0\nsteps:\n  - step: blocked\n    handler: test::free\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(reg))
+            .run(&pipeline, serde_json::json!({}))
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 0,
+                attempted: 1
+            })
+        ));
+        assert!(result.steps.is_empty());
     }
 
     #[tokio::test]

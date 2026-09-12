@@ -154,6 +154,10 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
     let mut report = ValidationReport::default();
     let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    if let Some(budget) = &pipeline.budget {
+        validate_budget(&mut report, "budget", budget);
+    }
+
     for (idx, step) in pipeline.steps.iter().enumerate() {
         let location = format!("steps[{idx}]");
 
@@ -255,6 +259,34 @@ pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> 
     report
 }
 
+fn validate_budget(
+    report: &mut ValidationReport,
+    location: &str,
+    budget: &crate::schema::BudgetDef,
+) {
+    if budget.steps.is_some() && budget.calls.is_some() {
+        report.push(ValidationDiagnostic::error(
+            format!("{location}.steps"),
+            "budget cannot specify both 'steps' and compatibility field 'calls'",
+        ));
+    }
+    if budget.usd.is_some() && budget.cost_cents.is_some() {
+        report.push(ValidationDiagnostic::error(
+            format!("{location}.usd"),
+            "budget cannot specify both 'usd' and compatibility field 'cost_cents'",
+        ));
+    }
+    if budget
+        .cost_cents
+        .is_some_and(|cents| cents.checked_mul(10_000).is_none())
+    {
+        report.push(ValidationDiagnostic::error(
+            format!("{location}.cost_cents"),
+            "cost_cents budget is too large to convert exactly to microdollars",
+        ));
+    }
+}
+
 /// Recursively validate a loop construct's nested `steps:` block, prefixing any
 /// diagnostics with the parent location (e.g. `steps[0].steps[1]`).
 fn validate_nested_steps(
@@ -267,6 +299,7 @@ fn validate_nested_steps(
         pipeline: parent_location.to_string(),
         budget: None,
         vars: None,
+        display: None,
         steps: steps.to_vec(),
     };
     let nested_report = validate_pipeline(&nested_pipeline, registry);
@@ -302,6 +335,7 @@ pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> 
             pipeline: name.clone(),
             budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
             vars: None,
+            display: None,
             steps: target.steps.clone(),
         };
         let target_report = validate_pipeline(&pipeline, registry);
