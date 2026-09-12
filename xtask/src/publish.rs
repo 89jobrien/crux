@@ -36,6 +36,7 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec {
         name: "crux-planner",
     },
+    CrateSpec { name: "crux-cli" },
     CrateSpec { name: "crux" },
 ];
 
@@ -222,8 +223,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn publish_order_contains_fourteen_crates() {
-        assert_eq!(PUBLISH_ORDER.len(), 14);
+    fn publish_order_contains_all_publishable_crates() {
+        assert_eq!(PUBLISH_ORDER.len(), 15);
+        assert!(PUBLISH_ORDER.iter().any(|spec| spec.name == "crux-cli"));
     }
 
     #[test]
@@ -234,7 +236,7 @@ mod tests {
 
     #[test]
     fn publish_order_ends_with_facade() {
-        assert_eq!(PUBLISH_ORDER[13].name, "crux");
+        assert_eq!(PUBLISH_ORDER[14].name, "crux");
     }
 
     #[test]
@@ -346,7 +348,8 @@ mod tests {
             from: Some("crux-planner".to_string()),
         };
         let remaining = crates_from(args.from.as_deref()).unwrap();
-        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining.len(), 3);
         assert_eq!(remaining[0].name, "crux-planner");
+        assert_eq!(remaining[1].name, "crux-cli");
     }
 }
