@@ -105,6 +105,30 @@ pub type ConfidenceRoute<'a, T> = (ConfidenceRange, &'a str, BoxFut<T>);
 /// A named stage for `pipe`: (label, closure producing a future).
 pub type PipeStage<'a, T> = (&'a str, Box<dyn FnOnce(T) -> BoxFut<T> + Send>);
 
+/// Failure behavior for one stage in a recoverable pipe.
+pub enum PipeFailurePolicy<T> {
+    /// Return the stage error and stop the pipe.
+    Propagate,
+    /// Convert the recorded stage error into the next stage's input.
+    SubstituteWith(Box<dyn FnOnce(CruxErr) -> Result<T, CruxErr> + Send>),
+}
+
+impl<T> std::fmt::Debug for PipeFailurePolicy<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Propagate => formatter.write_str("Propagate"),
+            Self::SubstituteWith(_) => formatter.write_str("SubstituteWith(..)"),
+        }
+    }
+}
+
+/// A named pipe stage with explicit failure behavior.
+pub type RecoverablePipeStage<'a, T> = (
+    &'a str,
+    Box<dyn FnOnce(T) -> BoxFut<T> + Send>,
+    PipeFailurePolicy<T>,
+);
+
 /// A named arm for `join_all`: (label, future).
 pub type JoinArm<'a, T> = (&'a str, BoxFut<T>);
 
@@ -119,7 +143,7 @@ use crux_domain::pipeline::EventSender;
 use crux_domain::plan_result::PlanResult;
 use crux_domain::planner::{PassthroughPlanner, Planner};
 
-use crate::context::Context;
+use crate::context::{BudgetedInvocation, Context, InvocationMeter};
 use crate::hooks::HookRegistry;
 use crate::recorder::{StepRecord, StepRecorder};
 use crate::replay::{ReplayCache, ReplayResult, deserialize_replay};
@@ -220,6 +244,9 @@ impl CruxCtx {
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.
+    // TODO(feature-idea-14): Unify runtime emissions and expose an ordered CLI JSONL stream.
+    // TODO(automation-13): Unify EventPipeline and crux-types EventSink emissions, then attach
+    // the unified sink in CLI runs so agent events and traces share one ordered stream.
     pub fn set_event_sender(&mut self, sender: EventSender) {
         self.event_sender = Some(sender);
     }
@@ -449,7 +476,7 @@ impl CruxCtx {
             if range.contains(confidence) {
                 trace_route!(name, confidence, label);
                 let step_name = format!("{name}::{label}");
-                let val = self.step(&step_name, move || fut).await?;
+                let val = self.step_budgeted(&step_name, move || fut).await?;
                 // If the handler output is a JSON object with a "confidence" field
                 // (finite f32 in [0.0, 1.0]), propagate it to the recorded step so
                 // that route_on_confidence can act on meaningful handler-reported scores.
@@ -485,12 +512,62 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
+        let stages = stages
+            .into_iter()
+            .map(|(name, stage)| (name, stage, PipeFailurePolicy::Propagate))
+            .collect();
+        self.pipe_with_recovery(name, input, stages).await
+    }
+
+    /// Sequential pipeline with explicit failure behavior for each stage.
+    ///
+    /// Failed stages are recorded before [`PipeFailurePolicy::SubstituteWith`] converts the
+    /// error into the next stage's input. [`PipeFailurePolicy::Propagate`] preserves the
+    /// short-circuit behavior of [`Self::pipe`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the stage error when its policy is [`PipeFailurePolicy::Propagate`], or when a
+    /// substitution callback declines recovery. Safety, replay, and budget errors can therefore
+    /// remain non-recoverable even when ordinary handler failures are substituted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use crux_runtime::prelude::*;
+    ///
+    /// # async fn example() -> Result<(), CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+    ///     "recover",
+    ///     Box::new(|_| Box::pin(async { Err(CruxErr::step_failed("recover", "failed")) })),
+    ///     PipeFailurePolicy::SubstituteWith(Box::new(|_| Ok(42))),
+    /// )];
+    /// assert_eq!(ctx.pipe_with_recovery("pipe", 0, stages).await?, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn pipe_with_recovery<T>(
+        &mut self,
+        name: &str,
+        input: T,
+        stages: Vec<RecoverablePipeStage<'_, T>>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
         trace_pipe!(name, stages.len());
         let mut current = input;
-        for (stage_name, f) in stages {
+        for (stage_name, stage, policy) in stages {
             let step_name = format!("{name}::{stage_name}");
             let val = current;
-            current = self.step(&step_name, move || f(val)).await?;
+            current = match self.step_budgeted(&step_name, move || stage(val)).await {
+                Ok(output) => output,
+                Err(error) => match policy {
+                    PipeFailurePolicy::Propagate => return Err(error),
+                    PipeFailurePolicy::SubstituteWith(substitute) => substitute(error)?,
+                },
+            };
         }
         Ok(current)
     }
@@ -597,6 +674,7 @@ impl CruxCtx {
             .collect();
 
         let live_indices: Vec<usize> = live_futs.iter().map(|(i, _)| *i).collect();
+        self.reserve_budgeted_steps(live_indices.len())?;
         let futs_only: Vec<_> = live_futs.into_iter().map(|(_, f)| f).collect();
 
         let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
@@ -875,6 +953,7 @@ impl CruxCtx {
         name: &str,
         confidence: f32,
         content_hash: Option<u64>,
+        budgeted: bool,
         f: F,
     ) -> Result<T, CruxErr>
     where
@@ -953,8 +1032,47 @@ impl CruxCtx {
             });
         }
 
+        if budgeted {
+            self.budget_tracker.begin_step()?;
+        }
+
         self.execute_single(name, confidence, input_hash, content_hash, f)
             .await
+    }
+
+    fn reserve_budgeted_steps(&mut self, count: usize) -> Result<(), CruxErr> {
+        self.budget_tracker
+            .reserve_steps(u64::try_from(count).unwrap_or(u64::MAX))
+    }
+
+    /// Execute one replay-aware step and reserve one live invocation.
+    ///
+    /// Unlike [`Context::step`], this method increments the typed step budget
+    /// immediately before live work starts. Replay hits return cached output without
+    /// reserving budget or polling `f`; pre-execution rejection also leaves `f`
+    /// untouched. Handler integrations should normally use [`InvocationMeter`] so
+    /// they can distinguish those cases before recording duration and usage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crux_runtime::prelude::{Budget, Context, CruxCtx};
+    ///
+    /// # async fn example() -> Result<(), crux_runtime::prelude::CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// ctx.set_budget(Budget::steps(1));
+    /// let value = ctx.step_budgeted("fetch", || async { Ok(42_u32) }).await?;
+    /// assert_eq!(value, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub(crate) async fn step_budgeted<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        self.step_inner(name, 1.0, None, true, f).await
     }
 
     /// Record the outcome of a stream drain and return the final value (or error).
@@ -1012,6 +1130,59 @@ impl CruxCtx {
     }
 }
 
+impl InvocationMeter for CruxCtx {
+    fn invoke_budgeted_step<'a, F, Fut, T>(
+        &'a mut self,
+        name: &'a str,
+        f: F,
+    ) -> std::pin::Pin<Box<dyn Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+    where
+        F: FnOnce() -> Fut + Send + 'a,
+        Fut: Future<Output = Result<T, CruxErr>> + Send + 'a,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+    {
+        Box::pin(async move {
+            use std::sync::atomic::{AtomicBool, Ordering};
+
+            let executed = std::sync::Arc::new(AtomicBool::new(false));
+            let live = std::sync::Arc::clone(&executed);
+            let outcome = self
+                .step_budgeted(name, move || {
+                    live.store(true, Ordering::Release);
+                    f()
+                })
+                .await;
+            BudgetedInvocation {
+                outcome,
+                executed: executed.load(Ordering::Acquire),
+            }
+        })
+    }
+
+    fn reserve_invocations(&mut self, count: u64) -> Result<(), CruxErr> {
+        self.budget_tracker.reserve_steps(count)
+    }
+
+    fn record_invocation_usage(
+        &mut self,
+        step: &str,
+        usage: crate::types::budget::HandlerUsage,
+        duration: std::time::Duration,
+    ) -> Result<(), CruxErr> {
+        let mut violation = self.budget_tracker.record_duration(duration).err();
+        if let Err(error) = self.budget_tracker.record_handler_usage(step, usage)
+            && violation.is_none()
+        {
+            violation = Some(error);
+        }
+        violation.map_or(Ok(()), Err)
+    }
+
+    fn budget_usage(&self) -> crate::types::budget::BudgetUsage {
+        self.budget_tracker.usage()
+    }
+}
+
 impl Context for CruxCtx {
     async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
     where
@@ -1030,7 +1201,7 @@ impl Context for CruxCtx {
         K: serde::Serialize + Sync,
     {
         let content_hash = Some(crate::recorder::hash_content(key));
-        self.step_inner(name, 1.0, content_hash, f).await
+        self.step_inner(name, 1.0, content_hash, false, f).await
     }
 
     async fn step_with_confidence<F, Fut, T>(
@@ -1044,7 +1215,7 @@ impl Context for CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.step_inner(name, confidence, None, f).await
+        self.step_inner(name, confidence, None, false, f).await
     }
 
     async fn step_retryable<F, Fut, T>(
@@ -1536,6 +1707,47 @@ mod tests {
         assert!(msg.contains("budget exceeded"));
     }
 
+    #[test]
+    fn typed_budget_methods_account_independent_dimensions() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::combined(vec![
+            Budget::steps(1),
+            Budget::usd(crate::types::budget::UsdAmount::ZERO),
+        ]));
+
+        assert!(ctx.reserve_invocations(1).is_ok());
+        assert!(
+            ctx.record_invocation_usage(
+                "free",
+                crate::types::budget::HandlerUsage::free(),
+                std::time::Duration::ZERO,
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            ctx.reserve_invocations(1),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
+    }
+
+    #[test]
+    fn invocation_usage_preserves_unreported_usd_without_synthetic_zero() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.record_invocation_usage(
+            "legacy",
+            crate::types::budget::HandlerUsage {
+                tokens: 3,
+                usd: None,
+            },
+            std::time::Duration::ZERO,
+        )
+        .unwrap();
+
+        let usage = ctx.budget_usage();
+        assert_eq!(usage.tokens, 3);
+        assert_eq!(usage.usd, None);
+    }
+
     #[tokio::test]
     async fn replay_returns_cached_output() {
         let mut ctx1 = CruxCtx::new("agent");
@@ -1840,6 +2052,87 @@ mod tests {
         assert_eq!(ctx.snapshot_steps().len(), 1);
     }
 
+    #[tokio::test]
+    async fn pipe_with_recovery_records_failure_before_substitution() {
+        let mut ctx = CruxCtx::new("test");
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![
+            (
+                "fail",
+                Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+                PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+            ),
+            (
+                "increment",
+                Box::new(|value| Box::pin(async move { Ok(value + 1) })),
+                PipeFailurePolicy::Propagate,
+            ),
+        ];
+
+        let result = ctx
+            .pipe_with_recovery("recover", 0, stages)
+            .await
+            .expect("substitution should continue the pipe");
+
+        assert_eq!(result, 8);
+        assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(
+            ctx.snapshot_steps()[0].error.as_deref(),
+            Some("step 'fail' failed: bad")
+        );
+        assert_eq!(ctx.snapshot_steps()[0].output, None);
+        assert_eq!(ctx.snapshot_steps()[1].status, StepStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn pipe_with_recovery_does_not_replay_failed_stage_as_success() {
+        let mut initial = CruxCtx::new("test");
+        let initial_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+        )];
+        assert_eq!(
+            initial
+                .pipe_with_recovery("recover", 0, initial_stages)
+                .await
+                .unwrap(),
+            7
+        );
+        let snapshot = initial.snapshot();
+
+        let mut replay = CruxCtx::new("test");
+        replay.replay_from(&snapshot);
+        let replay_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "again")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(9))),
+        )];
+        let result = replay
+            .pipe_with_recovery("recover", 0, replay_stages)
+            .await
+            .expect("failed stages should execute and recover again");
+
+        assert_eq!(result, 9);
+        assert_eq!(replay.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(replay.snapshot_steps()[0].output, None);
+    }
+
+    #[tokio::test]
+    async fn pipe_recovery_callback_can_reject_policy_errors() {
+        use crate::hooks::HookVerdict;
+
+        let mut ctx = CruxCtx::new("test");
+        ctx.on_pre_step(|_| HookVerdict::Deny("blocked".into()));
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "denied",
+            Box::new(|value| Box::pin(async move { Ok(value) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(Err)),
+        )];
+        let result = ctx.pipe_with_recovery("policy", 0, stages).await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
+    }
+
     // -- join_all -------------------------------------------------------------
 
     #[tokio::test]
@@ -2050,6 +2343,29 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("budget exceeded"));
+    }
+
+    #[tokio::test]
+    async fn join_all_insufficient_step_budget_does_not_charge_undispatched_arms() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::steps(1));
+
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { panic!("should not run") })),
+                    ("b", Box::pin(async { panic!("should not run") })),
+                ],
+            )
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::StepBudgetExceeded { .. })));
+        let value = ctx
+            .step_budgeted("after", || async { Ok(7_i32) })
+            .await
+            .expect("failed join must not consume the remaining invocation");
+        assert_eq!(value, 7);
     }
 
     #[tokio::test]

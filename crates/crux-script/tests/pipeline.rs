@@ -64,6 +64,30 @@ fn test_registry() -> Arc<HandlerRegistry> {
     Arc::new(reg)
 }
 
+#[test]
+fn display_metadata_parses_with_defaults() {
+    let yaml = r#"
+pipeline: polished
+display:
+  title: Polished Pipeline
+  steps:
+    analyze: Analysis
+steps:
+  - step: analyze
+    handler: analyzer
+"#;
+
+    let pipeline = load(yaml).unwrap();
+    let display = pipeline.display.as_ref().expect("display metadata");
+
+    assert_eq!(display.title.as_deref(), Some("Polished Pipeline"));
+    assert_eq!(display.output, crux_script::schema::DisplayOutput::Auto);
+    assert_eq!(
+        display.steps.get("analyze").map(String::as_str),
+        Some("Analysis")
+    );
+}
+
 #[tokio::test]
 async fn simple_step() {
     let yaml = r#"

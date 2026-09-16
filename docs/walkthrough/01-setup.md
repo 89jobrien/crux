@@ -1,5 +1,7 @@
 # Chapter 01 — Setup and First Agent
 
+<!-- TODO(docs): Replace stale Cruxx naming and align Agent, confidence, attempt, event, and ID details with current types. -->
+
 This chapter walks from zero to a working agent. By the end you will have a project that compiles,
 runs a two-step agent, and prints a structured trace as JSON.
 
@@ -7,11 +9,11 @@ runs a two-step agent, and prints a structured trace as JSON.
 
 ## Toolchain Requirements
 
-Cruxx requires **Rust 1.88 or later** and **edition 2024**.
+Cruxx requires **Rust 1.89.0 or later** and **edition 2024**.
 
 The two key language features that make the programming model work are:
 
-- **Native async fn in traits** (stabilized in 1.75, fully ergonomic in 1.88). The `Agent` trait
+- **Native async fn in traits** (stabilized in 1.75, fully ergonomic by 1.89). The `Agent` trait
   uses `async fn run(...)` directly. There is no `#[async_trait]` macro in this codebase and none
   is needed in yours.
 - **Edition 2024 resolver semantics**. Feature unification behaves differently in edition 2024.
@@ -21,7 +23,7 @@ Check your toolchain:
 
 ```bash
 rustup show active-toolchain
-# should print: stable-aarch64-apple-darwin (or similar) with version >= 1.88
+# should print: stable-aarch64-apple-darwin (or similar) with version >= 1.89.0
 ```
 
 If you are on an older toolchain:
@@ -48,7 +50,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-crux      = { version = "0.2", features = ["tokio-runtime"] }
+crux      = { version = "0.3", features = ["tokio-runtime"] }
 tokio      = { version = "1", features = ["full"] }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -23,10 +23,34 @@ jobs:
 
       - uses: taiki-e/install-action@nextest
 
+      - name: Install required taskit tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-deny,cargo-machete
+
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install taskit
-        run: cargo install taskit || cargo install --path .
+      - name: Stub generated modules for fmt
+        run: |
+          for crate in crux-agentic crux-baml; do
+            mkdir -p "crates/$crate/src/baml_client"
+            printf '\n' > "crates/$crate/src/baml_client/mod.rs"
+          done
 
-      - name: Run CI pipeline
-        run: taskit ci --fail-fast
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Rust fmt
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo nextest run --workspace --exclude crux-baml --exclude crux-agentic
+
+      - name: cargo machete
+        run: cargo machete
+
+      - name: cargo deny
+        run: cargo deny check

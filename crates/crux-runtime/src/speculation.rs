@@ -8,7 +8,9 @@ use std::pin::Pin;
 
 use chrono::Utc;
 
+use crate::context::InvocationMeter;
 use crate::ctx::CruxCtx;
+use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepStatus};
 
@@ -66,13 +68,32 @@ where
     where
         F: Fn(&T) -> f32,
     {
+        self.pick_best_by_metered(f, |_| None).await
+    }
+
+    /// Run all arms while recording each completed arm before starting the next.
+    pub async fn pick_best_by_metered<F, R>(self, f: F, mut report: R) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> f32,
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
         trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         // Run all arms, collect results
         let mut completed: Vec<(String, Result<T, CruxErr>)> = Vec::new();
         for arm in self.arms {
+            self.ctx.reserve_invocations(1)?;
             let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
             completed.push((arm.name, result));
         }
 
@@ -217,12 +238,31 @@ where
 
     /// Return the first arm that succeeds. Failed arms recorded as Rejected.
     pub async fn first_ok(self) -> Result<T, CruxErr> {
+        self.first_ok_metered(|_| None).await
+    }
+
+    /// Return the first successful arm, accounting each completed attempt immediately.
+    pub async fn first_ok_metered<R>(self, mut report: R) -> Result<T, CruxErr>
+    where
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
         trace_speculate!(&self.name, self.arms.len());
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
         for arm in self.arms {
-            match arm.fut.await {
+            self.ctx.reserve_invocations(1)?;
+            let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
+            match result {
                 Ok(val) => {
                     self.ctx.push_step(Step {
                         name: format!("{}::{}", self.name, arm.name),
@@ -265,6 +305,20 @@ where
         }
 
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
+    }
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
     }
 }
 
@@ -404,6 +458,50 @@ mod tests {
         // Both arms score 5.0; first arm should win (strict > comparison).
         let result = builder.pick_best_by(|_| 5.0).await.unwrap();
         assert_eq!(result.as_str().unwrap(), "a");
+    }
+
+    #[tokio::test]
+    async fn pick_best_multiple_arms_without_score_resolve_deterministically() {
+        // Issue #68: arms with no "score" field must not silently tie at 0.0
+        // and win arbitrarily by iteration order. The fallback (byte-length of
+        // serialized output) must deterministically pick the same winner
+        // regardless of arm order.
+        let mut ctx_a = CruxCtx::new("test");
+        let arms_a = vec![
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+        ];
+        let result_a = SpeculationBuilder::new(&mut ctx_a, "spec", arms_a)
+            .pick_best()
+            .await
+            .unwrap();
+
+        let mut ctx_b = CruxCtx::new("test");
+        let arms_b = vec![
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+        ];
+        let result_b = SpeculationBuilder::new(&mut ctx_b, "spec", arms_b)
+            .pick_best()
+            .await
+            .unwrap();
+
+        // Same logical winner regardless of arm order -- not an arbitrary
+        // first-wins tie at score 0.0.
+        assert_eq!(result_a["answer"], result_b["answer"]);
+        assert_eq!(
+            result_a["answer"].as_str().unwrap(),
+            "a much longer answer",
+            "expected the longest-serialized arm to win deterministically"
+        );
     }
 
     // first_ok tests

@@ -2,12 +2,52 @@
 ///
 /// Dependency inversion: Agent::run depends on this trait, not on CruxCtx directly.
 /// CruxCtx is the production adapter. Tests can substitute a mock or no-op context.
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
-use crate::types::budget::Budget;
+use crate::types::budget::{Budget, BudgetUsage, HandlerUsage};
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
 use crate::types::step::Step;
+
+/// Result of a budgeted invocation, including whether live work started.
+///
+/// Replay hits and pre-execution budget rejections set `executed` to `false`, so
+/// callers can avoid charging duration or synthesizing missing usage reports.
+#[derive(Debug)]
+pub struct BudgetedInvocation<T> {
+    pub outcome: Result<T, CruxErr>,
+    pub executed: bool,
+}
+
+/// Narrow accounting port for runtime-owned handler invocations.
+pub trait InvocationMeter: Send {
+    /// Execute a replay-aware step while identifying whether its closure ran.
+    fn invoke_budgeted_step<'a, F, Fut, T>(
+        &'a mut self,
+        name: &'a str,
+        f: F,
+    ) -> std::pin::Pin<Box<dyn Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+    where
+        F: FnOnce() -> Fut + Send + 'a,
+        Fut: Future<Output = Result<T, CruxErr>> + Send + 'a,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a;
+
+    /// Atomically reserve a batch of live handler invocations.
+    fn reserve_invocations(&mut self, count: u64) -> Result<(), CruxErr>;
+
+    /// Record every dimension reported by a completed invocation atomically.
+    ///
+    /// All counters are updated before the primary violation is returned.
+    fn record_invocation_usage(
+        &mut self,
+        step: &str,
+        usage: HandlerUsage,
+        duration: Duration,
+    ) -> Result<(), CruxErr>;
+
+    /// Return aggregate usage recorded by this meter.
+    fn budget_usage(&self) -> BudgetUsage;
+}
 
 pub trait Context: Send {
     /// Execute a named step, recording it in the trace.
@@ -85,7 +125,7 @@ pub trait Context: Send {
     /// Set a custom budget.
     fn set_budget(&mut self, budget: Budget);
 
-    /// Record budget consumption.
+    /// Apply compatibility scalar consumption to every configured budget counter.
     fn consume_budget(&mut self, amount: u64);
 
     /// Get the current budget.

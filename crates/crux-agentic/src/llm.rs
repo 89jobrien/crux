@@ -106,6 +106,7 @@ fn merge_metadata(out: &mut Value, resp: &crate::provider::LlmResponse) {
 }
 
 /// Register the `llm::stream` handler.
+// TODO(feature-idea-12): Stream provider deltas into trace chunk events with usage accounting.
 ///
 /// **Stub implementation**: emits the full response as a single output rather than
 /// streaming deltas.  Real streaming requires an async-stream variant on `LlmProvider`

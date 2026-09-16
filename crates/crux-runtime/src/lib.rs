@@ -37,15 +37,18 @@ pub mod prelude {
     pub use crate::agent::Agent;
     pub use crate::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
     pub use crate::audit::{AuditEntry, AuditSink, InMemoryAudit};
-    pub use crate::context::Context;
-    pub use crate::ctx::{BoxFut, ConfidenceRange, ConfidenceRoute, CruxCtx, JoinArm, PipeStage};
+    pub use crate::context::{BudgetedInvocation, Context, InvocationMeter};
+    pub use crate::ctx::{
+        BoxFut, ConfidenceRange, ConfidenceRoute, CruxCtx, JoinArm, PipeFailurePolicy, PipeStage,
+        RecoverablePipeStage,
+    };
     pub use crate::governance::{GovernancePolicy, PolicyAction, compose_policies};
     pub use crate::recorder::hash_content;
     pub use crate::registry::{Task, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
     pub use crate::safety::{SafetyPolicy, SafetyViolation};
     pub use crate::trust::{TrustRegistry, TrustScore};
-    pub use crate::types::budget::Budget;
+    pub use crate::types::budget::{Budget, BudgetUsage, HandlerUsage, UsdAmount};
     pub use crate::types::crux_value::Crux;
     pub use crate::types::error::CruxErr;
     pub use crate::types::evolution::EvolutionOutcome;

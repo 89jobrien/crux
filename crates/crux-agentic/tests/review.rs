@@ -20,7 +20,7 @@ async fn normalize_findings_merges_sources() {
         ]},
         "coverage": {"uncovered": ["c.rs:10"]}
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let findings = out.value["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 3);
     assert!(findings.iter().all(|f| f.get("source").is_some()));
@@ -37,7 +37,7 @@ async fn apply_severity_tiers_findings() {
             {"source": "coverage", "message": "uncovered"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     let findings = out.value["findings"].as_array().unwrap();
     assert_eq!(findings[0]["tier"], "blocking");
     assert_eq!(findings[1]["tier"], "suggestion");
@@ -55,7 +55,7 @@ async fn compute_score_emits_confidence() {
             {"tier": "observation", "file": "c.rs"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert!(out.confidence.is_some());
     let score = out.confidence.unwrap();
     assert!(score < 1.0);
@@ -71,7 +71,7 @@ async fn compute_score_perfect_when_no_blocking() {
             {"tier": "observation"},
         ]
     });
-    let out = h(input).await.unwrap();
+    let out = h(input).await.outcome.unwrap();
     assert_eq!(out.confidence.unwrap(), 1.0);
 }
 
@@ -79,6 +79,6 @@ async fn compute_score_perfect_when_no_blocking() {
 async fn compute_score_empty_findings() {
     let reg = registry();
     let h = reg.get_handler("review::compute_score").unwrap();
-    let out = h(json!({"findings": []})).await.unwrap();
+    let out = h(json!({"findings": []})).await.outcome.unwrap();
     assert_eq!(out.confidence.unwrap(), 1.0);
 }

@@ -388,6 +388,7 @@ fn register_patch_schema_check(registry: &mut HandlerRegistry) {
     );
 }
 
+// TODO(feature-idea-9): Replace the missing external replay command with safe in-process analysis.
 fn register_replay_dry_run(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_REPLAY_DRY_RUN)

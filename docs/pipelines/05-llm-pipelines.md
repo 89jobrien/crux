@@ -34,7 +34,7 @@ Build `crux run` with the `baml` feature to unlock structured
 extraction handlers:
 
 ```bash
-cargo build -p crux-agentic --features baml --bin crux run --release
+cargo build -p crux-cli --features baml --bin crux --release
 ```
 
 ### llm::extract

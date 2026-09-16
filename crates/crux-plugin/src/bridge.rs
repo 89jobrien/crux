@@ -29,6 +29,8 @@ pub async fn register_plugins(
         .map(|h| h.name.clone())
         .collect();
 
+    // TODO(automation-4): Remove the global host mutex so independent plugin processes can
+    // execute concurrently without serializing every handler invocation.
     let host = Arc::new(Mutex::new(host));
 
     for name in handler_names {

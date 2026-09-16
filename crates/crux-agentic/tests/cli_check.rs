@@ -1,4 +1,4 @@
-/// Integration tests for `crux check` subcommand.
+/// Integration tests for `crux run --check`.
 ///
 /// Tests write temporary pipeline files and invoke the check logic directly
 /// via `crux_script::load_file` (same path as the binary) to avoid

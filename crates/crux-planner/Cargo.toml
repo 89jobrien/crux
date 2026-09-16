@@ -17,6 +17,7 @@ baml = ["dep:crux-agentic"]
 [dependencies]
 crux-agentic = { workspace = true, features = ["baml"], optional = true } #unified
 crux-runtime = { workspace = true } #unified
+crux-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

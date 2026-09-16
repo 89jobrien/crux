@@ -16,7 +16,6 @@ categories.workspace = true
 baml = "0.221.0"
 crux-runtime = { workspace = true } #unified
 crux-script = { workspace = true } #unified
-serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 

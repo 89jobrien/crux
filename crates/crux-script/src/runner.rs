@@ -2,13 +2,19 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use crux_types::budget::{Budget, HandlerUsage, UsdAmount};
+use crux_types::crux_value::Crux;
+use crux_types::error::CruxErr;
+use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::expr::IterFrame;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, JoinAllNode, PipeNode, PipelineDef, RouteNode, SpeculateMode,
-    SpeculateNode, StepDef, StepNode, TargetDef,
+    BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
+    PipelineDef, PollNode, RepeatNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode,
+    TargetDef, WhileNode,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -92,11 +98,15 @@ impl Runner {
         let mut ctx = CruxCtx::new(name);
 
         if let Some(budget_def) = budget_override.or(target.budget.as_ref()) {
-            ctx.set_budget(budget_from_def(budget_def));
+            match budget_from_def(budget_def) {
+                Ok(budget) => ctx.set_budget(budget),
+                Err(error) => return ctx.finalize(Err(error)),
+            }
         }
 
+        let empty_vars = IndexMap::new();
         let result = self
-            .execute_steps(&mut ctx, &target.steps, Value::Null)
+            .execute_steps(&mut ctx, &target.steps, Value::Null, &empty_vars)
             .await;
         ctx.finalize(result)
     }
@@ -111,7 +121,10 @@ impl Runner {
         let mut ctx = CruxCtx::new(&pipeline.pipeline);
 
         if let Some(budget_def) = &pipeline.budget {
-            ctx.set_budget(budget_from_def(budget_def));
+            match budget_from_def(budget_def) {
+                Ok(budget) => ctx.set_budget(budget),
+                Err(error) => return ctx.finalize(Err(error)),
+            }
         }
 
         if let Some(prev) = previous {
@@ -119,7 +132,11 @@ impl Runner {
             ctx.replay_from(prev);
         }
 
-        let result = self.execute_steps(&mut ctx, &pipeline.steps, input).await;
+        let empty_vars = IndexMap::new();
+        let vars = pipeline.vars.as_ref().unwrap_or(&empty_vars);
+        let result = self
+            .execute_steps(&mut ctx, &pipeline.steps, input, vars)
+            .await;
         ctx.finalize(result)
     }
 
@@ -128,17 +145,49 @@ impl Runner {
         ctx: &mut CruxCtx,
         steps: &[StepDef],
         input: Value,
+        vars: &IndexMap<String, Value>,
     ) -> Result<Value, CruxErr> {
         let mut expr_ctx = ExprContext::new(input.clone());
-        let mut last_output = input;
 
-        for step_def in steps {
-            last_output = self
-                .execute_step(ctx, step_def, &last_output, &mut expr_ctx)
-                .await?;
+        // Resolve vars: (#85) once, up front, in declaration order so a var may
+        // reference input.* or an earlier-declared var. Steps see the fully
+        // resolved map via `{{ vars.NAME }}`.
+        for (name, raw) in vars {
+            let resolved = expand_args(raw.clone(), &expr_ctx);
+            expr_ctx.vars.insert(name.clone(), resolved);
         }
 
-        Ok(last_output)
+        self.execute_steps_with_ctx(ctx, steps, input, &mut expr_ctx)
+            .await
+    }
+
+    /// Run a list of steps against an already-built `ExprContext`, without creating
+    /// a fresh one or resolving `vars:`. Used both by [`Self::execute_steps`] (the
+    /// top-level pipeline body) and by loop constructs (`poll`, `for_each`, `while`,
+    /// `repeat`) that need their nested `steps:` block to share the outer scope's
+    /// `vars`/`steps` map while adding per-iteration `iter.*` bindings.
+    // Returns a boxed future: this method participates in a recursion cycle
+    // (loop constructs call it, which calls execute_step, which calls back into
+    // loop-construct executors), and `async fn` cannot recurse without indirection.
+    fn execute_steps_with_ctx<'a>(
+        &'a self,
+        ctx: &'a mut CruxCtx,
+        steps: &'a [StepDef],
+        input: Value,
+        expr_ctx: &'a mut ExprContext,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, CruxErr>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let mut last_output = input;
+
+            for step_def in steps {
+                last_output = self
+                    .execute_step(ctx, step_def, &last_output, expr_ctx)
+                    .await?;
+            }
+
+            Ok(last_output)
+        })
     }
 
     async fn execute_step(
@@ -173,7 +222,324 @@ impl Runner {
                 self.execute_speculate_step(ctx, node, current_input, expr_ctx)
                     .await
             }
+            StepDef::Poll(node) => {
+                self.execute_poll_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::ForEach(node) => {
+                self.execute_for_each_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::While(node) => {
+                self.execute_while_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
+            StepDef::Repeat(node) => {
+                self.execute_repeat_step(ctx, node, current_input, expr_ctx)
+                    .await
+            }
         }
+    }
+
+    /// Execute a `while:` node — pre-condition loop (#89). `condition:` is
+    /// checked before each iteration (including the first); the loop runs only
+    /// while it's truthy. Each iteration is a traced sub-step named
+    /// `<while>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_while_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &WhileNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.r#while.as_str();
+        let mut last_output = current_input.clone();
+        let mut index: usize = 0;
+
+        loop {
+            let cont = expr_ctx
+                .eval_bool(&node.condition)
+                .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+            if !cont {
+                break;
+            }
+
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+            index += 1;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `repeat:` node — fixed-count loop (#89). Runs `steps:` exactly
+    /// `count` times. Each iteration is a traced sub-step named
+    /// `<repeat>[<index>]`; `break_if:` can stop the loop early.
+    async fn execute_repeat_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &RepeatNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.repeat.as_str();
+        let mut last_output = current_input.clone();
+
+        for index in 0..node.count as usize {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::new(),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `for_each:` node — maps `steps:` over each item in `items:` (#84).
+    ///
+    /// `items:` is evaluated once against the outer scope to produce the array.
+    /// Each iteration binds `{{ iter.<as> }}` and `{{ iter.index }}`, runs the
+    /// nested `steps:` block, and records the iteration as a traced sub-step named
+    /// `<for_each>[<index>]`. `break_if:` (evaluated after each iteration) stops
+    /// the loop early.
+    ///
+    /// Iterations run sequentially even when `parallel: true` — `CruxCtx` is a
+    /// single mutable trace recorder in this crate's architecture (unlike
+    /// `join_all`, whose arms don't touch `ctx` until the runtime's own internal
+    /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
+    /// sound without a `crux-runtime` change, which is out of scope here.
+    /// `parallel`/`max_concurrency` are accepted for forward compatibility.
+    // TODO(feature-idea-17): Add bounded parallel iteration with deterministic trace merging.
+    async fn execute_for_each_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &ForEachNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.label();
+        let binding = node.binding();
+
+        let items_value = expr_ctx
+            .eval(&node.items)
+            .map_err(|e| CruxErr::step_failed(label, e.to_string()))?;
+        let items = items_value.as_array().cloned().ok_or_else(|| {
+            CruxErr::step_failed(
+                label,
+                format!("items: did not resolve to an array: {items_value}"),
+            )
+        })?;
+
+        let mut last_output = current_input.clone();
+
+        for (index, item) in items.iter().enumerate() {
+            let saved_iter = expr_ctx.iter.take();
+            expr_ctx.iter = Some(IterFrame {
+                index,
+                values: std::collections::HashMap::from([(binding.to_string(), item.clone())]),
+            });
+
+            let iter_result = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await;
+
+            let iter_output = match iter_result {
+                Ok(v) => v,
+                Err(e) => {
+                    expr_ctx.iter = saved_iter;
+                    return Err(e);
+                }
+            };
+
+            let iteration_label = format!("{label}[{index}]");
+            let marker_value = iter_output.clone();
+            if let Err(e) = ctx
+                .step(&iteration_label, move || async move {
+                    Ok::<Value, CruxErr>(marker_value)
+                })
+                .await
+            {
+                expr_ctx.iter = saved_iter;
+                return Err(e);
+            }
+
+            last_output = iter_output;
+
+            let should_break = match &node.break_if {
+                Some(expr) => expr_ctx
+                    .eval_bool(expr)
+                    .map_err(|e| CruxErr::step_failed(label, e.to_string()))?,
+                None => false,
+            };
+
+            expr_ctx.iter = saved_iter;
+
+            if should_break {
+                break;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    /// Execute a `poll:` node — do-while semantics (#83). Runs `steps:` at least
+    /// once, then repeats until `until:` is truthy or `max_attempts` is reached.
+    /// Each iteration's output is recorded as a traced sub-step named
+    /// `<poll>[<index>]` (0-based) so the trace shows exactly how many attempts ran.
+    async fn execute_poll_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &PollNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let mut last_output = current_input.clone();
+        let mut index: u32 = 0;
+
+        loop {
+            let iter_output = self
+                .execute_steps_with_ctx(ctx, &node.steps, last_output.clone(), expr_ctx)
+                .await?;
+
+            // Record the iteration itself as a traced sub-step (#83). The nested
+            // steps above are already individually traced; this marker makes the
+            // iteration boundary visible in the trace.
+            let label = format!("{}[{}]", node.poll, index);
+            let marker_value = iter_output.clone();
+            ctx.step(
+                &label,
+                move || async move { Ok::<Value, CruxErr>(marker_value) },
+            )
+            .await?;
+
+            last_output = iter_output;
+            index += 1;
+
+            let done = expr_ctx
+                .eval_bool(&node.until)
+                .map_err(|e| CruxErr::step_failed(&node.poll, e.to_string()))?;
+            if done {
+                break;
+            }
+            if let Some(max) = node.max_attempts
+                && index >= max
+            {
+                break;
+            }
+            if let Some(ms) = node.interval_ms {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
+        expr_ctx.steps.insert(
+            node.poll.clone(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
     }
 
     /// Execute a `step:` node — resolves the handler, expands args, runs via `ctx.step()`.
@@ -209,19 +575,92 @@ impl Runner {
             current_input.clone()
         };
 
-        // Run the handler inside ctx.step() so replay can skip it entirely.
-        // Confidence is captured via a shared cell since ctx.step() only returns the value.
-        let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
-        let cc = confidence_cell.clone();
-        let handler_out = ctx
-            .step(&node.step, move || async move {
-                let raw = handler(input).await?;
-                *cc.lock().unwrap() = raw.confidence;
-                Ok::<Value, CruxErr>(raw.value)
-            })
-            .await?;
+        // Retry-with-backoff (#79): attempt 1 (initial) plus `retry.count` more,
+        // each recorded as its own traced sub-step so replay/inspection can see
+        // exactly which attempts ran and failed.
+        let (max_attempts, delay_ms) = match &node.retry {
+            Some(r) => (r.count + 1, r.delay_ms),
+            None => (1, 0),
+        };
 
-        let confidence = *confidence_cell.lock().unwrap();
+        let mut last_err: Option<CruxErr> = None;
+        let mut success: Option<(Value, Option<f32>)> = None;
+        for attempt in 0..max_attempts {
+            let step_label = if node.retry.is_some() {
+                format!("{}::attempt{}", node.step, attempt + 1)
+            } else {
+                node.step.clone()
+            };
+            match run_step_once(
+                ctx,
+                &step_label,
+                handler.clone(),
+                input.clone(),
+                node.timeout_ms,
+            )
+            .await
+            {
+                Ok(ok) => {
+                    success = Some(ok);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt + 1 < max_attempts && delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+
+        let (handler_out, confidence) = match success {
+            Some(ok) => ok,
+            None => {
+                let e = last_err.expect("loop runs at least once, so failure implies an error");
+
+                // on_error (#88): active recovery, tried before falling back to
+                // allow_failure's passive tolerance.
+                if let Some(on_err) = &node.on_error {
+                    match self
+                        .run_on_error(ctx, &node.step, on_err, current_input, expr_ctx)
+                        .await
+                    {
+                        Ok(v) => (v, None),
+                        Err(e2) => {
+                            if node.allow_failure {
+                                let failed_val = failed_allowed_value(&e2);
+                                expr_ctx.steps.insert(
+                                    node.step.clone(),
+                                    StepResult {
+                                        output: failed_val.clone(),
+                                        confidence: None,
+                                    },
+                                );
+                                return Ok(failed_val);
+                            }
+                            return Err(e2);
+                        }
+                    }
+                } else if node.allow_failure {
+                    let failed_val = failed_allowed_value(&e);
+                    expr_ctx.steps.insert(
+                        node.step.clone(),
+                        StepResult {
+                            output: failed_val.clone(),
+                            confidence: None,
+                        },
+                    );
+                    return Ok(failed_val);
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+
+        if let Some(expect) = &node.expect {
+            check_expect(&node.step, &handler_out, expect)?;
+        }
+
         expr_ctx.steps.insert(
             node.step.clone(),
             StepResult {
@@ -232,7 +671,46 @@ impl Runner {
         Ok(handler_out)
     }
 
+    /// Run a step's `on_error:` fallback handler (#88) as a traced sub-step named
+    /// `<step>::on_error`. Static args are expanded against the current `ExprContext`,
+    /// same as a normal step's `args`.
+    async fn run_on_error(
+        &self,
+        ctx: &mut CruxCtx,
+        step_name: &str,
+        on_err: &OnErrorDef,
+        current_input: &Value,
+        expr_ctx: &ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let handler = self
+            .registry
+            .get_handler(&on_err.handler)
+            .ok_or_else(|| {
+                CruxErr::step_failed(
+                    step_name,
+                    format!("on_error handler not found: {}", on_err.handler),
+                )
+            })?
+            .clone();
+
+        let input = merge_args(
+            current_input.clone(),
+            on_err
+                .args
+                .as_ref()
+                .map(|a| expand_args(a.clone(), expr_ctx)),
+        );
+
+        let label = format!("{step_name}::on_error");
+        run_step_once(ctx, &label, handler, input, None)
+            .await
+            .map(|(value, _)| value)
+    }
+
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
+    // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
+    // DelegateNode budgets instead of recording delegation as an ordinary parent step.
+    // TODO(feature-idea-13): Use runtime delegation so YAML preserves child traces and budgets.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -265,7 +743,7 @@ impl Runner {
         Ok(output)
     }
 
-    /// Execute a `pipe:` node — chains stages sequentially via `ctx.pipe()`.
+    /// Execute a `pipe:` node, accounting each sequential stage before the next.
     async fn execute_pipe_step(
         &self,
         ctx: &mut CruxCtx,
@@ -273,55 +751,38 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
-        let registry = self.registry.clone();
+        let mut output = current_input.clone();
+        let mut confidence = None;
 
-        // One confidence cell per stage; the last stage's confidence wins.
-        let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
-            .stages
-            .iter()
-            .map(|_| Arc::new(Mutex::new(None)))
-            .collect();
+        for stage in &node.stages {
+            let handler = self
+                .registry
+                .get_handler(stage.handler_name())
+                .ok_or_else(|| CruxErr::step_failed(stage.handler_name(), "handler not found"))?
+                .clone();
+            let input = merge_args(output, stage.args().cloned());
+            let step_name = format!("{}::{}", node.pipe, stage.label());
+            match run_step_once(ctx, &step_name, handler, input, None).await {
+                Ok((value, stage_confidence)) => {
+                    output = value;
+                    confidence = stage_confidence;
+                }
+                Err(error @ CruxErr::StepFailed { .. }) if stage.allow_failure() => {
+                    output = failed_allowed_value(&error);
+                    confidence = None;
+                }
+                Err(error) => return Err(error),
+            }
+        }
 
-        #[allow(clippy::type_complexity)]
-        let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
-            .stages
-            .iter()
-            .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
-                let handler = registry.get_handler(arm.handler_name()).cloned();
-                let name_owned = arm.handler_name().to_string();
-                let static_args = arm.args().cloned();
-                let cell = Arc::clone(cell);
-                let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
-                    Box::new(move |v: Value| {
-                        Box::pin(async move {
-                            let h = handler.ok_or_else(|| {
-                                CruxErr::step_failed(&name_owned, "handler not found")
-                            })?;
-                            let input = merge_args(v, static_args);
-                            let out = h(input).await?;
-                            *cell.lock().unwrap() = out.confidence;
-                            Ok(out.value)
-                        }) as BoxFut<Value>
-                    });
-                (arm.label(), stage_fn)
-            })
-            .collect();
-
-        let input = current_input.clone();
-        let result = ctx.pipe(&node.pipe, input, stages).await?;
-
-        // Use the last stage's confidence (pipeline is sequential).
-        // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
-        let confidence = confidence_cells.last().and_then(|c| *c.lock().unwrap());
         expr_ctx.steps.insert(
             node.pipe.clone(),
             StepResult {
-                output: result.clone(),
+                output: output.clone(),
                 confidence,
             },
         );
-        Ok(result)
+        Ok(output)
     }
 
     /// Execute a `join_all:` node — fans out arms concurrently via `ctx.join_all()`.
@@ -337,28 +798,51 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(arm, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((arm, cell), usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
+                let allow_failure = arm.allow_failure();
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    let out = h(input).await?;
-                    *cell.lock().unwrap() = out.confidence;
-                    Ok(out.value)
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    match execution.outcome {
+                        Ok(out) => {
+                            *cell.lock().unwrap() = out.confidence;
+                            Ok(out.value)
+                        }
+                        Err(e) if allow_failure => Ok(failed_allowed_value(&e)),
+                        Err(e) => Err(e),
+                    }
                 });
                 (arm.label(), fut)
             })
             .collect();
 
-        let results = ctx.join_all(&node.join_all, arms).await?;
+        let results = ctx.join_all(&node.join_all, arms).await;
+        record_usage_cells(
+            ctx,
+            node.arms.iter().map(|arm| arm.label()),
+            &usage_cells,
+            results.as_ref().err(),
+        )?;
+        let results = results?;
         let output = Value::Array(results);
 
         // Average confidence across arms that provided a score; None if none did.
@@ -401,21 +885,31 @@ impl Runner {
             .iter()
             .map(|_| Arc::new(Mutex::new(None)))
             .collect();
+        let usage_cells: Vec<UsageCell> = node
+            .routes
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
 
         let routes: Vec<ConfidenceRoute<'_, Value>> = node
             .routes
             .iter()
             .zip(confidence_cells.iter())
-            .map(|(branch, cell)| {
+            .zip(usage_cells.iter())
+            .map(|((branch, cell), usage_cell)| {
                 let range = parse_range(&branch.range);
                 let handler = self.registry.get_handler(&branch.handler).cloned();
                 let input = merge_args(current_input.clone(), branch.args.clone());
                 let handler_name = branch.handler.clone();
                 let cell = Arc::clone(cell);
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&handler_name, "handler not found"))?;
-                    let out = h(input).await?;
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    let out = execution.outcome?;
                     *cell.lock().unwrap() = out.confidence;
                     Ok(out.value)
                 });
@@ -425,7 +919,14 @@ impl Runner {
 
         let result = ctx
             .route_on_confidence(&node.route_on_confidence, confidence, routes)
-            .await?;
+            .await;
+        record_usage_cells(
+            ctx,
+            node.routes.iter().map(|branch| branch.label.as_str()),
+            &usage_cells,
+            result.as_ref().err(),
+        )?;
+        let result = result?;
 
         // Use the matched branch's handler confidence; fall back to the routing score.
         let handler_confidence = confidence_cells
@@ -452,33 +953,50 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
+        let usage_cells: Vec<UsageCell> = node
+            .arms
+            .iter()
+            .map(|_| Arc::new(Mutex::new(None)))
+            .collect();
         let arms: Vec<(&str, BoxFut<Value>)> = node
             .arms
             .iter()
-            .map(|arm| {
+            .zip(usage_cells.iter())
+            .map(|(arm, usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
                 let input = merge_args(current_input.clone(), arm.args().cloned());
                 let name_owned = arm.handler_name().to_string();
+                let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
                     let h = handler
                         .ok_or_else(|| CruxErr::step_failed(&name_owned, "handler not found"))?;
-                    h(input).await.map(|o| o.value)
+                    let started = std::time::Instant::now();
+                    let execution = h(input).await;
+                    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                    execution.outcome.map(|o| o.value)
                 });
                 (arm.label(), fut)
             })
             .collect();
 
         let builder = ctx.speculate(&node.speculate, arms);
+        let mut usage_iter = usage_cells.iter();
+        let report = move |_arm: &str| {
+            usage_iter
+                .next()
+                .and_then(|cell| cell.lock().unwrap().take())
+        };
         let result = match node.mode {
             SpeculateMode::PickBest => {
                 builder
-                    .pick_best_by(|v: &Value| {
-                        v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32
-                    })
-                    .await?
+                    .pick_best_by_metered(
+                        |v: &Value| v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32,
+                        report,
+                    )
+                    .await
             }
-            SpeculateMode::FirstOk => builder.first_ok().await?,
-        };
+            SpeculateMode::FirstOk => builder.first_ok_metered(report).await,
+        }?;
 
         expr_ctx.steps.insert(
             node.speculate.clone(),
@@ -489,6 +1007,47 @@ impl Runner {
         );
         Ok(result)
     }
+}
+
+type UsageCell = Arc<Mutex<Option<(HandlerUsage, std::time::Duration)>>>;
+
+// TODO(automation-6): Require metered usage from cost-bearing shell, plugin, and LLM handlers
+// and fail closed before work starts when token or USD accounting is unavailable.
+fn record_usage_cells<'a, M: InvocationMeter>(
+    ctx: &mut M,
+    labels: impl Iterator<Item = &'a str>,
+    cells: &[UsageCell],
+    source: Option<&CruxErr>,
+) -> Result<(), CruxErr> {
+    let mut first_label = None;
+    let mut total_tokens = 0_u64;
+    let mut total_duration = std::time::Duration::ZERO;
+    let mut total_usd = Some(UsdAmount::ZERO);
+    for (label, cell) in labels.zip(cells) {
+        if let Some((usage, duration)) = cell.lock().unwrap().take() {
+            first_label.get_or_insert(label);
+            total_tokens = total_tokens.saturating_add(usage.tokens);
+            total_duration = total_duration.saturating_add(duration);
+            total_usd = match (total_usd, usage.usd) {
+                (Some(total), Some(amount)) => total.checked_add(amount),
+                _ => None,
+            };
+        }
+    }
+    let Some(label) = first_label else {
+        return Ok(());
+    };
+    let usage = HandlerUsage {
+        tokens: total_tokens,
+        usd: total_usd,
+    };
+    ctx.record_invocation_usage(label, usage, total_duration)
+        .map_err(|mut error| {
+            if let Some(source) = source {
+                attach_budget_source(&mut error, source.clone());
+            }
+            error
+        })
 }
 
 /// Recursively expand `{{ expr }}` templates in all string leaves of a JSON value.
@@ -516,6 +1075,147 @@ fn expand_args(value: Value, ctx: &ExprContext) -> Value {
     }
 }
 
+/// Run a single handler invocation through `ctx.step()`, applying an optional
+/// per-attempt timeout (#81) and capturing the confidence score via a shared cell
+/// (since `ctx.step()` only returns the value). Used directly for non-retrying
+/// steps, and once per attempt for steps with a `retry:` policy (#79).
+async fn run_step_once<M: InvocationMeter>(
+    ctx: &mut M,
+    step_label: &str,
+    handler: crate::registry::BoxHandler,
+    input: Value,
+    timeout_ms: Option<u64>,
+) -> Result<(Value, Option<f32>), CruxErr> {
+    let started_cell: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
+    let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let usage_cell: Arc<Mutex<Option<HandlerUsage>>> = Arc::new(Mutex::new(None));
+    let sc = started_cell.clone();
+    let cc = confidence_cell.clone();
+    let uc = usage_cell.clone();
+    let step_name_owned = step_label.to_string();
+    let invocation = ctx
+        .invoke_budgeted_step(step_label, move || async move {
+            *sc.lock().unwrap() = Some(std::time::Instant::now());
+            let fut = async move {
+                let execution = handler(input).await;
+                *uc.lock().unwrap() = Some(execution.usage);
+                let raw = execution.outcome?;
+                *cc.lock().unwrap() = raw.confidence;
+                Ok::<Value, CruxErr>(raw.value)
+            };
+            match timeout_ms {
+                Some(ms) => {
+                    match tokio::time::timeout(std::time::Duration::from_millis(ms), fut).await {
+                        Ok(res) => res,
+                        Err(_) => Err(CruxErr::step_failed(
+                            &step_name_owned,
+                            format!("step timed out after {ms}ms"),
+                        )),
+                    }
+                }
+                None => fut.await,
+            }
+        })
+        .await;
+    if !invocation.executed {
+        return invocation
+            .outcome
+            .map(|value| (value, *confidence_cell.lock().unwrap()));
+    }
+
+    let usage = usage_cell
+        .lock()
+        .unwrap()
+        .unwrap_or_else(HandlerUsage::unreported);
+    let duration = started_cell
+        .lock()
+        .unwrap()
+        .expect("executed invocation records its live start")
+        .elapsed();
+    if let Err(mut accounting_error) = ctx.record_invocation_usage(step_label, usage, duration) {
+        if let Err(source) = invocation.outcome {
+            attach_budget_source(&mut accounting_error, source);
+        }
+        return Err(accounting_error);
+    }
+    invocation
+        .outcome
+        .map(|v| (v, *confidence_cell.lock().unwrap()))
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
+    }
+}
+
+/// Build the placeholder output value for a step/arm whose failure was tolerated
+/// via `allow_failure: true` (#80). Carries enough metadata for downstream
+/// expressions/consumers to detect and inspect the failure without a panic.
+fn failed_allowed_value(err: &CruxErr) -> Value {
+    serde_json::json!({
+        "status": "failed_allowed",
+        "error": err.to_string(),
+    })
+}
+
+/// Evaluate a step's `expect:` clause against its handler output.
+///
+/// Looks up `exit_code`, `stdout`, `stderr` fields on the output value (the
+/// convention used by shell-style handlers). Any configured check that fails
+/// produces a descriptive `CruxErr::StepFailed`. Checks not configured in the
+/// `expect:` block are skipped.
+fn check_expect(step_name: &str, output: &Value, expect: &ExpectDef) -> Result<(), CruxErr> {
+    if let Some(expected_code) = expect.exit_code {
+        let actual = output.get("exit_code").and_then(|v| v.as_i64());
+        if actual != Some(expected_code) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.exit_code mismatch: expected {expected_code}, got {}",
+                    actual
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "<missing>".to_string())
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stdout_contains {
+        let actual = output.get("stdout").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stdout_contains mismatch: stdout did not contain {needle:?} (stdout was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    if let Some(needle) = &expect.stderr_contains {
+        let actual = output.get("stderr").and_then(|v| v.as_str()).unwrap_or("");
+        if !actual.contains(needle.as_str()) {
+            return Err(CruxErr::step_failed(
+                step_name,
+                format!(
+                    "expect.stderr_contains mismatch: stderr did not contain {needle:?} (stderr was {actual:?})"
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Merge static step args into handler input under the "args" key.
 fn merge_args(mut input: Value, args: Option<Value>) -> Value {
     if let Some(a) = args {
@@ -528,27 +1228,35 @@ fn merge_args(mut input: Value, args: Option<Value>) -> Value {
     input
 }
 
-fn budget_from_def(def: &BudgetDef) -> Budget {
+fn budget_from_def(def: &BudgetDef) -> Result<Budget, CruxErr> {
     let mut budgets = Vec::new();
     if let Some(tokens) = def.tokens {
         budgets.push(Budget::tokens(tokens));
     }
-    if let Some(calls) = def.calls {
-        budgets.push(Budget::calls(calls));
+    if let Some(steps) = def.steps.or(def.calls) {
+        budgets.push(Budget::steps(steps));
     }
     if let Some(duration_ms) = def.duration_ms {
         budgets.push(Budget::duration(std::time::Duration::from_millis(
             duration_ms,
         )));
     }
-    if let Some(cost_cents) = def.cost_cents {
-        budgets.push(Budget::cost_cents(cost_cents));
+    if let Some(usd) = def.usd {
+        budgets.push(Budget::usd(usd));
+    } else if let Some(cost_cents) = def.cost_cents {
+        let micros = cost_cents.checked_mul(10_000).ok_or_else(|| {
+            CruxErr::step_failed(
+                "budget",
+                "cost_cents budget is too large to convert exactly to microdollars",
+            )
+        })?;
+        budgets.push(Budget::usd(UsdAmount::from_micros(micros)));
     }
-    match budgets.as_slice() {
+    Ok(match budgets.as_slice() {
         [] => Budget::default(),
         [_] => budgets.into_iter().next().unwrap_or_default(),
         _ => Budget::combined(budgets),
-    }
+    })
 }
 
 /// Parse a range string like `[0.0, 0.5)` or `[0.8, 1.0]`.
@@ -571,6 +1279,71 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    struct DelayedMeter {
+        duration: Option<std::time::Duration>,
+    }
+
+    impl InvocationMeter for DelayedMeter {
+        fn invoke_budgeted_step<'a, F, Fut, T>(
+            &'a mut self,
+            _name: &'a str,
+            f: F,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+        where
+            F: FnOnce() -> Fut + Send + 'a,
+            Fut: std::future::Future<Output = Result<T, CruxErr>> + Send + 'a,
+            T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+        {
+            Box::pin(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                BudgetedInvocation {
+                    outcome: f().await,
+                    executed: true,
+                }
+            })
+        }
+
+        fn reserve_invocations(&mut self, _count: u64) -> Result<(), CruxErr> {
+            Ok(())
+        }
+
+        fn record_invocation_usage(
+            &mut self,
+            _step: &str,
+            _usage: HandlerUsage,
+            duration: std::time::Duration,
+        ) -> Result<(), CruxErr> {
+            self.duration = Some(duration);
+            Ok(())
+        }
+
+        fn budget_usage(&self) -> crux_types::budget::BudgetUsage {
+            crux_types::budget::BudgetUsage::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn invocation_duration_starts_when_live_handler_closure_begins() {
+        let mut meter = DelayedMeter { duration: None };
+        let handler: crate::registry::BoxHandler = Arc::new(|_input| {
+            Box::pin(async {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                crate::HandlerExecution::free(Ok(crate::HandlerOutput::new(Value::Null)))
+            })
+        });
+
+        run_step_once(&mut meter, "timed", handler, Value::Null, None)
+            .await
+            .unwrap();
+
+        let duration = meter.duration.expect("duration recorded");
+        assert!(duration >= std::time::Duration::from_millis(5));
+        assert!(
+            duration < std::time::Duration::from_millis(30),
+            "{duration:?}"
+        );
+    }
+
     /// Build a minimal pipeline with a single step that calls a counting handler.
     fn counting_pipeline() -> (PipelineDef, HandlerRegistry, Arc<AtomicU32>) {
         let counter = Arc::new(AtomicU32::new(0));
@@ -591,6 +1364,417 @@ mod tests {
         .expect("valid pipeline");
 
         (pipeline, reg, counter)
+    }
+
+    #[tokio::test]
+    async fn retry_accounts_failed_and_successful_attempts_exactly_once() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let called = attempts.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("flaky", move |input: Value| {
+            let called = called.clone();
+            async move {
+                let attempt = called.fetch_add(1, Ordering::SeqCst);
+                let usage = HandlerUsage::metered(0, UsdAmount::from_micros(1));
+                if attempt == 0 {
+                    crate::HandlerExecution::failure(
+                        CruxErr::step_failed("flaky", "first attempt"),
+                        usage,
+                    )
+                } else {
+                    crate::HandlerExecution::success(crate::HandlerOutput::new(input), usage)
+                }
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: retry_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - step: flaky\n    retry:\n      count: 1\n      delay_ms: 0\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn on_error_accounts_failed_primary_and_fallback_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("primary", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("primary", "failed"),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        registry.handler_metered("fallback", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: fallback_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - step: primary\n    on_error:\n      handler: fallback\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn join_accounts_every_completed_parallel_arm_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        for name in ["one", "two"] {
+            registry.handler_metered(name, |input: Value| async move {
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            });
+        }
+        let pipeline = crate::load(
+            "pipeline: join_meter\nbudget:\n  usd: 0.000001\nsteps:\n  - join_all: both\n    arms: [one, two]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 2,
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn route_accounts_only_the_selected_handler_once() {
+        let unselected = Arc::new(AtomicU32::new(0));
+        let low_calls = unselected.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_metered("high", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+            )
+        });
+        registry.handler_metered("low", move |input: Value| {
+            let low_calls = low_calls.clone();
+            async move {
+                low_calls.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: route_meter\nbudget:\n  usd: 0\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 0.5)\"\n        label: low\n        handler: low\n      - range: \"[0.5, 1.0]\"\n        label: high\n        handler: high\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                ..
+            })
+        ));
+        assert_eq!(unselected.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn selected_route_reserves_step_before_handler_invocation() {
+        let selected_calls = Arc::new(AtomicU32::new(0));
+        let calls = selected_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_value_free("selected", move |input: Value| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: route_steps\nbudget: { steps: 1 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: selected\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
+        assert_eq!(selected_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_paid_join_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_join\nbudget: { usd: 0 }\nsteps:\n  - join_all: work\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_route_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_free("score", |_input: Value| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_route\nbudget: { usd: 0 }\nsteps:\n  - step: score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 1.0]\"\n        label: selected\n        handler: paid_failure\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn failed_paid_speculation_is_metered_exactly_once() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid_failure", |_input: Value| async move {
+            crate::HandlerExecution::failure(
+                CruxErr::step_failed("paid_failure", "provider failed"),
+                HandlerUsage::metered(4, UsdAmount::from_micros(1)),
+            )
+        });
+        let pipeline = crate::load(
+            "pipeline: failed_speculation\nbudget: { usd: 0 }\nsteps:\n  - speculate: work\n    mode: first_ok\n    arms: [paid_failure]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded {
+                actual_micros: 1,
+                source: Some(_),
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn legacy_budget_conversion_succeeds_for_pipeline_and_target() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(10_000)),
+            )
+        });
+        let runner = Runner::new(Arc::new(registry));
+        let pipeline = crate::load(
+            "pipeline: legacy\nbudget:\n  calls: 1\n  cost_cents: 1\nsteps:\n  - step: paid\n",
+        )
+        .unwrap();
+        assert!(runner.run(&pipeline, Value::Null).await.value().is_ok());
+
+        let cruxfile = crate::load_cruxfile(
+            "project: legacy\ndefault: check\ntargets:\n  check:\n    budget:\n      calls: 1\n      cost_cents: 1\n    steps:\n      - step: paid\n",
+        )
+        .unwrap();
+        let target = cruxfile.targets.get("check").unwrap();
+        assert!(
+            runner
+                .run_target(target, "check", None)
+                .await
+                .value()
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn run_target_rejects_cost_cents_overflow() {
+        let overflow = u64::MAX / 10_000 + 1;
+        let cruxfile = crate::load_cruxfile(&format!(
+            "project: overflow\ndefault: check\ntargets:\n  check:\n    budget:\n      cost_cents: {overflow}\n    steps: []\n"
+        ))
+        .unwrap();
+        let target = cruxfile.targets.get("check").unwrap();
+
+        let result = Runner::new(Arc::new(HandlerRegistry::new()))
+            .run_target(target, "check", None)
+            .await;
+
+        assert!(result.value().is_err());
+        assert!(
+            result
+                .value()
+                .unwrap_err()
+                .to_string()
+                .contains("cost_cents")
+        );
+    }
+
+    #[tokio::test]
+    async fn sequential_pipe_stops_after_first_over_budget_invocation() {
+        let later_calls = Arc::new(AtomicU32::new(0));
+        let later = later_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(input),
+                HandlerUsage::metered(0, UsdAmount::from_micros(2)),
+            )
+        });
+        registry.handler_metered("later", move |input: Value| {
+            let later = later.clone();
+            async move {
+                later.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(input),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: pipe_budget\nbudget:\n  usd: 0.000001\nsteps:\n  - pipe: sequence\n    stages: [paid, later]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded { .. })
+        ));
+        assert_eq!(later_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn sequential_speculation_stops_after_first_over_budget_invocation() {
+        let later_calls = Arc::new(AtomicU32::new(0));
+        let later = later_calls.clone();
+        let mut registry = HandlerRegistry::new();
+        registry.handler_metered("paid", |_input: Value| async move {
+            crate::HandlerExecution::success(
+                crate::HandlerOutput::new(serde_json::json!({"score": 1})),
+                HandlerUsage::metered(0, UsdAmount::from_micros(2)),
+            )
+        });
+        registry.handler_metered("later", move |_input: Value| {
+            let later = later.clone();
+            async move {
+                later.fetch_add(1, Ordering::SeqCst);
+                crate::HandlerExecution::success(
+                    crate::HandlerOutput::new(serde_json::json!({"score": 2})),
+                    HandlerUsage::metered(0, UsdAmount::from_micros(1)),
+                )
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: speculate_budget\nbudget:\n  usd: 0.000001\nsteps:\n  - speculate: choices\n    mode: pick_best\n    arms: [paid, later]\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(registry))
+            .run(&pipeline, Value::Null)
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UsdBudgetExceeded { .. })
+        ));
+        assert_eq!(later_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn accounting_retains_all_dimensions_and_completed_reports_before_violation() {
+        let mut ctx = CruxCtx::new("meter");
+        ctx.set_budget(Budget::combined(vec![
+            Budget::duration(std::time::Duration::ZERO),
+            Budget::tokens(0),
+            Budget::usd(UsdAmount::ZERO),
+        ]));
+        let cells = vec![
+            Arc::new(Mutex::new(Some((
+                HandlerUsage::metered(2, UsdAmount::from_micros(3)),
+                std::time::Duration::from_millis(1),
+            )))),
+            Arc::new(Mutex::new(Some((
+                HandlerUsage::metered(5, UsdAmount::from_micros(7)),
+                std::time::Duration::from_millis(2),
+            )))),
+        ];
+
+        let error = record_usage_cells(&mut ctx, ["a", "b"].into_iter(), &cells, None)
+            .expect_err("completed usage must still report a violation");
+
+        assert!(error.to_string().to_lowercase().contains("duration"));
+        let usage = ctx.budget_usage();
+        assert_eq!(usage.duration_ms, 3);
+        assert_eq!(usage.tokens, 7);
+        assert_eq!(usage.usd.map(UsdAmount::micros), Some(10));
     }
 
     #[tokio::test]
@@ -623,6 +1807,58 @@ mod tests {
             1,
             "handler should not re-execute during replay"
         );
+    }
+
+    #[tokio::test]
+    async fn replayed_step_under_usd_budget_consumes_no_usage() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let called = counter.clone();
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value_free("test::free", move |input: Value| {
+            let called = called.clone();
+            async move {
+                called.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: replay_budget\nbudget:\n  usd: 0\nsteps:\n  - step: free\n    handler: test::free\n",
+        )
+        .unwrap();
+        let runner = Runner::new(Arc::new(reg));
+
+        let first = runner.run(&pipeline, serde_json::json!({})).await;
+        assert!(first.value().is_ok());
+        let replayed = runner
+            .run_with_replay(&pipeline, serde_json::json!({}), &first, ReplayMode::Strict)
+            .await;
+
+        assert!(replayed.value().is_ok(), "{:?}", replayed.value());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert_eq!(replayed.steps[0].duration_ms, 0);
+    }
+
+    #[tokio::test]
+    async fn pre_execution_step_rejection_preserves_error_and_records_no_duration() {
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value_free("test::free", |input: Value| async move { Ok(input) });
+        let pipeline = crate::load(
+            "pipeline: rejected\nbudget:\n  steps: 0\n  usd: 0\nsteps:\n  - step: blocked\n    handler: test::free\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(reg))
+            .run(&pipeline, serde_json::json!({}))
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 0,
+                attempted: 1
+            })
+        ));
+        assert!(result.steps.is_empty());
     }
 
     #[tokio::test]

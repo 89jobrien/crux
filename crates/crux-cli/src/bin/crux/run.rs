@@ -3,25 +3,79 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
+use crux_script::{HandlerRegistry, TargetResolver, collect_agent_names, schema::PipelineDef};
 use serde_json::{Value, json};
 
-use crate::registry::{build_registry, collect_handler_names, print_trace, warn_missing_env};
+use crate::output::{render_summary, render_trace};
+use crate::registry::{build_registry, collect_handler_names, warn_missing_env};
+
+/// Render compact result JSON for explicit `--json` mode.
+///
+/// Pure: no I/O. On success, returns the compact JSON encoding of the value. On
+/// failure, returns the error message (printed to stderr by the caller).
+fn render_default_output(crux: &Crux<Value>) -> Result<String, String> {
+    match crux.value() {
+        Ok(v) => Ok(serde_json::to_string(v).unwrap_or_default()),
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 /// Shared config for the `run` subcommand, replacing positional arg sprawl.
 pub struct RunConfig<'a> {
     pub pipeline_arg: Option<&'a str>,
     pub target_or_input: Option<&'a str>,
+    pub check: bool,
     pub target_flag: Option<&'a str>,
     pub input_flag: Option<&'a str>,
     pub plugins_path: Option<&'a str>,
     pub quiet: bool,
+    pub summary: bool,
+    pub json: bool,
     pub verbose: bool,
     pub dry_run: bool,
     pub replay_path: Option<&'a str>,
     pub replay_mode_str: &'a str,
     pub save_trace_path: Option<&'a str>,
     pub strict: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputMode {
+    Summary,
+    Verbose,
+    Json,
+    Quiet,
+}
+
+fn output_mode(config: &RunConfig<'_>) -> OutputMode {
+    if config.verbose {
+        OutputMode::Verbose
+    } else if config.summary {
+        OutputMode::Summary
+    } else if config.json {
+        OutputMode::Json
+    } else if config.quiet {
+        OutputMode::Quiet
+    } else {
+        OutputMode::Summary
+    }
+}
+
+fn render_human_error(error: &CruxErr) {
+    eprintln!("{:?}", miette::Report::new(error.clone()));
+}
+
+fn render_json_error(error: &CruxErr) {
+    match serde_json::to_string(error) {
+        Ok(json) => eprintln!("{json}"),
+        Err(source) => {
+            let fallback = json!({
+                "kind": "serialization_error",
+                "message": source.to_string(),
+            });
+            eprintln!("{fallback}");
+        }
+    }
 }
 
 /// Resolve the pipeline path from the config, or discover `Cruxfile` in cwd.
@@ -77,10 +131,19 @@ fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>
 /// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
 pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
     let Some(pipeline_path) = resolve_pipeline_path(cfg.pipeline_arg) else {
+        if cfg.check {
+            eprintln!("error: --check does not support stdin ('-') pipelines");
+            std::process::exit(1);
+        }
         // stdin path — always a regular pipeline
         cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
         return;
     };
+
+    if cfg.check {
+        crate::check::cmd_check(&[pipeline_path]);
+        return;
+    }
 
     let contents = std::fs::read_to_string(&pipeline_path).unwrap_or_else(|e| {
         eprintln!("error: cannot read {pipeline_path}: {e}");
@@ -127,9 +190,12 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
             let tmp = PipelineDef {
                 pipeline: name.to_string(),
                 budget: None,
+                vars: None,
+                display: None,
                 steps: target_def.steps.clone(),
             };
-            let handlers = collect_handler_names(&tmp);
+            let mut handlers = collect_handler_names(&tmp);
+            handlers.extend(collect_agent_names(&tmp));
             println!(
                 "  {:>2}. {name} ({} steps: {}){budget_info}",
                 i + 1,
@@ -147,7 +213,8 @@ fn cmd_dry_run_pipeline(contents: &str, path: &str) {
         std::process::exit(1);
     });
 
-    let handlers = collect_handler_names(&pipeline);
+    let mut handlers = collect_handler_names(&pipeline);
+    handlers.extend(collect_agent_names(&pipeline));
     println!(
         "Pipeline: {} ({} steps)\n",
         pipeline.pipeline,
@@ -169,6 +236,11 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         eprintln!("error: failed to parse {path}: {e}");
         std::process::exit(1);
     });
+
+    if cfg.json {
+        eprintln!("error: --json is not supported for Cruxfile targets");
+        std::process::exit(2);
+    }
 
     let target = target_name.unwrap_or(&cruxfile.default);
 
@@ -195,37 +267,65 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
         budget: None,
+        vars: None,
+        display: None,
         steps: vec![],
     };
     let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path, false));
 
     // Also register any handlers referenced in all targets.
     let mut full_reg = registry;
-    let mut unregistered: Vec<String> = Vec::new();
+    let mut unregistered_handlers = std::collections::BTreeSet::new();
+    let mut unregistered_agents = std::collections::BTreeSet::new();
     for (_, tgt) in &cruxfile.targets {
         let tmp_pipeline = PipelineDef {
             pipeline: String::new(),
             budget: None,
+            vars: None,
+            display: None,
             steps: tgt.steps.clone(),
         };
         for name in collect_handler_names(&tmp_pipeline) {
             if full_reg.get_handler(&name).is_none() {
                 if strict {
-                    if !unregistered.contains(&name) {
-                        unregistered.push(name);
-                    }
+                    unregistered_handlers.insert(name);
                 } else {
+                    // TODO(automation-7): Make production automation profiles strict by
+                    // default so unregistered handlers can never degrade into successful stubs.
                     register_stub_handler(&mut full_reg, name);
+                }
+            }
+        }
+        for name in collect_agent_names(&tmp_pipeline) {
+            if full_reg.get_agent(&name).is_none() {
+                if strict {
+                    unregistered_agents.insert(name);
+                } else {
+                    register_stub_agent(&mut full_reg, name);
                 }
             }
         }
     }
 
-    if !unregistered.is_empty() {
-        eprintln!(
-            "[crux] error: --strict mode: unregistered handlers: {}",
-            unregistered.join(", ")
-        );
+    if !unregistered_handlers.is_empty() || !unregistered_agents.is_empty() {
+        if !unregistered_handlers.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered handlers: {}",
+                unregistered_handlers
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        if !unregistered_agents.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered agents: {}",
+                unregistered_agents
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         std::process::exit(1);
     }
 
@@ -324,8 +424,6 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
 
 fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let plugins_path = cfg.plugins_path;
-    let quiet = cfg.quiet;
-    let verbose = cfg.verbose;
     let replay_path = cfg.replay_path;
     let replay_mode_str = cfg.replay_mode_str;
     let save_trace_path = cfg.save_trace_path;
@@ -371,26 +469,47 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     };
     let elapsed = start.elapsed();
 
+    // TODO(automation-11): Persist run state, checkpoints, trace paths, artifacts, and final
+    // status under one run ID instead of leaving trace files detached from TaskRegistry.
     if let Some(path) = save_trace_path {
         let trace_json = serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
         std::fs::write(path, trace_json).expect("failed to write trace file");
-        if !quiet {
+        if !cfg.quiet {
             eprintln!("[crux] trace saved to {path}");
         }
     }
 
-    if verbose {
-        print_trace(&crux, elapsed);
-    } else if !quiet {
-        match crux.value() {
-            Ok(v) => println!("{}", serde_json::to_string(v).unwrap_or_default()),
-            Err(e) => {
-                eprintln!("{e}");
-                std::process::exit(1);
+    match output_mode(cfg) {
+        OutputMode::Verbose => {
+            print!(
+                "{}",
+                render_trace(&crux, elapsed, pipeline.display.as_ref())
+            );
+        }
+        OutputMode::Json => match crux.value() {
+            Ok(_) => println!("{}", render_default_output(&crux).unwrap_or_default()),
+            Err(error) => render_json_error(error),
+        },
+        OutputMode::Summary => {
+            print!(
+                "{}",
+                render_summary(&crux, elapsed, pipeline.display.as_ref())
+            );
+        }
+        OutputMode::Quiet => {
+            if let Err(error) = crux.value() {
+                render_human_error(error);
             }
         }
-    } else if let Err(e) = crux.value() {
-        eprintln!("{e}");
+    }
+
+    if let Err(error) = crux.value() {
+        if !matches!(
+            output_mode(cfg),
+            OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
+        ) {
+            render_human_error(error);
+        }
         std::process::exit(1);
     }
 }
@@ -408,4 +527,172 @@ fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
             }))
         }
     });
+}
+
+fn register_stub_agent(reg: &mut HandlerRegistry, name: String) {
+    let n = name.clone();
+    reg.agent_fn(name, move |_input: Value| {
+        let agent_name = n.clone();
+        async move {
+            eprintln!("[crux] warning: no builtin for agent '{agent_name}', using stub");
+            Ok(json!({
+                "_stub": agent_name,
+                "confidence": 0.5,
+                "score": 0.5,
+            }))
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crux_runtime::prelude::{CruxId, Step};
+    use crux_script::schema::{DisplayOutput, PipelineDisplayDef};
+    use std::collections::HashMap;
+
+    fn ok_crux(v: Value) -> Crux<Value> {
+        Crux {
+            id: CruxId::new(),
+            agent: "test-agent".to_string(),
+            value: Ok(v),
+            steps: vec![],
+            children: vec![],
+            started_at: chrono::Utc::now(),
+            finished_at: None,
+        }
+    }
+
+    fn ok_step(name: &str, duration_ms: u64) -> Step {
+        Step {
+            name: name.to_string(),
+            kind: StepKind::Plain,
+            status: StepStatus::Ok,
+            confidence: 1.0,
+            started_at: chrono::Utc::now(),
+            duration_ms,
+            input_hash: 0,
+            content_hash: None,
+            output: None,
+            error: None,
+            attempt: 0,
+            events: vec![],
+            metadata: HashMap::new(),
+            findings: vec![],
+        }
+    }
+
+    fn display_metadata() -> PipelineDisplayDef {
+        let mut display = PipelineDisplayDef {
+            title: Some("Bamlish CI".to_string()),
+            output: DisplayOutput::Auto,
+            ..PipelineDisplayDef::default()
+        };
+        display
+            .steps
+            .insert("fmt_check".to_string(), "Formatting".to_string());
+        display
+    }
+
+    fn config() -> RunConfig<'static> {
+        RunConfig {
+            pipeline_arg: Some("pipeline.crux"),
+            target_or_input: None,
+            check: false,
+            target_flag: None,
+            input_flag: None,
+            plugins_path: None,
+            quiet: false,
+            summary: false,
+            json: false,
+            verbose: false,
+            dry_run: false,
+            replay_path: None,
+            replay_mode_str: "strict",
+            save_trace_path: None,
+            strict: false,
+        }
+    }
+
+    #[test]
+    fn output_mode_defaults_to_summary_and_preserves_explicit_modes() {
+        let mut cfg = config();
+        assert_eq!(output_mode(&cfg), OutputMode::Summary);
+
+        cfg.summary = true;
+        assert_eq!(output_mode(&cfg), OutputMode::Summary);
+
+        cfg.summary = false;
+        cfg.json = true;
+        assert_eq!(output_mode(&cfg), OutputMode::Json);
+
+        cfg.json = false;
+        cfg.verbose = true;
+        assert_eq!(output_mode(&cfg), OutputMode::Verbose);
+
+        cfg.verbose = false;
+        cfg.quiet = true;
+        assert_eq!(output_mode(&cfg), OutputMode::Quiet);
+    }
+
+    #[test]
+    fn summary_output_uses_display_labels_and_suppresses_shell_envelope() {
+        let mut crux = ok_crux(json!({
+            "exit_code": 0,
+            "stdout": "all checks passed\n",
+            "stderr": ""
+        }));
+        crux.steps.push(ok_step("fmt_check", 73));
+
+        let out = render_summary(
+            &crux,
+            std::time::Duration::from_millis(73),
+            Some(&display_metadata()),
+        );
+
+        assert!(out.contains("Bamlish CI"));
+        assert!(out.contains("PASS"));
+        assert!(out.contains("Formatting"));
+        assert!(out.contains("1/1 checks passed"));
+        assert!(!out.contains("exit_code"));
+        assert!(out.contains("Output:\nall checks passed\n"), "{out}");
+    }
+
+    #[test]
+    fn summary_output_retains_semantic_result_in_auto_mode() {
+        let crux = ok_crux(json!({"answer": 42}));
+        let out = render_summary(
+            &crux,
+            std::time::Duration::from_millis(5),
+            Some(&PipelineDisplayDef::default()),
+        );
+
+        assert!(out.contains("Output:"));
+        assert!(out.contains(r#""answer": 42"#));
+    }
+
+    #[test]
+    fn json_output_is_raw_result() {
+        let crux = ok_crux(json!({"answer": 42}));
+        let out = render_default_output(&crux).expect("ok result");
+        assert_eq!(out, r#"{"answer":42}"#);
+        // No trace envelope framing should leak into compact JSON output.
+        assert!(!out.contains("Pipeline:"));
+        assert!(!out.contains("Trace:"));
+    }
+
+    #[test]
+    fn verbose_output_is_full_trace_envelope() {
+        let crux = ok_crux(json!({"answer": 42}));
+        let out = render_trace(
+            &crux,
+            std::time::Duration::from_millis(5),
+            Some(&display_metadata()),
+        );
+        assert!(out.contains("Pipeline:"));
+        assert!(out.contains("Status:   OK"));
+        assert!(out.contains("Trace:"));
+        assert!(out.contains("Output:"));
+        assert!(out.contains(r#""answer": 42"#));
+    }
 }

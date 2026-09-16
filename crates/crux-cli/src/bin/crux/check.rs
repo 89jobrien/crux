@@ -12,6 +12,8 @@ pub fn cmd_check(paths: &[String]) {
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
         budget: None,
+        vars: None,
+        display: None,
         steps: vec![],
     };
     let registry = rt.block_on(build_registry(&empty_pipeline, None, false));

@@ -8,28 +8,16 @@ pipeline: session_handoff
 budget: { tokens: 6000, calls: 15 }
 
 steps:
-  - join_all: scan_workspace
-    arms:
-      - step: dirty_repos
-        handler: ctrl::noop
-        args:
-          input: "{{ input.dirty_repos }}"
-      - step: handoffs
-        handler: ctrl::noop
-        args:
-          input: "{{ input.handoffs }}"
-      - step: pending_todos
-        handler: ctrl::noop
-        args:
-          input: "{{ input.pending_todos }}"
-      - step: stale_worktrees
-        handler: ctrl::noop
-        args:
-          input: "{{ input.stale_worktrees }}"
-      - step: recent_activity
-        handler: ctrl::noop
-        args:
-          input: "{{ input.recent_activity }}"
+  - step: reshape
+    handler: json::merge
+    args:
+      with:
+        todos: "{{ input.pending_todos }}"
+    # Bridge the scanner's `pending_todos` field into the `todos` shape the
+    # triage handlers expect. Must be a top-level step, not a pipe stage:
+    # pipe/join_all arm args are not template-expanded (only top-level
+    # `step:` args go through expand_args), so this can't live inside the
+    # `prioritize` pipe below.
 
   - pipe: prioritize
     stages:
@@ -39,18 +27,29 @@ steps:
       - step: score
         handler: triage::score_urgency
         # Rank by age * priority weight
-      - step: dedup
-        handler: triage::deduplicate_intent
-        # Cluster duplicate/similar items
       - step: group
         handler: triage::group_by_repo
-        # Partition into per-repo buckets
+        # Partition into per-repo buckets. `triage::deduplicate_intent` is
+        # skipped here: its `{groups: [...]}` output doesn't chain into
+        # group_by_repo's `{todos: [...]}` input, so it can't sit between
+        # score and group in a single sequential pipe.
+
+  - step: assemble
+    handler: json::merge
+    args:
+      with:
+        dirty_repos: "{{ input.dirty_repos }}"
+        handoffs: "{{ input.handoffs }}"
+        stale_worktrees: "{{ input.stale_worktrees }}"
+        recent_activity: "{{ input.recent_activity }}"
+    # Recombine prioritized/grouped todos (steps.prioritize.output.repos)
+    # with the raw context sections the triage pipe doesn't carry forward
 
   - step: emit_briefing
     handler: fs::write
     args:
       path: ".ctx/session-briefing.md"
-      content: "{{ steps.prioritize.output }}"
+      content: "{{ steps.assemble.output }}"
     # Write session briefing to .ctx/session-briefing.md:
     # - dirty repos needing attention
     # - stale worktrees to clean up

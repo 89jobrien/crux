@@ -454,9 +454,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.18"
+version = "0.9.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
+checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -469,7 +469,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crux"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crux-agentic",
  "crux-derive",
@@ -484,11 +484,10 @@ dependencies = [
 
 [[package]]
 name = "crux-agentic"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bollard",
  "chrono",
- "clap",
  "crux-baml",
  "crux-model",
  "crux-plugin",
@@ -512,20 +511,38 @@ dependencies = [
 
 [[package]]
 name = "crux-baml"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "baml",
  "crux-runtime",
  "crux-script",
- "serde",
  "serde_json",
  "serde_yaml",
  "tokio",
 ]
 
 [[package]]
+name = "crux-cli"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "crux-agentic",
+ "crux-baml",
+ "crux-plugin",
+ "crux-runtime",
+ "crux-script",
+ "crux-types",
+ "miette",
+ "proptest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "crux-derive"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -534,7 +551,7 @@ dependencies = [
 
 [[package]]
 name = "crux-domain"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -543,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "crux-improve"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "crux-types",
@@ -555,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "crux-model"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "serde",
@@ -565,10 +582,11 @@ dependencies = [
 
 [[package]]
 name = "crux-planner"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crux-agentic",
  "crux-runtime",
+ "crux-types",
  "indoc",
  "insta",
  "serde",
@@ -579,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "crux-plugin"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crux-runtime",
  "crux-script",
@@ -593,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "crux-runtime"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "crux-domain",
@@ -613,9 +631,10 @@ dependencies = [
 
 [[package]]
 name = "crux-script"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crux-runtime",
+ "crux-types",
  "indexmap",
  "miette",
  "serde",
@@ -627,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "crux-stdlib"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "crux-runtime",
  "crux-script",
@@ -642,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "crux-task"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "clap",
@@ -661,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "crux-types"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "miette",
@@ -1771,9 +1790,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.14"
+version = "0.11.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
+checksum = "4fcb935c5bec503c2f0e306bdd3e58bb9029dcb14fa8d9ac76e3a5256ac0763e"
 dependencies = [
  "bytes",
  "getrandom 0.3.4",

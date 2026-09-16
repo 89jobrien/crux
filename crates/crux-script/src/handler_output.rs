@@ -1,14 +1,118 @@
+use crux_types::budget::HandlerUsage;
+use crux_types::error::CruxErr;
 /// Output from a pipeline handler — value plus optional confidence score.
 use serde_json::Value;
 
 /// Carries the handler's output value and an optional confidence score.
 ///
-/// Handlers that do not have a meaningful confidence score return `None`; the
-/// runner treats that as `1.0` via [`HandlerOutput::confidence_or_default`].
+/// Handlers that do not have a meaningful confidence score return `None`. Previously
+/// [`HandlerOutput::confidence_or_default`] silently treated that as `1.0`, which made
+/// unscored handlers look maximally confident to any consumer relying on the default
+/// (e.g. `route_on_confidence`). To avoid that false signal, `None` now defaults to
+/// `0.5` (a neutral midpoint) instead of `1.0`. This is a behavior change but is less
+/// invasive than making every `None`-confidence caller handle a hard error, since the
+/// only in-crate callers of this method were tests (see #75, #76).
 #[derive(Debug, Clone)]
 pub struct HandlerOutput {
     pub value: Value,
     pub confidence: Option<f32>,
+}
+
+/// A handler outcome paired with usage reported for the same invocation.
+///
+/// Usage is preserved even when `outcome` is an error, allowing the runner to
+/// account failed paid calls exactly once.
+///
+/// # Examples
+///
+/// ```
+/// use crux_types::budget::{HandlerUsage, UsdAmount};
+/// use crux_types::error::CruxErr;
+/// use crux_script::{HandlerExecution, HandlerOutput};
+/// use serde_json::json;
+///
+/// let usage = HandlerUsage::metered(12, UsdAmount::from_micros(34));
+/// let ok = HandlerExecution::success(HandlerOutput::new(json!("ok")), usage);
+/// let failed = HandlerExecution::failure(CruxErr::step_failed("llm", "failed"), usage);
+/// assert!(ok.is_ok());
+/// assert!(failed.is_err());
+/// assert_eq!(failed.usage, usage);
+/// ```
+#[derive(Debug, Clone)]
+pub struct HandlerExecution {
+    pub outcome: Result<HandlerOutput, CruxErr>,
+    pub usage: HandlerUsage,
+}
+
+impl HandlerExecution {
+    /// Construct a successful metered execution.
+    pub fn success(output: HandlerOutput, usage: HandlerUsage) -> Self {
+        Self {
+            outcome: Ok(output),
+            usage,
+        }
+    }
+
+    /// Construct a failed metered execution without discarding usage.
+    pub fn failure(error: CruxErr, usage: HandlerUsage) -> Self {
+        Self {
+            outcome: Err(error),
+            usage,
+        }
+    }
+
+    /// Construct an explicitly free execution (`usd = Some(0)`).
+    pub fn free(outcome: Result<HandlerOutput, CruxErr>) -> Self {
+        Self {
+            outcome,
+            usage: HandlerUsage::free(),
+        }
+    }
+
+    /// Construct a legacy execution whose USD cost is unknown.
+    pub fn unreported(outcome: Result<HandlerOutput, CruxErr>) -> Self {
+        Self {
+            outcome,
+            usage: HandlerUsage::unreported(),
+        }
+    }
+
+    /// Return whether the handler outcome succeeded.
+    pub fn is_ok(&self) -> bool {
+        self.outcome.is_ok()
+    }
+
+    /// Return whether the handler outcome failed.
+    pub fn is_err(&self) -> bool {
+        self.outcome.is_err()
+    }
+
+    /// Return the successful output.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the handler outcome is an error.
+    pub fn unwrap(self) -> HandlerOutput {
+        self.outcome.unwrap()
+    }
+
+    /// Return the handler error.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the handler outcome succeeded.
+    pub fn unwrap_err(self) -> CruxErr {
+        self.outcome.unwrap_err()
+    }
+
+    /// Return the handler error using `message` if the outcome succeeded.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `message` when the handler outcome succeeded.
+    pub fn expect_err(self, message: &str) -> CruxErr {
+        self.outcome.expect_err(message)
+    }
 }
 
 impl HandlerOutput {
@@ -32,9 +136,13 @@ impl HandlerOutput {
         Self { value, confidence }
     }
 
-    /// Returns the confidence score, defaulting to `1.0` when absent.
+    /// Returns the confidence score, defaulting to `0.5` (neutral) when absent.
+    ///
+    /// Prior to #76 this defaulted to `1.0`, which silently made unscored handlers
+    /// look maximally confident. `0.5` signals "unknown" without biasing routing
+    /// decisions toward either extreme.
     pub fn confidence_or_default(&self) -> f32 {
-        self.confidence.unwrap_or(1.0)
+        self.confidence.unwrap_or(0.5)
     }
 }
 
@@ -61,13 +169,38 @@ impl From<Value> for HandlerOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crux_types::budget::{HandlerUsage, UsdAmount};
     use serde_json::json;
 
     #[test]
     fn from_value_has_no_confidence() {
         let out = HandlerOutput::from(json!({ "x": 1 }));
         assert!(out.confidence.is_none());
-        assert_eq!(out.confidence_or_default(), 1.0);
+        assert_eq!(out.confidence_or_default(), 0.5);
+    }
+
+    #[test]
+    fn execution_preserves_usage_for_success_and_failure() {
+        let usage = HandlerUsage::metered(10, UsdAmount::from_micros(25));
+        let success = HandlerExecution::success(HandlerOutput::new(json!(1)), usage);
+        let failure = HandlerExecution::failure(CruxErr::step_failed("x", "boom"), usage);
+
+        assert_eq!(success.usage, usage);
+        assert_eq!(failure.usage, usage);
+        assert!(success.outcome.is_ok());
+        assert!(failure.outcome.is_err());
+    }
+
+    /// Regression test for #76: `None` confidence must NOT silently present as
+    /// maximal (`1.0`) confidence — it should default to a neutral `0.5`.
+    #[test]
+    fn none_confidence_defaults_to_neutral_not_maximal() {
+        let out = HandlerOutput::new(json!("unscored"));
+        assert_eq!(
+            out.confidence_or_default(),
+            0.5,
+            "None confidence must default to neutral 0.5, not maximal 1.0 (#76)"
+        );
     }
 
     #[test]
@@ -81,7 +214,7 @@ mod tests {
     fn nan_confidence_becomes_none() {
         let out = HandlerOutput::with_confidence(json!("x"), f32::NAN);
         assert!(out.confidence.is_none());
-        assert_eq!(out.confidence_or_default(), 1.0);
+        assert_eq!(out.confidence_or_default(), 0.5);
     }
 
     #[test]

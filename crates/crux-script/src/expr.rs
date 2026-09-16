@@ -15,10 +15,25 @@ pub struct StepResult {
     pub confidence: Option<f32>,
 }
 
+/// Per-iteration bindings exposed inside a loop construct's `steps:` block
+/// (`for_each`, `while`, `repeat`, #84/#89) via `{{ iter.index }}` and
+/// `{{ iter.<name> }}`.
+#[derive(Debug, Clone, Default)]
+pub struct IterFrame {
+    pub index: usize,
+    pub values: HashMap<String, Value>,
+}
+
 /// Evaluation context holding pipeline state.
 pub struct ExprContext {
     pub input: Value,
     pub steps: HashMap<String, StepResult>,
+    /// Pipeline-level `vars:` bindings (#85), resolved once up front. Referenced
+    /// from any step via `{{ vars.NAME }}` / `{{ vars.NAME.field }}`.
+    pub vars: HashMap<String, Value>,
+    /// Current loop iteration bindings, if evaluation is happening inside a loop
+    /// construct's body (#84/#89). `None` outside any loop.
+    pub iter: Option<IterFrame>,
 }
 
 impl ExprContext {
@@ -26,6 +41,8 @@ impl ExprContext {
         Self {
             input,
             steps: HashMap::new(),
+            vars: HashMap::new(),
+            iter: None,
         }
     }
 
@@ -81,6 +98,15 @@ impl ExprContext {
         }
     }
 
+    /// Resolve an expression to a bool (for `until:`, `condition:`, `break_if:`).
+    pub fn eval_bool(&self, expr: &str) -> Result<bool, ExprError> {
+        let value = self.eval(expr)?;
+        match value {
+            Value::Bool(b) => Ok(b),
+            _ => Err(ExprError::NotBoolean),
+        }
+    }
+
     fn resolve_path(&self, path: &str) -> Result<Value, ExprError> {
         if path == "input" {
             return Ok(self.input.clone());
@@ -90,6 +116,46 @@ impl ExprContext {
         if let Some(rest) = path.strip_prefix("input.") {
             return json_get(&self.input, rest)
                 .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
+        }
+
+        // `iter.index` — 0-based loop counter; `iter.<name>` / `iter.<name>.<sub>` —
+        // the current item binding from a `for_each`/`while`/`repeat` loop (#84/#89).
+        if let Some(rest) = path.strip_prefix("iter.") {
+            let frame = self
+                .iter
+                .as_ref()
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            if rest == "index" {
+                return Ok(Value::Number(serde_json::Number::from(frame.index)));
+            }
+            let mut parts = rest.splitn(2, '.');
+            let name = parts.next().unwrap_or("");
+            let value = frame
+                .values
+                .get(name)
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            return match parts.next() {
+                Some(sub) => {
+                    json_get(value, sub).ok_or_else(|| ExprError::UnknownPath(path.to_string()))
+                }
+                None => Ok(value.clone()),
+            };
+        }
+
+        // `vars.<name>` — full value; `vars.<name>.<subfield>...` — dot-path into it.
+        if let Some(rest) = path.strip_prefix("vars.") {
+            let mut parts = rest.splitn(2, '.');
+            let name = parts.next().unwrap_or("");
+            let value = self
+                .vars
+                .get(name)
+                .ok_or_else(|| ExprError::UnknownPath(path.to_string()))?;
+            return match parts.next() {
+                Some(sub) => {
+                    json_get(value, sub).ok_or_else(|| ExprError::UnknownPath(path.to_string()))
+                }
+                None => Ok(value.clone()),
+            };
         }
 
         const MAX_PATH_SEGMENTS: usize = 3;
@@ -121,9 +187,7 @@ impl ExprContext {
                     .steps
                     .get(*name)
                     .ok_or_else(|| ExprError::UnknownStep((*name).to_string()))?;
-                // TODO(#103): trim_start_matches strips repeated "output." prefixes;
-                //   use strip_prefix("output.").unwrap_or(rest) for single-strip
-                let field_path = rest.trim_start_matches("output.");
+                let field_path = rest.strip_prefix("output.").unwrap_or(rest);
                 json_get(&step.output, field_path)
                     .ok_or_else(|| ExprError::UnknownPath(path.to_string()))
             }
@@ -153,8 +217,37 @@ pub enum ExprError {
     UnknownPath(String),
     #[error("value is not numeric")]
     NotNumeric,
+    #[error("value is not a boolean")]
+    NotBoolean,
     /// Step exists but produced no confidence score (e.g. a `handler_value` handler).
     /// Using such a step as input to `route_on_confidence` is a pipeline authoring error.
     #[error("step '{0}' produced no confidence score — use a handler that emits confidence")]
     NoConfidence(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Regression test for #103: a step output containing a field literally named
+    /// "output" nested under the "output." namespace (i.e. `output.output.something`)
+    /// must resolve via a single strip of the leading "output." prefix, not a repeated
+    /// strip of every "output." occurrence.
+    #[test]
+    fn steps_output_dot_path_strips_prefix_once() {
+        let mut ctx = ExprContext::new(Value::Null);
+        ctx.steps.insert(
+            "s1".to_string(),
+            StepResult {
+                output: json!({ "output": { "something": "value" } }),
+                confidence: None,
+            },
+        );
+
+        let result = ctx
+            .resolve_path("steps.s1.output.output.something")
+            .expect("path should resolve");
+        assert_eq!(result, json!("value"));
+    }
 }

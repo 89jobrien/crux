@@ -38,14 +38,14 @@ x.delegate::<Agent>(name, input)
     .with_budget(Budget::tokens(4000))
     .on_low_confidence(0.7, handler)
     .on_step_failure(handler)
-    .on_budget_exceeded(handler)
+    .run()
     .await?;
 
 // Confidence branching (validates non-overlapping, gap-free [0.0, 1.0] coverage)
 x.route_on_confidence(name, score, vec![
-    (ConfidenceRange { lo: 0.90, hi: None }, "high", fut),
-    (ConfidenceRange { lo: 0.70, hi: Some(0.90) }, "mid", fut),
-    (ConfidenceRange { lo: 0.00, hi: Some(0.70) }, "low", fut),
+    (ConfidenceRange::inclusive(0.90, 1.00), "high", Box::pin(high_fut)),
+    (ConfidenceRange::exclusive(0.70, 0.90), "mid", Box::pin(mid_fut)),
+    (ConfidenceRange::exclusive(0.00, 0.70), "low", Box::pin(low_fut)),
 ]).await?;
 
 // Sequential pipeline (each stage gets previous output)
@@ -65,7 +65,6 @@ x.speculate(name, vec![
     ("cheap", Box::pin(async { Ok(result) })),
     ("fast",  Box::pin(async { Ok(result) })),
 ])
-    .with_budget(Budget::tokens(8000))
     .pick_best_by(|r| r.confidence)
     .await?;
     // or: .first_ok()
@@ -78,7 +77,7 @@ x.on_budget_exceeded(handler);
 // Configuration
 x.set_max_retries(5);
 x.set_budget(Budget::tokens(4000));
-x.consume_budget(100);
+x.consume_budget(100); // deprecated; prefer typed accounting
 
 // Inspection
 x.budget();            // &Budget
@@ -150,6 +149,8 @@ pub enum StepKind { Plain, Delegation, Branch, Speculation }
 pub enum StepStatus { Ok, Err, Rejected, Skipped }
 ```
 
+<!-- TODO(docs): Add the current `metadata` and `findings` fields to this API sketch. -->
+
 ## `CruxErr`
 
 ```rust
@@ -157,9 +158,17 @@ pub enum CruxErr {
     StepFailed { step: String, source_msg: String },
     LowConfidence { step: String, score: f32, threshold: f32 },
     BudgetExceeded { budget_kind: BudgetKind, limit: u64, actual: u64 },
+    UnreportedCost { step: String, source: Option<Box<CruxErr>> },
+    StepBudgetExceeded { limit: u64, attempted: u64 },
+    UsdBudgetExceeded {
+        limit_micros: u64,
+        actual_micros: u64,
+        source: Option<Box<CruxErr>>,
+    },
     Delegation { to: String, source: Box<CruxErr> },
     Cancelled { reason: String },
     ReplayMismatch { step: String, expected: u64, actual: u64 },
+    Denied { step: String, reason: String },
 }
 
 CruxErr::step_failed(name, msg);
@@ -167,6 +176,11 @@ CruxErr::low_confidence(name, score, threshold);
 err.failed_step() -> Option<&str>;
 err.is_transient() -> bool;
 ```
+
+`UnreportedCost`, `StepBudgetExceeded`, and `UsdBudgetExceeded` are
+non-transient. With the `miette` feature they expose dedicated diagnostic codes
+and remediation help; related handler failures are retained in the optional
+`source` fields.
 
 ## `Agent` trait
 
@@ -206,21 +220,56 @@ pub enum Recovery<T> {
 ```rust
 pub enum Budget {
     Tokens { limit: u64 },
-    Calls { limit: u64 },
+    Steps { limit: u64 },
+    Calls { limit: u64 },             // compatibility alias for steps
     Duration { limit_ms: u64 },
-    CostCents { limit: u64 },
+    Usd { limit_micros: u64 },
+    CostCents { limit: u64 },         // compatibility alias for USD
     Combined { budgets: Vec<Budget> },
 }
 
 Budget::tokens(4000);
-Budget::calls(20);
+Budget::steps(20);
 Budget::duration(Duration::from_secs(30));
-Budget::cost_cents(500);
+Budget::usd(UsdAmount::from_micros(5_000_000));
 Budget::combined(vec![...]);
+
+// Compatibility constructors:
+Budget::calls(20);
+Budget::cost_cents(500);
 
 budget.kind() -> BudgetKind;
 budget.limit() -> u64;
 ```
+
+`UsdAmount` is fixed-point USD in integer microdollars and provides `ZERO`,
+`from_micros`, `micros`, and `checked_add`. `HandlerUsage` reports one
+invocation tokens and optional USD through `free`, `metered`, or `unreported`.
+`BudgetUsage` aggregates `steps`, `tokens`, `duration_ms`, and USD.
+
+```rust
+use crux::types::budget::BudgetTracker;
+
+let mut tracker = BudgetTracker::new(Budget::combined(vec![
+    Budget::steps(2),
+    Budget::usd(UsdAmount::from_micros(500_000)),
+]));
+tracker.begin_step()?;
+tracker.record_duration(Duration::from_millis(25))?;
+tracker.record_handler_usage(
+    "classify",
+    HandlerUsage::metered(120, UsdAmount::from_micros(250_000)),
+)?;
+let totals: BudgetUsage = tracker.usage();
+```
+
+Exact limits succeed. Step limits are checked before dispatch; duration, tokens,
+and USD are recorded after completion, making those dimensions soft caps. Under
+a USD budget, unreported cost fails closed even when the handler fails; explicit
+free usage reports zero. The compatibility `consume(amount)` method applies the
+scalar to every configured counter for historical source compatibility; it does
+not update typed `BudgetUsage`. Pipeline `delegate` nodes remain an exception: their
+nested budget is ignored and delegated work is not charged to pipeline usage.
 
 ## `TaskRegistry`
 
@@ -259,7 +308,7 @@ pub enum TaskStatus { Pending, Running, Done, Failed }
 ## Feature flags
 
 ```toml
-crux = { version = "0.2", features = ["redb", "tracing", "script"] }
+crux = { version = "0.4", features = ["redb", "tracing", "script"] }
 ```
 
 | Flag            | Turns on                                        |
@@ -267,7 +316,32 @@ crux = { version = "0.2", features = ["redb", "tracing", "script"] }
 | `tokio-runtime` | Async support (tokio + futures). On by default. |
 | `redb`          | `RedbBackend` for persistent task registry.     |
 | `tracing`       | Instrument with tracing spans.                  |
-| `script`        | Re-export `crux-script` for pipeline execution. |
+| `script`        | Re-exports `crux-script` for pipeline execution. |
+
+## Pipeline display metadata
+
+```yaml
+pipeline: ci
+display:
+  title: Project CI
+  output: auto # auto | always | never
+  steps:
+    fmt_check: Formatting
+    test: Tests
+```
+
+Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
+unchanged in saved traces and replay matching. `output` affects both default summary and verbose
+output. `auto` renders useful successful shell stdout as plain text, `always` includes final output,
+and `never` suppresses it; semantic values remain pretty JSON.
+
+```text
+crux run pipeline.crux          # concise human summary
+crux run pipeline.crux -v       # verbose trace and humanized output
+crux run pipeline.crux --summary # explicit summary alias
+crux run pipeline.crux --json   # compact machine result
+crux run pipeline.crux -q       # errors only
+```
 
 ## Prelude
 
@@ -283,3 +357,5 @@ use crux::prelude::*;
 //            EvolutionOutcome, HarnessDiff, HarnessProfile, ResourceHints,
 //            ExecutionContext, Priority, StepState, Urgency (from slashcrux)
 ```
+
+<!-- TODO(docs): Add planner, audit, governance, trust, usage, and cited-finding exports. -->

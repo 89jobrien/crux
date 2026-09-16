@@ -1,13 +1,236 @@
 /// Budget constraints for agent execution.
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::time::Duration;
+
+use crate::error::CruxErr;
+
+/// A non-negative USD amount stored as integer microdollars.
+///
+/// One microdollar is USD $0.000001. Serde writes an exact decimal string and
+/// accepts either that string representation or legacy numeric dollar values.
+///
+/// # Examples
+///
+/// ```
+/// use crux_types::UsdAmount;
+///
+/// let amount = UsdAmount::from_micros(1_250_000);
+/// assert_eq!(amount.micros(), 1_250_000);
+/// assert_eq!(amount.to_string(), "$1.250000");
+/// ```
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct UsdAmount {
+    micros: u64,
+}
+
+impl UsdAmount {
+    /// Zero USD.
+    pub const ZERO: Self = Self { micros: 0 };
+
+    /// Creates an amount from integer microdollars.
+    pub const fn from_micros(micros: u64) -> Self {
+        Self { micros }
+    }
+
+    /// Returns this amount in integer microdollars.
+    pub const fn micros(self) -> u64 {
+        self.micros
+    }
+
+    /// Adds two amounts, returning `None` if the microdollar total overflows.
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        self.micros.checked_add(other.micros).map(Self::from_micros)
+    }
+
+    fn from_decimal(value: &str) -> Result<Self, &'static str> {
+        if value.starts_with('-') || value.starts_with('+') {
+            return Err("USD budget must be non-negative");
+        }
+        let mut parts = value.split('.');
+        let whole = parts.next().unwrap_or_default();
+        let fraction = parts.next().unwrap_or_default();
+        if whole.is_empty()
+            || !whole.bytes().all(|byte| byte.is_ascii_digit())
+            || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+            || parts.next().is_some()
+        {
+            return Err("USD budget must be a decimal amount");
+        }
+        if fraction.len() > 6 {
+            return Err("USD budget supports at most six decimal places");
+        }
+
+        let dollars = whole
+            .parse::<u64>()
+            .map_err(|_| "USD budget exceeds supported range")?;
+        let fractional = if fraction.is_empty() {
+            0
+        } else {
+            fraction
+                .parse::<u64>()
+                .map_err(|_| "USD budget must be a decimal amount")?
+                * 10_u64.pow((6 - fraction.len()) as u32)
+        };
+        dollars
+            .checked_mul(1_000_000)
+            .and_then(|micros| micros.checked_add(fractional))
+            .map(Self::from_micros)
+            .ok_or("USD budget exceeds supported range")
+    }
+
+    fn from_f64(amount: f64) -> Result<Self, &'static str> {
+        if !amount.is_finite() || amount.is_sign_negative() {
+            return Err("USD budget must be finite and non-negative");
+        }
+
+        let micros = amount * 1_000_000.0;
+        let rounded = micros.round();
+        if !micros.is_finite() || rounded >= u64::MAX as f64 {
+            return Err("USD budget exceeds supported range");
+        }
+        if (micros - rounded).abs() > 1e-6 {
+            return Err("USD budget supports at most six decimal places");
+        }
+        Ok(Self::from_micros(rounded as u64))
+    }
+}
+
+impl Serialize for UsdAmount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!(
+            "{}.{:06}",
+            self.micros / 1_000_000,
+            self.micros % 1_000_000
+        ))
+    }
+}
+
+impl<'de> Deserialize<'de> for UsdAmount {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct UsdAmountVisitor;
+
+        impl de::Visitor<'_> for UsdAmountVisitor {
+            type Value = UsdAmount;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a finite, non-negative USD amount with at most six decimals")
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                value
+                    .checked_mul(1_000_000)
+                    .map(UsdAmount::from_micros)
+                    .ok_or_else(|| E::custom("USD budget exceeds supported range"))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                u64::try_from(value)
+                    .map_err(|_| E::custom("USD budget must be finite and non-negative"))
+                    .and_then(|value| self.visit_u64(value))
+            }
+
+            fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                UsdAmount::from_f64(value).map_err(E::custom)
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                UsdAmount::from_decimal(value).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_any(UsdAmountVisitor)
+    }
+}
+
+impl std::fmt::Display for UsdAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "${}.{:06}",
+            self.micros / 1_000_000,
+            self.micros % 1_000_000
+        )
+    }
+}
+
+/// Usage reported atomically by one completed handler invocation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HandlerUsage {
+    /// Tokens consumed by the invocation.
+    pub tokens: u64,
+    /// USD consumed by the invocation.
+    ///
+    /// `None` means unreported; `Some(UsdAmount::ZERO)` means explicitly free.
+    pub usd: Option<UsdAmount>,
+}
+
+impl HandlerUsage {
+    /// Reports an invocation that consumed no tokens or USD.
+    pub const fn free() -> Self {
+        Self {
+            tokens: 0,
+            usd: Some(UsdAmount::ZERO),
+        }
+    }
+
+    /// Reports measured token and USD usage for an invocation.
+    pub const fn metered(tokens: u64, usd: UsdAmount) -> Self {
+        Self {
+            tokens,
+            usd: Some(usd),
+        }
+    }
+
+    /// Reports that an invocation did not provide USD accounting.
+    ///
+    /// Trackers with a USD budget reject this usage fail-closed.
+    pub const fn unreported() -> Self {
+        Self {
+            tokens: 0,
+            usd: None,
+        }
+    }
+}
+
+/// Aggregate typed usage recorded against a budget.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BudgetUsage {
+    /// Accepted handler attempts.
+    pub steps: u64,
+    /// Tokens reported by completed handlers.
+    pub tokens: u64,
+    /// Completed handler duration in milliseconds.
+    pub duration_ms: u64,
+    /// Reported USD total, or `None` if no handler has reported USD usage.
+    pub usd: Option<UsdAmount>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Budget {
     Tokens { limit: u64 },
+    Steps { limit: u64 },
     Calls { limit: u64 },
     Duration { limit_ms: u64 },
+    Usd { limit_micros: u64 },
     CostCents { limit: u64 },
     Combined { budgets: Vec<Budget> },
 }
@@ -16,8 +239,10 @@ pub enum Budget {
 #[serde(rename_all = "snake_case")]
 pub enum BudgetKind {
     Tokens,
+    Steps,
     Calls,
     Duration,
+    Usd,
     CostCents,
     Combined,
 }
@@ -31,6 +256,10 @@ impl Budget {
         Self::Calls { limit: n }
     }
 
+    pub fn steps(n: u64) -> Self {
+        Self::Steps { limit: n }
+    }
+
     pub fn duration(d: Duration) -> Self {
         Self::Duration {
             limit_ms: d.as_millis() as u64,
@@ -41,6 +270,12 @@ impl Budget {
         Self::CostCents { limit: n }
     }
 
+    pub fn usd(amount: UsdAmount) -> Self {
+        Self::Usd {
+            limit_micros: amount.micros(),
+        }
+    }
+
     pub fn combined(budgets: Vec<Budget>) -> Self {
         Self::Combined { budgets }
     }
@@ -48,8 +283,10 @@ impl Budget {
     pub fn kind(&self) -> BudgetKind {
         match self {
             Self::Tokens { .. } => BudgetKind::Tokens,
+            Self::Steps { .. } => BudgetKind::Steps,
             Self::Calls { .. } => BudgetKind::Calls,
             Self::Duration { .. } => BudgetKind::Duration,
+            Self::Usd { .. } => BudgetKind::Usd,
             Self::CostCents { .. } => BudgetKind::CostCents,
             Self::Combined { .. } => BudgetKind::Combined,
         }
@@ -58,10 +295,33 @@ impl Budget {
     pub fn limit(&self) -> u64 {
         match self {
             Self::Tokens { limit }
+            | Self::Steps { limit }
             | Self::Calls { limit }
             | Self::Duration { limit_ms: limit }
+            | Self::Usd {
+                limit_micros: limit,
+            }
             | Self::CostCents { limit } => *limit,
+            // NOTE: for `Combined`, summing limits across mixed units (e.g. calls +
+            // duration_ms) is not meaningful on its own — it exists only as a rough
+            // aggregate for display/error-metadata purposes. `BudgetTracker` does NOT
+            // use this to decide whether a combined budget is exceeded; it tracks each
+            // leaf dimension independently instead. See `BudgetTracker::leaf_limits`.
             Self::Combined { budgets } => budgets.iter().map(|b| b.limit()).sum(),
+        }
+    }
+
+    /// Flattens this budget into its independent leaf dimensions (kind, limit),
+    /// recursing into nested `Combined` budgets. A non-combined budget yields a
+    /// single leaf.
+    fn leaves(&self) -> Vec<(BudgetKind, u64)> {
+        match self {
+            Self::Combined { budgets } => budgets.iter().flat_map(Budget::leaves).collect(),
+            Self::Calls { limit } => vec![(BudgetKind::Steps, *limit)],
+            Self::CostCents { limit } => {
+                vec![(BudgetKind::Usd, limit.saturating_mul(10_000))]
+            }
+            other => vec![(other.kind(), other.limit())],
         }
     }
 }
@@ -73,29 +333,238 @@ impl Default for Budget {
 }
 
 /// Tracks budget consumption at runtime.
+///
+/// `Combined` budgets mix units (e.g. a step count and USD). Each leaf
+/// dimension is tracked independently, and duplicate dimensions use their
+/// strictest limit.
+///
+/// Limits are inclusive: usage exactly at a limit succeeds. A USD budget
+/// fails closed when a completed handler does not report whether it was free.
+///
+/// # Examples
+///
+/// ```
+/// use crux_types::{Budget, BudgetTracker, CruxErr, HandlerUsage, UsdAmount};
+///
+/// let mut tracker = BudgetTracker::new(Budget::combined(vec![
+///     Budget::steps(1),
+///     Budget::usd(UsdAmount::from_micros(10)),
+/// ]));
+/// tracker.begin_step()?;
+/// tracker.record_handler_usage(
+///     "paid",
+///     HandlerUsage::metered(0, UsdAmount::from_micros(10)),
+/// )?;
+/// assert!(matches!(
+///     tracker.record_handler_usage("legacy", HandlerUsage::unreported()),
+///     Err(CruxErr::UnreportedCost { .. })
+/// ));
+/// # Ok::<(), CruxErr>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct BudgetTracker {
     budget: Budget,
+    counters: Vec<BudgetCounter>,
+    usage: BudgetUsage,
+}
+
+#[derive(Debug, Clone)]
+struct BudgetCounter {
+    kind: BudgetKind,
+    limit: u64,
     used: u64,
 }
 
 impl BudgetTracker {
+    /// Creates an empty tracker, normalizing duplicate dimensions to the
+    /// strictest limit.
     pub fn new(budget: Budget) -> Self {
-        Self { budget, used: 0 }
+        let mut counters: Vec<BudgetCounter> = Vec::new();
+        for (kind, limit) in budget.leaves() {
+            if let Some(counter) = counters.iter_mut().find(|counter| counter.kind == kind) {
+                counter.limit = counter.limit.min(limit);
+            } else {
+                counters.push(BudgetCounter {
+                    kind,
+                    limit,
+                    used: 0,
+                });
+            }
+        }
+        Self {
+            budget,
+            counters,
+            usage: BudgetUsage::default(),
+        }
     }
 
+    /// Smallest remaining amount across all tracked dimensions. For a single
+    /// (non-combined) budget this is exact; for `Combined` it is the
+    /// distance to the first dimension that will be exhausted.
     pub fn remaining(&self) -> u64 {
-        self.budget.limit().saturating_sub(self.used)
+        self.counters
+            .iter()
+            .map(|counter| counter.limit.saturating_sub(counter.used))
+            .min()
+            .unwrap_or(0)
     }
 
+    /// Reserves one handler attempt.
+    ///
+    /// An attempt exactly at the configured limit succeeds. A rejected attempt
+    /// does not increment typed usage.
+    pub fn begin_step(&mut self) -> Result<(), CruxErr> {
+        self.reserve_steps(1)
+    }
+
+    /// Atomically reserves `count` handler attempts against the actual step counter.
+    ///
+    /// This checks legacy scalar consumption and typed reservations together. If the
+    /// complete batch would exceed the step limit, neither the counter nor typed usage
+    /// is changed.
+    pub fn reserve_steps(&mut self, count: u64) -> Result<(), CruxErr> {
+        if let Some(counter) = self
+            .counters
+            .iter_mut()
+            .find(|counter| counter.kind == BudgetKind::Steps)
+        {
+            let attempted = counter.used.saturating_add(count);
+            if attempted > counter.limit {
+                return Err(CruxErr::StepBudgetExceeded {
+                    limit: counter.limit,
+                    attempted,
+                });
+            }
+            counter.used = attempted;
+        }
+        self.usage.steps = self.usage.steps.saturating_add(count);
+        Ok(())
+    }
+
+    /// Records every usage dimension from one completed handler invocation.
+    ///
+    /// All supplied dimensions are retained before the primary violation is
+    /// returned. Missing USD is rejected when a USD budget is active.
+    pub fn record_handler_usage(&mut self, step: &str, usage: HandlerUsage) -> Result<(), CruxErr> {
+        let mut violation = None;
+
+        self.usage.tokens = self.usage.tokens.saturating_add(usage.tokens);
+        if let Some(counter) = self
+            .counters
+            .iter_mut()
+            .find(|counter| counter.kind == BudgetKind::Tokens)
+        {
+            counter.used = counter.used.saturating_add(usage.tokens);
+            if counter.used > counter.limit {
+                violation = Some(CruxErr::BudgetExceeded {
+                    budget_kind: BudgetKind::Tokens,
+                    limit: counter.limit,
+                    actual: counter.used,
+                });
+            }
+        }
+
+        let has_usd_budget = self
+            .counters
+            .iter()
+            .any(|counter| counter.kind == BudgetKind::Usd);
+        match usage.usd {
+            None if has_usd_budget => {
+                if violation.is_none() {
+                    violation = Some(CruxErr::UnreportedCost {
+                        step: step.to_string(),
+                        source: None,
+                    });
+                }
+            }
+            None => {}
+            Some(amount) => {
+                let current = self.usage.usd.unwrap_or(UsdAmount::ZERO);
+                let total = current.checked_add(amount);
+                self.usage.usd = Some(total.unwrap_or(UsdAmount::from_micros(u64::MAX)));
+
+                if let Some(counter) = self
+                    .counters
+                    .iter_mut()
+                    .find(|counter| counter.kind == BudgetKind::Usd)
+                {
+                    counter.used = counter.used.saturating_add(amount.micros());
+                }
+
+                if total.is_none() && violation.is_none() {
+                    violation = Some(CruxErr::UsdBudgetExceeded {
+                        limit_micros: self
+                            .counters
+                            .iter()
+                            .find(|counter| counter.kind == BudgetKind::Usd)
+                            .map_or(u64::MAX, |counter| counter.limit),
+                        actual_micros: u64::MAX,
+                        source: None,
+                    });
+                } else if let Some(counter) = self
+                    .counters
+                    .iter()
+                    .find(|counter| counter.kind == BudgetKind::Usd)
+                    && counter.used > counter.limit
+                    && violation.is_none()
+                {
+                    violation = Some(CruxErr::UsdBudgetExceeded {
+                        limit_micros: counter.limit,
+                        actual_micros: counter.used,
+                        source: None,
+                    });
+                }
+            }
+        }
+
+        violation.map_or(Ok(()), Err)
+    }
+
+    /// Records completed wall-clock duration.
+    pub fn record_duration(&mut self, duration: Duration) -> Result<(), CruxErr> {
+        let millis = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
+        self.usage.duration_ms = self.usage.duration_ms.saturating_add(millis);
+        if let Some(counter) = self
+            .counters
+            .iter_mut()
+            .find(|counter| counter.kind == BudgetKind::Duration)
+        {
+            counter.used = counter.used.saturating_add(millis);
+            if counter.used > counter.limit {
+                return Err(CruxErr::BudgetExceeded {
+                    budget_kind: BudgetKind::Duration,
+                    limit: counter.limit,
+                    actual: counter.used,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns aggregate typed usage recorded so far.
+    pub fn usage(&self) -> BudgetUsage {
+        self.usage
+    }
+
+    /// Compatibility scalar accounting applied to every tracked dimension.
+    ///
+    /// This preserves the historical behavior for legacy callers. New code should
+    /// use [`Self::reserve_steps`], [`Self::record_handler_usage`], and
+    /// [`Self::record_duration`] so unlike units are never conflated.
     pub fn consume(&mut self, amount: u64) {
-        self.used = self.used.saturating_add(amount);
+        for counter in &mut self.counters {
+            counter.used = counter.used.saturating_add(amount);
+        }
     }
 
+    /// True if ANY tracked dimension has exceeded its own limit.
     pub fn is_exceeded(&self) -> bool {
-        self.used > self.budget.limit()
+        self.counters
+            .iter()
+            .any(|counter| counter.used > counter.limit)
     }
 
+    /// Returns the original budget definition.
     pub fn budget(&self) -> &Budget {
         &self.budget
     }
@@ -104,6 +573,239 @@ impl BudgetTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usd_amount_deserializes_to_microdollars() {
+        let amount: UsdAmount = serde_json::from_str("1.25").unwrap();
+        assert_eq!(amount.micros(), 1_250_000);
+        assert_eq!(amount.to_string(), "$1.250000");
+    }
+
+    #[test]
+    fn usd_amount_serde_round_trip_preserves_microdollars() {
+        for amount in [
+            UsdAmount::ZERO,
+            UsdAmount::from_micros(1_234_567),
+            UsdAmount::from_micros(u64::MAX),
+        ] {
+            let json = serde_json::to_string(&amount).unwrap();
+            let decoded: UsdAmount = serde_json::from_str(&json).unwrap();
+
+            assert_eq!(decoded, amount);
+        }
+    }
+
+    #[test]
+    fn usd_amount_rejects_invalid_and_overprecise_values() {
+        for invalid in [
+            "-0.000001",
+            "1.0000001",
+            "1e100",
+            "\"NaN\"",
+            "\"inf\"",
+            "\"18446744073709.551616\"",
+        ] {
+            assert!(
+                serde_json::from_str::<UsdAmount>(invalid).is_err(),
+                "accepted invalid USD amount {invalid}"
+            );
+        }
+
+        assert_eq!(
+            serde_json::from_str::<UsdAmount>("0").unwrap(),
+            UsdAmount::ZERO
+        );
+        assert_eq!(
+            serde_json::from_str::<UsdAmount>("\"1.000001\"").unwrap(),
+            UsdAmount::from_micros(1_000_001)
+        );
+    }
+
+    #[test]
+    fn usd_amount_checked_add_detects_overflow() {
+        assert_eq!(
+            UsdAmount::from_micros(u64::MAX).checked_add(UsdAmount::from_micros(1)),
+            None
+        );
+    }
+
+    #[test]
+    fn handler_usage_distinguishes_free_from_unreported() {
+        assert_eq!(HandlerUsage::free().usd, Some(UsdAmount::ZERO));
+        assert_eq!(HandlerUsage::unreported().usd, None);
+    }
+
+    #[test]
+    fn step_budget_allows_limit_and_rejects_next_attempt() {
+        let mut tracker = BudgetTracker::new(Budget::steps(2));
+        assert!(tracker.begin_step().is_ok());
+        assert!(tracker.begin_step().is_ok());
+        assert!(matches!(
+            tracker.begin_step(),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 2,
+                attempted: 3
+            })
+        ));
+    }
+
+    #[test]
+    fn usd_budget_fails_closed_and_allows_exact_limit() {
+        let mut tracker = BudgetTracker::new(Budget::usd(UsdAmount::from_micros(100)));
+        assert!(matches!(
+            tracker.record_handler_usage("paid", HandlerUsage::unreported()),
+            Err(CruxErr::UnreportedCost { .. })
+        ));
+        assert!(
+            tracker
+                .record_handler_usage(
+                    "paid",
+                    HandlerUsage::metered(0, UsdAmount::from_micros(100))
+                )
+                .is_ok()
+        );
+        assert!(matches!(
+            tracker
+                .record_handler_usage("paid", HandlerUsage::metered(0, UsdAmount::from_micros(1))),
+            Err(CruxErr::UsdBudgetExceeded {
+                limit_micros: 100,
+                actual_micros: 101,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn record_handler_usage_accounts_all_completed_dimensions_before_error() {
+        let mut tracker = BudgetTracker::new(Budget::combined(vec![
+            Budget::tokens(1),
+            Budget::usd(UsdAmount::from_micros(10)),
+        ]));
+
+        assert!(matches!(
+            tracker
+                .record_handler_usage("paid", HandlerUsage::metered(2, UsdAmount::from_micros(7))),
+            Err(CruxErr::BudgetExceeded {
+                budget_kind: BudgetKind::Tokens,
+                limit: 1,
+                actual: 2,
+            })
+        ));
+        assert_eq!(tracker.usage().tokens, 2);
+        assert_eq!(tracker.usage().usd, Some(UsdAmount::from_micros(7)));
+
+        let mut unreported = BudgetTracker::new(Budget::combined(vec![
+            Budget::tokens(10),
+            Budget::usd(UsdAmount::from_micros(10)),
+        ]));
+        assert!(matches!(
+            unreported.record_handler_usage(
+                "legacy",
+                HandlerUsage {
+                    tokens: 3,
+                    usd: None,
+                }
+            ),
+            Err(CruxErr::UnreportedCost { .. })
+        ));
+        assert_eq!(unreported.usage().tokens, 3);
+    }
+
+    #[test]
+    fn reserve_steps_is_atomic_against_legacy_counter_usage() {
+        let mut tracker = BudgetTracker::new(Budget::steps(2));
+        tracker.consume(1);
+
+        assert!(matches!(
+            tracker.reserve_steps(2),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 2,
+                attempted: 3,
+            })
+        ));
+        assert_eq!(tracker.remaining(), 1);
+        assert_eq!(tracker.usage().steps, 0);
+
+        tracker.reserve_steps(1).unwrap();
+        assert_eq!(tracker.remaining(), 0);
+        assert_eq!(tracker.usage().steps, 1);
+    }
+
+    #[test]
+    fn mixed_legacy_and_typed_accounting_is_monotonic() {
+        let mut tokens = BudgetTracker::new(Budget::tokens(10));
+        tokens.consume(7);
+        tokens
+            .record_handler_usage("typed", HandlerUsage::metered(1, UsdAmount::ZERO))
+            .unwrap();
+        assert_eq!(tokens.remaining(), 2);
+
+        let mut steps = BudgetTracker::new(Budget::steps(10));
+        steps.consume(7);
+        steps.begin_step().unwrap();
+        assert_eq!(steps.remaining(), 2);
+
+        let mut duration = BudgetTracker::new(Budget::duration(Duration::from_millis(10)));
+        duration.consume(7);
+        duration.record_duration(Duration::from_millis(1)).unwrap();
+        assert_eq!(duration.remaining(), 2);
+    }
+
+    #[test]
+    fn combined_budget_uses_strictest_duplicate_dimension() {
+        let mut tracker = BudgetTracker::new(Budget::combined(vec![
+            Budget::steps(10),
+            Budget::combined(vec![Budget::calls(1), Budget::steps(5)]),
+        ]));
+
+        tracker.begin_step().unwrap();
+        assert!(matches!(
+            tracker.begin_step(),
+            Err(CruxErr::StepBudgetExceeded {
+                limit: 1,
+                attempted: 2,
+            })
+        ));
+
+        let mut tokens = BudgetTracker::new(Budget::combined(vec![
+            Budget::tokens(10),
+            Budget::combined(vec![Budget::tokens(1)]),
+        ]));
+        assert!(matches!(
+            tokens.record_handler_usage("tokenized", HandlerUsage::metered(2, UsdAmount::ZERO)),
+            Err(CruxErr::BudgetExceeded {
+                budget_kind: BudgetKind::Tokens,
+                limit: 1,
+                actual: 2,
+            })
+        ));
+
+        let mut duration = BudgetTracker::new(Budget::combined(vec![
+            Budget::duration(Duration::from_millis(10)),
+            Budget::combined(vec![Budget::duration(Duration::from_millis(1))]),
+        ]));
+        assert!(matches!(
+            duration.record_duration(Duration::from_millis(2)),
+            Err(CruxErr::BudgetExceeded {
+                budget_kind: BudgetKind::Duration,
+                limit: 1,
+                actual: 2,
+            })
+        ));
+
+        let mut usd = BudgetTracker::new(Budget::combined(vec![
+            Budget::usd(UsdAmount::from_micros(10)),
+            Budget::combined(vec![Budget::usd(UsdAmount::from_micros(1))]),
+        ]));
+        assert!(matches!(
+            usd.record_handler_usage("paid", HandlerUsage::metered(0, UsdAmount::from_micros(2))),
+            Err(CruxErr::UsdBudgetExceeded {
+                limit_micros: 1,
+                actual_micros: 2,
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn budget_tracking() {
@@ -115,6 +817,46 @@ mod tests {
         assert!(!tracker.is_exceeded());
 
         tracker.consume(80);
+        assert!(tracker.is_exceeded());
+    }
+
+    /// Regression test for #91: a `Combined` budget must track each dimension
+    /// independently. Previously `BudgetTracker` summed mixed-unit limits into
+    /// one counter (e.g. `calls: 5` + `duration_ms: 10_000` -> limit 10_005),
+    /// so 9_999 "calls" of consumption would not trip `is_exceeded` even
+    /// though the 5-call limit was blown past thousands of units ago.
+    #[test]
+    fn combined_budget_tracks_dimensions_independently() {
+        let combined = Budget::combined(vec![
+            Budget::calls(5),
+            Budget::duration(Duration::from_millis(10_000)),
+        ]);
+        let mut tracker = BudgetTracker::new(combined);
+
+        // Buggy behavior: limit() summed to 10_005, so consuming 9 units of
+        // "usage" would report far from exceeded. Correct behavior: the
+        // `calls` dimension has a limit of 5, so this must already be
+        // exceeded once 6+ units have been consumed, regardless of the much
+        // larger `duration_ms` limit.
+        tracker.consume(6);
+        assert!(
+            tracker.is_exceeded(),
+            "calls dimension (limit 5) should be exceeded independently of duration_ms (limit 10_000)"
+        );
+    }
+
+    #[test]
+    fn combined_budget_not_exceeded_until_a_dimension_is_exceeded() {
+        let combined = Budget::combined(vec![
+            Budget::calls(5),
+            Budget::duration(Duration::from_millis(10_000)),
+        ]);
+        let mut tracker = BudgetTracker::new(combined);
+
+        tracker.consume(5);
+        assert!(!tracker.is_exceeded());
+
+        tracker.consume(1);
         assert!(tracker.is_exceeded());
     }
 

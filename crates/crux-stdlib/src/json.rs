@@ -180,8 +180,6 @@ pub fn register(registry: &mut HandlerRegistry) {
 }
 
 const UNSUPPORTED_PREFIXES: &[&str] = &[
-    "select(",
-    "map(",
     "map_values(",
     "reduce ",
     "env",
@@ -286,7 +284,6 @@ const UNSUPPORTED_PREFIXES: &[&str] = &[
     "include ",
 ];
 
-// TODO(#70): extend json::jq beyond dot-path — add filters, pipes, select(), map()
 fn is_unsupported(expr: &str) -> bool {
     if expr.starts_with('[') || expr.starts_with('{') {
         return true;
@@ -373,8 +370,167 @@ fn eval_jq(value: &Value, expr: &str) -> Result<Value, CruxErr> {
         ));
     }
 
+    if let Some(cond) = parse_call(expr, "select") {
+        return eval_select(value, cond);
+    }
+
+    if let Some(inner) = parse_call(expr, "map") {
+        return eval_map(value, inner);
+    }
+
     let path = expr.trim_start_matches('.');
     Ok(traverse(value, path))
+}
+
+/// Extract the argument of a `name(...)` call, requiring the whole expression
+/// to be exactly that call (balanced parens, nothing trailing).
+fn parse_call<'a>(expr: &'a str, name: &str) -> Option<&'a str> {
+    let rest = expr.strip_prefix(name)?.strip_prefix('(')?;
+    let mut depth = 1i32;
+    let mut in_str = false;
+    for (byte_pos, c) in rest.char_indices() {
+        match c {
+            '"' => in_str = !in_str,
+            '(' if !in_str => depth += 1,
+            ')' if !in_str => {
+                depth -= 1;
+                if depth == 0 {
+                    // the closing paren must be the last character of expr
+                    return if byte_pos + c.len_utf8() == rest.len() {
+                        Some(&rest[..byte_pos])
+                    } else {
+                        None
+                    };
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// jq-style truthiness: everything except `null` and `false` is truthy.
+fn is_truthy(v: &Value) -> bool {
+    !matches!(v, Value::Null | Value::Bool(false))
+}
+
+const COMPARISON_OPS: &[&str] = &["==", "!=", ">=", "<=", ">", "<"];
+
+fn find_top_level_op<'a>(expr: &str, ops: &[&'a str]) -> Option<(usize, &'a str)> {
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let chars: Vec<char> = expr.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '"' => in_str = !in_str,
+            '(' if !in_str => depth += 1,
+            ')' if !in_str => depth -= 1,
+            _ if !in_str && depth == 0 => {
+                for op in ops {
+                    if expr[i..].starts_with(op) {
+                        return Some((i, op));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn parse_literal(lit: &str) -> Value {
+    let lit = lit.trim();
+    serde_json::from_str(lit).unwrap_or_else(|_| Value::String(lit.to_string()))
+}
+
+fn compare_values(op: &str, lhs: &Value, rhs: &Value) -> bool {
+    match op {
+        "==" => lhs == rhs,
+        "!=" => lhs != rhs,
+        _ => {
+            let ordering = match (lhs, rhs) {
+                (Value::Number(a), Value::Number(b)) => a.as_f64().partial_cmp(&b.as_f64()),
+                (Value::String(a), Value::String(b)) => Some(a.cmp(b)),
+                _ => None,
+            };
+            match (op, ordering) {
+                (">", Some(o)) => o.is_gt(),
+                ("<", Some(o)) => o.is_lt(),
+                (">=", Some(o)) => o.is_ge(),
+                ("<=", Some(o)) => o.is_le(),
+                _ => false,
+            }
+        }
+    }
+}
+
+/// Evaluate a boolean condition (used by `select(...)`) against a single value.
+fn eval_condition(item: &Value, cond: &str) -> Result<bool, CruxErr> {
+    let cond = cond.trim();
+    if let Some((pos, op)) = find_top_level_op(cond, COMPARISON_OPS) {
+        let lhs_expr = cond[..pos].trim();
+        let rhs_expr = cond[pos + op.len()..].trim();
+        let lhs = eval_jq(item, lhs_expr)?;
+        let rhs = if rhs_expr.starts_with('.') {
+            eval_jq(item, rhs_expr)?
+        } else {
+            parse_literal(rhs_expr)
+        };
+        return Ok(compare_values(op, &lhs, &rhs));
+    }
+
+    let result = eval_jq(item, cond)?;
+    Ok(is_truthy(&result))
+}
+
+fn eval_select(value: &Value, cond: &str) -> Result<Value, CruxErr> {
+    match value {
+        Value::Array(items) => {
+            let mut out = Vec::new();
+            for item in items {
+                if eval_condition(item, cond)? {
+                    out.push(item.clone());
+                }
+            }
+            Ok(Value::Array(out))
+        }
+        other => {
+            if eval_condition(other, cond)? {
+                Ok(other.clone())
+            } else {
+                Ok(Value::Null)
+            }
+        }
+    }
+}
+
+fn eval_map(value: &Value, expr: &str) -> Result<Value, CruxErr> {
+    match value {
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(eval_jq(item, expr.trim())?);
+            }
+            Ok(Value::Array(out))
+        }
+        other => Err(CruxErr::step_failed(
+            "json::jq",
+            format!("map(...) requires an array input, got {}", type_name(other)),
+        )),
+    }
+}
+
+fn type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
 }
 
 fn find_pipe(expr: &str) -> Option<usize> {
@@ -401,26 +557,61 @@ fn parse_has(expr: &str) -> Option<&str> {
     Some(key)
 }
 
+#[derive(Debug, Clone)]
+enum PathSeg {
+    Key(String),
+    Index(usize),
+}
+
+/// Split a jq-style path (e.g. `foo.bar[2].baz` or `foo[0][1]`) into an
+/// ordered list of key/index segments.
+fn parse_path_segments(path: &str) -> Vec<PathSeg> {
+    let mut segments = Vec::new();
+    let mut current = String::new();
+    let mut chars = path.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '.' => {
+                if !current.is_empty() {
+                    segments.push(PathSeg::Key(std::mem::take(&mut current)));
+                }
+            }
+            '[' => {
+                if !current.is_empty() {
+                    segments.push(PathSeg::Key(std::mem::take(&mut current)));
+                }
+                let mut idx = String::new();
+                for ic in chars.by_ref() {
+                    if ic == ']' {
+                        break;
+                    }
+                    idx.push(ic);
+                }
+                if let Ok(n) = idx.trim().parse::<usize>() {
+                    segments.push(PathSeg::Index(n));
+                }
+            }
+            _ => current.push(c),
+        }
+    }
+    if !current.is_empty() {
+        segments.push(PathSeg::Key(current));
+    }
+    segments
+}
+
 fn traverse(value: &Value, path: &str) -> Value {
     if path.is_empty() {
         return value.clone();
     }
 
-    let (head, rest) = match path.find('.') {
-        Some(i) => (&path[..i], path[i + 1..].trim_start_matches('.')),
-        None => (path, ""),
-    };
-
-    let next = if head.starts_with('[') && head.ends_with(']') {
-        let idx: usize = head[1..head.len() - 1].parse().unwrap_or(usize::MAX);
-        value.get(idx).cloned().unwrap_or(Value::Null)
-    } else {
-        value.get(head).cloned().unwrap_or(Value::Null)
-    };
-
-    if rest.is_empty() {
-        next
-    } else {
-        traverse(&next, rest)
+    let mut current = value.clone();
+    for seg in parse_path_segments(path) {
+        current = match seg {
+            PathSeg::Key(k) => current.get(&k).cloned().unwrap_or(Value::Null),
+            PathSeg::Index(i) => current.get(i).cloned().unwrap_or(Value::Null),
+        };
     }
+    current
 }

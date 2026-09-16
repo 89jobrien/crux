@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod output;
 mod plan;
 mod registry;
 mod run;
@@ -35,18 +36,15 @@ enum Cli {
         #[arg(default_value = ".")]
         root: String,
     },
-    /// Validate a .crux pipeline file without executing it
-    Check {
-        /// Pipeline file(s) to validate
-        #[arg(required = true)]
-        pipelines: Vec<String>,
-    },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
         /// Pipeline/Cruxfile path ("-" for stdin). If omitted, discovers Cruxfile in cwd.
         pipeline: Option<String>,
         /// Optional: target name (for Cruxfile) or input JSON file (for pipeline)
         target_or_input: Option<String>,
+        /// Validate the pipeline without executing it
+        #[arg(long)]
+        check: bool,
         /// Target to run from a Cruxfile (alternative to positional)
         #[arg(long)]
         target: Option<String>,
@@ -57,10 +55,16 @@ enum Cli {
         #[arg(long)]
         plugins: Option<String>,
         /// Suppress all output except errors
-        #[arg(short, long)]
+        #[arg(short, long, conflicts_with_all = ["summary", "verbose", "json"])]
         quiet: bool,
-        /// Show full trace envelope (pipeline info, steps, timing)
-        #[arg(short, long)]
+        /// Explicitly select the default concise human-readable summary
+        #[arg(long, conflicts_with_all = ["quiet", "verbose", "json"])]
+        summary: bool,
+        /// Emit only the compact machine-readable JSON result
+        #[arg(long, conflicts_with_all = ["quiet", "summary", "verbose"])]
+        json: bool,
+        /// Show pipeline metadata, full trace, and display-aware humanized output
+        #[arg(short, long, conflicts_with_all = ["quiet", "summary", "json"])]
         verbose: bool,
         /// Print execution plan without running anything
         #[arg(short = 'n', long)]
@@ -106,14 +110,16 @@ fn main() {
 
     match cli {
         Cli::List { root } => cmd_list(&root),
-        Cli::Check { pipelines } => check::cmd_check(&pipelines),
         Cli::Run {
             pipeline,
             target_or_input,
+            check,
             target,
             input,
             plugins,
             quiet,
+            summary,
+            json,
             verbose,
             dry_run,
             replay,
@@ -123,10 +129,13 @@ fn main() {
         } => run::cmd_run_dispatch(&run::RunConfig {
             pipeline_arg: pipeline.as_deref(),
             target_or_input: target_or_input.as_deref(),
+            check,
             target_flag: target.as_deref(),
             input_flag: input.as_deref(),
             plugins_path: plugins.as_deref(),
             quiet,
+            summary,
+            json,
             verbose,
             dry_run,
             replay_path: replay.as_deref(),
@@ -187,7 +196,20 @@ fn cmd_list(root: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::plan::*;
+    use super::{Cli, plan::*};
+    use clap::Parser;
+
+    #[test]
+    fn run_accepts_json_output_mode() {
+        let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json"]);
+        assert!(matches!(cli, Ok(Cli::Run { json: true, .. })));
+    }
+
+    #[test]
+    fn run_rejects_conflicting_output_modes() {
+        let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json", "--verbose"]);
+        assert!(cli.is_err());
+    }
 
     #[test]
     fn plan_subcommand_with_rule_planner_prints_steps() {
