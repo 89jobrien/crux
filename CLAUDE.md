@@ -9,6 +9,8 @@ Crux is an agentic DSL for Rust -- macros, traits, and types that make agentic c
 explicit in the type system. Every step, delegation, speculation, and failure is a first-class
 value (`Crux<T>`) that is inspectable, serializable, and replayable. Rust edition 2024, MSRV 1.88.
 
+<!-- TODO(docs): Update the documented MSRV to the workspace's Rust 1.89 requirement. -->
+
 ## Build Commands
 
 ```bash
@@ -43,8 +45,9 @@ Crates in `crates/`:
   `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
 - **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
-- **`crux-cli`** -- `crux` CLI binary (`run`/`plan`/`check` subcommands), depends on `crux-agentic`
+- **`crux-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
   for handlers/registry.
+<!-- TODO(docs): Attribute shell, fs, git, JSON, text, and control handlers to `crux-stdlib`. -->
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
   harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
 - **`crux-script`** -- YAML-driven pipeline scripting.
@@ -118,6 +121,8 @@ recovery path, not a fallback.
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
 
+<!-- TODO(docs): Change the documented injected `CruxCtx` binding from `t` to `x`. -->
+
 `#[crux::harness]` on a struct marks it as a managed container/process harness. The struct
 must have `image: String` and any additional fields mapped to `HarnessProfile`.
 
@@ -137,8 +142,9 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   `generators.baml` exactly. When bumping baml, update both files together.
 - `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
   `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
-- Build `crux-run` with `--features baml` or `llm::extract` / `llm::decompose` won't register.
-- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux-run
+- Build `crux` with `cargo build -p crux-cli --bin crux --features baml` or
+  `llm::extract` / `llm::decompose` won't register.
+- Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux
 examples/<pipeline>.crux examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`
   for the exact injection commands (machine-local, gitignored).

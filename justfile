@@ -17,6 +17,8 @@ lint:
 test:
     cargo nextest run
 
+# TODO(feature-idea-5): Run mdBook builds and lint-crux in the remote CI workflow.
+# TODO(feature-idea-10): Add credential-free agentic/BAML and optional-feature CI matrix jobs.
 # Run full CI suite locally (mirrors GH Actions - DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 ci: check build-locked fmt lint test deny lint-crux
 
@@ -99,18 +101,21 @@ check-baml:
 # Lint all .crux pipeline files (parse + handler/arg validation)
 lint-crux:
     #!/usr/bin/env bash
+    set -euo pipefail
     files=$(find examples -name '*.crux' | sort)
     if [ -z "$files" ]; then
         echo "No .crux files found"
         exit 0
     fi
-    cargo run --quiet -p crux-cli --features baml --bin crux -- check $files
+    while IFS= read -r file; do
+        cargo run --quiet -p crux-cli --features baml --bin crux -- run "$file" --check
+    done <<< "$files"
 
 # Demo replay: fresh run vs cached replay with timing comparison
 replay-demo:
     #!/usr/bin/env bash
     set -euo pipefail
-    BIN="cargo run --quiet -p crux-agentic --bin crux --"
+    BIN="cargo run --quiet -p crux-cli --bin crux --"
     PIPE="examples/showcase.crux"
     INPUT="examples/input_showcase.json"
     TRACE="target/replay-demo-trace.json"

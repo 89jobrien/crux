@@ -8,6 +8,8 @@
 
 # Crates
 
+<!-- TODO(docs): Add the missing crux-task crate page and index entry. -->
+
 - [crux](./crates/crux.md)
 - [crux-domain](./crates/crux-domain.md)
 - [crux-macros](./crates/crux-macros.md)

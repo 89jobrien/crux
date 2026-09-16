@@ -86,6 +86,7 @@ impl Default for StepRunnerRegistry {
 }
 
 // ── Built-in runner stubs ──────────────────────────────────────────────────
+// TODO(feature-idea-11): Consolidate these stubs with the production HandlerRegistry surface.
 // TODO(#63): implement real step runners — all return Value::Null today
 
 pub struct ShellRunner;

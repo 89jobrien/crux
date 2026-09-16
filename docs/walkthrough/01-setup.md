@@ -1,5 +1,7 @@
 # Chapter 01 — Setup and First Agent
 
+<!-- TODO(docs): Replace stale Cruxx naming and align Agent, confidence, attempt, event, and ID details with current types. -->
+
 This chapter walks from zero to a working agent. By the end you will have a project that compiles,
 runs a two-step agent, and prints a structured trace as JSON.
 

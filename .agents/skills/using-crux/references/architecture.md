@@ -34,11 +34,14 @@ The terminal approval adapter is in `crux-agentic`; no runtime
 Each step gets an ordinal-derived `input_hash` from its name and ordinal.
 `step_keyed` also stores a content hash.
 
-- Strict replay checks ordinal, name, and hash and reports
-  `CruxErr::ReplayMismatch` on divergence.
-- Lenient replay first tries the ordinal and then scans forward by name. When
-  both sides have content hashes they must match. Hash divergence becomes a
-  live miss rather than an error.
+- Strict replay checks the ordinal entry's name and ordinal-derived
+  `input_hash`; divergence reports `CruxErr::ReplayMismatch`. It does not use
+  `content_hash`.
+- Lenient replay first accepts an exact ordinal/name/`input_hash` hit without
+  consulting `content_hash`. On its forward name scan, differing content hashes
+  reject a candidate only when both the lookup and cached step have hashes. If
+  either side lacks one, matching by name remains the compatibility fallback.
+  Exhausting candidates produces a live miss rather than an error.
 
 `replay_from` seeds top-level steps from `Crux<Value>`. `join_all` allocates all
 arm ordinals before dispatch and supports partial replay.

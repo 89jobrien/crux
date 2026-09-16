@@ -11,7 +11,7 @@ optional `crux-baml`.
 | Join | `join_all`, `arms` | Concurrent; output preserves arm order |
 | Speculate | `speculate`, `mode`, `arms` | Sequential; `first_ok` short-circuits, `pick_best` runs all |
 | Route | `route_on_confidence`, `value`, `routes` | One branch; ranges exactly cover `[0,1]` |
-| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; parsed budget is ignored |
+| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; node-local budget is parsed but ignored |
 | Poll | `poll`, `steps`, `until`, optional limits | Do-while |
 | For each | `for_each`, `items`, `steps` | Sequential; parallel settings are ignored |
 | While | `while`, `condition`, `steps` | Pre-condition loop |
@@ -25,8 +25,7 @@ optional `crux-baml`.
 A normal step also supports `expect`, `allow_failure`, `timeout_ms`,
 `retry: { count, delay_ms }`, and `on_error: { handler, args }`. `expect` checks
 `exit_code`, `stdout_contains`, and `stderr_contains`. Pipe stage and join arm
-objects accept `allow_failure`, but only join arms honor it; pipe stages still abort
-on failure.
+objects accept and honor `allow_failure`.
 
 Pipeline `vars` resolve once in declaration order. Expressions support `input`,
 `steps`, `vars`, and `iter` paths in `{{ ... }}`. Whole expressions return typed

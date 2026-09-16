@@ -33,6 +33,7 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec {
         name: "crux-agentic",
     },
+    CrateSpec { name: "crux-cli" },
     CrateSpec {
         name: "crux-planner",
     },
@@ -220,10 +221,91 @@ pub(crate) fn version_in_index_body(body: &str, version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::path::Path;
+    use std::process::Command;
 
     #[test]
-    fn publish_order_contains_fourteen_crates() {
-        assert_eq!(PUBLISH_ORDER.len(), 14);
+    fn publish_order_covers_every_publishable_workspace_package() {
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask must live directly beneath the workspace root");
+        let output = Command::new("cargo")
+            .args(["metadata", "--no-deps", "--format-version", "1"])
+            .current_dir(workspace_root)
+            .output()
+            .expect("cargo metadata must run");
+        assert!(
+            output.status.success(),
+            "cargo metadata failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let metadata: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("cargo metadata must return JSON");
+        let expected: BTreeSet<&str> = metadata["packages"]
+            .as_array()
+            .expect("metadata packages must be an array")
+            .iter()
+            .filter(|package| {
+                package["publish"].is_null()
+                    || package["publish"].as_array().is_some_and(|registries| {
+                        registries
+                            .iter()
+                            .any(|registry| registry.as_str() == Some("crates-io"))
+                    })
+            })
+            .map(|package| {
+                package["name"]
+                    .as_str()
+                    .expect("metadata package name must be a string")
+            })
+            .collect();
+
+        let mut actual = BTreeSet::new();
+        for spec in PUBLISH_ORDER {
+            assert!(
+                actual.insert(spec.name),
+                "publish order contains duplicate package {}",
+                spec.name
+            );
+        }
+
+        assert_eq!(actual, expected);
+
+        let positions: BTreeMap<&str, usize> = PUBLISH_ORDER
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| (spec.name, index))
+            .collect();
+        for package in metadata["packages"]
+            .as_array()
+            .expect("metadata packages must be an array")
+        {
+            let package_name = package["name"]
+                .as_str()
+                .expect("metadata package name must be a string");
+            let Some(&package_position) = positions.get(package_name) else {
+                continue;
+            };
+            for dependency in package["dependencies"]
+                .as_array()
+                .expect("metadata dependencies must be an array")
+            {
+                if dependency["kind"].as_str() == Some("dev") {
+                    continue;
+                }
+                let dependency_name = dependency["name"]
+                    .as_str()
+                    .expect("metadata dependency name must be a string");
+                if let Some(&dependency_position) = positions.get(dependency_name) {
+                    assert!(
+                        dependency_position < package_position,
+                        "{dependency_name} must be published before {package_name}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -234,7 +316,7 @@ mod tests {
 
     #[test]
     fn publish_order_ends_with_facade() {
-        assert_eq!(PUBLISH_ORDER[13].name, "crux");
+        assert_eq!(PUBLISH_ORDER.last().map(|spec| spec.name), Some("crux"));
     }
 
     #[test]
@@ -341,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn run_publish_dry_from_crux_planner_skips_twelve_crates() {
+    fn run_publish_dry_from_crux_planner_leaves_two_crates() {
         let args = PublishArgs {
             from: Some("crux-planner".to_string()),
         };

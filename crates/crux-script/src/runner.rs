@@ -403,6 +403,7 @@ impl Runner {
     /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
     /// sound without a `crux-runtime` change, which is out of scope here.
     /// `parallel`/`max_concurrency` are accepted for forward compatibility.
+    // TODO(feature-idea-17): Add bounded parallel iteration with deterministic trace merging.
     async fn execute_for_each_step(
         &self,
         ctx: &mut CruxCtx,
@@ -709,6 +710,7 @@ impl Runner {
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
     // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
     // DelegateNode budgets instead of recording delegation as an ordinary parent step.
+    // TODO(feature-idea-13): Use runtime delegation so YAML preserves child traces and budgets.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -760,10 +762,17 @@ impl Runner {
                 .clone();
             let input = merge_args(output, stage.args().cloned());
             let step_name = format!("{}::{}", node.pipe, stage.label());
-            let (value, stage_confidence) =
-                run_step_once(ctx, &step_name, handler, input, None).await?;
-            output = value;
-            confidence = stage_confidence;
+            match run_step_once(ctx, &step_name, handler, input, None).await {
+                Ok((value, stage_confidence)) => {
+                    output = value;
+                    confidence = stage_confidence;
+                }
+                Err(error @ CruxErr::StepFailed { .. }) if stage.allow_failure() => {
+                    output = failed_allowed_value(&error);
+                    confidence = None;
+                }
+                Err(error) => return Err(error),
+            }
         }
 
         expr_ctx.steps.insert(

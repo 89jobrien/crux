@@ -60,7 +60,7 @@ other rows use `handler_value` and emit no confidence.
 | `analysis::compress_stages` | `token_spend.by_step`, `token_spend.total` | `{suggestions}` |
 | `analysis::tune_retry` | `failure_clusters.clusters` | `{suggestions}` |
 | `analysis::patch_schema_check` | `patch` YAML text | `{valid,errors}`; syntax only |
-| `analysis::replay_dry_run` | `trace_path`, `patch` | `{ok,mismatches}`; invokes external `crux replay`, so confirm CLI compatibility |
+| `analysis::replay_dry_run` | `trace_path`, `patch` | Currently unusable: invokes external `crux replay`, but the CLI has no `replay` subcommand |
 
 ## CI
 

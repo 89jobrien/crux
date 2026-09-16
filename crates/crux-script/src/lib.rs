@@ -7,6 +7,7 @@
 pub mod expr;
 pub mod handler_output;
 pub mod metadata;
+pub mod output;
 pub mod registry;
 pub mod resolve;
 pub mod runner;
@@ -50,6 +51,10 @@ pub enum LoadError {
 pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use metadata::{
     ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect,
+};
+pub use output::{
+    PipelineOutputError, PipelineOutputFormat, collect_agent_names, collect_handler_names,
+    format_pipeline_output,
 };
 pub use registry::HandlerRegistry;
 pub use resolve::{ResolveError, TargetResolver};

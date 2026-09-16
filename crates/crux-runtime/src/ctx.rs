@@ -105,6 +105,30 @@ pub type ConfidenceRoute<'a, T> = (ConfidenceRange, &'a str, BoxFut<T>);
 /// A named stage for `pipe`: (label, closure producing a future).
 pub type PipeStage<'a, T> = (&'a str, Box<dyn FnOnce(T) -> BoxFut<T> + Send>);
 
+/// Failure behavior for one stage in a recoverable pipe.
+pub enum PipeFailurePolicy<T> {
+    /// Return the stage error and stop the pipe.
+    Propagate,
+    /// Convert the recorded stage error into the next stage's input.
+    SubstituteWith(Box<dyn FnOnce(CruxErr) -> Result<T, CruxErr> + Send>),
+}
+
+impl<T> std::fmt::Debug for PipeFailurePolicy<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Propagate => formatter.write_str("Propagate"),
+            Self::SubstituteWith(_) => formatter.write_str("SubstituteWith(..)"),
+        }
+    }
+}
+
+/// A named pipe stage with explicit failure behavior.
+pub type RecoverablePipeStage<'a, T> = (
+    &'a str,
+    Box<dyn FnOnce(T) -> BoxFut<T> + Send>,
+    PipeFailurePolicy<T>,
+);
+
 /// A named arm for `join_all`: (label, future).
 pub type JoinArm<'a, T> = (&'a str, BoxFut<T>);
 
@@ -220,6 +244,7 @@ impl CruxCtx {
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.
+    // TODO(feature-idea-14): Unify runtime emissions and expose an ordered CLI JSONL stream.
     // TODO(automation-13): Unify EventPipeline and crux-types EventSink emissions, then attach
     // the unified sink in CLI runs so agent events and traces share one ordered stream.
     pub fn set_event_sender(&mut self, sender: EventSender) {
@@ -487,12 +512,62 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
+        let stages = stages
+            .into_iter()
+            .map(|(name, stage)| (name, stage, PipeFailurePolicy::Propagate))
+            .collect();
+        self.pipe_with_recovery(name, input, stages).await
+    }
+
+    /// Sequential pipeline with explicit failure behavior for each stage.
+    ///
+    /// Failed stages are recorded before [`PipeFailurePolicy::SubstituteWith`] converts the
+    /// error into the next stage's input. [`PipeFailurePolicy::Propagate`] preserves the
+    /// short-circuit behavior of [`Self::pipe`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the stage error when its policy is [`PipeFailurePolicy::Propagate`], or when a
+    /// substitution callback declines recovery. Safety, replay, and budget errors can therefore
+    /// remain non-recoverable even when ordinary handler failures are substituted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use crux_runtime::prelude::*;
+    ///
+    /// # async fn example() -> Result<(), CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+    ///     "recover",
+    ///     Box::new(|_| Box::pin(async { Err(CruxErr::step_failed("recover", "failed")) })),
+    ///     PipeFailurePolicy::SubstituteWith(Box::new(|_| Ok(42))),
+    /// )];
+    /// assert_eq!(ctx.pipe_with_recovery("pipe", 0, stages).await?, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn pipe_with_recovery<T>(
+        &mut self,
+        name: &str,
+        input: T,
+        stages: Vec<RecoverablePipeStage<'_, T>>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
         trace_pipe!(name, stages.len());
         let mut current = input;
-        for (stage_name, f) in stages {
+        for (stage_name, stage, policy) in stages {
             let step_name = format!("{name}::{stage_name}");
             let val = current;
-            current = self.step_budgeted(&step_name, move || f(val)).await?;
+            current = match self.step_budgeted(&step_name, move || stage(val)).await {
+                Ok(output) => output,
+                Err(error) => match policy {
+                    PipeFailurePolicy::Propagate => return Err(error),
+                    PipeFailurePolicy::SubstituteWith(substitute) => substitute(error)?,
+                },
+            };
         }
         Ok(current)
     }
@@ -1975,6 +2050,87 @@ mod tests {
             .await;
         assert!(result.is_err());
         assert_eq!(ctx.snapshot_steps().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn pipe_with_recovery_records_failure_before_substitution() {
+        let mut ctx = CruxCtx::new("test");
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![
+            (
+                "fail",
+                Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+                PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+            ),
+            (
+                "increment",
+                Box::new(|value| Box::pin(async move { Ok(value + 1) })),
+                PipeFailurePolicy::Propagate,
+            ),
+        ];
+
+        let result = ctx
+            .pipe_with_recovery("recover", 0, stages)
+            .await
+            .expect("substitution should continue the pipe");
+
+        assert_eq!(result, 8);
+        assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(
+            ctx.snapshot_steps()[0].error.as_deref(),
+            Some("step 'fail' failed: bad")
+        );
+        assert_eq!(ctx.snapshot_steps()[0].output, None);
+        assert_eq!(ctx.snapshot_steps()[1].status, StepStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn pipe_with_recovery_does_not_replay_failed_stage_as_success() {
+        let mut initial = CruxCtx::new("test");
+        let initial_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+        )];
+        assert_eq!(
+            initial
+                .pipe_with_recovery("recover", 0, initial_stages)
+                .await
+                .unwrap(),
+            7
+        );
+        let snapshot = initial.snapshot();
+
+        let mut replay = CruxCtx::new("test");
+        replay.replay_from(&snapshot);
+        let replay_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "again")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(9))),
+        )];
+        let result = replay
+            .pipe_with_recovery("recover", 0, replay_stages)
+            .await
+            .expect("failed stages should execute and recover again");
+
+        assert_eq!(result, 9);
+        assert_eq!(replay.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(replay.snapshot_steps()[0].output, None);
+    }
+
+    #[tokio::test]
+    async fn pipe_recovery_callback_can_reject_policy_errors() {
+        use crate::hooks::HookVerdict;
+
+        let mut ctx = CruxCtx::new("test");
+        ctx.on_pre_step(|_| HookVerdict::Deny("blocked".into()));
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "denied",
+            Box::new(|value| Box::pin(async move { Ok(value) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(Err)),
+        )];
+        let result = ctx.pipe_with_recovery("policy", 0, stages).await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
     }
 
     // -- join_all -------------------------------------------------------------

@@ -150,6 +150,7 @@ impl Diagnostic for ValidationReport {
 }
 
 /// Validate a parsed pipeline against the registered handler metadata.
+// TODO(feature-idea-8): Validate expression references, variable scope, and prior-step paths.
 pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> ValidationReport {
     let mut report = ValidationReport::default();
     let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
