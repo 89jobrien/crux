@@ -14,6 +14,7 @@ pub mod harness;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
+// TODO(feature-idea-6): Implement the policy-aware typed HTTP handler described by automation-12.
 // TODO(automation-12): Add a typed generic HTTP handler with explicit method, URL, headers,
 // response limits, timeout, and network policy instead of routing research fetches through shell.
 pub mod review;

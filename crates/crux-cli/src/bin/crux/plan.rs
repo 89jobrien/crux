@@ -1,12 +1,9 @@
 #[cfg(feature = "baml")]
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
-#[cfg(feature = "baml")]
-use crux_script::schema::PipelineDef;
-#[cfg(feature = "baml")]
-use serde_json::{Value, json};
+use crux_script::{PipelineOutputFormat, format_pipeline_output};
 
 #[cfg(feature = "baml")]
-use crate::registry::{collect_handler_names, resolve_plugins_path};
+use crate::registry::resolve_plugins_path;
 
 /// Canonical `PlanRule` / `RulePlanner` definitions live in `crux-types`.
 pub use crux_types::planner::{PlanRule, RulePlanner};
@@ -32,9 +29,21 @@ fn steps_to_yaml(goal: &str, steps: &[String]) -> String {
     let name = goal
         .split_whitespace()
         .take(4)
-        .collect::<Vec<_>>()
+        .map(|word| {
+            word.chars()
+                .filter(char::is_ascii_alphanumeric)
+                .flat_map(char::to_lowercase)
+                .collect::<String>()
+        })
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<String>>()
         .join("-");
-    let mut out = format!("pipeline: {name}\nsteps:\n");
+    let name = if name.is_empty() {
+        "generated-pipeline"
+    } else {
+        &name
+    };
+    let mut out = format!("pipeline: \"{name}\"\nsteps:\n");
     for step in steps {
         out.push_str(&format!("  - step: {step}\n    handler: {step}\n"));
     }
@@ -51,19 +60,15 @@ pub fn cmd_plan(
 ) {
     match planner {
         "llm" => cmd_plan_llm(goal, output, constraints, output_type, plugins_path),
-        _ => cmd_plan_rule(goal, output),
+        _ => cmd_plan_rule(goal, output, output_type),
     }
 }
 
-fn cmd_plan_rule(goal: &str, output: Option<&str>) {
+fn cmd_plan_rule(goal: &str, output: Option<&str>, output_type: &super::OutputType) {
     let steps = rule_planner_steps(goal);
     let yaml = steps_to_yaml(goal, &steps);
-    if let Some(path) = output {
-        std::fs::write(path, &yaml).expect("failed to write output file");
-        eprintln!("Pipeline written to {path}");
-    } else {
-        println!("{yaml}");
-    }
+    let formatted = format_output_or_exit(&yaml, goal, output_type);
+    write_output_or_exit(output, &formatted);
 }
 
 #[cfg(feature = "baml")]
@@ -108,14 +113,9 @@ fn cmd_plan_llm(
         ))
         .expect("pipeline generation failed");
 
-    let formatted = format_plan_output(&yaml, goal, output_type);
+    let formatted = format_output_or_exit(&yaml, goal, output_type);
 
-    if let Some(path) = output {
-        std::fs::write(path, &formatted).expect("failed to write output file");
-        eprintln!("Pipeline written to {path}");
-    } else {
-        println!("{formatted}");
-    }
+    write_output_or_exit(output, &formatted);
 }
 
 #[cfg(not(feature = "baml"))]
@@ -133,96 +133,28 @@ fn cmd_plan_llm(
     std::process::exit(1);
 }
 
-#[cfg(feature = "baml")]
-fn format_plan_output(yaml: &str, goal: &str, output_type: &super::OutputType) -> String {
-    match output_type {
-        super::OutputType::Yaml => yaml.to_string(),
-
-        super::OutputType::Json => {
-            let pipeline: PipelineDef = crux_script::load(yaml).expect("generated YAML is invalid");
-            let steps: Vec<Value> = collect_handler_names(&pipeline)
-                .into_iter()
-                .map(|h| json!({ "handler": h }))
-                .collect();
-            serde_json::to_string_pretty(&json!({
-                "pipeline": pipeline.pipeline,
-                "steps": steps,
-                "yaml": yaml,
-            }))
-            .unwrap()
-        }
-
-        super::OutputType::Pretty => {
-            let pipeline: PipelineDef = crux_script::load(yaml).expect("generated YAML is invalid");
-            let handlers = collect_handler_names(&pipeline);
-            let mut out = String::new();
-            out.push_str(&format!("# Generated pipeline: {}\n", pipeline.pipeline));
-            out.push_str(&format!("# Goal: {goal}\n"));
-            out.push_str(&format!("# Steps: {}\n", pipeline.steps.len()));
-            out.push_str(&format!("# Handlers: {}\n", handlers.join(", ")));
-            out.push_str("#\n\n");
-            out.push_str(yaml);
-            out
-        }
-
-        super::OutputType::DryRun => {
-            let pipeline: PipelineDef = crux_script::load(yaml).expect("generated YAML is invalid");
-            let handlers = collect_handler_names(&pipeline);
-            let mut out = String::new();
-            out.push_str(&format!(
-                "Pipeline: {} ({} steps)\n\n",
-                pipeline.pipeline,
-                pipeline.steps.len()
-            ));
-            for (i, name) in handlers.iter().enumerate() {
-                out.push_str(&format!("  {:>2}. {name}\n", i + 1));
-            }
-            out
-        }
-
-        super::OutputType::Handoff => {
-            let pipeline: PipelineDef = crux_script::load(yaml).expect("generated YAML is invalid");
-            format_handoff(&pipeline, goal)
-        }
-    }
+fn format_output_or_exit(yaml: &str, goal: &str, output_type: &super::OutputType) -> String {
+    let format = match output_type {
+        super::OutputType::Yaml => PipelineOutputFormat::Yaml,
+        super::OutputType::Json => PipelineOutputFormat::Json,
+        super::OutputType::Pretty => PipelineOutputFormat::Pretty,
+        super::OutputType::DryRun => PipelineOutputFormat::DryRun,
+        super::OutputType::Handoff => PipelineOutputFormat::Handoff,
+    };
+    format_pipeline_output(yaml, goal, format).unwrap_or_else(|error| {
+        eprintln!("failed to format generated pipeline: {error}");
+        std::process::exit(1);
+    })
 }
 
-#[cfg(feature = "baml")]
-fn format_handoff(pipeline: &PipelineDef, goal: &str) -> String {
-    use crux_script::schema::StepDef;
-
-    let mut out = String::new();
-    out.push_str(&format!("project: {}\n", pipeline.pipeline));
-    out.push_str(&format!("id: {}\n", pipeline.pipeline));
-    out.push_str(&format!(
-        "description: >\n  Generated from goal: {goal}\n\n"
-    ));
-    out.push_str("items:\n\n");
-
-    for (i, step) in pipeline.steps.iter().enumerate() {
-        let (id, name, handler) = match step {
-            StepDef::Step(n) => (&n.step, &n.step, n.handler.as_deref().unwrap_or(&n.step)),
-            StepDef::Pipe(n) => (&n.pipe, &n.pipe, n.pipe.as_str()),
-            StepDef::JoinAll(n) => (&n.join_all, &n.join_all, n.join_all.as_str()),
-            StepDef::Delegate(n) => (&n.delegate, &n.delegate, n.delegate.as_str()),
-            StepDef::Speculate(n) => (&n.speculate, &n.speculate, n.speculate.as_str()),
-            StepDef::RouteOnConfidence(n) => (
-                &n.route_on_confidence,
-                &n.route_on_confidence,
-                n.route_on_confidence.as_str(),
-            ),
-        };
-
-        out.push_str(&format!("  - id: step-{}\n", i + 1));
-        out.push_str(&format!("    name: {name}\n"));
-        out.push_str(&format!("    title: \"Execute {id} via {handler}\"\n"));
-        out.push_str(&format!(
-            "    description: >\n      Pipeline step {}: {handler}\n",
-            i + 1
-        ));
-        out.push_str("    priority: P1\n");
-        out.push_str("    status: open\n\n");
+fn write_output_or_exit(path: Option<&str>, output: &str) {
+    if let Some(path) = path {
+        if let Err(error) = std::fs::write(path, output) {
+            eprintln!("failed to write generated pipeline to {path}: {error}");
+            std::process::exit(1);
+        }
+        eprintln!("Pipeline written to {path}");
+    } else {
+        println!("{output}");
     }
-
-    out
 }

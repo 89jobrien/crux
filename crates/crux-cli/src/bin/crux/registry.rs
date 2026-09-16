@@ -2,8 +2,8 @@ use crux_plugin::bridge::register_plugins;
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_runtime::prelude::*;
 use crux_script::{
-    HandlerRegistry,
-    schema::{DisplayOutput, PipelineDef, PipelineDisplayDef, StepDef},
+    HandlerRegistry, collect_agent_names,
+    schema::{DisplayOutput, PipelineDef, PipelineDisplayDef},
 };
 use serde_json::{Value, json};
 
@@ -40,11 +40,11 @@ pub async fn build_registry(
         eprintln!("[crux] warning: failed to load plugins: {e}");
     }
 
-    let mut unregistered: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut unregistered_handlers = std::collections::HashSet::new();
     for name in collect_handler_names(pipeline) {
         if reg.get_handler(&name).is_none() {
             if strict {
-                unregistered.insert(name);
+                unregistered_handlers.insert(name);
             } else {
                 let n = name.clone();
                 reg.handler_value(name, move |_input: Value| {
@@ -62,66 +62,54 @@ pub async fn build_registry(
         }
     }
 
-    if !unregistered.is_empty() {
-        let mut sorted: Vec<String> = unregistered.into_iter().collect();
+    let mut unregistered_agents = std::collections::HashSet::new();
+    for name in collect_agent_names(pipeline) {
+        if reg.get_agent(&name).is_none() {
+            if strict {
+                unregistered_agents.insert(name);
+            } else {
+                let n = name.clone();
+                reg.agent_fn(name, move |_input: Value| {
+                    let agent_name = n.clone();
+                    async move {
+                        eprintln!(
+                            "[crux] warning: no builtin for agent '{agent_name}', using stub"
+                        );
+                        Ok(json!({
+                            "_stub": agent_name,
+                            "confidence": 0.5,
+                            "score": 0.5,
+                        }))
+                    }
+                });
+            }
+        }
+    }
+
+    if !unregistered_handlers.is_empty() || !unregistered_agents.is_empty() {
+        let mut sorted: Vec<String> = unregistered_handlers.into_iter().collect();
         sorted.sort();
-        eprintln!(
-            "[crux] error: --strict mode: unregistered handlers: {}",
-            sorted.join(", ")
-        );
+        if !sorted.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered handlers: {}",
+                sorted.join(", ")
+            );
+        }
+        let mut agents: Vec<String> = unregistered_agents.into_iter().collect();
+        agents.sort();
+        if !agents.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered agents: {}",
+                agents.join(", ")
+            );
+        }
         std::process::exit(1);
     }
 
     reg
 }
 
-/// Collect all handler/arm/stage names referenced in the pipeline.
-pub fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
-    let mut names = Vec::new();
-    collect_handler_names_into(&pipeline.steps, &mut names);
-    names.sort();
-    names.dedup();
-    names
-}
-
-fn collect_handler_names_into(steps: &[StepDef], names: &mut Vec<String>) {
-    for step in steps {
-        match step {
-            StepDef::Step(node) => {
-                names.push(node.handler.clone().unwrap_or_else(|| node.step.clone()));
-            }
-            StepDef::Delegate(node) => {
-                names.push(node.delegate.clone());
-            }
-            StepDef::Pipe(node) => {
-                names.extend(node.stages.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::JoinAll(node) => {
-                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::RouteOnConfidence(node) => {
-                for route in &node.routes {
-                    names.push(route.handler.clone());
-                }
-            }
-            StepDef::Speculate(node) => {
-                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::Poll(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::ForEach(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::While(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::Repeat(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-        }
-    }
-}
+pub use crux_script::collect_handler_names;
 
 /// Warn if the pipeline uses LLM handlers but no API keys are set.
 pub fn warn_missing_env(pipeline: &PipelineDef) {

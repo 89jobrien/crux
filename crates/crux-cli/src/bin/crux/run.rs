@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
+use crux_script::{HandlerRegistry, TargetResolver, collect_agent_names, schema::PipelineDef};
 use serde_json::{Value, json};
 
 use crate::registry::{
@@ -192,7 +192,8 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
                 display: None,
                 steps: target_def.steps.clone(),
             };
-            let handlers = collect_handler_names(&tmp);
+            let mut handlers = collect_handler_names(&tmp);
+            handlers.extend(collect_agent_names(&tmp));
             println!(
                 "  {:>2}. {name} ({} steps: {}){budget_info}",
                 i + 1,
@@ -210,7 +211,8 @@ fn cmd_dry_run_pipeline(contents: &str, path: &str) {
         std::process::exit(1);
     });
 
-    let handlers = collect_handler_names(&pipeline);
+    let mut handlers = collect_handler_names(&pipeline);
+    handlers.extend(collect_agent_names(&pipeline));
     println!(
         "Pipeline: {} ({} steps)\n",
         pipeline.pipeline,
@@ -271,7 +273,8 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
 
     // Also register any handlers referenced in all targets.
     let mut full_reg = registry;
-    let mut unregistered: Vec<String> = Vec::new();
+    let mut unregistered_handlers = std::collections::BTreeSet::new();
+    let mut unregistered_agents = std::collections::BTreeSet::new();
     for (_, tgt) in &cruxfile.targets {
         let tmp_pipeline = PipelineDef {
             pipeline: String::new(),
@@ -283,9 +286,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         for name in collect_handler_names(&tmp_pipeline) {
             if full_reg.get_handler(&name).is_none() {
                 if strict {
-                    if !unregistered.contains(&name) {
-                        unregistered.push(name);
-                    }
+                    unregistered_handlers.insert(name);
                 } else {
                     // TODO(automation-7): Make production automation profiles strict by
                     // default so unregistered handlers can never degrade into successful stubs.
@@ -293,13 +294,36 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
                 }
             }
         }
+        for name in collect_agent_names(&tmp_pipeline) {
+            if full_reg.get_agent(&name).is_none() {
+                if strict {
+                    unregistered_agents.insert(name);
+                } else {
+                    register_stub_agent(&mut full_reg, name);
+                }
+            }
+        }
     }
 
-    if !unregistered.is_empty() {
-        eprintln!(
-            "[crux] error: --strict mode: unregistered handlers: {}",
-            unregistered.join(", ")
-        );
+    if !unregistered_handlers.is_empty() || !unregistered_agents.is_empty() {
+        if !unregistered_handlers.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered handlers: {}",
+                unregistered_handlers
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        if !unregistered_agents.is_empty() {
+            eprintln!(
+                "[crux] error: --strict mode: unregistered agents: {}",
+                unregistered_agents
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         std::process::exit(1);
     }
 
@@ -493,6 +517,21 @@ fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
             eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
             Ok(json!({
                 "_stub": handler_name,
+                "confidence": 0.5,
+                "score": 0.5,
+            }))
+        }
+    });
+}
+
+fn register_stub_agent(reg: &mut HandlerRegistry, name: String) {
+    let n = name.clone();
+    reg.agent_fn(name, move |_input: Value| {
+        let agent_name = n.clone();
+        async move {
+            eprintln!("[crux] warning: no builtin for agent '{agent_name}', using stub");
+            Ok(json!({
+                "_stub": agent_name,
                 "confidence": 0.5,
                 "score": 0.5,
             }))

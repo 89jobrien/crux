@@ -394,6 +394,7 @@ impl Runner {
     /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
     /// sound without a `crux-runtime` change, which is out of scope here.
     /// `parallel`/`max_concurrency` are accepted for forward compatibility.
+    // TODO(feature-idea-17): Add bounded parallel iteration with deterministic trace merging.
     async fn execute_for_each_step(
         &self,
         ctx: &mut CruxCtx,
@@ -700,6 +701,7 @@ impl Runner {
     /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
     // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
     // DelegateNode budgets instead of recording delegation as an ordinary parent step.
+    // TODO(feature-idea-13): Use runtime delegation so YAML preserves child traces and budgets.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -740,67 +742,64 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
-        let registry = self.registry.clone();
+        let mut result = current_input.clone();
+        let mut confidence = None;
+        for arm in &node.stages {
+            let handler = self.registry.get_handler(arm.handler_name()).cloned();
+            let name_owned = arm.handler_name().to_string();
+            // TODO(automation-9): Apply the same expression expansion semantics to pipe,
+            // join, route, and speculate arguments that top-level handler steps receive.
+            let static_args = arm.args().cloned();
+            let confidence_cell = Arc::new(Mutex::new(None));
+            let usage_cell: UsageCell = Arc::new(Mutex::new(None));
+            let error_cell = Arc::new(Mutex::new(None));
+            let stage_confidence = Arc::clone(&confidence_cell);
+            let stage_usage = Arc::clone(&usage_cell);
+            let stage_error = Arc::clone(&error_cell);
+            let policy = if arm.allow_failure() {
+                PipeFailurePolicy::SubstituteWith(Box::new(|error| match error {
+                    error @ CruxErr::StepFailed { .. } => Ok(failed_allowed_value(&error)),
+                    error => Err(error),
+                }))
+            } else {
+                PipeFailurePolicy::Propagate
+            };
+            let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
+                Box::new(move |value: Value| {
+                    Box::pin(async move {
+                        let handler = handler.ok_or_else(|| {
+                            CruxErr::step_failed(&name_owned, "handler not found")
+                        })?;
+                        let input = merge_args(value, static_args);
+                        let started = std::time::Instant::now();
+                        let execution = handler(input).await;
+                        *stage_usage.lock().unwrap() = Some((execution.usage, started.elapsed()));
+                        match execution.outcome {
+                            Ok(output) => {
+                                *stage_confidence.lock().unwrap() = output.confidence;
+                                Ok(output.value)
+                            }
+                            Err(error) => {
+                                *stage_error.lock().unwrap() = Some(error.clone());
+                                Err(error)
+                            }
+                        }
+                    })
+                });
+            let stage_result = ctx
+                .pipe_with_recovery(&node.pipe, result, vec![(arm.label(), stage_fn, policy)])
+                .await;
+            let handler_error = error_cell.lock().unwrap().take();
+            record_usage_cells(
+                ctx,
+                std::iter::once(arm.label()),
+                &[usage_cell],
+                stage_result.as_ref().err().or(handler_error.as_ref()),
+            )?;
+            result = stage_result?;
+            confidence = *confidence_cell.lock().unwrap();
+        }
 
-        // One confidence cell per stage; the last stage's confidence wins.
-        let confidence_cells: Vec<Arc<Mutex<Option<f32>>>> = node
-            .stages
-            .iter()
-            .map(|_| Arc::new(Mutex::new(None)))
-            .collect();
-        let usage_cells: Vec<UsageCell> = node
-            .stages
-            .iter()
-            .map(|_| Arc::new(Mutex::new(None)))
-            .collect();
-
-        #[allow(clippy::type_complexity)]
-        let stages: Vec<(&str, Box<dyn FnOnce(Value) -> BoxFut<Value> + Send>)> = node
-            .stages
-            .iter()
-            .zip(confidence_cells.iter())
-            .zip(usage_cells.iter())
-            .map(|((arm, cell), usage_cell)| {
-                let handler = registry.get_handler(arm.handler_name()).cloned();
-                let name_owned = arm.handler_name().to_string();
-                // TODO(automation-9): Apply the same expression expansion semantics to pipe,
-                // join, route, and speculate arguments that top-level handler steps receive.
-                let static_args = arm.args().cloned();
-                let cell = Arc::clone(cell);
-                let usage_cell = Arc::clone(usage_cell);
-                let stage_fn: Box<dyn FnOnce(Value) -> BoxFut<Value> + Send> =
-                    Box::new(move |v: Value| {
-                        Box::pin(async move {
-                            let h = handler.ok_or_else(|| {
-                                CruxErr::step_failed(&name_owned, "handler not found")
-                            })?;
-                            let input = merge_args(v, static_args);
-                            let started = std::time::Instant::now();
-                            let execution = h(input).await;
-                            *usage_cell.lock().unwrap() =
-                                Some((execution.usage, started.elapsed()));
-                            let out = execution.outcome?;
-                            *cell.lock().unwrap() = out.confidence;
-                            Ok(out.value)
-                        }) as BoxFut<Value>
-                    });
-                (arm.label(), stage_fn)
-            })
-            .collect();
-
-        let input = current_input.clone();
-        let result = ctx.pipe(&node.pipe, input, stages).await;
-        record_usage_cells(
-            ctx,
-            node.stages.iter().map(|arm| arm.label()),
-            &usage_cells,
-            result.as_ref().err(),
-        )?;
-        let result = result?;
-
-        // Use the last stage's confidence (pipeline is sequential).
-        // Empty stages vec → last() returns None → confidence is None (correct for degenerate case).
-        let confidence = confidence_cells.last().and_then(|c| *c.lock().unwrap());
         expr_ctx.steps.insert(
             node.pipe.clone(),
             StepResult {

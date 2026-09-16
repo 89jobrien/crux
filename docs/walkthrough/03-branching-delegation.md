@@ -1,5 +1,7 @@
 # 03 — Branching and Delegation
 
+<!-- TODO(docs): Describe `ConfidenceRange::exclusive(lo, hi)` as the half-open range `[lo, hi)`. -->
+
 This chapter covers the four primitives for branching control flow in a Crux agent: plain `match`
 inside a step, `route_on_confidence`, `speculate`, and `delegate`. Each serves a distinct purpose;
 choosing the right one is as important as using it correctly.

@@ -1,5 +1,7 @@
 # Budgets and errors
 
+<!-- TODO(docs): Explain that top-level budgets are optional and document `steps` and `usd`. -->
+
 ## Budgets
 
 Every pipeline declares a budget at the top level:

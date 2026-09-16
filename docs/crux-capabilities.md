@@ -118,7 +118,7 @@ Trace analysis and optimization for completed agent runs.
 | `analysis::compress_stages`    | Flag pipe stages consuming > 40% of total tokens           |
 | `analysis::tune_retry`         | Suggest Recovery::Retry config for steps with > 2 failures |
 | `analysis::patch_schema_check` | Validate a YAML patch string for syntax correctness        |
-| `analysis::replay_dry_run`     | Re-run trace in lenient replay mode against a patch        |
+| `analysis::replay_dry_run`     | Currently unusable: invokes missing `crux replay` command  |
 
 ## CI Handlers
 
@@ -168,6 +168,7 @@ Doob backlog processing and prioritization.
 
 ## Known Gaps
 
+<!-- TODO(docs): Document llm::stream, SQLite, task, remaining review, and triage handlers. -->
 | Area                   | Gap                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `rx::install`          | installs scripts in a local registry (#66)                                         |

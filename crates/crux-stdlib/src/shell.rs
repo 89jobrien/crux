@@ -49,6 +49,7 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
     let cmd = require_str(&input, "cmd").map_err(CruxErr::from)?;
     let cwd = opt_str(&input, "cwd");
 
+    // TODO(feature-idea-7): Implement the typed argv process handler described by automation-14.
     // TODO(automation-14): Add a typed argv process handler for untrusted automation input;
     // never interpolate issue text, prompts, branch names, or paths into `sh -c` commands.
     let mut command = Command::new("sh");

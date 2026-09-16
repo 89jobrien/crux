@@ -3,6 +3,8 @@
 //! Re-exports core trace types from `crux-types` and defines the
 //! improvement vocabulary: strategies, diffs, comparisons, and policies.
 
+// TODO(feature-idea-16): Integrate persisted runs with proposals, approval, and replay comparison.
+
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};

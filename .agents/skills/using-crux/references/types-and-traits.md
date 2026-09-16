@@ -16,23 +16,34 @@ failure-causing steps.
 `Rejected`, or `Skipped`.
 
 `CruxErr` variants are `StepFailed { step, source_msg }`, `LowConfidence`,
-`BudgetExceeded { budget_kind, limit, actual }`, `Delegation { to, source }`,
-`Cancelled`, `ReplayMismatch { step, expected, actual }`, and `Denied`.
+`BudgetExceeded { budget_kind, limit, actual }`,
+`UnreportedCost { step, source }`, `StepBudgetExceeded { limit, attempted }`,
+`UsdBudgetExceeded { limit_micros, actual_micros, source }`,
+`Delegation { to, source }`, `Cancelled`,
+`ReplayMismatch { step, expected, actual }`, and `Denied`.
 
-`Budget` uses struct variants and these constructors:
+`Budget` uses struct variants. `steps` and `usd` are the canonical count and
+cost APIs; `calls` and `cost_cents` remain compatibility APIs:
 
 ```rust
 Budget::tokens(10_000);
-Budget::calls(5);
+Budget::steps(5);
 Budget::duration(std::time::Duration::from_secs(60));
-Budget::cost_cents(100);
-Budget::combined(vec![Budget::calls(5), Budget::tokens(10_000)]);
+Budget::usd(UsdAmount::from_micros(1_000_000));
+Budget::calls(5);        // compatibility alias, enforced as steps
+Budget::cost_cents(100); // compatibility form, enforced as USD
+Budget::combined(vec![Budget::steps(5), Budget::tokens(10_000)]);
 ```
 
-`BudgetTracker::consume(amount)` applies one scalar amount to every combined
-leaf. Exceeded means usage is greater than a limit. It does not measure tokens,
-time, calls, or cost automatically. Serializable `RecoveryKind` is `Retry`,
-`Skip`, `Propagate`, or `Continue`.
+`BudgetTracker` exposes `begin_step`, `record_handler_usage`, `record_duration`,
+`usage`, `remaining`, `budget`, and the legacy scalar `consume`/`is_exceeded`
+API. Combined leaves are enforced independently and a value equal to its limit
+is allowed. `begin_step` rejects the first attempt over a step limit.
+`record_handler_usage` accounts tokens and fixed-point microdollars; a USD
+budget fails closed with `UnreportedCost` when a handler reports no cost, while
+`HandlerUsage::free()` explicitly reports zero. `record_duration` accumulates
+elapsed milliseconds. Serializable `RecoveryKind` is `Retry`, `Skip`,
+`Propagate`, or `Continue`.
 
 ## Runtime API
 
@@ -42,7 +53,10 @@ tokens. It also has default low-confidence and failure hooks.
 
 Bring `Context` into scope (the facade prelude does this) for `step`,
 `step_keyed`, `step_with_confidence`, `step_retryable`, `try_step`,
-`step_stream`, hooks, and budget methods.
+`step_stream`, hooks, and budget methods. Typed accounting methods are
+`begin_budgeted_step`, `record_handler_usage`, and `record_budget_duration`;
+`set_budget`, `budget`, `remaining_budget`, and compatibility
+`consume_budget` are also available.
 
 `pipe` is sequential. `join_all` runs arms concurrently, waits for every live
 arm, and returns values in input order. `speculate` is sequential:

@@ -285,13 +285,18 @@ async fn generate_report(docs: Vec<Doc>) -> Crux<Report> {
         Recovery::Substitute(template)
     });
 
-    let summaries = x
-        .join_all(docs.into_iter().map(|d| summarize(d)))
-        .await?;
+    let names: Vec<String> = (0..docs.len()).map(|i| format!("document-{i}")).collect();
+    let arms = names
+        .iter()
+        .zip(docs)
+        .map(|(name, doc)| (name.as_str(), Box::pin(summarize(doc)) as BoxFut<_>))
+        .collect();
+    let summaries = x.join_all("summarize", arms).await?;
 
     // This step will trigger on_budget_exceeded if it would push over the limit.
     x.delegate::<PolishedReport>("polish", summaries)
         .with_budget(Budget::tokens(10_000))
+        .run()
         .await
 }
 ```

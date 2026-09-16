@@ -57,7 +57,7 @@ Either way, the returned `Crux<T>` is:
 
 - **Inspectable** -- `crux.causal_chain()`, `crux.delegations()`
 - **Serializable** -- `serde_json::to_string(&crux)`
-- **Replayable** -- `Crux::replay_from(snapshot)` resumes after a crash
+- **Replayable** -- `ctx.replay_from(&snapshot)` resumes a `CruxCtx` after a crash
 
 ## Installation
 
@@ -87,6 +87,11 @@ crux run pipeline.crux --save-trace trace.json
 crux run pipeline.crux --replay trace.json
 crux plan --goal "summarize the latest release notes"
 ```
+
+The default rule planner emits pipeline templates. Generated handlers that are not built in must
+be registered through a plugin or replaced before running with `--strict`.
+
+<!-- TODO(docs): Document every `run` and `plan` option shown by their `--help` output. -->
 
 ## Crates
 
@@ -121,6 +126,8 @@ The `crux` facade crate provides:
 
 Build `crux-cli` with its `baml` feature to enable BAML-backed structured
 extraction and the LLM planner.
+
+<!-- TODO(docs): Add an index for repository-local skills under `.agents/skills/`. -->
 
 ## Documentation
 

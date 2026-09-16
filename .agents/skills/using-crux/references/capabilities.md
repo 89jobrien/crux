@@ -11,7 +11,7 @@ optional `crux-baml`.
 | Join | `join_all`, `arms` | Concurrent; output preserves arm order |
 | Speculate | `speculate`, `mode`, `arms` | Sequential; `first_ok` short-circuits, `pick_best` runs all |
 | Route | `route_on_confidence`, `value`, `routes` | One branch; ranges exactly cover `[0,1]` |
-| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; parsed budget is ignored |
+| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; node-local budget is parsed but ignored |
 | Poll | `poll`, `steps`, `until`, optional limits | Do-while |
 | For each | `for_each`, `items`, `steps` | Sequential; parallel settings are ignored |
 | While | `while`, `condition`, `steps` | Pre-condition loop |
@@ -38,14 +38,23 @@ the routing score, and speculation has no aggregate score. Pipeline `pick_best`
 reads numeric output `score`; missing scores become `0.0` and ties favor the
 first arm.
 
-## Budget limitation
+## Budget enforcement
 
-The schema accepts `tokens`, `calls`, `duration_ms`, and `cost_cents`, and the
-runner installs a `Budget`. Execution does not automatically call
-`consume_budget`, count handlers, measure duration, read token use, or track
-cost. Pipeline budgets are therefore not effective runtime limits. Delegate
-budgets are also ignored by the pipeline runner. Use `timeout_ms` for an
-enforced per-step wall-clock timeout.
+The schema accepts canonical `steps` and `usd` plus `tokens`, `duration_ms`, and
+compatibility fields `calls` and `cost_cents`. The runner installs pipeline and
+Cruxfile-target budgets. Handler attempts reserve step budget before execution;
+completed normal, pipe, join, and speculation handlers report elapsed duration,
+tokens, and fixed-point USD through `HandlerExecution`/`HandlerUsage`. Limits
+allow exact equality and reject the first value above the limit. A configured
+USD budget fails closed with `UnreportedCost` after a handler that does not
+report cost; explicitly free handlers report zero. Token and USD enforcement is
+only as accurate as handler usage reporting.
+
+`calls` maps to `steps`, and `cost_cents` maps to USD. The legacy scalar
+`consume_budget` API is not how the pipeline runner meters handlers. A
+`delegate` node's own budget remains ignored, and that registered-agent path is
+not metered as a handler invocation. Use `timeout_ms` for an enforced per-step
+wall-clock timeout.
 
 Default registration includes stdlib, analysis, CI, container, harness, review,
 rx, SQLite, task, triage, and raw LLM handlers. `docker` selects Bollard instead
