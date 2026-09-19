@@ -136,3 +136,76 @@ steps:
         ValidationCode::UnknownHandler
     );
 }
+
+fn expression_pipeline() -> crux_script::schema::PipelineDef {
+    crux_script::load(
+        r#"
+pipeline: typed-expressions
+steps:
+  - step: echo
+    handler: test::echo
+    args:
+      exact: "{{ input }}"
+      message: "hello {{ input.name }}"
+      count: 3
+"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn compiler_types_template_expressions() {
+    let compilation = compile_pipeline(
+        &expression_pipeline(),
+        &registry(),
+        CompileOptions::strict(),
+    );
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.step_argument_schema("echo", "exact"),
+        Some(&ValueSchema::Dynamic)
+    );
+    assert_eq!(
+        typed.step_argument_schema("echo", "message"),
+        Some(&ValueSchema::String)
+    );
+    assert_eq!(
+        typed.step_argument_schema("echo", "count"),
+        Some(&ValueSchema::Integer)
+    );
+}
+
+#[test]
+fn exact_template_preserves_type() {
+    let compilation = compile_pipeline(
+        &expression_pipeline(),
+        &registry(),
+        CompileOptions::strict(),
+    );
+
+    assert_eq!(
+        compilation
+            .artifact()
+            .unwrap()
+            .step_argument_schema("echo", "exact"),
+        Some(&ValueSchema::Dynamic)
+    );
+}
+
+#[test]
+fn interpolation_produces_string() {
+    let compilation = compile_pipeline(
+        &expression_pipeline(),
+        &registry(),
+        CompileOptions::strict(),
+    );
+
+    assert_eq!(
+        compilation
+            .artifact()
+            .unwrap()
+            .step_argument_schema("echo", "message"),
+        Some(&ValueSchema::String)
+    );
+}

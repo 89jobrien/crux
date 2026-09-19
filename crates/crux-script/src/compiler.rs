@@ -1,6 +1,6 @@
 //! Typed pipeline compilation options and results.
 
-use crate::ir::{TypedPipeline, TypedStep};
+use crate::ir::{TypedPipeline, TypedStep, TypedValue};
 use crate::registry::HandlerRegistry;
 use crate::schema::{PipelineDef, StepDef};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
@@ -150,7 +150,7 @@ pub fn compile_pipeline(
             diagnostics.push(diagnostic_for_mode(
                 options,
                 ValidationCode::UnknownHandler,
-                location,
+                &location,
                 format!("handler '{handler_name}' is not registered"),
             ));
             unresolved = true;
@@ -161,7 +161,7 @@ pub fn compile_pipeline(
             diagnostics.push(diagnostic_for_mode(
                 options,
                 ValidationCode::MissingContract,
-                location,
+                &location,
                 format!("handler '{handler_name}' has no complete contract"),
             ));
             if options.mode() == CompileMode::Strict {
@@ -170,9 +170,23 @@ pub fn compile_pipeline(
             }
         }
 
+        let args = match node.args.as_ref().map(TypedValue::compile).transpose() {
+            Ok(args) => args,
+            Err(error) => {
+                diagnostics.push(ValidationDiagnostic::error_with_code(
+                    ValidationCode::InvalidExpression,
+                    format!("{location}.args"),
+                    error.to_string(),
+                ));
+                unresolved = true;
+                continue;
+            }
+        };
+
         steps.push(TypedStep {
             node: node.clone(),
             runner,
+            args,
         });
     }
 

@@ -4,6 +4,59 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TemplateSegment {
+    Text(String),
+    Path(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ParsedExpression {
+    Literal(String),
+    ExactPath(String),
+    Interpolated(Vec<TemplateSegment>),
+}
+
+pub(crate) fn parse_expression(expr: &str) -> Result<ParsedExpression, ExprError> {
+    let trimmed = expr.trim();
+    if let Some(inner) = trimmed
+        .strip_prefix("{{")
+        .and_then(|value| value.strip_suffix("}}"))
+    {
+        let path = inner.trim();
+        if path.is_empty() || path.contains("{{") || path.contains("}}") {
+            return Err(ExprError::Syntax(expr.to_string()));
+        }
+        return Ok(ParsedExpression::ExactPath(path.to_string()));
+    }
+
+    if !expr.contains("{{") {
+        return Ok(ParsedExpression::Literal(expr.to_string()));
+    }
+
+    let mut segments = Vec::new();
+    let mut remaining = expr;
+    while let Some(start) = remaining.find("{{") {
+        if start > 0 {
+            segments.push(TemplateSegment::Text(remaining[..start].to_string()));
+        }
+        let after_open = &remaining[start + 2..];
+        let end = after_open
+            .find("}}")
+            .ok_or_else(|| ExprError::Syntax(expr.to_string()))?;
+        let path = after_open[..end].trim();
+        if path.is_empty() {
+            return Err(ExprError::Syntax(expr.to_string()));
+        }
+        segments.push(TemplateSegment::Path(path.to_string()));
+        remaining = &after_open[end + 2..];
+    }
+    if !remaining.is_empty() {
+        segments.push(TemplateSegment::Text(remaining.to_string()));
+    }
+    Ok(ParsedExpression::Interpolated(segments))
+}
+
 /// Result of a completed step, used for expression resolution.
 ///
 /// `confidence` is `None` for steps that produced no score (e.g. `handler_value` handlers).
@@ -53,40 +106,23 @@ impl ExprContext {
     ///   snippet is replaced with its string representation; result is a JSON string.
     /// - Plain strings with no `{{ }}` — returned unchanged as a JSON string.
     pub fn eval(&self, expr: &str) -> Result<Value, ExprError> {
-        let trimmed = expr.trim();
-
-        // Fast path: entire string is a single template — return typed value.
-        if let Some(inner) = trimmed
-            .strip_prefix("{{")
-            .and_then(|s| s.strip_suffix("}}"))
-        {
-            return self.resolve_path(inner.trim());
-        }
-
-        // No template markers at all — return as-is.
-        if !expr.contains("{{") {
-            return Ok(Value::String(expr.to_string()));
-        }
-
-        // Interpolation: replace every `{{ path }}` occurrence within the string.
-        let mut result = String::with_capacity(expr.len());
-        let mut remaining = expr;
-        while let Some(start) = remaining.find("{{") {
-            result.push_str(&remaining[..start]);
-            let after_open = &remaining[start + 2..];
-            let end = after_open
-                .find("}}")
-                .ok_or_else(|| ExprError::Syntax(expr.to_string()))?;
-            let path = after_open[..end].trim();
-            let value = self.resolve_path(path)?;
-            match value {
-                Value::String(s) => result.push_str(&s),
-                other => result.push_str(&other.to_string()),
+        match parse_expression(expr)? {
+            ParsedExpression::Literal(value) => Ok(Value::String(value)),
+            ParsedExpression::ExactPath(path) => self.resolve_path(&path),
+            ParsedExpression::Interpolated(segments) => {
+                let mut result = String::with_capacity(expr.len());
+                for segment in segments {
+                    match segment {
+                        TemplateSegment::Text(text) => result.push_str(&text),
+                        TemplateSegment::Path(path) => match self.resolve_path(&path)? {
+                            Value::String(value) => result.push_str(&value),
+                            other => result.push_str(&other.to_string()),
+                        },
+                    }
+                }
+                Ok(Value::String(result))
             }
-            remaining = &after_open[end + 2..];
         }
-        result.push_str(remaining);
-        Ok(Value::String(result))
     }
 
     /// Resolve an expression to f32 (for confidence routing).
