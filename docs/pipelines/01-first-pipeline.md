@@ -80,6 +80,21 @@ crux run hello.crux --json    # explicitly select compact result JSON
 crux run hello.crux -q        # errors only
 ```
 
+## Saved traces
+
+Every executed `crux run` writes a JSON trace beneath `$HOME/.crux/traces/`, including failed runs.
+Regular pipeline traces are replayable. Use `--save-trace trace.json` to override the automatic
+destination, then replay it directly:
+
+```bash
+crux run hello.crux --save-trace trace.json
+crux run hello.crux --replay trace.json
+```
+
+Validation-only `--check` and `--dry-run` commands do not write traces.
+Cruxfile executions save one trace per executed target for inspection; `--replay` currently applies
+only to regular pipelines.
+
 ## Passing input
 
 Some pipelines accept JSON input:

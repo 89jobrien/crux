@@ -88,6 +88,12 @@ crux run pipeline.crux --replay trace.json
 crux plan --goal "summarize the latest release notes"
 ```
 
+Every executed `crux run` writes a JSON trace beneath `$HOME/.crux/traces/`, including failed
+runs. Regular pipeline traces can be passed to `--replay`. Cruxfile executions save one trace per
+executed target for inspection; `--replay` currently applies only to regular pipelines.
+`--save-trace` overrides the automatic destination, while `--check` and `--dry-run` do not write
+traces.
+
 The default rule planner emits pipeline templates. Generated handlers that are not built in must
 be registered through a plugin or replaced before running with `--strict`.
 
