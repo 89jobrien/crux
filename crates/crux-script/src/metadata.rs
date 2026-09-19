@@ -596,6 +596,47 @@ pub enum ConfidenceCapability {
     Always,
 }
 
+/// Static input and output contract for a delegated pipeline agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentMetadata {
+    /// Name used by delegate nodes.
+    pub name: String,
+    /// Accepted input schema, or `None` for a legacy dynamic agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<ValueSchema>,
+    /// Successful output schema, or `None` for a legacy dynamic agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<ValueSchema>,
+}
+
+impl AgentMetadata {
+    /// Create metadata for a named agent without typed schemas.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            input_schema: None,
+            output_schema: None,
+        }
+    }
+
+    /// Set the accepted input schema.
+    pub fn input_schema(mut self, schema: ValueSchema) -> Self {
+        self.input_schema = Some(schema);
+        self
+    }
+
+    /// Set the successful output schema.
+    pub fn output_schema(mut self, schema: ValueSchema) -> Self {
+        self.output_schema = Some(schema);
+        self
+    }
+
+    /// Return whether both typed contract fields are declared.
+    pub fn has_complete_contract(&self) -> bool {
+        self.input_schema.is_some() && self.output_schema.is_some()
+    }
+}
+
 /// Introspection metadata for a registered handler.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandlerMetadata {

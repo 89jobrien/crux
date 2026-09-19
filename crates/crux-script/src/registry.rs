@@ -9,7 +9,7 @@ use crux_types::error::CruxErr;
 use serde_json::Value;
 
 use crate::handler_output::{HandlerExecution, HandlerOutput};
-use crate::metadata::{HandlerMetadata, SchemaBuildError};
+use crate::metadata::{AgentMetadata, HandlerMetadata, SchemaBuildError};
 use crate::step_runner::{StepFuture, StepInvocation, StepRunner};
 
 /// Type-erased async handler returning outcome and invocation usage together.
@@ -28,6 +28,12 @@ pub type BoxHandler =
 pub type BoxAgentRunner = Arc<
     dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>> + Send + Sync,
 >;
+
+#[derive(Clone)]
+pub(crate) struct RegisteredAgent {
+    pub(crate) metadata: AgentMetadata,
+    pub(crate) runner: BoxAgentRunner,
+}
 
 struct ClosureStepRunner {
     metadata: HandlerMetadata,
@@ -61,6 +67,9 @@ pub enum RegistryError {
     /// A handler name is already bound to an executor.
     #[error("step runner '{name}' is already registered")]
     DuplicateRunner { name: String },
+    /// An agent name is already bound to an executor.
+    #[error("agent '{name}' is already registered")]
+    DuplicateAgent { name: String },
     /// A runner exposes a malformed recursive schema.
     #[error("invalid schema for '{name}': {source}")]
     InvalidSchema {
@@ -73,7 +82,7 @@ pub enum RegistryError {
 pub struct HandlerRegistry {
     handlers: HashMap<String, BoxHandler>,
     runners: HashMap<String, Arc<dyn StepRunner>>,
-    agents: HashMap<String, BoxAgentRunner>,
+    agents: HashMap<String, RegisteredAgent>,
     metadata: HashMap<String, HandlerMetadata>,
 }
 
@@ -148,6 +157,37 @@ impl HandlerRegistry {
         self.handlers.insert(name.clone(), Arc::clone(&handler));
         self.runners
             .insert(name, Arc::new(ClosureStepRunner { metadata, handler }));
+    }
+
+    fn register_agent(
+        &mut self,
+        metadata: AgentMetadata,
+        runner: BoxAgentRunner,
+    ) -> Result<(), RegistryError> {
+        let name = metadata.name.clone();
+        if self.agents.contains_key(&name) {
+            return Err(RegistryError::DuplicateAgent { name });
+        }
+        for schema in metadata
+            .input_schema
+            .iter()
+            .chain(metadata.output_schema.iter())
+        {
+            schema
+                .validate_definition()
+                .map_err(|source| RegistryError::InvalidSchema {
+                    name: metadata.name.clone(),
+                    source,
+                })?;
+        }
+        self.agents
+            .insert(name, RegisteredAgent { metadata, runner });
+        Ok(())
+    }
+
+    fn register_legacy_agent(&mut self, metadata: AgentMetadata, runner: BoxAgentRunner) {
+        self.agents
+            .insert(metadata.name.clone(), RegisteredAgent { metadata, runner });
     }
 
     /// Register handler metadata for validation and introspection.
@@ -331,16 +371,30 @@ impl HandlerRegistry {
     {
         let name_str = name.into();
         let agent_name = name_str.clone();
-        self.agents.insert(
-            name_str,
-            Arc::new(move |input: Value| {
-                let n = agent_name.clone();
-                Box::pin(async move {
-                    let mut ctx = CruxCtx::new(&n);
-                    A::run(&mut ctx, input).await
-                }) as Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>>
-            }),
-        );
+        let runner: BoxAgentRunner = Arc::new(move |input: Value| {
+            let n = agent_name.clone();
+            Box::pin(async move {
+                let mut ctx = CruxCtx::new(&n);
+                A::run(&mut ctx, input).await
+            }) as Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>>
+        });
+        self.register_legacy_agent(AgentMetadata::new(name_str), runner);
+    }
+
+    /// Register a typed crux agent and reject duplicate names.
+    pub fn agent_with_metadata<A>(&mut self, metadata: AgentMetadata) -> Result<(), RegistryError>
+    where
+        A: Agent<Input = Value, Output = Value>,
+    {
+        let agent_name = metadata.name.clone();
+        let runner: BoxAgentRunner = Arc::new(move |input: Value| {
+            let name = agent_name.clone();
+            Box::pin(async move {
+                let mut ctx = CruxCtx::new(&name);
+                A::run(&mut ctx, input).await
+            })
+        });
+        self.register_agent(metadata, runner)
     }
 
     /// Register a named agent using a plain async closure.
@@ -354,7 +408,22 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.agents.insert(name, Arc::new(move |v| Box::pin(f(v))));
+        let runner: BoxAgentRunner = Arc::new(move |v| Box::pin(f(v)));
+        self.register_legacy_agent(AgentMetadata::new(name), runner);
+    }
+
+    /// Register a typed async agent closure and reject duplicate names.
+    pub fn agent_fn_with_metadata<F, Fut>(
+        &mut self,
+        metadata: AgentMetadata,
+        f: F,
+    ) -> Result<(), RegistryError>
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
+    {
+        let runner: BoxAgentRunner = Arc::new(move |value| Box::pin(f(value)));
+        self.register_agent(metadata, runner)
     }
 
     /// Look up a handler by name.
@@ -364,7 +433,17 @@ impl HandlerRegistry {
 
     /// Look up an agent runner by name.
     pub fn get_agent(&self, name: &str) -> Option<&BoxAgentRunner> {
-        self.agents.get(name)
+        self.agents.get(name).map(|agent| &agent.runner)
+    }
+
+    /// Look up a registered agent contract by name.
+    pub fn agent_metadata(&self, name: &str) -> Option<&AgentMetadata> {
+        self.agents.get(name).map(|agent| &agent.metadata)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn agent_binding(&self, name: &str) -> Option<RegisteredAgent> {
+        self.agents.get(name).cloned()
     }
 }
 
