@@ -104,6 +104,28 @@ fn automatic_trace_path(
     home.join(".crux").join("traces").join(filename)
 }
 
+#[allow(dead_code)]
+fn persist_trace(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
+    let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
+    std::fs::write(path, json)
+}
+
+#[allow(dead_code)]
+fn persist_automatic_trace(
+    trace: &Crux<Value>,
+    home: &Path,
+    pipeline_name: &str,
+    target_name: Option<&str>,
+) -> std::io::Result<PathBuf> {
+    let path = automatic_trace_path(home, trace, pipeline_name, target_name);
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("automatic trace path has no parent directory"))?;
+    std::fs::create_dir_all(parent)?;
+    persist_trace(trace, &path)?;
+    Ok(path)
+}
+
 fn render_human_error(error: &CruxErr) {
     eprintln!("{:?}", miette::Report::new(error.clone()));
 }
@@ -701,6 +723,31 @@ mod tests {
 
         assert_eq!(path, expected);
         assert_eq!(trace_name_component("///"), "pipeline");
+    }
+
+    #[test]
+    fn persist_trace_writes_replayable_json() {
+        let home = tempfile::tempdir().expect("temporary home must be created");
+        let trace = ok_crux(json!({"answer": 42}));
+        let explicit_path = home.path().join("explicit.json");
+
+        persist_trace(&trace, &explicit_path).expect("explicit trace must be persisted");
+        let contents = std::fs::read_to_string(&explicit_path).expect("trace must be readable");
+        let restored: Crux<Value> =
+            serde_json::from_str(&contents).expect("trace must be replayable JSON");
+        assert_eq!(restored.id, trace.id);
+        assert_eq!(
+            restored.value().expect("restored trace must be successful"),
+            trace.value().expect("original trace must be successful")
+        );
+
+        let automatic_path = persist_automatic_trace(&trace, home.path(), "pipeline", None)
+            .expect("automatic trace must be persisted");
+        assert_eq!(
+            automatic_path.parent(),
+            Some(home.path().join(".crux").join("traces").as_path())
+        );
+        assert!(automatic_path.is_file());
     }
 
     #[test]
