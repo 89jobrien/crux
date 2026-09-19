@@ -98,3 +98,32 @@ fn registry_returns_runner_metadata() {
     assert_eq!(runner.metadata().name, "test::record");
     assert_eq!(registry.runners().count(), 1);
 }
+
+#[tokio::test]
+async fn closure_runner_preserves_legacy_envelope() {
+    let mut registry = HandlerRegistry::new();
+    registry.handler_value("test::echo", |input| async move { Ok(input) });
+    let runner = registry.runner("test::echo").unwrap();
+
+    let object = runner
+        .run(StepInvocation::new(
+            json!({"source": "pipeline"}),
+            json!({"limit": 3}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        object.value,
+        json!({"source": "pipeline", "args": {"limit": 3}})
+    );
+
+    let scalar = runner
+        .run(StepInvocation::new(json!(7), json!({"limit": 3})))
+        .await
+        .unwrap();
+    assert_eq!(scalar.value, json!({"input": 7, "args": {"limit": 3}}));
+    assert_eq!(runner.metadata().name, "test::echo");
+
+    let compatible = registry.get_handler("test::echo").unwrap()(json!("legacy")).await;
+    assert_eq!(compatible.unwrap().value, json!("legacy"));
+}

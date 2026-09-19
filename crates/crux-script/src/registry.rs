@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::handler_output::{HandlerExecution, HandlerOutput};
 use crate::metadata::{HandlerMetadata, SchemaBuildError};
-use crate::step_runner::StepRunner;
+use crate::step_runner::{StepFuture, StepInvocation, StepRunner};
 
 /// Type-erased async handler returning outcome and invocation usage together.
 ///
@@ -28,6 +28,32 @@ pub type BoxHandler =
 pub type BoxAgentRunner = Arc<
     dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>> + Send + Sync,
 >;
+
+struct ClosureStepRunner {
+    metadata: HandlerMetadata,
+    handler: BoxHandler,
+}
+
+impl StepRunner for ClosureStepRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        &self.metadata
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        (self.handler)(legacy_handler_input(invocation))
+    }
+}
+
+fn legacy_handler_input(invocation: StepInvocation) -> Value {
+    let (input, args) = invocation.into_parts();
+    match input {
+        Value::Object(mut object) => {
+            object.insert("args".to_string(), args);
+            Value::Object(object)
+        }
+        input => serde_json::json!({ "input": input, "args": args }),
+    }
+}
 
 /// Failure while adding an executor to the canonical registry.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -116,6 +142,14 @@ impl HandlerRegistry {
         Ok(())
     }
 
+    fn register_closure(&mut self, metadata: HandlerMetadata, handler: BoxHandler) {
+        let name = metadata.name.clone();
+        self.metadata.insert(name.clone(), metadata.clone());
+        self.handlers.insert(name.clone(), Arc::clone(&handler));
+        self.runners
+            .insert(name, Arc::new(ClosureStepRunner { metadata, handler }));
+    }
+
     /// Register handler metadata for validation and introspection.
     pub fn register_metadata(&mut self, meta: HandlerMetadata) {
         self.metadata.insert(meta.name.clone(), meta);
@@ -123,10 +157,9 @@ impl HandlerRegistry {
 
     /// Look up metadata for a registered handler by name.
     pub fn get_metadata(&self, name: &str) -> Option<&HandlerMetadata> {
-        self.runners
+        self.metadata
             .get(name)
-            .map(|runner| runner.metadata())
-            .or_else(|| self.metadata.get(name))
+            .or_else(|| self.runners.get(name).map(|runner| runner.metadata()))
     }
 
     /// Register a handler that returns [`HandlerOutput`] directly.
@@ -144,13 +177,11 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers.insert(
-            name,
-            Arc::new(move |v| {
-                let fut = f(v);
-                Box::pin(async move { HandlerExecution::unreported(fut.await) })
-            }),
-        );
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::unreported(fut.await) })
+        });
+        self.register_closure(HandlerMetadata::new(name), handler);
     }
 
     /// Register a handler that returns a plain [`Value`], without a confidence score.
@@ -169,15 +200,13 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers.insert(
-            name,
-            Arc::new(move |v| {
-                let fut = f(v);
-                Box::pin(
-                    async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
-                ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
-            }),
-        );
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(
+                async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
+            ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
+        });
+        self.register_closure(HandlerMetadata::new(name), handler);
     }
 
     /// Register a plain-value handler together with its [`HandlerMetadata`].
@@ -190,17 +219,13 @@ impl HandlerRegistry {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
-        let name = meta.name.clone();
-        self.metadata.insert(name.clone(), meta);
-        self.handlers.insert(
-            name,
-            Arc::new(move |v| {
-                let fut = f(v);
-                Box::pin(
-                    async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
-                ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
-            }),
-        );
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(
+                async move { HandlerExecution::unreported(fut.await.map(HandlerOutput::from)) },
+            ) as Pin<Box<dyn Future<Output = HandlerExecution> + Send>>
+        });
+        self.register_closure(meta, handler);
     }
 
     /// Register a confidence-bearing handler that is explicitly free.
@@ -213,13 +238,11 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers.insert(
-            name,
-            Arc::new(move |v| {
-                let fut = f(v);
-                Box::pin(async move { HandlerExecution::free(fut.await) })
-            }),
-        );
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::free(fut.await) })
+        });
+        self.register_closure(HandlerMetadata::new(name), handler);
     }
 
     /// Register an explicitly free confidence-bearing handler with metadata.
@@ -231,9 +254,11 @@ impl HandlerRegistry {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
     {
-        let name = meta.name.clone();
-        self.metadata.insert(name.clone(), meta);
-        self.handler_free(name, f);
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::free(fut.await) })
+        });
+        self.register_closure(meta, handler);
     }
 
     /// Register a handler that returns outcome and usage atomically.
@@ -261,8 +286,9 @@ impl HandlerRegistry {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = HandlerExecution> + Send + 'static,
     {
-        self.handlers
-            .insert(name.into(), Arc::new(move |v| Box::pin(f(v))));
+        let name = name.into();
+        let handler: BoxHandler = Arc::new(move |v| Box::pin(f(v)));
+        self.register_closure(HandlerMetadata::new(name), handler);
     }
 
     /// Register an explicitly free plain-value handler.
@@ -274,13 +300,11 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        self.handlers.insert(
-            name,
-            Arc::new(move |v| {
-                let fut = f(v);
-                Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
-            }),
-        );
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
+        });
+        self.register_closure(HandlerMetadata::new(name), handler);
     }
 
     /// Register an explicitly free plain-value handler and metadata atomically.
@@ -291,9 +315,11 @@ impl HandlerRegistry {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
-        let name = meta.name.clone();
-        self.metadata.insert(name.clone(), meta);
-        self.handler_value_free(name, f);
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
+        });
+        self.register_closure(meta, handler);
     }
 
     /// Register a crux Agent by name for delegation.
