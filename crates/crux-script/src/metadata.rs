@@ -440,30 +440,44 @@ impl ArgType {
     }
 }
 
+impl From<ArgType> for ValueSchema {
+    fn from(arg_type: ArgType) -> Self {
+        match arg_type {
+            ArgType::Any => Self::Dynamic,
+            ArgType::String => Self::String,
+            ArgType::Number => Self::Number,
+            ArgType::Integer => Self::Integer,
+            ArgType::Boolean => Self::Boolean,
+            ArgType::Object => Self::object(ObjectSchema::new().additional(Self::Dynamic)),
+            ArgType::Array => Self::array(Self::Dynamic),
+        }
+    }
+}
+
 /// One static argument accepted by a handler under the pipeline `args` object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArgSpec {
     pub name: String,
-    pub arg_type: ArgType,
+    pub schema: ValueSchema,
     pub required: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
 impl ArgSpec {
-    pub fn required(name: impl Into<String>, arg_type: ArgType) -> Self {
+    pub fn required(name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         Self {
             name: name.into(),
-            arg_type,
+            schema: schema.into(),
             required: true,
             description: None,
         }
     }
 
-    pub fn optional(name: impl Into<String>, arg_type: ArgType) -> Self {
+    pub fn optional(name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         Self {
             name: name.into(),
-            arg_type,
+            schema: schema.into(),
             required: false,
             description: None,
         }
@@ -499,13 +513,13 @@ impl ArgSchema {
         }
     }
 
-    pub fn required(mut self, name: impl Into<String>, arg_type: ArgType) -> Self {
-        self.args.push(ArgSpec::required(name, arg_type));
+    pub fn required(mut self, name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
+        self.args.push(ArgSpec::required(name, schema));
         self
     }
 
-    pub fn optional(mut self, name: impl Into<String>, arg_type: ArgType) -> Self {
-        self.args.push(ArgSpec::optional(name, arg_type));
+    pub fn optional(mut self, name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
+        self.args.push(ArgSpec::optional(name, schema));
         self
     }
 
@@ -570,6 +584,18 @@ pub enum Capability {
     Process,
 }
 
+/// Whether a handler reports a confidence score with its output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfidenceCapability {
+    /// The handler never reports confidence.
+    Never,
+    /// The handler may report confidence depending on the result.
+    Optional,
+    /// Every successful result reports confidence.
+    Always,
+}
+
 /// Introspection metadata for a registered handler.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandlerMetadata {
@@ -578,6 +604,12 @@ pub struct HandlerMetadata {
     pub description: String,
     #[serde(default)]
     pub args: ArgSchema,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<ValueSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<ValueSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<ConfidenceCapability>,
     pub risk: RiskLevel,
     #[serde(default)]
     pub side_effects: Vec<SideEffect>,
@@ -593,6 +625,9 @@ impl HandlerMetadata {
             name: name.into(),
             description: String::new(),
             args: ArgSchema::new(),
+            input_schema: None,
+            output_schema: None,
+            confidence: None,
             risk: RiskLevel::Low,
             side_effects: vec![SideEffect::None],
             capabilities: Vec::new(),
@@ -608,6 +643,29 @@ impl HandlerMetadata {
     pub fn args(mut self, args: ArgSchema) -> Self {
         self.args = args;
         self
+    }
+
+    /// Set the upstream pipeline input schema.
+    pub fn input_schema(mut self, schema: ValueSchema) -> Self {
+        self.input_schema = Some(schema);
+        self
+    }
+
+    /// Set the successful output schema.
+    pub fn output_schema(mut self, schema: ValueSchema) -> Self {
+        self.output_schema = Some(schema);
+        self
+    }
+
+    /// Set the confidence-reporting contract.
+    pub fn confidence(mut self, capability: ConfidenceCapability) -> Self {
+        self.confidence = Some(capability);
+        self
+    }
+
+    /// Return whether every typed contract field is declared.
+    pub fn has_complete_contract(&self) -> bool {
+        self.input_schema.is_some() && self.output_schema.is_some() && self.confidence.is_some()
     }
 
     pub fn risk(mut self, risk: RiskLevel) -> Self {

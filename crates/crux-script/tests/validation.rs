@@ -1,6 +1,6 @@
 use crux_script::{
-    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel, validate_cruxfile,
-    validate_pipeline,
+    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, ObjectSchema, RiskLevel, ValueSchema,
+    validate_cruxfile, validate_pipeline,
 };
 use serde_json::Value;
 
@@ -22,7 +22,47 @@ fn registry() -> HandlerRegistry {
             .args(ArgSchema::new().optional("fields", ArgType::Array)),
         |input: Value| async move { Ok(input) },
     );
+    registry.handler_value_with_metadata(
+        HandlerMetadata::new("test::nested").args(ArgSchema::strict().required(
+            "config",
+            ValueSchema::object(ObjectSchema::new().required("name", ValueSchema::String)),
+        )),
+        |input: Value| async move { Ok(input) },
+    );
     registry
+}
+
+#[test]
+fn recursive_argument_schema_validation() {
+    let valid = crux_script::load(
+        r#"
+pipeline: nested
+steps:
+  - step: validate
+    handler: test::nested
+    args:
+      config:
+        name: crux
+"#,
+    )
+    .unwrap();
+    assert!(validate_pipeline(&valid, &registry()).is_ok());
+
+    let invalid = crux_script::load(
+        r#"
+pipeline: nested
+steps:
+  - step: validate
+    handler: test::nested
+    args:
+      config:
+        name: false
+"#,
+    )
+    .unwrap();
+    let report = validate_pipeline(&invalid, &registry());
+    assert_eq!(report.error_count(), 1);
+    assert!(report.diagnostics[0].message.contains("expected object"));
 }
 
 #[test]

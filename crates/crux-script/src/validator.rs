@@ -5,7 +5,6 @@ use std::fmt;
 use miette::Diagnostic;
 use serde_json::Value;
 
-use crate::metadata::ArgType;
 use crate::registry::HandlerRegistry;
 use crate::resolve::TargetResolver;
 use crate::schema::{ArmDef, CruxfileDef, PipelineDef, RouteBranch, StepDef};
@@ -436,13 +435,13 @@ fn validate_handler_ref(
             continue;
         }
 
-        if !spec.arg_type.matches(value) {
+        if spec.schema.validate(value).is_err() {
             report.push(ValidationDiagnostic::error(
                 location,
                 format!(
                     "handler '{handler}' arg '{}' expected {}, got {}",
                     spec.name,
-                    display_arg_type(spec.arg_type),
+                    spec.schema,
                     display_value_type(value)
                 ),
             ));
@@ -466,18 +465,6 @@ fn is_template_string(value: &Value) -> bool {
         .as_str()
         .map(|s| s.trim_start().starts_with("{{"))
         .unwrap_or(false)
-}
-
-fn display_arg_type(arg_type: ArgType) -> &'static str {
-    match arg_type {
-        ArgType::Any => "any",
-        ArgType::String => "string",
-        ArgType::Number => "number",
-        ArgType::Integer => "integer",
-        ArgType::Boolean => "boolean",
-        ArgType::Object => "object",
-        ArgType::Array => "array",
-    }
 }
 
 fn display_value_type(value: &Value) -> &'static str {

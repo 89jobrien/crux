@@ -1,4 +1,7 @@
-use crux_script::{ObjectSchema, SchemaBuildError, SchemaViolationKind, ValueKind, ValueSchema};
+use crux_script::{
+    ArgSchema, ConfidenceCapability, HandlerMetadata, ObjectSchema, SchemaBuildError,
+    SchemaViolationKind, ValueKind, ValueSchema,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -180,5 +183,25 @@ fn empty_union_is_rejected() {
         }
         .validate_definition(),
         Err(SchemaBuildError::EmptyUnion)
+    );
+}
+
+#[test]
+fn handler_contract_completeness() {
+    assert!(!HandlerMetadata::new("test::dynamic").has_complete_contract());
+
+    let metadata = HandlerMetadata::new("test::complete")
+        .args(ArgSchema::strict().required(
+            "config",
+            ValueSchema::object(ObjectSchema::new().required("name", ValueSchema::String)),
+        ))
+        .input_schema(ValueSchema::Dynamic)
+        .output_schema(ValueSchema::String)
+        .confidence(ConfidenceCapability::Never);
+
+    assert!(metadata.has_complete_contract());
+    assert_eq!(
+        metadata.args.get("config").unwrap().schema,
+        ValueSchema::object(ObjectSchema::new().required("name", ValueSchema::String))
     );
 }
