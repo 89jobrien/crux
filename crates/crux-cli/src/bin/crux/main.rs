@@ -78,7 +78,7 @@ enum Cli {
         /// Error on unregistered handlers instead of injecting stubs
         #[arg(short = 'S', long)]
         strict: bool,
-        /// Save the execution trace to a JSON file (replayable)
+        /// Override the automatic execution trace JSON path
         #[arg(long)]
         save_trace: Option<String>,
     },

@@ -1,5 +1,8 @@
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use crux_runtime::prelude::Crux;
+use serde_json::Value;
 use tempfile::TempDir;
 
 fn pipeline(contents: &str) -> (TempDir, std::path::PathBuf) {
@@ -14,6 +17,10 @@ fn run(path: &std::path::Path, args: &[&str]) -> Output {
         .arg("run")
         .arg(path)
         .args(args)
+        .env(
+            "HOME",
+            path.parent().expect("pipeline path must have a parent"),
+        )
         .output()
         .expect("run crux")
 }
@@ -22,7 +29,77 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+fn assert_trace_saved(stderr: &[u8]) {
+    let stderr = text(stderr);
+    assert_eq!(
+        stderr.matches("[crux] trace saved to ").count(),
+        1,
+        "{stderr}"
+    );
+}
+
 const EMPTY_PIPELINE: &str = "pipeline: contract\nsteps: []\n";
+
+fn trace_files(pipeline_path: &Path) -> Vec<PathBuf> {
+    let trace_dir = pipeline_path
+        .parent()
+        .expect("pipeline path must have a parent")
+        .join(".crux")
+        .join("traces");
+    if !trace_dir.exists() {
+        return Vec::new();
+    }
+
+    let mut files: Vec<_> = std::fs::read_dir(trace_dir)
+        .expect("trace directory must be readable")
+        .map(|entry| entry.expect("trace entry must be readable").path())
+        .collect();
+    files.sort();
+    files
+}
+
+fn read_trace(path: &Path) -> Crux<Value> {
+    let contents = std::fs::read_to_string(path).expect("trace file must be readable");
+    serde_json::from_str(&contents).expect("trace file must be replayable JSON")
+}
+
+#[test]
+fn regular_runs_persist_success_failure_replay_and_override_traces() {
+    let (_dir, path) = pipeline(EMPTY_PIPELINE);
+    let success = run(&path, &[]);
+    assert!(success.status.success());
+    assert!(text(&success.stderr).contains("[crux] trace saved to "));
+    let traces = trace_files(&path);
+    assert_eq!(traces.len(), 1);
+    assert!(read_trace(&traces[0]).value().is_ok());
+
+    let replay_path = traces[0].to_str().expect("trace path must be UTF-8");
+    let replay = run(&path, &["--replay", replay_path]);
+    assert!(replay.status.success());
+    assert_eq!(trace_files(&path).len(), 2);
+
+    let (_failure_dir, failure_path) = pipeline(
+        "pipeline: budget-failure\nbudget: { steps: 0 }\nsteps:\n  - step: blocked\n    handler: ctrl::noop\n",
+    );
+    let failure = run(&failure_path, &[]);
+    assert_eq!(failure.status.code(), Some(1));
+    let failed_traces = trace_files(&failure_path);
+    assert_eq!(failed_traces.len(), 1);
+    assert!(read_trace(&failed_traces[0]).value().is_err());
+
+    let (_override_dir, override_pipeline) = pipeline(EMPTY_PIPELINE);
+    let explicit_path = override_pipeline
+        .parent()
+        .expect("pipeline path must have a parent")
+        .join("chosen-trace.json");
+    let explicit_arg = explicit_path
+        .to_str()
+        .expect("explicit trace path must be UTF-8");
+    let explicit = run(&override_pipeline, &["--save-trace", explicit_arg]);
+    assert!(explicit.status.success());
+    assert!(explicit_path.is_file());
+    assert!(trace_files(&override_pipeline).is_empty());
+}
 
 #[test]
 fn success_modes_preserve_stream_and_exit_contracts() {
@@ -33,24 +110,24 @@ fn success_modes_preserve_stream_and_exit_contracts() {
     assert!(text(&default.stdout).contains("contract  PASS"));
     assert!(text(&default.stdout).contains("0/0 checks passed"));
     assert_ne!(text(&default.stdout), "null\n");
-    assert_eq!(text(&default.stderr), "");
+    assert_trace_saved(&default.stderr);
 
     let summary = run(&path, &["--summary"]);
     assert!(summary.status.success());
     assert!(text(&summary.stdout).contains("contract  PASS"));
     assert!(text(&summary.stdout).contains("0/0 checks passed"));
-    assert_eq!(text(&summary.stderr), "");
+    assert_trace_saved(&summary.stderr);
 
     let verbose = run(&path, &["--verbose"]);
     assert!(verbose.status.success());
     assert!(text(&verbose.stdout).contains("Pipeline: contract"));
     assert!(text(&verbose.stdout).contains("Trace:"));
-    assert_eq!(text(&verbose.stderr), "");
+    assert_trace_saved(&verbose.stderr);
 
     let json = run(&path, &["--json"]);
     assert!(json.status.success());
     assert_eq!(text(&json.stdout), "null\n");
-    assert_eq!(text(&json.stderr), "");
+    assert_trace_saved(&json.stderr);
 
     let quiet = run(&path, &["--quiet"]);
     assert!(quiet.status.success());
@@ -106,7 +183,7 @@ steps:
         "{verbose_stdout}"
     );
     assert!(!verbose_stdout.contains(r"\n"), "{verbose_stdout}");
-    assert_eq!(text(&verbose.stderr), "");
+    assert_trace_saved(&verbose.stderr);
 }
 
 #[test]
@@ -118,7 +195,7 @@ fn budget_failure_has_one_diagnostic_and_exit_one() {
     let output = run(&path, &[]);
     let stdout = text(&output.stdout);
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(text(&output.stderr), "");
+    assert_trace_saved(&output.stderr);
     assert!(stdout.contains("budget-failure  FAIL"), "{stdout}");
     assert_eq!(
         stdout.matches("step budget exceeded").count(),
@@ -136,7 +213,7 @@ fn summary_failure_prints_exactly_one_diagnostic() {
     let output = run(&path, &["--summary"]);
     let stdout = text(&output.stdout);
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(text(&output.stderr), "");
+    assert_trace_saved(&output.stderr);
     assert_eq!(
         stdout.matches("step budget exceeded").count(),
         1,

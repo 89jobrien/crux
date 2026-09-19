@@ -62,7 +62,6 @@ fn output_mode(config: &RunConfig<'_>) -> OutputMode {
     }
 }
 
-#[allow(dead_code)]
 fn trace_name_component(value: &str) -> String {
     let mut component = String::with_capacity(value.len());
     let mut replacing = false;
@@ -85,7 +84,6 @@ fn trace_name_component(value: &str) -> String {
     }
 }
 
-#[allow(dead_code)]
 fn automatic_trace_path(
     home: &Path,
     trace: &Crux<Value>,
@@ -104,13 +102,11 @@ fn automatic_trace_path(
     home.join(".crux").join("traces").join(filename)
 }
 
-#[allow(dead_code)]
 fn persist_trace(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
     std::fs::write(path, json)
 }
 
-#[allow(dead_code)]
 fn persist_automatic_trace(
     trace: &Crux<Value>,
     home: &Path,
@@ -536,13 +532,38 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
 
     // TODO(automation-11): Persist run state, checkpoints, trace paths, artifacts, and final
     // status under one run ID instead of leaving trace files detached from TaskRegistry.
-    if let Some(path) = save_trace_path {
-        let trace_json = serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-        std::fs::write(path, trace_json).expect("failed to write trace file");
-        if !cfg.quiet {
-            eprintln!("[crux] trace saved to {path}");
+    let trace_path = if let Some(path) = save_trace_path {
+        let path = PathBuf::from(path);
+        persist_trace(&crux, &path).map(|()| path)
+    } else {
+        let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "HOME is not set; cannot save automatic trace",
+            )
+        });
+        let pipeline_name = if pipeline_path == "-" {
+            "stdin"
+        } else {
+            Path::new(pipeline_path)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or("pipeline")
+        };
+        home.and_then(|home| persist_automatic_trace(&crux, &home, pipeline_name, None))
+    };
+    let trace_persistence_failed = match trace_path {
+        Ok(path) => {
+            if !cfg.quiet {
+                eprintln!("[crux] trace saved to {}", path.display());
+            }
+            false
         }
-    }
+        Err(error) => {
+            eprintln!("[crux] failed to save trace: {error}");
+            true
+        }
+    };
 
     match output_mode(cfg) {
         OutputMode::Verbose => {
@@ -568,13 +589,19 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         }
     }
 
-    if let Err(error) = crux.value() {
+    let execution_failed = if let Err(error) = crux.value() {
         if !matches!(
             output_mode(cfg),
             OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
         ) {
             render_human_error(error);
         }
+        true
+    } else {
+        false
+    };
+
+    if execution_failed || trace_persistence_failed {
         std::process::exit(1);
     }
 }
