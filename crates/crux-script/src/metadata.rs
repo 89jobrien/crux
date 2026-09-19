@@ -1,6 +1,6 @@
 //! Handler metadata and lightweight static argument schemas.
 
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,18 +22,32 @@ pub enum ValueSchema {
     Number,
     /// JSON string.
     String,
+    /// JSON object with named and optional additional properties.
+    Object(ObjectSchema),
 }
 
 impl ValueSchema {
+    /// Create an object value schema.
+    pub fn object(schema: ObjectSchema) -> Self {
+        Self::Object(schema)
+    }
+
     /// Return whether a value described by `source` can flow into this schema.
     pub fn is_assignable_from(&self, source: &Self) -> bool {
-        self == &Self::Dynamic
-            || self == source
-            || matches!((self, source), (Self::Number, Self::Integer))
+        match (self, source) {
+            (Self::Dynamic, _) => true,
+            (Self::Number, Self::Integer) => true,
+            (Self::Object(target), Self::Object(source)) => target.is_assignable_from(source),
+            _ => self == source,
+        }
     }
 
     /// Validate one JSON value against this schema.
     pub fn validate(&self, value: &Value) -> Result<(), SchemaViolation> {
+        self.validate_at(value, "$")
+    }
+
+    fn validate_at(&self, value: &Value, path: &str) -> Result<(), SchemaViolation> {
         let matches = match self {
             Self::Dynamic => true,
             Self::Null => value.is_null(),
@@ -41,13 +55,21 @@ impl ValueSchema {
             Self::Integer => value.as_i64().is_some() || value.as_u64().is_some(),
             Self::Number => value.is_number(),
             Self::String => value.is_string(),
+            Self::Object(schema) => {
+                if let Some(object) = value.as_object() {
+                    schema.validate_object(object, path)?;
+                    true
+                } else {
+                    false
+                }
+            }
         };
 
         if matches {
             Ok(())
         } else {
             Err(SchemaViolation {
-                path: "$".to_string(),
+                path: path.to_string(),
                 expected: self.clone(),
                 kind: SchemaViolationKind::TypeMismatch {
                     actual: ValueKind::from_value(value),
@@ -66,8 +88,157 @@ impl fmt::Display for ValueSchema {
             Self::Integer => "integer",
             Self::Number => "number",
             Self::String => "string",
+            Self::Object(_) => "object",
         };
         f.write_str(name)
+    }
+}
+
+/// Schema for a JSON object and its named properties.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectSchema {
+    properties: BTreeMap<String, SchemaProperty>,
+    additional: Option<Box<ValueSchema>>,
+}
+
+impl ObjectSchema {
+    /// Create a closed object schema with no declared properties.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a required property.
+    pub fn required(mut self, name: impl Into<String>, schema: ValueSchema) -> Self {
+        self.properties
+            .insert(name.into(), SchemaProperty::new(schema, true));
+        self
+    }
+
+    /// Add an optional property.
+    pub fn optional(mut self, name: impl Into<String>, schema: ValueSchema) -> Self {
+        self.properties
+            .insert(name.into(), SchemaProperty::new(schema, false));
+        self
+    }
+
+    /// Permit additional properties matching `schema`.
+    pub fn additional(mut self, schema: ValueSchema) -> Self {
+        self.additional = Some(Box::new(schema));
+        self
+    }
+
+    /// Return one declared property.
+    pub fn property(&self, name: &str) -> Option<&SchemaProperty> {
+        self.properties.get(name)
+    }
+
+    /// Return the schema for additional properties, if they are allowed.
+    pub fn additional_schema(&self) -> Option<&ValueSchema> {
+        self.additional.as_deref()
+    }
+
+    fn is_assignable_from(&self, source: &Self) -> bool {
+        let declared_properties_match =
+            self.properties
+                .iter()
+                .all(|(name, target)| match source.properties.get(name) {
+                    Some(source) => {
+                        (!target.required || source.required)
+                            && target.schema.is_assignable_from(&source.schema)
+                    }
+                    None => {
+                        !target.required
+                            && source
+                                .additional
+                                .as_deref()
+                                .is_none_or(|source| target.schema.is_assignable_from(source))
+                    }
+                });
+        if !declared_properties_match {
+            return false;
+        }
+
+        let source_extras_match = source
+            .properties
+            .iter()
+            .filter(|(name, _)| !self.properties.contains_key(*name))
+            .all(|(_, property)| {
+                self.additional
+                    .as_deref()
+                    .is_some_and(|target| target.is_assignable_from(&property.schema))
+            });
+        if !source_extras_match {
+            return false;
+        }
+
+        match (self.additional.as_deref(), source.additional.as_deref()) {
+            (None, Some(_)) => false,
+            (Some(target), Some(source)) => target.is_assignable_from(source),
+            _ => true,
+        }
+    }
+
+    fn validate_object(
+        &self,
+        object: &serde_json::Map<String, Value>,
+        path: &str,
+    ) -> Result<(), SchemaViolation> {
+        for (name, property) in &self.properties {
+            let property_path = format!("{path}.{name}");
+            match object.get(name) {
+                Some(value) => property.schema.validate_at(value, &property_path)?,
+                None if property.required => {
+                    return Err(SchemaViolation {
+                        path: property_path,
+                        expected: property.schema.clone(),
+                        kind: SchemaViolationKind::MissingRequiredProperty,
+                    });
+                }
+                None => {}
+            }
+        }
+
+        for (name, value) in object {
+            if self.properties.contains_key(name) {
+                continue;
+            }
+            let property_path = format!("{path}.{name}");
+            match self.additional.as_deref() {
+                Some(schema) => schema.validate_at(value, &property_path)?,
+                None => {
+                    return Err(SchemaViolation {
+                        path: property_path,
+                        expected: ValueSchema::Object(self.clone()),
+                        kind: SchemaViolationKind::AdditionalPropertyNotAllowed,
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// One named property in an object schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchemaProperty {
+    schema: ValueSchema,
+    required: bool,
+}
+
+impl SchemaProperty {
+    fn new(schema: ValueSchema, required: bool) -> Self {
+        Self { schema, required }
+    }
+
+    /// Return the property's value schema.
+    pub fn schema(&self) -> &ValueSchema {
+        &self.schema
+    }
+
+    /// Return whether the property must be present.
+    pub fn is_required(&self) -> bool {
+        self.required
     }
 }
 
@@ -126,6 +297,12 @@ pub enum SchemaViolationKind {
     /// The runtime value has an incompatible JSON kind.
     #[error("got {actual}")]
     TypeMismatch { actual: ValueKind },
+    /// A required object property is absent.
+    #[error("required property is missing")]
+    MissingRequiredProperty,
+    /// A closed object contains an undeclared property.
+    #[error("additional property is not allowed")]
+    AdditionalPropertyNotAllowed,
 }
 
 /// Runtime mismatch between a JSON value and its declared schema.
