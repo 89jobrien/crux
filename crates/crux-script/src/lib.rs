@@ -7,6 +7,7 @@
 pub mod compiler;
 pub mod expr;
 pub mod handler_output;
+pub mod ir;
 pub mod metadata;
 pub mod output;
 pub mod registry;
@@ -49,8 +50,9 @@ pub enum LoadError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
-pub use compiler::{Compilation, CompileMode, CompileOptions};
+pub use compiler::{Compilation, CompileMode, CompileOptions, compile_pipeline};
 pub use handler_output::{HandlerExecution, HandlerOutput};
+pub use ir::TypedPipeline;
 pub use metadata::{
     AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, ConfidenceCapability, HandlerMetadata,
     ObjectSchema, RiskLevel, SchemaBuildError, SchemaProperty, SchemaViolation,

@@ -1,5 +1,8 @@
 //! Typed pipeline compilation options and results.
 
+use crate::ir::{TypedPipeline, TypedStep};
+use crate::registry::HandlerRegistry;
+use crate::schema::{PipelineDef, StepDef};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
 
 /// Static validation strictness used while compiling pipeline definitions.
@@ -117,5 +120,76 @@ impl<T> Compilation<T> {
     /// Consume the result into its artifact and diagnostics.
     pub fn into_parts(self) -> (Option<T>, Vec<ValidationDiagnostic>) {
         (self.artifact, self.diagnostics)
+    }
+}
+
+/// Compile simple handler steps into resolved runtime-only typed IR.
+pub fn compile_pipeline(
+    definition: &PipelineDef,
+    registry: &HandlerRegistry,
+    options: CompileOptions,
+) -> Compilation<TypedPipeline> {
+    let mut diagnostics = Vec::new();
+    let mut steps = Vec::with_capacity(definition.steps.len());
+    let mut unresolved = false;
+
+    for (index, step) in definition.steps.iter().enumerate() {
+        let location = format!("steps[{index}]");
+        let StepDef::Step(node) = step else {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::InvalidControlFlow,
+                location,
+                "typed compilation for this combinator is not implemented",
+            ));
+            unresolved = true;
+            continue;
+        };
+
+        let handler_name = node.handler.as_deref().unwrap_or(&node.step);
+        let Some(runner) = registry.runner(handler_name) else {
+            diagnostics.push(diagnostic_for_mode(
+                options,
+                ValidationCode::UnknownHandler,
+                location,
+                format!("handler '{handler_name}' is not registered"),
+            ));
+            unresolved = true;
+            continue;
+        };
+
+        if !runner.metadata().has_complete_contract() {
+            diagnostics.push(diagnostic_for_mode(
+                options,
+                ValidationCode::MissingContract,
+                location,
+                format!("handler '{handler_name}' has no complete contract"),
+            ));
+            if options.mode() == CompileMode::Strict {
+                unresolved = true;
+                continue;
+            }
+        }
+
+        steps.push(TypedStep {
+            node: node.clone(),
+            runner,
+        });
+    }
+
+    let artifact = (!unresolved).then(|| TypedPipeline::new(definition, steps));
+    Compilation::new(artifact, diagnostics)
+}
+
+fn diagnostic_for_mode(
+    options: CompileOptions,
+    code: ValidationCode,
+    location: impl Into<String>,
+    message: impl Into<String>,
+) -> ValidationDiagnostic {
+    match options.severity_for(code) {
+        DiagnosticSeverity::Error => ValidationDiagnostic::error_with_code(code, location, message),
+        DiagnosticSeverity::Warning => {
+            ValidationDiagnostic::warning_with_code(code, location, message)
+        }
     }
 }
