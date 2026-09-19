@@ -436,13 +436,29 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
             failed = true;
         }
 
-        if let Some(trace_dir) = save_trace_path {
-            let trace_file = format!("{trace_dir}.{target_name}.json");
-            let trace_json =
-                serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-            std::fs::write(&trace_file, trace_json).expect("failed to write trace file");
-            if !quiet {
-                eprintln!("[crux] trace saved to {trace_file}");
+        let trace_path = if let Some(trace_prefix) = save_trace_path {
+            let path = PathBuf::from(format!("{trace_prefix}.{target_name}.json"));
+            persist_trace(&crux, &path).map(|()| path)
+        } else {
+            let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "HOME is not set; cannot save automatic trace",
+                )
+            });
+            home.and_then(|home| {
+                persist_automatic_trace(&crux, &home, &cruxfile.project, Some(target_name))
+            })
+        };
+        match trace_path {
+            Ok(path) => {
+                if !quiet {
+                    eprintln!("[crux] trace saved to {}", path.display());
+                }
+            }
+            Err(error) => {
+                eprintln!("[crux] failed to save trace: {error}");
+                failed = true;
             }
         }
     }
