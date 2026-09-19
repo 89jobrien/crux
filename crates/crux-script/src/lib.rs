@@ -4,6 +4,7 @@
 //! in Rust, and execute without recompilation.
 // TODO(#99): pipeline validation pass — catch bad refs, missing handlers, type
 //   mismatches, and unreachable steps before execution starts (static analysis)
+pub mod compiler;
 pub mod expr;
 pub mod handler_output;
 pub mod metadata;
@@ -48,6 +49,7 @@ pub enum LoadError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
+pub use compiler::{Compilation, CompileMode, CompileOptions};
 pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use metadata::{
     AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, ConfidenceCapability, HandlerMetadata,
@@ -66,6 +68,6 @@ pub use step_runner::{
     StepRunnerRegistry,
 };
 pub use validator::{
-    DiagnosticSeverity, ValidationDiagnostic, ValidationReport, validate_cruxfile,
+    DiagnosticSeverity, ValidationCode, ValidationDiagnostic, ValidationReport, validate_cruxfile,
     validate_pipeline,
 };

@@ -33,8 +33,57 @@ impl fmt::Display for DiagnosticSeverity {
     }
 }
 
+/// Stable category attached to a pipeline compilation diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ValidationCode {
+    DuplicateName,
+    UnknownHandler,
+    UnknownAgent,
+    MissingContract,
+    MissingInputSchema,
+    InvalidArguments,
+    InvalidExpression,
+    UnknownReference,
+    ForwardReference,
+    InvalidScope,
+    TypeMismatch,
+    DynamicBoundary,
+    InvalidControlFlow,
+    InvalidRoute,
+    InvalidBudget,
+    TargetResolution,
+    LegacyValidation,
+}
+
+impl fmt::Display for ValidationCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let code = match self {
+            Self::DuplicateName => "duplicate_name",
+            Self::UnknownHandler => "unknown_handler",
+            Self::UnknownAgent => "unknown_agent",
+            Self::MissingContract => "missing_contract",
+            Self::MissingInputSchema => "missing_input_schema",
+            Self::InvalidArguments => "invalid_arguments",
+            Self::InvalidExpression => "invalid_expression",
+            Self::UnknownReference => "unknown_reference",
+            Self::ForwardReference => "forward_reference",
+            Self::InvalidScope => "invalid_scope",
+            Self::TypeMismatch => "type_mismatch",
+            Self::DynamicBoundary => "dynamic_boundary",
+            Self::InvalidControlFlow => "invalid_control_flow",
+            Self::InvalidRoute => "invalid_route",
+            Self::InvalidBudget => "invalid_budget",
+            Self::TargetResolution => "target_resolution",
+            Self::LegacyValidation => "legacy_validation",
+        };
+        f.write_str(code)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationDiagnostic {
+    pub code: ValidationCode,
     pub severity: DiagnosticSeverity,
     pub location: String,
     pub message: String,
@@ -42,15 +91,33 @@ pub struct ValidationDiagnostic {
 
 impl ValidationDiagnostic {
     pub fn error(location: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::error_with_code(ValidationCode::LegacyValidation, location, message)
+    }
+
+    pub fn warning(location: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::warning_with_code(ValidationCode::LegacyValidation, location, message)
+    }
+
+    pub fn error_with_code(
+        code: ValidationCode,
+        location: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
+            code,
             severity: DiagnosticSeverity::Error,
             location: location.into(),
             message: message.into(),
         }
     }
 
-    pub fn warning(location: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn warning_with_code(
+        code: ValidationCode,
+        location: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
+            code,
             severity: DiagnosticSeverity::Warning,
             location: location.into(),
             message: message.into(),
@@ -68,7 +135,7 @@ impl std::error::Error for ValidationDiagnostic {}
 
 impl Diagnostic for ValidationDiagnostic {
     fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new(format!("crux::validate::{}", self.severity)))
+        Some(Box::new(format!("crux::validate::{}", self.code)))
     }
 
     fn severity(&self) -> Option<miette::Severity> {
