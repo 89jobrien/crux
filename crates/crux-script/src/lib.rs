@@ -61,7 +61,10 @@ pub use output::{
 pub use registry::HandlerRegistry;
 pub use resolve::{ResolveError, TargetResolver};
 pub use runner::Runner;
-pub use step_runner::{RunnerCapability, StepContext, StepOutput, StepRunner, StepRunnerRegistry};
+pub use step_runner::{
+    RunnerCapability, StepContext, StepFuture, StepInvocation, StepOutput, StepRunner,
+    StepRunnerRegistry,
+};
 pub use validator::{
     DiagnosticSeverity, ValidationDiagnostic, ValidationReport, validate_cruxfile,
     validate_pipeline,

@@ -45,7 +45,7 @@
     {
       "name": "crux-script-step_runner",
       "path": "crates/crux-script/src/step_runner.rs",
-      "hash": "4d9536a58a932641c6a3a64f69d91886c3bace5eff5870de410436c83cec2315"
+      "hash": "f20421090ac343535b80b92b515145040d56f83cc5f040584c199b9f7f12cb55"
     },
     {
       "name": "crux-agentic-provider",
