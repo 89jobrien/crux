@@ -1,4 +1,5 @@
 use std::io::Read as _;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -59,6 +60,48 @@ fn output_mode(config: &RunConfig<'_>) -> OutputMode {
     } else {
         OutputMode::Summary
     }
+}
+
+#[allow(dead_code)]
+fn trace_name_component(value: &str) -> String {
+    let mut component = String::with_capacity(value.len());
+    let mut replacing = false;
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+            component.push(character);
+            replacing = false;
+        } else if !replacing {
+            component.push('-');
+            replacing = true;
+        }
+    }
+
+    let component = component.trim_matches('-');
+    if component.is_empty() {
+        "pipeline".to_string()
+    } else {
+        component.to_string()
+    }
+}
+
+#[allow(dead_code)]
+fn automatic_trace_path(
+    home: &Path,
+    trace: &Crux<Value>,
+    pipeline_name: &str,
+    target_name: Option<&str>,
+) -> PathBuf {
+    let timestamp = trace.started_at.format("%Y%m%dT%H%M%S%.3fZ");
+    let pipeline_name = trace_name_component(pipeline_name);
+    let target_name = target_name
+        .map(trace_name_component)
+        .map(|target| format!("-{target}"))
+        .unwrap_or_default();
+    let trace_id = trace_name_component(trace.id.as_str());
+    let filename = format!("{timestamp}-{pipeline_name}{target_name}-{trace_id}.json");
+
+    home.join(".crux").join("traces").join(filename)
 }
 
 fn render_human_error(error: &CruxErr) {
@@ -633,6 +676,31 @@ mod tests {
         cfg.verbose = false;
         cfg.quiet = true;
         assert_eq!(output_mode(&cfg), OutputMode::Quiet);
+    }
+
+    #[test]
+    fn trace_path_uses_sanitized_components_and_unique_id() {
+        let mut trace = ok_crux(json!({"answer": 42}));
+        trace.started_at = chrono::DateTime::parse_from_rfc3339("2026-09-19T12:34:56.789Z")
+            .expect("timestamp must parse")
+            .with_timezone(&chrono::Utc);
+
+        let path = automatic_trace_path(
+            std::path::Path::new("/tmp/home"),
+            &trace,
+            "My pipeline",
+            Some("check/all"),
+        );
+        let expected = std::path::Path::new("/tmp/home")
+            .join(".crux")
+            .join("traces")
+            .join(format!(
+                "20260919T123456.789Z-My-pipeline-check-all-{}.json",
+                trace.id
+            ));
+
+        assert_eq!(path, expected);
+        assert_eq!(trace_name_component("///"), "pipeline");
     }
 
     #[test]
