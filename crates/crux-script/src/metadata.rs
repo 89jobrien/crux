@@ -22,21 +22,86 @@ pub enum ValueSchema {
     Number,
     /// JSON string.
     String,
+    /// JSON array with a uniform item schema.
+    Array { items: Box<ValueSchema> },
     /// JSON object with named and optional additional properties.
     Object(ObjectSchema),
+    /// Value accepted by any one of the member schemas.
+    Union { variants: Vec<ValueSchema> },
 }
 
 impl ValueSchema {
+    /// Create an array value schema.
+    pub fn array(items: ValueSchema) -> Self {
+        Self::Array {
+            items: Box::new(items),
+        }
+    }
+
     /// Create an object value schema.
     pub fn object(schema: ObjectSchema) -> Self {
         Self::Object(schema)
+    }
+
+    /// Create a flattened, deduplicated union schema.
+    pub fn union(
+        variants: impl IntoIterator<Item = ValueSchema>,
+    ) -> Result<Self, SchemaBuildError> {
+        let mut normalized = Vec::new();
+        for variant in variants {
+            Self::push_union_variant(&mut normalized, variant);
+        }
+
+        match normalized.len() {
+            0 => Err(SchemaBuildError::EmptyUnion),
+            1 => Ok(normalized.remove(0)),
+            _ => Ok(Self::Union {
+                variants: normalized,
+            }),
+        }
+    }
+
+    fn push_union_variant(normalized: &mut Vec<Self>, variant: Self) {
+        match variant {
+            Self::Union { variants } => {
+                for nested in variants {
+                    Self::push_union_variant(normalized, nested);
+                }
+            }
+            variant if !normalized.contains(&variant) => normalized.push(variant),
+            _ => {}
+        }
+    }
+
+    /// Validate recursive schema invariants after deserialization.
+    pub fn validate_definition(&self) -> Result<(), SchemaBuildError> {
+        match self {
+            Self::Array { items } => items.validate_definition(),
+            Self::Object(schema) => schema.validate_definition(),
+            Self::Union { variants } => {
+                if variants.is_empty() {
+                    return Err(SchemaBuildError::EmptyUnion);
+                }
+                variants.iter().try_for_each(Self::validate_definition)
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Return whether a value described by `source` can flow into this schema.
     pub fn is_assignable_from(&self, source: &Self) -> bool {
         match (self, source) {
             (Self::Dynamic, _) => true,
+            (_, Self::Union { variants }) => variants
+                .iter()
+                .all(|source| self.is_assignable_from(source)),
+            (Self::Union { variants }, _) => variants
+                .iter()
+                .any(|target| target.is_assignable_from(source)),
             (Self::Number, Self::Integer) => true,
+            (Self::Array { items: target }, Self::Array { items: source }) => {
+                target.is_assignable_from(source)
+            }
             (Self::Object(target), Self::Object(source)) => target.is_assignable_from(source),
             _ => self == source,
         }
@@ -55,6 +120,16 @@ impl ValueSchema {
             Self::Integer => value.as_i64().is_some() || value.as_u64().is_some(),
             Self::Number => value.is_number(),
             Self::String => value.is_string(),
+            Self::Array { items } => {
+                if let Some(array) = value.as_array() {
+                    for (index, value) in array.iter().enumerate() {
+                        items.validate_at(value, &format!("{path}[{index}]"))?;
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
             Self::Object(schema) => {
                 if let Some(object) = value.as_object() {
                     schema.validate_object(object, path)?;
@@ -63,6 +138,9 @@ impl ValueSchema {
                     false
                 }
             }
+            Self::Union { variants } => variants
+                .iter()
+                .any(|variant| variant.validate_at(value, path).is_ok()),
         };
 
         if matches {
@@ -88,7 +166,9 @@ impl fmt::Display for ValueSchema {
             Self::Integer => "integer",
             Self::Number => "number",
             Self::String => "string",
+            Self::Array { .. } => "array",
             Self::Object(_) => "object",
+            Self::Union { .. } => "union",
         };
         f.write_str(name)
     }
@@ -217,6 +297,14 @@ impl ObjectSchema {
 
         Ok(())
     }
+
+    fn validate_definition(&self) -> Result<(), SchemaBuildError> {
+        self.properties
+            .values()
+            .map(SchemaProperty::schema)
+            .chain(self.additional_schema())
+            .try_for_each(ValueSchema::validate_definition)
+    }
 }
 
 /// One named property in an object schema.
@@ -315,6 +403,14 @@ pub struct SchemaViolation {
     pub expected: ValueSchema,
     /// Reason validation failed.
     pub kind: SchemaViolationKind,
+}
+
+/// Invalid recursive schema definition.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SchemaBuildError {
+    /// A union must contain at least one possible schema.
+    #[error("union schema must contain at least one variant")]
+    EmptyUnion,
 }
 
 /// Static JSON type accepted by a handler argument.

@@ -1,4 +1,4 @@
-use crux_script::{ObjectSchema, SchemaViolationKind, ValueKind, ValueSchema};
+use crux_script::{ObjectSchema, SchemaBuildError, SchemaViolationKind, ValueKind, ValueSchema};
 use serde_json::{Value, json};
 
 #[test]
@@ -104,5 +104,81 @@ fn object_schema_reports_property_violations() {
     assert_eq!(
         additional.kind,
         SchemaViolationKind::AdditionalPropertyNotAllowed
+    );
+}
+
+#[test]
+fn array_schema_is_covariant() {
+    let numbers = ValueSchema::array(ValueSchema::Number);
+    let integers = ValueSchema::array(ValueSchema::Integer);
+
+    assert!(numbers.is_assignable_from(&integers));
+    assert!(!integers.is_assignable_from(&numbers));
+    assert_eq!(numbers.validate(&json!([1, 2.5, 3])), Ok(()));
+
+    let violation = integers.validate(&json!([1, true])).unwrap_err();
+    assert_eq!(violation.path, "$[1]");
+    assert_eq!(
+        violation.kind,
+        SchemaViolationKind::TypeMismatch {
+            actual: ValueKind::Boolean,
+        }
+    );
+}
+
+#[test]
+fn union_schema_normalization() {
+    let numeric = ValueSchema::union([ValueSchema::Integer, ValueSchema::Number]).unwrap();
+    let normalized = ValueSchema::union([
+        ValueSchema::String,
+        numeric,
+        ValueSchema::String,
+        ValueSchema::Integer,
+    ])
+    .unwrap();
+
+    assert_eq!(
+        normalized,
+        ValueSchema::Union {
+            variants: vec![
+                ValueSchema::String,
+                ValueSchema::Integer,
+                ValueSchema::Number,
+            ],
+        }
+    );
+    assert_eq!(
+        ValueSchema::union([ValueSchema::Boolean]).unwrap(),
+        ValueSchema::Boolean
+    );
+    assert_eq!(normalized.validate(&json!("value")), Ok(()));
+    assert_eq!(normalized.validate(&json!(3.5)), Ok(()));
+
+    let deeply_nested = ValueSchema::union([ValueSchema::Union {
+        variants: vec![
+            ValueSchema::Union {
+                variants: vec![ValueSchema::Null, ValueSchema::Boolean],
+            },
+            ValueSchema::String,
+        ],
+    }])
+    .unwrap();
+    assert_eq!(
+        deeply_nested,
+        ValueSchema::Union {
+            variants: vec![ValueSchema::Null, ValueSchema::Boolean, ValueSchema::String,],
+        }
+    );
+}
+
+#[test]
+fn empty_union_is_rejected() {
+    assert_eq!(ValueSchema::union([]), Err(SchemaBuildError::EmptyUnion));
+    assert_eq!(
+        ValueSchema::Union {
+            variants: Vec::new(),
+        }
+        .validate_definition(),
+        Err(SchemaBuildError::EmptyUnion)
     );
 }
