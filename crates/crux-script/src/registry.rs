@@ -9,7 +9,8 @@ use crux_types::error::CruxErr;
 use serde_json::Value;
 
 use crate::handler_output::{HandlerExecution, HandlerOutput};
-use crate::metadata::HandlerMetadata;
+use crate::metadata::{HandlerMetadata, SchemaBuildError};
+use crate::step_runner::StepRunner;
 
 /// Type-erased async handler returning outcome and invocation usage together.
 ///
@@ -28,9 +29,24 @@ pub type BoxAgentRunner = Arc<
     dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>> + Send + Sync,
 >;
 
+/// Failure while adding an executor to the canonical registry.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum RegistryError {
+    /// A handler name is already bound to an executor.
+    #[error("step runner '{name}' is already registered")]
+    DuplicateRunner { name: String },
+    /// A runner exposes a malformed recursive schema.
+    #[error("invalid schema for '{name}': {source}")]
+    InvalidSchema {
+        name: String,
+        source: SchemaBuildError,
+    },
+}
+
 /// Registry of named handlers and agents for pipeline execution.
 pub struct HandlerRegistry {
     handlers: HashMap<String, BoxHandler>,
+    runners: HashMap<String, Arc<dyn StepRunner>>,
     agents: HashMap<String, BoxAgentRunner>,
     metadata: HashMap<String, HandlerMetadata>,
 }
@@ -39,6 +55,7 @@ impl HandlerRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
+            runners: HashMap::new(),
             agents: HashMap::new(),
             metadata: HashMap::new(),
         }
@@ -48,8 +65,55 @@ impl HandlerRegistry {
     pub fn registered_namespaces(&self) -> std::collections::HashSet<&str> {
         self.handlers
             .keys()
+            .chain(self.runners.keys())
             .filter_map(|k| k.split_once("::").map(|(ns, _)| ns))
             .collect()
+    }
+
+    /// Register one contract-bearing step runner.
+    pub fn register<R>(&mut self, runner: R) -> Result<(), RegistryError>
+    where
+        R: StepRunner + 'static,
+    {
+        self.register_arc(Arc::new(runner))
+    }
+
+    /// Register one shared contract-bearing step runner.
+    pub fn register_arc(&mut self, runner: Arc<dyn StepRunner>) -> Result<(), RegistryError> {
+        let name = runner.metadata().name.clone();
+        if self.runners.contains_key(&name) || self.handlers.contains_key(&name) {
+            return Err(RegistryError::DuplicateRunner { name });
+        }
+        Self::validate_runner_metadata(runner.metadata())?;
+        self.runners.insert(name, runner);
+        Ok(())
+    }
+
+    /// Look up a contract-bearing runner by name.
+    pub fn runner(&self, name: &str) -> Option<Arc<dyn StepRunner>> {
+        self.runners.get(name).cloned()
+    }
+
+    /// Iterate over all contract-bearing runners.
+    pub fn runners(&self) -> impl Iterator<Item = &dyn StepRunner> {
+        self.runners.values().map(Arc::as_ref)
+    }
+
+    fn validate_runner_metadata(metadata: &HandlerMetadata) -> Result<(), RegistryError> {
+        let schemas = metadata
+            .input_schema
+            .iter()
+            .chain(metadata.output_schema.iter())
+            .chain(metadata.args.args.iter().map(|arg| &arg.schema));
+        for schema in schemas {
+            schema
+                .validate_definition()
+                .map_err(|source| RegistryError::InvalidSchema {
+                    name: metadata.name.clone(),
+                    source,
+                })?;
+        }
+        Ok(())
     }
 
     /// Register handler metadata for validation and introspection.
@@ -59,7 +123,10 @@ impl HandlerRegistry {
 
     /// Look up metadata for a registered handler by name.
     pub fn get_metadata(&self, name: &str) -> Option<&HandlerMetadata> {
-        self.metadata.get(name)
+        self.runners
+            .get(name)
+            .map(|runner| runner.metadata())
+            .or_else(|| self.metadata.get(name))
     }
 
     /// Register a handler that returns [`HandlerOutput`] directly.

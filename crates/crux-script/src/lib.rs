@@ -58,7 +58,7 @@ pub use output::{
     PipelineOutputError, PipelineOutputFormat, collect_agent_names, collect_handler_names,
     format_pipeline_output,
 };
-pub use registry::HandlerRegistry;
+pub use registry::{HandlerRegistry, RegistryError};
 pub use resolve::{ResolveError, TargetResolver};
 pub use runner::Runner;
 pub use step_runner::{
