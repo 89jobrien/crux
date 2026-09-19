@@ -1,7 +1,144 @@
 //! Handler metadata and lightweight static argument schemas.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Recursive JSON value schema used by pipeline contracts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(tag = "type", content = "definition", rename_all = "snake_case")]
+pub enum ValueSchema {
+    /// Explicitly dynamic value accepted without structural validation.
+    Dynamic,
+    /// JSON null.
+    Null,
+    /// JSON boolean.
+    Boolean,
+    /// Integral JSON number.
+    Integer,
+    /// Any JSON number, including integers.
+    Number,
+    /// JSON string.
+    String,
+}
+
+impl ValueSchema {
+    /// Return whether a value described by `source` can flow into this schema.
+    pub fn is_assignable_from(&self, source: &Self) -> bool {
+        self == &Self::Dynamic
+            || self == source
+            || matches!((self, source), (Self::Number, Self::Integer))
+    }
+
+    /// Validate one JSON value against this schema.
+    pub fn validate(&self, value: &Value) -> Result<(), SchemaViolation> {
+        let matches = match self {
+            Self::Dynamic => true,
+            Self::Null => value.is_null(),
+            Self::Boolean => value.is_boolean(),
+            Self::Integer => value.as_i64().is_some() || value.as_u64().is_some(),
+            Self::Number => value.is_number(),
+            Self::String => value.is_string(),
+        };
+
+        if matches {
+            Ok(())
+        } else {
+            Err(SchemaViolation {
+                path: "$".to_string(),
+                expected: self.clone(),
+                kind: SchemaViolationKind::TypeMismatch {
+                    actual: ValueKind::from_value(value),
+                },
+            })
+        }
+    }
+}
+
+impl fmt::Display for ValueSchema {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Dynamic => "dynamic",
+            Self::Null => "null",
+            Self::Boolean => "boolean",
+            Self::Integer => "integer",
+            Self::Number => "number",
+            Self::String => "string",
+        };
+        f.write_str(name)
+    }
+}
+
+/// Concrete JSON kind observed during runtime contract validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueKind {
+    /// JSON null.
+    Null,
+    /// JSON boolean.
+    Boolean,
+    /// Integral JSON number.
+    Integer,
+    /// Non-integral JSON number.
+    Number,
+    /// JSON string.
+    String,
+    /// JSON array.
+    Array,
+    /// JSON object.
+    Object,
+}
+
+impl ValueKind {
+    fn from_value(value: &Value) -> Self {
+        match value {
+            Value::Null => Self::Null,
+            Value::Bool(_) => Self::Boolean,
+            Value::Number(number) if number.is_i64() || number.is_u64() => Self::Integer,
+            Value::Number(_) => Self::Number,
+            Value::String(_) => Self::String,
+            Value::Array(_) => Self::Array,
+            Value::Object(_) => Self::Object,
+        }
+    }
+}
+
+impl fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Null => "null",
+            Self::Boolean => "boolean",
+            Self::Integer => "integer",
+            Self::Number => "number",
+            Self::String => "string",
+            Self::Array => "array",
+            Self::Object => "object",
+        };
+        f.write_str(name)
+    }
+}
+
+/// Specific reason a runtime value failed schema validation.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SchemaViolationKind {
+    /// The runtime value has an incompatible JSON kind.
+    #[error("got {actual}")]
+    TypeMismatch { actual: ValueKind },
+}
+
+/// Runtime mismatch between a JSON value and its declared schema.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("schema mismatch at {path}: expected {expected}, {kind}")]
+pub struct SchemaViolation {
+    /// JSON path at which validation failed.
+    pub path: String,
+    /// Schema expected at the failing path.
+    pub expected: ValueSchema,
+    /// Reason validation failed.
+    pub kind: SchemaViolationKind,
+}
 
 /// Static JSON type accepted by a handler argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

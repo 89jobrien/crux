@@ -50,7 +50,8 @@ pub enum LoadError {
 
 pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use metadata::{
-    ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SideEffect,
+    ArgSchema, ArgSpec, ArgType, Capability, HandlerMetadata, RiskLevel, SchemaViolation,
+    SchemaViolationKind, SideEffect, ValueKind, ValueSchema,
 };
 pub use output::{
     PipelineOutputError, PipelineOutputFormat, collect_agent_names, collect_handler_names,
