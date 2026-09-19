@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-19
+
+### Fixed
+
+- Include the generated Rust BAML client in source archives so `crux-baml`
+  can be independently packaged and compiled.
+
 ## [0.4.1] - 2026-09-19
 
 ### Changed

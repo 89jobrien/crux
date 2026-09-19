@@ -1,8 +1,10 @@
 target/
 book/
 
-# BAML generated client — regenerate with `baml-cli generate`
+# BAML generated clients -- crux-baml checks in its publishable Rust client.
 **/baml_client/
+!crates/crux-baml/src/baml_client/
+!crates/crux-baml/src/baml_client/**
 
 .ctx/*
 !.ctx/HANDOFF.*.yaml

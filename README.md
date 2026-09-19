@@ -81,14 +81,14 @@ Either way, the returned `Crux<T>` is:
 Install the pipeline CLI:
 
 ```bash
-cargo install --git https://github.com/89jobrien/crux --tag v0.4.1 crux-cli
+cargo install --git https://github.com/89jobrien/crux --tag v0.4.2 crux-cli
 ```
 
 Add the Rust DSL to a project:
 
 ```toml
 [dependencies]
-crux = { git = "https://github.com/89jobrien/crux", tag = "v0.4.1" }
+crux = { git = "https://github.com/89jobrien/crux", tag = "v0.4.2" }
 ```
 
 Requires Rust 1.89+ (edition 2024).
