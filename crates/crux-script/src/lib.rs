@@ -50,9 +50,9 @@ pub enum LoadError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
-pub use compiler::{Compilation, CompileMode, CompileOptions, compile_pipeline};
+pub use compiler::{Compilation, CompileMode, CompileOptions, compile_cruxfile, compile_pipeline};
 pub use handler_output::{HandlerExecution, HandlerOutput};
-pub use ir::TypedPipeline;
+pub use ir::{TypedCruxfile, TypedPipeline};
 pub use metadata::{
     AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, ConfidenceCapability, HandlerMetadata,
     ObjectSchema, RiskLevel, SchemaBuildError, SchemaProperty, SchemaViolation,

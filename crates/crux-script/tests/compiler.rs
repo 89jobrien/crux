@@ -1,7 +1,7 @@
 use crux_script::{
     ArgSchema, Compilation, CompileOptions, ConfidenceCapability, DiagnosticSeverity,
     HandlerMetadata, HandlerRegistry, ObjectSchema, ValidationCode, ValidationDiagnostic,
-    ValueSchema, compile_pipeline,
+    ValueSchema, compile_cruxfile, compile_pipeline,
 };
 use serde_json::Value;
 
@@ -1134,4 +1134,116 @@ steps:
         diagnostic.code == ValidationCode::UnknownReference
             && diagnostic.location == "steps[1].args"
     }));
+}
+
+#[test]
+fn compiler_resolves_all_cruxfile_targets() {
+    let cruxfile = crux_script::load_cruxfile(
+        r#"
+project: typed-project
+default: ci
+targets:
+  ci:
+    depends: [test]
+    steps:
+      - step: ci
+        handler: test::echo
+  test:
+    depends: [lint]
+    steps:
+      - step: test
+        handler: test::echo
+  lint:
+    steps:
+      - step: lint
+        handler: test::echo
+  docs:
+    steps:
+      - step: docs
+        handler: test::echo
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_cruxfile(&cruxfile, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(typed.project(), "typed-project");
+    assert_eq!(typed.default_target(), "ci");
+    for target in ["ci", "test", "lint", "docs"] {
+        assert!(typed.contains_target(target), "missing target {target}");
+    }
+}
+
+#[test]
+fn compiler_rejects_cruxfile_dependency_cycles() {
+    let cruxfile = crux_script::load_cruxfile(
+        r#"
+project: cyclic
+default: first
+targets:
+  first:
+    depends: [second]
+  second:
+    depends: [first]
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_cruxfile(&cruxfile, &registry(), CompileOptions::strict());
+
+    assert!(!compilation.is_ok());
+    assert!(compilation.artifact().is_none());
+    assert!(compilation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::TargetResolution
+            && diagnostic.message.contains("dependency cycle")
+    }));
+}
+
+#[test]
+fn compiler_retains_cruxfile_dependency_order() {
+    let cruxfile = crux_script::load_cruxfile(
+        r#"
+project: ordered
+default: ci
+targets:
+  ci:
+    depends: [test, lint]
+  test:
+    depends: [lint]
+  lint: {}
+  docs: {}
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_cruxfile(&cruxfile, &registry(), CompileOptions::strict());
+
+    let typed = compilation.artifact().unwrap();
+    assert_eq!(typed.target_order(), ["lint", "test", "ci", "docs"]);
+    assert_eq!(typed.target_dependencies("ci").unwrap(), ["test", "lint"]);
+}
+
+#[test]
+fn compiler_types_cruxfile_target_input_as_null() {
+    let cruxfile = crux_script::load_cruxfile(
+        r#"
+project: null-input
+default: check
+targets:
+  check:
+    steps:
+      - step: check
+        handler: test::echo
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_cruxfile(&cruxfile, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.target("check").unwrap().input_schema(),
+        Some(&ValueSchema::Null)
+    );
 }

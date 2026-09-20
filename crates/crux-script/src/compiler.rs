@@ -3,17 +3,20 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 
+use indexmap::IndexMap;
+
 use crate::expr::ExprError;
 use crate::ir::{
-    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedLoopBinding, TypedLoopBindings,
-    TypedPipeline, TypedRecoveryStep, TypedRouteBranch, TypedStep, TypedStepKind, TypedValue,
-    failed_allowed_output_schema,
+    BindingId, TypedArm, TypedBinding, TypedCruxfile, TypedHandlerStep, TypedLoopBinding,
+    TypedLoopBindings, TypedPipeline, TypedRecoveryStep, TypedRouteBranch, TypedStep,
+    TypedStepKind, TypedTarget, TypedValue, failed_allowed_output_schema,
 };
 use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
+use crate::resolve::TargetResolver;
 use crate::schema::{
-    ArmDef, ForEachNode, JoinAllNode, PipeNode, PipelineDef, PollNode, RepeatNode, RouteBranch,
-    RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, WhileNode,
+    ArmDef, CruxfileDef, ForEachNode, JoinAllNode, PipeNode, PipelineDef, PollNode, RepeatNode,
+    RouteBranch, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, WhileNode,
 };
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
 
@@ -354,6 +357,82 @@ pub fn compile_pipeline(
     }
 
     let artifact = (!unresolved).then(|| TypedPipeline::new(definition, variables, steps));
+    Compilation::new(artifact, diagnostics)
+}
+
+/// Compile every target in a Cruxfile into resolved typed IR.
+pub fn compile_cruxfile(
+    definition: &CruxfileDef,
+    registry: &HandlerRegistry,
+    options: CompileOptions,
+) -> Compilation<TypedCruxfile> {
+    let resolver = match TargetResolver::new(definition) {
+        Ok(resolver) => resolver,
+        Err(error) => {
+            return Compilation::new(
+                None,
+                vec![ValidationDiagnostic::error_with_code(
+                    ValidationCode::TargetResolution,
+                    "targets",
+                    error.to_string(),
+                )],
+            );
+        }
+    };
+    if let Err(error) = resolver.execution_order(&definition.default) {
+        return Compilation::new(
+            None,
+            vec![ValidationDiagnostic::error_with_code(
+                ValidationCode::TargetResolution,
+                "default",
+                error.to_string(),
+            )],
+        );
+    }
+
+    let target_order = resolver
+        .complete_order()
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    let mut targets = IndexMap::with_capacity(target_order.len());
+
+    for name in &target_order {
+        let target = &definition.targets[name];
+        let pipeline = PipelineDef {
+            pipeline: name.clone(),
+            input_schema: Some(ValueSchema::Null),
+            budget: target.budget.clone().or_else(|| definition.budget.clone()),
+            vars: None,
+            display: None,
+            steps: target.steps.clone(),
+        };
+        let (artifact, target_diagnostics) =
+            compile_pipeline(&pipeline, registry, options).into_parts();
+        diagnostics.extend(target_diagnostics.into_iter().map(|mut diagnostic| {
+            diagnostic.location = format!("targets.{name}.{}", diagnostic.location);
+            diagnostic
+        }));
+        if let Some(pipeline) = artifact {
+            targets.insert(
+                name.clone(),
+                TypedTarget {
+                    dependencies: target.depends.clone(),
+                    pipeline,
+                },
+            );
+        }
+    }
+
+    let artifact = (targets.len() == definition.targets.len()).then(|| {
+        TypedCruxfile::new(
+            definition.project.clone(),
+            definition.default.clone(),
+            targets,
+            target_order,
+        )
+    });
     Compilation::new(artifact, diagnostics)
 }
 

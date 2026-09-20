@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
+use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::expr::{ExprError, ParsedExpression, parse_expression};
@@ -400,6 +401,80 @@ impl fmt::Debug for TypedPipeline {
             .field("steps", &self.steps)
             .field("budget", &self.budget)
             .field("display", &self.display)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TypedTarget {
+    pub(crate) dependencies: Vec<String>,
+    pub(crate) pipeline: TypedPipeline,
+}
+
+/// Fully compiled multi-target Cruxfile.
+#[derive(Clone)]
+pub struct TypedCruxfile {
+    pub(crate) project: String,
+    pub(crate) default_target: String,
+    pub(crate) targets: IndexMap<String, TypedTarget>,
+    pub(crate) target_order: Vec<String>,
+}
+
+impl TypedCruxfile {
+    pub(crate) fn new(
+        project: String,
+        default_target: String,
+        targets: IndexMap<String, TypedTarget>,
+        target_order: Vec<String>,
+    ) -> Self {
+        Self {
+            project,
+            default_target,
+            targets,
+            target_order,
+        }
+    }
+
+    /// Return the Cruxfile project name.
+    pub fn project(&self) -> &str {
+        &self.project
+    }
+
+    /// Return the default target name.
+    pub fn default_target(&self) -> &str {
+        &self.default_target
+    }
+
+    /// Return whether the compiled Cruxfile contains a target.
+    pub fn contains_target(&self, name: &str) -> bool {
+        self.targets.contains_key(name)
+    }
+
+    /// Return every compiled target in stable dependency order.
+    pub fn target_order(&self) -> &[String] {
+        &self.target_order
+    }
+
+    /// Return one target's dependencies in declaration order.
+    pub fn target_dependencies(&self, name: &str) -> Option<&[String]> {
+        self.targets
+            .get(name)
+            .map(|target| target.dependencies.as_slice())
+    }
+
+    /// Return one target's compiled pipeline.
+    pub fn target(&self, name: &str) -> Option<&TypedPipeline> {
+        self.targets.get(name).map(|target| &target.pipeline)
+    }
+}
+
+impl fmt::Debug for TypedCruxfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypedCruxfile")
+            .field("project", &self.project)
+            .field("default_target", &self.default_target)
+            .field("targets", &self.targets)
+            .field("target_order", &self.target_order)
             .finish()
     }
 }
