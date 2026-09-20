@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, sync::Arc};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-use crate::expr::{ExprError, ParsedExpression, parse_expression};
+use crate::expr::{ExprContext, ExprError, ParsedExpression, TemplateSegment, parse_expression};
 use crate::metadata::{ConfidenceCapability, ObjectSchema, ValueSchema};
 use crate::schema::{
     ArmDef, BudgetDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode, PipelineDef,
@@ -133,6 +133,38 @@ impl TypedValue {
             return None;
         };
         values.get(property).map(|value| &value.schema)
+    }
+
+    pub(crate) fn evaluate(&self, context: &ExprContext) -> Result<Value, ExprError> {
+        match &self.kind {
+            TypedValueKind::Literal(value) => Ok(value.clone()),
+            TypedValueKind::Expression(expression) => match expression {
+                ParsedExpression::Literal(value) => Ok(Value::String(value.clone())),
+                ParsedExpression::ExactPath(path) => context.eval(&format!("{{{{ {path} }}}}")),
+                ParsedExpression::Interpolated(segments) => {
+                    let mut value = String::new();
+                    for segment in segments {
+                        match segment {
+                            TemplateSegment::Text(text) => value.push_str(text),
+                            TemplateSegment::Path(path) => {
+                                match context.eval(&format!("{{{{ {path} }}}}"))? {
+                                    Value::String(text) => value.push_str(&text),
+                                    resolved => value.push_str(&resolved.to_string()),
+                                }
+                            }
+                        }
+                    }
+                    Ok(Value::String(value))
+                }
+            },
+            TypedValueKind::Array(values) => {
+                values.iter().map(|value| value.evaluate(context)).collect()
+            }
+            TypedValueKind::Object(values) => values
+                .iter()
+                .map(|(name, value)| Ok((name.clone(), value.evaluate(context)?)))
+                .collect(),
+        }
     }
 }
 
@@ -329,6 +361,12 @@ impl TypedPipeline {
     /// Return the number of compiled top-level steps.
     pub fn step_count(&self) -> usize {
         self.steps.len()
+    }
+
+    pub(crate) fn supports_simple_execution(&self) -> bool {
+        self.steps
+            .iter()
+            .all(|step| matches!(step.kind, TypedStepKind::Handler(_)))
     }
 
     /// Return the inferred schema for one top-level step argument.
