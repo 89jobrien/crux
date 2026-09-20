@@ -346,7 +346,8 @@ crux run pipeline.crux -q       # errors only
 Every executed run saves JSON beneath `$HOME/.crux/traces/`, including failed runs. Regular
 pipeline traces can be reused with `--replay trace.json`, and `--save-trace trace.json` overrides
 the automatic destination. Cruxfiles save one trace per executed target for inspection; `--replay`
-currently applies only to regular pipelines. `--check` and `--dry-run` do not write traces.
+currently applies only to regular pipelines. `--check` and `--dry-run` do not write traces. Trace
+files may contain raw handler inputs and outputs and should be treated as sensitive data.
 
 ## Prelude
 

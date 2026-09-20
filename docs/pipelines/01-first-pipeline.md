@@ -93,7 +93,8 @@ crux run hello.crux --replay trace.json
 
 Validation-only `--check` and `--dry-run` commands do not write traces.
 Cruxfile executions save one trace per executed target for inspection; `--replay` currently applies
-only to regular pipelines.
+only to regular pipelines. Trace files can include raw handler inputs and outputs, so treat them as
+sensitive data.
 
 ## Passing input
 

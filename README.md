@@ -92,7 +92,8 @@ Every executed `crux run` writes a JSON trace beneath `$HOME/.crux/traces/`, inc
 runs. Regular pipeline traces can be passed to `--replay`. Cruxfile executions save one trace per
 executed target for inspection; `--replay` currently applies only to regular pipelines.
 `--save-trace` overrides the automatic destination, while `--check` and `--dry-run` do not write
-traces.
+traces. Trace files can contain raw handler inputs and outputs; treat the trace directory as
+sensitive data.
 
 The default rule planner emits pipeline templates. Generated handlers that are not built in must
 be registered through a plugin or replaced before running with `--strict`.

@@ -78,7 +78,7 @@ enum Cli {
         /// Error on unregistered handlers instead of injecting stubs
         #[arg(short = 'S', long)]
         strict: bool,
-        /// Override the automatic execution trace JSON path
+        /// Override automatic trace path (Cruxfiles append .<target>.json)
         #[arg(long)]
         save_trace: Option<String>,
     },

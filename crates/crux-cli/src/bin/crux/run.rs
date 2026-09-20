@@ -1,4 +1,4 @@
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -118,7 +118,25 @@ fn persist_automatic_trace(
         .parent()
         .ok_or_else(|| std::io::Error::other("automatic trace path has no parent directory"))?;
     std::fs::create_dir_all(parent)?;
-    persist_trace(trace, &path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+    }
+
+    let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+
+        options.mode(0o600);
+    }
+    let mut file = options.open(&path)?;
+    file.write_all(json.as_bytes())?;
+    file.sync_all()?;
     Ok(path)
 }
 
@@ -196,7 +214,14 @@ pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
             eprintln!("error: --check does not support stdin ('-') pipelines");
             std::process::exit(1);
         }
-        // stdin path — always a regular pipeline
+        if cfg.dry_run {
+            let mut contents = String::new();
+            std::io::stdin()
+                .read_to_string(&mut contents)
+                .expect("failed to read stdin");
+            cmd_dry_run_pipeline(&contents, "stdin");
+            return;
+        }
         cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
         return;
     };
@@ -395,12 +420,13 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
 
     let runner = crux_script::Runner::new(Arc::new(full_reg));
     let mut failed = false;
+    let mut trace_persistence_failed = false;
     let mut skipped: Vec<&str> = Vec::new();
 
     let start = Instant::now();
 
     for &target_name in &order {
-        if failed {
+        if failed || trace_persistence_failed {
             skipped.push(target_name);
             continue;
         }
@@ -461,7 +487,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
             }
             Err(error) => {
                 eprintln!("[crux] failed to save trace: {error}");
-                failed = true;
+                trace_persistence_failed = true;
             }
         }
     }
@@ -482,8 +508,15 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         } else {
             format!("{}ms", elapsed.as_millis())
         };
-        let status = if failed {
-            format!("{ok_count}/{total} targets OK, {failed_count} failed, {skipped_count} skipped")
+        let status = if failed || trace_persistence_failed {
+            let trace_status = if trace_persistence_failed {
+                ", trace persistence failed"
+            } else {
+                ""
+            };
+            format!(
+                "{ok_count}/{total} targets OK, {failed_count} failed, {skipped_count} skipped{trace_status}"
+            )
         } else {
             format!("{ok_count}/{total} targets OK")
         };
@@ -497,7 +530,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         eprintln!("[crux] total: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
     }
 
-    if failed {
+    if failed || trace_persistence_failed {
         std::process::exit(1);
     }
 }
@@ -571,16 +604,18 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         };
         home.and_then(|home| persist_automatic_trace(&crux, &home, pipeline_name, None))
     };
-    let trace_persistence_failed = match trace_path {
+    let trace_persistence_error = match trace_path {
         Ok(path) => {
-            if !cfg.quiet {
+            if !cfg.quiet && !cfg.json {
                 eprintln!("[crux] trace saved to {}", path.display());
             }
-            false
+            None
         }
         Err(error) => {
-            eprintln!("[crux] failed to save trace: {error}");
-            true
+            if !cfg.json {
+                eprintln!("[crux] failed to save trace: {error}");
+            }
+            Some(error.to_string())
         }
     };
 
@@ -591,9 +626,24 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
                 render_trace(&crux, elapsed, pipeline.display.as_ref())
             );
         }
-        OutputMode::Json => match crux.value() {
-            Ok(_) => println!("{}", render_default_output(&crux).unwrap_or_default()),
-            Err(error) => render_json_error(error),
+        OutputMode::Json => match (crux.value(), trace_persistence_error.as_deref()) {
+            (Ok(_), None) => println!("{}", render_default_output(&crux).unwrap_or_default()),
+            (Ok(_), Some(trace_error)) => eprintln!(
+                "{}",
+                json!({
+                    "kind": "trace_persistence_error",
+                    "message": trace_error,
+                })
+            ),
+            (Err(error), None) => render_json_error(error),
+            (Err(error), Some(trace_error)) => eprintln!(
+                "{}",
+                json!({
+                    "kind": "run_and_trace_persistence_error",
+                    "run_error": error,
+                    "trace_error": trace_error,
+                })
+            ),
         },
         OutputMode::Summary => {
             print!(
@@ -620,7 +670,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         false
     };
 
-    if execution_failed || trace_persistence_failed {
+    if execution_failed || trace_persistence_error.is_some() {
         std::process::exit(1);
     }
 }

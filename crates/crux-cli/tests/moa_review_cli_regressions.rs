@@ -1,5 +1,6 @@
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 use crux_runtime::prelude::Crux;
 use serde_json::Value;
@@ -13,16 +14,43 @@ fn pipeline(contents: &str) -> (TempDir, std::path::PathBuf) {
 }
 
 fn run(path: &std::path::Path, args: &[&str]) -> Output {
+    run_with_home(
+        path,
+        args,
+        path.parent().expect("pipeline path must have a parent"),
+    )
+}
+
+fn run_with_home(path: &Path, args: &[&str], home: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_crux"))
         .arg("run")
         .arg(path)
         .args(args)
-        .env(
-            "HOME",
-            path.parent().expect("pipeline path must have a parent"),
-        )
+        .env("HOME", home)
         .output()
         .expect("run crux")
+}
+
+fn run_stdin(home: &Path, args: &[&str], input: &str) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_crux"))
+        .arg("run")
+        .arg("-")
+        .args(args)
+        .env("HOME", home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("crux stdin run must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin must be piped")
+        .write_all(input.as_bytes())
+        .expect("pipeline input must be written");
+    child
+        .wait_with_output()
+        .expect("crux stdin run must finish")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -41,11 +69,15 @@ fn assert_trace_saved(stderr: &[u8]) {
 const EMPTY_PIPELINE: &str = "pipeline: contract\nsteps: []\n";
 
 fn trace_files(pipeline_path: &Path) -> Vec<PathBuf> {
-    let trace_dir = pipeline_path
-        .parent()
-        .expect("pipeline path must have a parent")
-        .join(".crux")
-        .join("traces");
+    trace_files_in(
+        pipeline_path
+            .parent()
+            .expect("pipeline path must have a parent"),
+    )
+}
+
+fn trace_files_in(home: &Path) -> Vec<PathBuf> {
+    let trace_dir = home.join(".crux").join("traces");
     if !trace_dir.exists() {
         return Vec::new();
     }
@@ -56,6 +88,77 @@ fn trace_files(pipeline_path: &Path) -> Vec<PathBuf> {
         .collect();
     files.sort();
     files
+}
+
+#[test]
+fn stdin_dry_run_does_not_execute_or_persist_a_trace() {
+    let home = tempfile::tempdir().expect("temporary home must be created");
+    let output = run_stdin(home.path(), &["--dry-run"], EMPTY_PIPELINE);
+
+    assert!(output.status.success());
+    assert!(text(&output.stdout).contains("Pipeline: contract"));
+    assert!(trace_files_in(home.path()).is_empty());
+    assert_eq!(text(&output.stderr), "");
+}
+
+#[test]
+fn failed_json_run_keeps_stderr_machine_readable() {
+    let (_dir, path) = pipeline(
+        "pipeline: json-failure\nbudget: { steps: 0 }\nsteps:\n  - step: blocked\n    handler: ctrl::noop\n",
+    );
+    let output = run(&path, &["--json"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    serde_json::from_slice::<Value>(&output.stderr).expect("stderr must contain one JSON error");
+    assert_eq!(trace_files(&path).len(), 1);
+}
+
+#[test]
+fn trace_persistence_failure_is_reported_even_in_quiet_mode() {
+    let (_dir, path) = pipeline(EMPTY_PIPELINE);
+    let home_file = path
+        .parent()
+        .expect("pipeline path must have a parent")
+        .join("not-a-directory");
+    std::fs::write(&home_file, "occupied").expect("home fixture must be written");
+    let output = run_with_home(&path, &["--quiet"], &home_file);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(text(&output.stderr).contains("[crux] failed to save trace:"));
+
+    let (_json_dir, json_path) = pipeline(
+        "pipeline: json-and-trace-failure\nbudget: { steps: 0 }\nsteps:\n  - step: blocked\n    handler: ctrl::noop\n",
+    );
+    let json_output = run_with_home(&json_path, &["--json"], &home_file);
+    assert_eq!(json_output.status.code(), Some(1));
+    let error = serde_json::from_slice::<Value>(&json_output.stderr)
+        .expect("JSON mode persistence failure must stay machine readable");
+    assert_eq!(error["kind"], "run_and_trace_persistence_error");
+}
+
+#[cfg(unix)]
+#[test]
+fn automatic_trace_storage_is_private() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let (_dir, path) = pipeline(EMPTY_PIPELINE);
+    let output = run(&path, &[]);
+    assert!(output.status.success());
+
+    let trace = trace_files(&path).pop().expect("trace must be written");
+    let trace_dir = trace.parent().expect("trace must have a parent");
+    let dir_mode = std::fs::metadata(trace_dir)
+        .expect("trace directory metadata must be readable")
+        .permissions()
+        .mode()
+        & 0o777;
+    let file_mode = std::fs::metadata(trace)
+        .expect("trace metadata must be readable")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(dir_mode, 0o700);
+    assert_eq!(file_mode, 0o600);
 }
 
 fn read_trace(path: &Path) -> Crux<Value> {
@@ -127,7 +230,7 @@ fn success_modes_preserve_stream_and_exit_contracts() {
     let json = run(&path, &["--json"]);
     assert!(json.status.success());
     assert_eq!(text(&json.stdout), "null\n");
-    assert_trace_saved(&json.stderr);
+    assert_eq!(text(&json.stderr), "");
 
     let quiet = run(&path, &["--quiet"]);
     assert!(quiet.status.success());
