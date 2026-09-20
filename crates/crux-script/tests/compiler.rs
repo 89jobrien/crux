@@ -31,6 +31,47 @@ fn registry() -> HandlerRegistry {
             |input: Value| async move { Ok(input) },
         );
     }
+    for (name, input, output, confidence) in [
+        (
+            "test::string_source",
+            ValueSchema::Dynamic,
+            ValueSchema::String,
+            ConfidenceCapability::Always,
+        ),
+        (
+            "test::string_to_integer",
+            ValueSchema::String,
+            ValueSchema::Integer,
+            ConfidenceCapability::Never,
+        ),
+        (
+            "test::integer_only",
+            ValueSchema::Integer,
+            ValueSchema::Integer,
+            ConfidenceCapability::Never,
+        ),
+        (
+            "test::join_string",
+            ValueSchema::Integer,
+            ValueSchema::String,
+            ConfidenceCapability::Always,
+        ),
+        (
+            "test::join_integer",
+            ValueSchema::Integer,
+            ValueSchema::Integer,
+            ConfidenceCapability::Never,
+        ),
+    ] {
+        registry.handler_value_with_metadata(
+            HandlerMetadata::new(name)
+                .args(ArgSchema::strict())
+                .input_schema(input)
+                .output_schema(output)
+                .confidence(confidence),
+            |input: Value| async move { Ok(input) },
+        );
+    }
     registry
 }
 
@@ -503,5 +544,97 @@ steps:
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code == ValidationCode::DynamicBoundary)
+    );
+}
+
+#[test]
+fn compiler_infers_pipe_and_join_outputs() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: typed-combinators
+input_schema:
+  type: dynamic
+steps:
+  - pipe: transform
+    stages:
+      - step: source
+        handler: test::string_source
+      - step: length
+        handler: test::string_to_integer
+  - join_all: collect
+    arms:
+      - step: text
+        handler: test::join_string
+      - step: count
+        handler: test::join_integer
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.step_output_schema("transform"),
+        Some(&ValueSchema::Integer)
+    );
+    assert_eq!(
+        typed.step_output_schema("collect"),
+        Some(&ValueSchema::array(
+            ValueSchema::union([ValueSchema::String, ValueSchema::Integer]).unwrap()
+        ))
+    );
+}
+
+#[test]
+fn compiler_rejects_incompatible_pipe_input() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: incompatible-pipe
+input_schema:
+  type: dynamic
+steps:
+  - pipe: transform
+    stages:
+      - step: source
+        handler: test::string_source
+      - step: consume
+        handler: test::integer_only
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(!compilation.is_ok());
+    assert!(compilation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::TypeMismatch
+            && diagnostic.location == "steps[0].stages[1].input"
+    }));
+}
+
+#[test]
+fn compiler_infers_mixed_confidence_join() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: mixed-confidence-join
+input_schema:
+  type: integer
+steps:
+  - join_all: collect
+    arms:
+      - step: text
+        handler: test::join_string
+      - step: count
+        handler: test::join_integer
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert_eq!(
+        compilation.artifact().unwrap().step_confidence("collect"),
+        Some(ConfidenceCapability::Optional)
     );
 }

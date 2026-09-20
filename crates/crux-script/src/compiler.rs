@@ -4,10 +4,13 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::expr::ExprError;
-use crate::ir::{BindingId, TypedBinding, TypedPipeline, TypedStep, TypedValue};
+use crate::ir::{
+    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedPipeline, TypedStep, TypedStepKind,
+    TypedValue,
+};
 use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
-use crate::schema::{PipelineDef, StepDef};
+use crate::schema::{ArmDef, JoinAllNode, PipeNode, PipelineDef, StepDef, StepNode};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
 
 struct StepBinding {
@@ -26,6 +29,37 @@ struct ReferenceScope<'a> {
     current_step: Option<usize>,
     options: CompileOptions,
     diagnostic_sink: Option<(&'a RefCell<Vec<ValidationDiagnostic>>, &'a str)>,
+}
+
+struct StepCompileContext<'a> {
+    definition: &'a PipelineDef,
+    variables: &'a BTreeMap<String, TypedBinding>,
+    variable_positions: &'a HashMap<String, usize>,
+    step_bindings: &'a BTreeMap<String, StepBinding>,
+    step_positions: &'a HashMap<String, usize>,
+    index: usize,
+    registry: &'a HandlerRegistry,
+    options: CompileOptions,
+}
+
+impl<'a> StepCompileContext<'a> {
+    fn reference_scope<'scope>(
+        &'scope self,
+        diagnostics: &'scope RefCell<Vec<ValidationDiagnostic>>,
+        location: &'scope str,
+    ) -> ReferenceScope<'scope> {
+        ReferenceScope {
+            input_schema: self.definition.input_schema.as_ref(),
+            variables: self.variables,
+            variable_positions: self.variable_positions,
+            current_variable: None,
+            steps: self.step_bindings,
+            step_positions: self.step_positions,
+            current_step: Some(self.index),
+            options: self.options,
+            diagnostic_sink: Some((diagnostics, location)),
+        }
+    }
 }
 
 /// Static validation strictness used while compiling pipeline definitions.
@@ -181,117 +215,355 @@ pub fn compile_pipeline(
         .steps
         .iter()
         .enumerate()
-        .filter_map(|(index, step)| match step {
-            StepDef::Step(node) => Some((node.step.clone(), index)),
-            _ => None,
-        })
+        .filter_map(|(index, step)| step_name(step).map(|name| (name.to_string(), index)))
         .collect::<HashMap<_, _>>();
     let mut step_bindings = BTreeMap::new();
+    let mut current_schema = definition
+        .input_schema
+        .clone()
+        .unwrap_or(ValueSchema::Dynamic);
+    let empty_variable_positions = HashMap::new();
 
     for (index, step) in definition.steps.iter().enumerate() {
         let location = format!("steps[{index}]");
-        let StepDef::Step(node) = step else {
+        let Some(name) = step_name(step) else {
             diagnostics.push(ValidationDiagnostic::error_with_code(
                 ValidationCode::InvalidControlFlow,
-                location,
+                &location,
                 "typed compilation for this combinator is not implemented",
             ));
             unresolved = true;
             continue;
         };
-
-        let handler_name = node.handler.as_deref().unwrap_or(&node.step);
-        let Some(runner) = registry.runner(handler_name) else {
-            diagnostics.push(diagnostic_for_mode(
-                options,
-                ValidationCode::UnknownHandler,
-                &location,
-                format!("handler '{handler_name}' is not registered"),
-            ));
-            unresolved = true;
-            continue;
-        };
-
-        if !runner.metadata().has_complete_contract() {
-            diagnostics.push(diagnostic_for_mode(
-                options,
-                ValidationCode::MissingContract,
-                &location,
-                format!("handler '{handler_name}' has no complete contract"),
-            ));
-            if options.mode() == CompileMode::Strict {
-                unresolved = true;
-                continue;
-            }
-        }
-
-        if step_bindings.contains_key(&node.step) {
+        if step_bindings.contains_key(name) {
             diagnostics.push(ValidationDiagnostic::error_with_code(
                 ValidationCode::DuplicateName,
                 &location,
-                format!("step '{}' is declared more than once", node.step),
+                format!("step '{name}' is declared more than once"),
             ));
             unresolved = true;
             continue;
         }
 
-        let expression_diagnostics = RefCell::new(Vec::new());
-        let empty_variable_positions = HashMap::new();
-        let scope = ReferenceScope {
-            input_schema: definition.input_schema.as_ref(),
+        let context = StepCompileContext {
+            definition,
             variables: &variables,
             variable_positions: &empty_variable_positions,
-            current_variable: None,
-            steps: &step_bindings,
+            step_bindings: &step_bindings,
             step_positions: &step_positions,
-            current_step: Some(index),
+            index,
+            registry,
             options,
-            diagnostic_sink: Some((&expression_diagnostics, &location)),
         };
-        let resolve = |path: &str| resolve_reference_schema(path, &scope);
-        let args = match node
-            .args
-            .as_ref()
-            .map(|args| TypedValue::compile_with(args, &resolve))
-            .transpose()
-        {
-            Ok(args) => args,
-            Err(error) => {
-                diagnostics.push(ValidationDiagnostic::error_with_code(
-                    validation_code_for_expression(&error),
-                    format!("{location}.args"),
-                    error.to_string(),
-                ));
-                unresolved = true;
-                continue;
+        let compiled = match step {
+            StepDef::Step(node) => {
+                compile_handler_step(node, &location, &context, &mut diagnostics, &mut unresolved)
             }
+            StepDef::Pipe(node) => compile_pipe_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::JoinAll(node) => compile_join_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            _ => None,
         };
-        diagnostics.extend(expression_diagnostics.into_inner());
 
-        steps.push(TypedStep {
-            node: node.clone(),
-            runner: runner.clone(),
-            args,
-        });
-        step_bindings.insert(
-            node.step.clone(),
-            StepBinding {
-                index,
-                output: runner
-                    .metadata()
-                    .output_schema
-                    .clone()
-                    .unwrap_or(ValueSchema::Dynamic),
-                confidence: runner
-                    .metadata()
-                    .confidence
-                    .unwrap_or(ConfidenceCapability::Optional),
-            },
-        );
+        if let Some(compiled) = compiled {
+            current_schema = compiled.output_schema.clone();
+            step_bindings.insert(
+                compiled.name.clone(),
+                StepBinding {
+                    index,
+                    output: compiled.output_schema.clone(),
+                    confidence: compiled.confidence,
+                },
+            );
+            steps.push(compiled);
+        }
     }
 
     let artifact = (!unresolved).then(|| TypedPipeline::new(definition, variables, steps));
     Compilation::new(artifact, diagnostics)
+}
+
+fn step_name(step: &StepDef) -> Option<&str> {
+    match step {
+        StepDef::Step(node) => Some(&node.step),
+        StepDef::Pipe(node) => Some(&node.pipe),
+        StepDef::JoinAll(node) => Some(&node.join_all),
+        _ => None,
+    }
+}
+
+fn compile_handler_step(
+    node: &StepNode,
+    location: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    let handler_name = node.handler.as_deref().unwrap_or(&node.step);
+    let runner = resolve_runner(handler_name, location, context, diagnostics, unresolved)?;
+    let args = compile_args(
+        node.args.as_ref(),
+        location,
+        context,
+        diagnostics,
+        unresolved,
+    )?;
+    let output_schema = runner
+        .metadata()
+        .output_schema
+        .clone()
+        .unwrap_or(ValueSchema::Dynamic);
+    let confidence = runner
+        .metadata()
+        .confidence
+        .unwrap_or(ConfidenceCapability::Optional);
+
+    Some(TypedStep {
+        name: node.step.clone(),
+        kind: TypedStepKind::Handler(Box::new(TypedHandlerStep {
+            node: node.clone(),
+            runner,
+            args,
+        })),
+        output_schema,
+        confidence,
+    })
+}
+
+fn compile_pipe_step(
+    node: &PipeNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    if node.stages.is_empty() {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::InvalidControlFlow,
+            location,
+            "pipe must contain at least one stage",
+        ));
+        *unresolved = true;
+        return None;
+    }
+
+    let mut stages = Vec::with_capacity(node.stages.len());
+    let mut stage_input = input_schema.clone();
+    for (stage_index, stage) in node.stages.iter().enumerate() {
+        let stage_location = format!("{location}.stages[{stage_index}]");
+        let typed = compile_arm(
+            stage,
+            &stage_location,
+            &stage_input,
+            context,
+            diagnostics,
+            unresolved,
+        )?;
+        stage_input = typed.output_schema.clone();
+        stages.push(typed);
+    }
+    let confidence = stages
+        .last()
+        .map(|stage| stage.confidence)
+        .unwrap_or(ConfidenceCapability::Never);
+
+    Some(TypedStep {
+        name: node.pipe.clone(),
+        kind: TypedStepKind::Pipe {
+            node: node.clone(),
+            stages,
+        },
+        output_schema: stage_input,
+        confidence,
+    })
+}
+
+fn compile_join_step(
+    node: &JoinAllNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    if node.arms.is_empty() {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::InvalidControlFlow,
+            location,
+            "join_all must contain at least one arm",
+        ));
+        *unresolved = true;
+        return None;
+    }
+
+    let mut arms = Vec::with_capacity(node.arms.len());
+    for (arm_index, arm) in node.arms.iter().enumerate() {
+        let arm_location = format!("{location}.arms[{arm_index}]");
+        arms.push(compile_arm(
+            arm,
+            &arm_location,
+            input_schema,
+            context,
+            diagnostics,
+            unresolved,
+        )?);
+    }
+    let item_schema = ValueSchema::union(arms.iter().map(|arm| arm.output_schema.clone()))
+        .unwrap_or(ValueSchema::Dynamic);
+    let confidence = join_confidence(&arms);
+
+    Some(TypedStep {
+        name: node.join_all.clone(),
+        kind: TypedStepKind::JoinAll {
+            node: node.clone(),
+            arms,
+        },
+        output_schema: ValueSchema::array(item_schema),
+        confidence,
+    })
+}
+
+fn compile_arm(
+    arm: &ArmDef,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedArm> {
+    let runner = resolve_runner(
+        arm.handler_name(),
+        location,
+        context,
+        diagnostics,
+        unresolved,
+    )?;
+    let expected_input = runner
+        .metadata()
+        .input_schema
+        .as_ref()
+        .unwrap_or(&ValueSchema::Dynamic);
+    if !expected_input.is_assignable_from(input_schema) {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::TypeMismatch,
+            format!("{location}.input"),
+            format!(
+                "handler '{}' expects {expected_input}, but receives {input_schema}",
+                arm.handler_name()
+            ),
+        ));
+        *unresolved = true;
+        return None;
+    }
+    let args = compile_args(arm.args(), location, context, diagnostics, unresolved)?;
+    let output_schema = runner
+        .metadata()
+        .output_schema
+        .clone()
+        .unwrap_or(ValueSchema::Dynamic);
+    let confidence = runner
+        .metadata()
+        .confidence
+        .unwrap_or(ConfidenceCapability::Optional);
+
+    Some(TypedArm {
+        node: arm.clone(),
+        runner,
+        args,
+        output_schema,
+        confidence,
+    })
+}
+
+fn resolve_runner(
+    handler_name: &str,
+    location: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<std::sync::Arc<dyn crate::step_runner::StepRunner>> {
+    let Some(runner) = context.registry.runner(handler_name) else {
+        diagnostics.push(diagnostic_for_mode(
+            context.options,
+            ValidationCode::UnknownHandler,
+            location,
+            format!("handler '{handler_name}' is not registered"),
+        ));
+        *unresolved = true;
+        return None;
+    };
+    if !runner.metadata().has_complete_contract() {
+        diagnostics.push(diagnostic_for_mode(
+            context.options,
+            ValidationCode::MissingContract,
+            location,
+            format!("handler '{handler_name}' has no complete contract"),
+        ));
+        if context.options.mode() == CompileMode::Strict {
+            *unresolved = true;
+            return None;
+        }
+    }
+    Some(runner.clone())
+}
+
+fn compile_args(
+    args: Option<&serde_json::Value>,
+    location: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<Option<TypedValue>> {
+    let expression_diagnostics = RefCell::new(Vec::new());
+    let scope = context.reference_scope(&expression_diagnostics, location);
+    let resolve = |path: &str| resolve_reference_schema(path, &scope);
+    let compiled = match args
+        .map(|args| TypedValue::compile_with(args, &resolve))
+        .transpose()
+    {
+        Ok(args) => args,
+        Err(error) => {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                validation_code_for_expression(&error),
+                format!("{location}.args"),
+                error.to_string(),
+            ));
+            *unresolved = true;
+            return None;
+        }
+    };
+    diagnostics.extend(expression_diagnostics.into_inner());
+    Some(compiled)
+}
+
+fn join_confidence(arms: &[TypedArm]) -> ConfidenceCapability {
+    if arms
+        .iter()
+        .all(|arm| arm.confidence == ConfidenceCapability::Always)
+    {
+        ConfidenceCapability::Always
+    } else if arms
+        .iter()
+        .all(|arm| arm.confidence == ConfidenceCapability::Never)
+    {
+        ConfidenceCapability::Never
+    } else {
+        ConfidenceCapability::Optional
+    }
 }
 
 fn compile_variables(

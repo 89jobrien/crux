@@ -5,8 +5,10 @@ use std::{collections::BTreeMap, fmt, sync::Arc};
 use serde_json::Value;
 
 use crate::expr::{ExprError, ParsedExpression, parse_expression};
-use crate::metadata::{ObjectSchema, ValueSchema};
-use crate::schema::{BudgetDef, PipelineDef, PipelineDisplayDef, StepNode};
+use crate::metadata::{ConfidenceCapability, ObjectSchema, ValueSchema};
+use crate::schema::{
+    ArmDef, BudgetDef, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef, StepNode,
+};
 use crate::step_runner::StepRunner;
 
 #[derive(Debug, Clone)]
@@ -117,20 +119,65 @@ impl TypedValue {
 }
 
 #[derive(Clone)]
-pub(crate) struct TypedStep {
+#[allow(dead_code)]
+pub(crate) struct TypedHandlerStep {
     pub(crate) node: StepNode,
     pub(crate) runner: Arc<dyn StepRunner>,
     pub(crate) args: Option<TypedValue>,
 }
 
-impl fmt::Debug for TypedStep {
+impl fmt::Debug for TypedHandlerStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TypedStep")
+        f.debug_struct("TypedHandlerStep")
             .field("name", &self.node.step)
             .field("handler", &self.runner.metadata().name)
             .field("args", &self.args)
             .finish_non_exhaustive()
     }
+}
+
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedArm {
+    pub(crate) node: ArmDef,
+    pub(crate) runner: Arc<dyn StepRunner>,
+    pub(crate) args: Option<TypedValue>,
+    pub(crate) output_schema: ValueSchema,
+    pub(crate) confidence: ConfidenceCapability,
+}
+
+impl fmt::Debug for TypedArm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypedArm")
+            .field("label", &self.node.label())
+            .field("handler", &self.runner.metadata().name)
+            .field("args", &self.args)
+            .field("output_schema", &self.output_schema)
+            .field("confidence", &self.confidence)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) enum TypedStepKind {
+    Handler(Box<TypedHandlerStep>),
+    Pipe {
+        node: PipeNode,
+        stages: Vec<TypedArm>,
+    },
+    JoinAll {
+        node: JoinAllNode,
+        arms: Vec<TypedArm>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TypedStep {
+    pub(crate) name: String,
+    pub(crate) kind: TypedStepKind,
+    pub(crate) output_schema: ValueSchema,
+    pub(crate) confidence: ConfidenceCapability,
 }
 
 /// Pipeline definition whose simple handler names have been resolved to executors.
@@ -186,9 +233,28 @@ impl TypedPipeline {
     pub fn step_argument_schema(&self, step: &str, argument: &str) -> Option<&ValueSchema> {
         self.steps
             .iter()
-            .find(|typed| typed.node.step == step)
-            .and_then(|typed| typed.args.as_ref())
+            .find(|typed| typed.name == step)
+            .and_then(|typed| match &typed.kind {
+                TypedStepKind::Handler(handler) => handler.args.as_ref(),
+                TypedStepKind::Pipe { .. } | TypedStepKind::JoinAll { .. } => None,
+            })
             .and_then(|args| args.object_property_schema(argument))
+    }
+
+    /// Return the inferred successful output schema for one top-level step.
+    pub fn step_output_schema(&self, step: &str) -> Option<&ValueSchema> {
+        self.steps
+            .iter()
+            .find(|typed| typed.name == step)
+            .map(|typed| &typed.output_schema)
+    }
+
+    /// Return the inferred confidence capability for one top-level step.
+    pub fn step_confidence(&self, step: &str) -> Option<ConfidenceCapability> {
+        self.steps
+            .iter()
+            .find(|typed| typed.name == step)
+            .map(|typed| typed.confidence)
     }
 }
 
