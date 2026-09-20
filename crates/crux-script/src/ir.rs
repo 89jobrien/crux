@@ -7,7 +7,8 @@ use serde_json::Value;
 use crate::expr::{ExprError, ParsedExpression, parse_expression};
 use crate::metadata::{ConfidenceCapability, ObjectSchema, ValueSchema};
 use crate::schema::{
-    ArmDef, BudgetDef, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef, StepNode,
+    ArmDef, BudgetDef, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef, RouteBranch,
+    RouteNode, SpeculateNode, StepNode,
 };
 use crate::step_runner::StepRunner;
 
@@ -158,6 +159,28 @@ impl fmt::Debug for TypedArm {
     }
 }
 
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedRouteBranch {
+    pub(crate) node: RouteBranch,
+    pub(crate) runner: Arc<dyn StepRunner>,
+    pub(crate) args: Option<TypedValue>,
+    pub(crate) output_schema: ValueSchema,
+    pub(crate) confidence: ConfidenceCapability,
+}
+
+impl fmt::Debug for TypedRouteBranch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypedRouteBranch")
+            .field("label", &self.node.label)
+            .field("handler", &self.runner.metadata().name)
+            .field("args", &self.args)
+            .field("output_schema", &self.output_schema)
+            .field("confidence", &self.confidence)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(crate) enum TypedStepKind {
@@ -168,6 +191,15 @@ pub(crate) enum TypedStepKind {
     },
     JoinAll {
         node: JoinAllNode,
+        arms: Vec<TypedArm>,
+    },
+    RouteOnConfidence {
+        node: RouteNode,
+        value: TypedValue,
+        branches: Vec<TypedRouteBranch>,
+    },
+    Speculate {
+        node: SpeculateNode,
         arms: Vec<TypedArm>,
     },
 }
@@ -236,7 +268,10 @@ impl TypedPipeline {
             .find(|typed| typed.name == step)
             .and_then(|typed| match &typed.kind {
                 TypedStepKind::Handler(handler) => handler.args.as_ref(),
-                TypedStepKind::Pipe { .. } | TypedStepKind::JoinAll { .. } => None,
+                TypedStepKind::Pipe { .. }
+                | TypedStepKind::JoinAll { .. }
+                | TypedStepKind::RouteOnConfidence { .. }
+                | TypedStepKind::Speculate { .. } => None,
             })
             .and_then(|args| args.object_property_schema(argument))
     }

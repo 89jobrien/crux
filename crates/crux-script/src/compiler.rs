@@ -5,12 +5,15 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::expr::ExprError;
 use crate::ir::{
-    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedPipeline, TypedStep, TypedStepKind,
-    TypedValue,
+    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedPipeline, TypedRouteBranch,
+    TypedStep, TypedStepKind, TypedValue,
 };
 use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
-use crate::schema::{ArmDef, JoinAllNode, PipeNode, PipelineDef, StepDef, StepNode};
+use crate::schema::{
+    ArmDef, JoinAllNode, PipeNode, PipelineDef, RouteBranch, RouteNode, SpeculateMode,
+    SpeculateNode, StepDef, StepNode,
+};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
 
 struct StepBinding {
@@ -275,6 +278,22 @@ pub fn compile_pipeline(
                 &mut diagnostics,
                 &mut unresolved,
             ),
+            StepDef::RouteOnConfidence(node) => compile_route_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::Speculate(node) => compile_speculate_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
             _ => None,
         };
 
@@ -301,6 +320,8 @@ fn step_name(step: &StepDef) -> Option<&str> {
         StepDef::Step(node) => Some(&node.step),
         StepDef::Pipe(node) => Some(&node.pipe),
         StepDef::JoinAll(node) => Some(&node.join_all),
+        StepDef::RouteOnConfidence(node) => Some(&node.route_on_confidence),
+        StepDef::Speculate(node) => Some(&node.speculate),
         _ => None,
     }
 }
@@ -435,6 +456,423 @@ fn compile_join_step(
         output_schema: ValueSchema::array(item_schema),
         confidence,
     })
+}
+
+fn compile_route_step(
+    node: &RouteNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    validate_route_ranges(node, location, diagnostics, unresolved);
+
+    let expression_diagnostics = RefCell::new(Vec::new());
+    let scope = context.reference_scope(&expression_diagnostics, location);
+    let resolve = |path: &str| resolve_reference_schema(path, &scope);
+    let value =
+        match TypedValue::compile_with(&serde_json::Value::String(node.value.clone()), &resolve) {
+            Ok(value) => value,
+            Err(error) => {
+                diagnostics.push(ValidationDiagnostic::error_with_code(
+                    validation_code_for_expression(&error),
+                    format!("{location}.value"),
+                    error.to_string(),
+                ));
+                *unresolved = true;
+                return None;
+            }
+        };
+    diagnostics.extend(expression_diagnostics.into_inner());
+    check_numeric_schema(
+        &value.schema,
+        format!("{location}.value"),
+        "route confidence",
+        context.options,
+        diagnostics,
+        unresolved,
+    );
+
+    let mut branches = Vec::with_capacity(node.routes.len());
+    for (branch_index, branch) in node.routes.iter().enumerate() {
+        branches.push(compile_route_branch(
+            branch,
+            &format!("{location}.routes[{branch_index}]"),
+            input_schema,
+            context,
+            diagnostics,
+            unresolved,
+        )?);
+    }
+    let output_schema =
+        ValueSchema::union(branches.iter().map(|branch| branch.output_schema.clone()))
+            .unwrap_or(ValueSchema::Dynamic);
+
+    Some(TypedStep {
+        name: node.route_on_confidence.clone(),
+        kind: TypedStepKind::RouteOnConfidence {
+            node: node.clone(),
+            value,
+            branches,
+        },
+        output_schema,
+        confidence: ConfidenceCapability::Always,
+    })
+}
+
+fn compile_route_branch(
+    branch: &RouteBranch,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedRouteBranch> {
+    let runner = resolve_runner(&branch.handler, location, context, diagnostics, unresolved)?;
+    let expected_input = runner
+        .metadata()
+        .input_schema
+        .as_ref()
+        .unwrap_or(&ValueSchema::Dynamic);
+    if !expected_input.is_assignable_from(input_schema) {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::TypeMismatch,
+            format!("{location}.input"),
+            format!(
+                "handler '{}' expects {expected_input}, but receives {input_schema}",
+                branch.handler
+            ),
+        ));
+        *unresolved = true;
+        return None;
+    }
+    let args = compile_args(
+        branch.args.as_ref(),
+        location,
+        context,
+        diagnostics,
+        unresolved,
+    )?;
+    let output_schema = runner
+        .metadata()
+        .output_schema
+        .clone()
+        .unwrap_or(ValueSchema::Dynamic);
+    let confidence = runner
+        .metadata()
+        .confidence
+        .unwrap_or(ConfidenceCapability::Optional);
+
+    Some(TypedRouteBranch {
+        node: branch.clone(),
+        runner,
+        args,
+        output_schema,
+        confidence,
+    })
+}
+
+fn compile_speculate_step(
+    node: &SpeculateNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    if node.arms.is_empty() {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::InvalidControlFlow,
+            location,
+            "speculate must contain at least one arm",
+        ));
+        *unresolved = true;
+        return None;
+    }
+
+    let mut arms = Vec::with_capacity(node.arms.len());
+    for (arm_index, arm) in node.arms.iter().enumerate() {
+        let arm_location = format!("{location}.arms[{arm_index}]");
+        let typed = compile_arm(
+            arm,
+            &arm_location,
+            input_schema,
+            context,
+            diagnostics,
+            unresolved,
+        )?;
+        if matches!(node.mode, SpeculateMode::PickBest) {
+            check_pick_best_score(
+                &typed.output_schema,
+                &arm_location,
+                context.options,
+                diagnostics,
+                unresolved,
+            );
+        }
+        arms.push(typed);
+    }
+    let output_schema = ValueSchema::union(arms.iter().map(|arm| arm.output_schema.clone()))
+        .unwrap_or(ValueSchema::Dynamic);
+
+    Some(TypedStep {
+        name: node.speculate.clone(),
+        kind: TypedStepKind::Speculate {
+            node: node.clone(),
+            arms,
+        },
+        output_schema,
+        confidence: ConfidenceCapability::Never,
+    })
+}
+
+#[derive(Clone, Copy)]
+struct ParsedRouteRange {
+    lower: f64,
+    upper: f64,
+    includes_lower: bool,
+    includes_upper: bool,
+}
+
+fn validate_route_ranges(
+    node: &RouteNode,
+    location: &str,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) {
+    let mut ranges = Vec::with_capacity(node.routes.len());
+    for (index, branch) in node.routes.iter().enumerate() {
+        match parse_route_range(&branch.range) {
+            Ok(range)
+                if range.lower >= 0.0
+                    && range.upper <= 1.0
+                    && (range.lower < range.upper
+                        || (range.lower == range.upper
+                            && range.includes_lower
+                            && range.includes_upper)) =>
+            {
+                ranges.push((index, range));
+            }
+            Ok(_) => {
+                diagnostics.push(ValidationDiagnostic::error_with_code(
+                    ValidationCode::InvalidRoute,
+                    format!("{location}.routes[{index}].range"),
+                    format!(
+                        "confidence range '{}' must be non-empty and within [0.0, 1.0]",
+                        branch.range
+                    ),
+                ));
+                *unresolved = true;
+            }
+            Err(message) => {
+                diagnostics.push(ValidationDiagnostic::error_with_code(
+                    ValidationCode::InvalidRoute,
+                    format!("{location}.routes[{index}].range"),
+                    format!("invalid confidence range '{}': {message}", branch.range),
+                ));
+                *unresolved = true;
+            }
+        }
+    }
+
+    ranges.sort_by(|left, right| {
+        left.1
+            .lower
+            .total_cmp(&right.1.lower)
+            .then(left.1.upper.total_cmp(&right.1.upper))
+    });
+    if ranges
+        .first()
+        .is_none_or(|(_, range)| range.lower != 0.0 || !range.includes_lower)
+    {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::InvalidRoute,
+            location,
+            "confidence routes leave a gap at 0.0",
+        ));
+        *unresolved = true;
+    }
+    if ranges
+        .last()
+        .is_none_or(|(_, range)| range.upper != 1.0 || !range.includes_upper)
+    {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::InvalidRoute,
+            location,
+            "confidence routes leave a gap at 1.0",
+        ));
+        *unresolved = true;
+    }
+    for pair in ranges.windows(2) {
+        let (left_index, left) = pair[0];
+        let (right_index, right) = pair[1];
+        let overlaps = left.upper > right.lower
+            || (left.upper == right.lower && left.includes_upper && right.includes_lower);
+        let has_gap = left.upper < right.lower
+            || (left.upper == right.lower && !left.includes_upper && !right.includes_lower);
+        if overlaps || has_gap {
+            let issue = if overlaps { "overlap" } else { "leave a gap" };
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::InvalidRoute,
+                location,
+                format!("confidence routes {left_index} and {right_index} {issue}"),
+            ));
+            *unresolved = true;
+        }
+    }
+}
+
+fn parse_route_range(range: &str) -> Result<ParsedRouteRange, &'static str> {
+    let range = range.trim();
+    let includes_lower = match range.as_bytes().first() {
+        Some(b'[') => true,
+        Some(b'(') => false,
+        _ => return Err("missing opening bracket"),
+    };
+    let includes_upper = match range.as_bytes().last() {
+        Some(b']') => true,
+        Some(b')') => false,
+        _ => return Err("missing closing bracket"),
+    };
+    let inner = range
+        .get(1..range.len().saturating_sub(1))
+        .ok_or("missing bounds")?;
+    let (lower, upper) = inner
+        .split_once(',')
+        .ok_or("expected lower and upper bounds")?;
+    let lower = lower
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| "invalid lower bound")?;
+    let upper = upper
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| "invalid upper bound")?;
+    if !lower.is_finite() || !upper.is_finite() {
+        return Err("bounds must be finite");
+    }
+    Ok(ParsedRouteRange {
+        lower,
+        upper,
+        includes_lower,
+        includes_upper,
+    })
+}
+
+fn check_numeric_schema(
+    schema: &ValueSchema,
+    location: String,
+    subject: &str,
+    options: CompileOptions,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) {
+    if ValueSchema::Number.is_assignable_from(schema) {
+        return;
+    }
+    if schema_contains_dynamic(schema) {
+        diagnostics.push(diagnostic_for_mode(
+            options,
+            ValidationCode::DynamicBoundary,
+            location,
+            format!("{subject} must be numeric, but its schema is dynamic"),
+        ));
+        if options.mode() == CompileMode::Strict {
+            *unresolved = true;
+        }
+    } else {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::TypeMismatch,
+            location,
+            format!("{subject} must be numeric, but has schema {schema}"),
+        ));
+        *unresolved = true;
+    }
+}
+
+fn check_pick_best_score(
+    schema: &ValueSchema,
+    location: &str,
+    options: CompileOptions,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) {
+    match pick_best_score_status(schema) {
+        ScoreStatus::Valid => {}
+        ScoreStatus::Dynamic => {
+            diagnostics.push(diagnostic_for_mode(
+                options,
+                ValidationCode::DynamicBoundary,
+                format!("{location}.output.score"),
+                "pick_best arm output must contain a required numeric 'score' property",
+            ));
+            if options.mode() == CompileMode::Strict {
+                *unresolved = true;
+            }
+        }
+        ScoreStatus::Invalid => {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::TypeMismatch,
+                format!("{location}.output.score"),
+                "pick_best arm output must contain a required numeric 'score' property",
+            ));
+            *unresolved = true;
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScoreStatus {
+    Valid,
+    Dynamic,
+    Invalid,
+}
+
+fn pick_best_score_status(schema: &ValueSchema) -> ScoreStatus {
+    match schema {
+        ValueSchema::Dynamic => ScoreStatus::Dynamic,
+        ValueSchema::Object(object) => match object.property("score") {
+            Some(property)
+                if property.is_required()
+                    && ValueSchema::Number.is_assignable_from(property.schema()) =>
+            {
+                ScoreStatus::Valid
+            }
+            Some(property) if schema_contains_dynamic(property.schema()) => ScoreStatus::Dynamic,
+            _ => ScoreStatus::Invalid,
+        },
+        ValueSchema::Union { variants } => variants
+            .iter()
+            .map(pick_best_score_status)
+            .fold(ScoreStatus::Valid, combine_score_status),
+        _ => ScoreStatus::Invalid,
+    }
+}
+
+fn combine_score_status(left: ScoreStatus, right: ScoreStatus) -> ScoreStatus {
+    match (left, right) {
+        (ScoreStatus::Invalid, _) | (_, ScoreStatus::Invalid) => ScoreStatus::Invalid,
+        (ScoreStatus::Dynamic, _) | (_, ScoreStatus::Dynamic) => ScoreStatus::Dynamic,
+        _ => ScoreStatus::Valid,
+    }
+}
+
+fn schema_contains_dynamic(schema: &ValueSchema) -> bool {
+    match schema {
+        ValueSchema::Dynamic => true,
+        ValueSchema::Array { items } => schema_contains_dynamic(items),
+        ValueSchema::Object(object) => {
+            object
+                .property("score")
+                .is_some_and(|property| schema_contains_dynamic(property.schema()))
+                || object
+                    .additional_schema()
+                    .is_some_and(schema_contains_dynamic)
+        }
+        ValueSchema::Union { variants } => variants.iter().any(schema_contains_dynamic),
+        _ => false,
+    }
 }
 
 fn compile_arm(

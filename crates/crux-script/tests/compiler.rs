@@ -72,6 +72,43 @@ fn registry() -> HandlerRegistry {
             |input: Value| async move { Ok(input) },
         );
     }
+    for (name, output) in [
+        ("test::route_string", ValueSchema::String),
+        ("test::route_integer", ValueSchema::Integer),
+        (
+            "test::scored_string",
+            ValueSchema::object(
+                ObjectSchema::new()
+                    .required("score", ValueSchema::Number)
+                    .required("result", ValueSchema::String),
+            ),
+        ),
+        (
+            "test::scored_integer",
+            ValueSchema::object(
+                ObjectSchema::new()
+                    .required("score", ValueSchema::Integer)
+                    .required("result", ValueSchema::Integer),
+            ),
+        ),
+        (
+            "test::missing_score",
+            ValueSchema::object(ObjectSchema::new().required("result", ValueSchema::String)),
+        ),
+        (
+            "test::string_score",
+            ValueSchema::object(ObjectSchema::new().required("score", ValueSchema::String)),
+        ),
+    ] {
+        registry.handler_value_with_metadata(
+            HandlerMetadata::new(name)
+                .args(ArgSchema::strict())
+                .input_schema(ValueSchema::Dynamic)
+                .output_schema(output)
+                .confidence(ConfidenceCapability::Never),
+            |input: Value| async move { Ok(input) },
+        );
+    }
     registry
 }
 
@@ -637,4 +674,179 @@ steps:
         compilation.artifact().unwrap().step_confidence("collect"),
         Some(ConfidenceCapability::Optional)
     );
+}
+
+#[test]
+fn compiler_validates_routes_and_pick_best_scores() {
+    let gap = crux_script::load(
+        r#"
+pipeline: route-gap
+input_schema:
+  type: number
+steps:
+  - route_on_confidence: choose
+    value: "{{ input }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: low
+        handler: test::route_string
+      - range: "[0.5, 1.0]"
+        label: high
+        handler: test::route_integer
+"#,
+    )
+    .unwrap();
+    let overlap = crux_script::load(
+        r#"
+pipeline: route-overlap
+input_schema:
+  type: number
+steps:
+  - route_on_confidence: choose
+    value: "{{ input }}"
+    routes:
+      - range: "[0.0, 0.6]"
+        label: low
+        handler: test::route_string
+      - range: "[0.5, 1.0]"
+        label: high
+        handler: test::route_integer
+"#,
+    )
+    .unwrap();
+    let missing_score = crux_script::load(
+        r#"
+pipeline: missing-pick-best-score
+input_schema:
+  type: dynamic
+steps:
+  - speculate: choose
+    mode: pick_best
+    arms:
+      - test::scored_string
+      - test::missing_score
+"#,
+    )
+    .unwrap();
+    let non_numeric_score = crux_script::load(
+        r#"
+pipeline: non-numeric-pick-best-score
+input_schema:
+  type: dynamic
+steps:
+  - speculate: choose
+    mode: pick_best
+    arms:
+      - test::scored_string
+      - test::string_score
+"#,
+    )
+    .unwrap();
+
+    for pipeline in [&gap, &overlap] {
+        let compilation = compile_pipeline(pipeline, &registry(), CompileOptions::strict());
+        assert!(!compilation.is_ok());
+        assert!(
+            compilation
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == ValidationCode::InvalidRoute)
+        );
+    }
+    for pipeline in [&missing_score, &non_numeric_score] {
+        let compilation = compile_pipeline(pipeline, &registry(), CompileOptions::strict());
+        assert!(!compilation.is_ok());
+        assert!(
+            compilation
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == ValidationCode::TypeMismatch)
+        );
+    }
+}
+
+#[test]
+fn compiler_unions_route_outputs() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: route-union
+input_schema:
+  type: number
+steps:
+  - route_on_confidence: choose
+    value: "{{ input }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: low
+        handler: test::route_string
+      - range: "[0.5, 1.0]"
+        label: high
+        handler: test::route_integer
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.step_output_schema("choose"),
+        Some(&ValueSchema::union([ValueSchema::String, ValueSchema::Integer]).unwrap())
+    );
+    assert_eq!(
+        typed.step_confidence("choose"),
+        Some(ConfidenceCapability::Always)
+    );
+}
+
+#[test]
+fn compiler_unions_speculation_outputs() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: speculation-union
+input_schema:
+  type: dynamic
+steps:
+  - speculate: choose
+    mode: first_ok
+    arms:
+      - test::route_string
+      - test::route_integer
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.step_output_schema("choose"),
+        Some(&ValueSchema::union([ValueSchema::String, ValueSchema::Integer]).unwrap())
+    );
+    assert_eq!(
+        typed.step_confidence("choose"),
+        Some(ConfidenceCapability::Never)
+    );
+}
+
+#[test]
+fn compiler_accepts_numeric_pick_best_scores() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: numeric-pick-best-scores
+input_schema:
+  type: dynamic
+steps:
+  - speculate: choose
+    mode: pick_best
+    arms:
+      - test::scored_string
+      - test::scored_integer
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(compilation.is_executable());
 }
