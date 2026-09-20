@@ -1,21 +1,22 @@
 //! Typed pipeline compilation options and results.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 
 use crate::expr::ExprError;
 use crate::ir::{
-    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedPipeline, TypedRouteBranch,
-    TypedStep, TypedStepKind, TypedValue,
+    BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedLoopBinding, TypedLoopBindings,
+    TypedPipeline, TypedRouteBranch, TypedStep, TypedStepKind, TypedValue,
 };
 use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    ArmDef, JoinAllNode, PipeNode, PipelineDef, RouteBranch, RouteNode, SpeculateMode,
-    SpeculateNode, StepDef, StepNode,
+    ArmDef, ForEachNode, JoinAllNode, PipeNode, PipelineDef, PollNode, RepeatNode, RouteBranch,
+    RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode, WhileNode,
 };
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
 
+#[derive(Clone)]
 struct StepBinding {
     index: usize,
     output: ValueSchema,
@@ -30,6 +31,7 @@ struct ReferenceScope<'a> {
     steps: &'a BTreeMap<String, StepBinding>,
     step_positions: &'a HashMap<String, usize>,
     current_step: Option<usize>,
+    loop_bindings: &'a [TypedLoopBindings],
     options: CompileOptions,
     diagnostic_sink: Option<(&'a RefCell<Vec<ValidationDiagnostic>>, &'a str)>,
 }
@@ -41,6 +43,8 @@ struct StepCompileContext<'a> {
     step_bindings: &'a BTreeMap<String, StepBinding>,
     step_positions: &'a HashMap<String, usize>,
     index: usize,
+    loop_bindings: &'a [TypedLoopBindings],
+    binding_ids: &'a Cell<usize>,
     registry: &'a HandlerRegistry,
     options: CompileOptions,
 }
@@ -59,6 +63,7 @@ impl<'a> StepCompileContext<'a> {
             steps: self.step_bindings,
             step_positions: self.step_positions,
             current_step: Some(self.index),
+            loop_bindings: self.loop_bindings,
             options: self.options,
             diagnostic_sink: Some((diagnostics, location)),
         }
@@ -226,6 +231,8 @@ pub fn compile_pipeline(
         .clone()
         .unwrap_or(ValueSchema::Dynamic);
     let empty_variable_positions = HashMap::new();
+    let loop_bindings = Vec::new();
+    let binding_ids = Cell::new(variables.len());
 
     for (index, step) in definition.steps.iter().enumerate() {
         let location = format!("steps[{index}]");
@@ -255,6 +262,8 @@ pub fn compile_pipeline(
             step_bindings: &step_bindings,
             step_positions: &step_positions,
             index,
+            loop_bindings: &loop_bindings,
+            binding_ids: &binding_ids,
             registry,
             options,
         };
@@ -294,7 +303,39 @@ pub fn compile_pipeline(
                 &mut diagnostics,
                 &mut unresolved,
             ),
-            _ => None,
+            StepDef::ForEach(node) => compile_for_each_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::While(node) => compile_while_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::Repeat(node) => compile_repeat_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::Poll(node) => compile_poll_step(
+                node,
+                &location,
+                &current_schema,
+                &context,
+                &mut diagnostics,
+                &mut unresolved,
+            ),
+            StepDef::Delegate(_) => None,
         };
 
         if let Some(compiled) = compiled {
@@ -322,7 +363,11 @@ fn step_name(step: &StepDef) -> Option<&str> {
         StepDef::JoinAll(node) => Some(&node.join_all),
         StepDef::RouteOnConfidence(node) => Some(&node.route_on_confidence),
         StepDef::Speculate(node) => Some(&node.speculate),
-        _ => None,
+        StepDef::Poll(node) => Some(&node.poll),
+        StepDef::ForEach(node) => Some(node.label()),
+        StepDef::While(node) => Some(&node.r#while),
+        StepDef::Repeat(node) => Some(&node.repeat),
+        StepDef::Delegate(_) => None,
     }
 }
 
@@ -625,6 +670,531 @@ fn compile_speculate_step(
         output_schema,
         confidence: ConfidenceCapability::Never,
     })
+}
+
+fn compile_for_each_step(
+    node: &ForEachNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    let items = compile_loop_expression(
+        &node.items,
+        &format!("{location}.items"),
+        context,
+        diagnostics,
+        unresolved,
+    )?;
+    let item_schema = match &items.schema {
+        ValueSchema::Array { items } => items.as_ref().clone(),
+        ValueSchema::Dynamic => {
+            diagnostics.push(diagnostic_for_mode(
+                context.options,
+                ValidationCode::DynamicBoundary,
+                format!("{location}.items"),
+                "for_each items must be an array, but its schema is dynamic",
+            ));
+            if context.options.mode() == CompileMode::Strict {
+                *unresolved = true;
+                return None;
+            }
+            ValueSchema::Dynamic
+        }
+        schema => {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::TypeMismatch,
+                format!("{location}.items"),
+                format!("for_each items must be an array, but has schema {schema}"),
+            ));
+            *unresolved = true;
+            return None;
+        }
+    };
+    let bindings = allocate_loop_bindings(
+        context.binding_ids,
+        Some((node.binding().to_string(), item_schema)),
+    );
+    let mut frames = context.loop_bindings.to_vec();
+    frames.push(bindings.clone());
+    let body = compile_nested_steps(
+        &node.steps,
+        &format!("{location}.steps"),
+        input_schema,
+        context,
+        &frames,
+        diagnostics,
+        unresolved,
+    )?;
+    let body_context = body.context(context, &frames);
+    let break_if = compile_optional_boolean_expression(
+        node.break_if.as_deref(),
+        &format!("{location}.break_if"),
+        "for_each break_if",
+        &body_context,
+        diagnostics,
+        unresolved,
+    )?;
+    let output_schema = ValueSchema::union([input_schema.clone(), body.output_schema.clone()])
+        .unwrap_or(ValueSchema::Dynamic);
+
+    Some(TypedStep {
+        name: node.label().to_string(),
+        kind: TypedStepKind::ForEach {
+            node: node.clone(),
+            items,
+            bindings,
+            body: body.steps,
+            break_if,
+        },
+        output_schema,
+        confidence: ConfidenceCapability::Never,
+    })
+}
+
+fn compile_while_step(
+    node: &WhileNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    let condition = compile_boolean_expression(
+        &node.condition,
+        &format!("{location}.condition"),
+        "while condition",
+        context,
+        diagnostics,
+        unresolved,
+    )?;
+    let bindings = allocate_loop_bindings(context.binding_ids, None);
+    let mut frames = context.loop_bindings.to_vec();
+    frames.push(bindings.clone());
+    let body = compile_nested_steps(
+        &node.steps,
+        &format!("{location}.steps"),
+        input_schema,
+        context,
+        &frames,
+        diagnostics,
+        unresolved,
+    )?;
+    let body_context = body.context(context, &frames);
+    let break_if = compile_optional_boolean_expression(
+        node.break_if.as_deref(),
+        &format!("{location}.break_if"),
+        "while break_if",
+        &body_context,
+        diagnostics,
+        unresolved,
+    )?;
+    let output_schema = ValueSchema::union([input_schema.clone(), body.output_schema.clone()])
+        .unwrap_or(ValueSchema::Dynamic);
+
+    Some(TypedStep {
+        name: node.r#while.clone(),
+        kind: TypedStepKind::While {
+            node: node.clone(),
+            bindings,
+            condition,
+            body: body.steps,
+            break_if,
+        },
+        output_schema,
+        confidence: ConfidenceCapability::Never,
+    })
+}
+
+fn compile_repeat_step(
+    node: &RepeatNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    let bindings = allocate_loop_bindings(context.binding_ids, None);
+    let mut frames = context.loop_bindings.to_vec();
+    frames.push(bindings.clone());
+    let body = compile_nested_steps(
+        &node.steps,
+        &format!("{location}.steps"),
+        input_schema,
+        context,
+        &frames,
+        diagnostics,
+        unresolved,
+    )?;
+    let body_context = body.context(context, &frames);
+    let break_if = compile_optional_boolean_expression(
+        node.break_if.as_deref(),
+        &format!("{location}.break_if"),
+        "repeat break_if",
+        &body_context,
+        diagnostics,
+        unresolved,
+    )?;
+    let output_schema = ValueSchema::union([input_schema.clone(), body.output_schema.clone()])
+        .unwrap_or(ValueSchema::Dynamic);
+
+    Some(TypedStep {
+        name: node.repeat.clone(),
+        kind: TypedStepKind::Repeat {
+            node: node.clone(),
+            bindings,
+            body: body.steps,
+            break_if,
+        },
+        output_schema,
+        confidence: ConfidenceCapability::Never,
+    })
+}
+
+fn compile_poll_step(
+    node: &PollNode,
+    location: &str,
+    input_schema: &ValueSchema,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedStep> {
+    let bindings = allocate_loop_bindings(context.binding_ids, None);
+    let mut frames = context.loop_bindings.to_vec();
+    frames.push(bindings.clone());
+    let body = compile_nested_steps(
+        &node.steps,
+        &format!("{location}.steps"),
+        input_schema,
+        context,
+        &frames,
+        diagnostics,
+        unresolved,
+    )?;
+    let body_context = body.context(context, &frames);
+    let until = compile_boolean_expression(
+        &node.until,
+        &format!("{location}.until"),
+        "poll until",
+        &body_context,
+        diagnostics,
+        unresolved,
+    )?;
+
+    Some(TypedStep {
+        name: node.poll.clone(),
+        kind: TypedStepKind::Poll {
+            node: node.clone(),
+            bindings,
+            body: body.steps,
+            until,
+        },
+        output_schema: body.output_schema,
+        confidence: ConfidenceCapability::Never,
+    })
+}
+
+struct CompiledBody {
+    steps: Vec<TypedStep>,
+    bindings: BTreeMap<String, StepBinding>,
+    positions: HashMap<String, usize>,
+    next_index: usize,
+    output_schema: ValueSchema,
+}
+
+impl CompiledBody {
+    fn context<'a>(
+        &'a self,
+        parent: &'a StepCompileContext<'a>,
+        loop_bindings: &'a [TypedLoopBindings],
+    ) -> StepCompileContext<'a> {
+        StepCompileContext {
+            definition: parent.definition,
+            variables: parent.variables,
+            variable_positions: parent.variable_positions,
+            step_bindings: &self.bindings,
+            step_positions: &self.positions,
+            index: self.next_index,
+            loop_bindings,
+            binding_ids: parent.binding_ids,
+            registry: parent.registry,
+            options: parent.options,
+        }
+    }
+}
+
+fn compile_nested_steps(
+    definitions: &[StepDef],
+    location: &str,
+    input_schema: &ValueSchema,
+    parent: &StepCompileContext<'_>,
+    loop_bindings: &[TypedLoopBindings],
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<CompiledBody> {
+    let base_index = parent
+        .step_positions
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(parent.index)
+        + 1;
+    let mut positions = parent.step_positions.clone();
+    for (offset, step) in definitions.iter().enumerate() {
+        if let Some(name) = step_name(step) {
+            positions.insert(name.to_string(), base_index + offset);
+        }
+    }
+    let mut bindings = parent.step_bindings.clone();
+    let mut local_names = std::collections::HashSet::new();
+    let mut steps = Vec::with_capacity(definitions.len());
+    let mut current_schema = input_schema.clone();
+
+    for (offset, step) in definitions.iter().enumerate() {
+        let step_location = format!("{location}[{offset}]");
+        let Some(name) = step_name(step) else {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::InvalidControlFlow,
+                &step_location,
+                "typed compilation for this combinator is not implemented",
+            ));
+            *unresolved = true;
+            return None;
+        };
+        if !local_names.insert(name.to_string()) {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::DuplicateName,
+                &step_location,
+                format!("step '{name}' is declared more than once in this loop body"),
+            ));
+            *unresolved = true;
+            return None;
+        }
+        let context = StepCompileContext {
+            definition: parent.definition,
+            variables: parent.variables,
+            variable_positions: parent.variable_positions,
+            step_bindings: &bindings,
+            step_positions: &positions,
+            index: base_index + offset,
+            loop_bindings,
+            binding_ids: parent.binding_ids,
+            registry: parent.registry,
+            options: parent.options,
+        };
+        let typed = match step {
+            StepDef::Step(node) => {
+                compile_handler_step(node, &step_location, &context, diagnostics, unresolved)
+            }
+            StepDef::Pipe(node) => compile_pipe_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::JoinAll(node) => compile_join_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::RouteOnConfidence(node) => compile_route_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::Speculate(node) => compile_speculate_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::ForEach(node) => compile_for_each_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::While(node) => compile_while_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::Repeat(node) => compile_repeat_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::Poll(node) => compile_poll_step(
+                node,
+                &step_location,
+                &current_schema,
+                &context,
+                diagnostics,
+                unresolved,
+            ),
+            StepDef::Delegate(_) => None,
+        }?;
+        current_schema = typed.output_schema.clone();
+        bindings.insert(
+            typed.name.clone(),
+            StepBinding {
+                index: base_index + offset,
+                output: typed.output_schema.clone(),
+                confidence: typed.confidence,
+            },
+        );
+        steps.push(typed);
+    }
+
+    Some(CompiledBody {
+        steps,
+        bindings,
+        positions,
+        next_index: base_index + definitions.len(),
+        output_schema: current_schema,
+    })
+}
+
+fn allocate_loop_bindings(
+    binding_ids: &Cell<usize>,
+    item: Option<(String, ValueSchema)>,
+) -> TypedLoopBindings {
+    let index = allocate_loop_binding(binding_ids, "index".to_string(), ValueSchema::Integer);
+    let item = item.map(|(name, schema)| allocate_loop_binding(binding_ids, name, schema));
+    TypedLoopBindings { index, item }
+}
+
+fn allocate_loop_binding(
+    binding_ids: &Cell<usize>,
+    name: String,
+    schema: ValueSchema,
+) -> TypedLoopBinding {
+    let id = binding_ids.get();
+    binding_ids.set(id + 1);
+    TypedLoopBinding {
+        id: BindingId(id),
+        name,
+        schema,
+    }
+}
+
+fn compile_loop_expression(
+    expression: &str,
+    location: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedValue> {
+    let expression_diagnostics = RefCell::new(Vec::new());
+    let scope = context.reference_scope(&expression_diagnostics, location);
+    let resolve = |path: &str| resolve_reference_schema(path, &scope);
+    let result =
+        TypedValue::compile_with(&serde_json::Value::String(expression.to_string()), &resolve);
+    diagnostics.extend(expression_diagnostics.into_inner());
+    match result {
+        Ok(value) => Some(value),
+        Err(error) => {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                validation_code_for_expression(&error),
+                location,
+                error.to_string(),
+            ));
+            *unresolved = true;
+            None
+        }
+    }
+}
+
+fn compile_boolean_expression(
+    expression: &str,
+    location: &str,
+    subject: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<TypedValue> {
+    let value = compile_loop_expression(expression, location, context, diagnostics, unresolved)?;
+    check_boolean_schema(
+        &value.schema,
+        location,
+        subject,
+        context.options,
+        diagnostics,
+        unresolved,
+    );
+    Some(value)
+}
+
+fn compile_optional_boolean_expression(
+    expression: Option<&str>,
+    location: &str,
+    subject: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> Option<Option<TypedValue>> {
+    match expression {
+        Some(expression) => compile_boolean_expression(
+            expression,
+            location,
+            subject,
+            context,
+            diagnostics,
+            unresolved,
+        )
+        .map(Some),
+        None => Some(None),
+    }
+}
+
+fn check_boolean_schema(
+    schema: &ValueSchema,
+    location: &str,
+    subject: &str,
+    options: CompileOptions,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) {
+    if ValueSchema::Boolean.is_assignable_from(schema) {
+        return;
+    }
+    if schema_contains_dynamic(schema) {
+        diagnostics.push(diagnostic_for_mode(
+            options,
+            ValidationCode::DynamicBoundary,
+            location,
+            format!("{subject} must be boolean, but its schema is dynamic"),
+        ));
+        if options.mode() == CompileMode::Strict {
+            *unresolved = true;
+        }
+    } else {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::TypeMismatch,
+            location,
+            format!("{subject} must be boolean, but has schema {schema}"),
+        ));
+        *unresolved = true;
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1030,6 +1600,7 @@ fn compile_variables(
             steps: &empty_steps,
             step_positions: &empty_step_positions,
             current_step: None,
+            loop_bindings: &[],
             options: CompileOptions::permissive(),
             diagnostic_sink: None,
         };
@@ -1140,8 +1711,18 @@ fn resolve_reference_schema(
             _ => Err(ExprError::UnknownPath(path.to_string())),
         };
     }
-    if path.starts_with("iter.") {
-        return Ok(ValueSchema::Dynamic);
+    if let Some(name) = path.strip_prefix("iter.") {
+        for bindings in scope.loop_bindings.iter().rev() {
+            if name == "index" {
+                return Ok(bindings.index.schema.clone());
+            }
+            if let Some(item) = &bindings.item
+                && item.name == name
+            {
+                return Ok(item.schema.clone());
+            }
+        }
+        return Err(ExprError::InvalidScope(path.to_string()));
     }
     Err(ExprError::UnknownPath(path.to_string()))
 }

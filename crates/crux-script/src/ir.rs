@@ -7,8 +7,8 @@ use serde_json::Value;
 use crate::expr::{ExprError, ParsedExpression, parse_expression};
 use crate::metadata::{ConfidenceCapability, ObjectSchema, ValueSchema};
 use crate::schema::{
-    ArmDef, BudgetDef, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef, RouteBranch,
-    RouteNode, SpeculateNode, StepNode,
+    ArmDef, BudgetDef, ForEachNode, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef,
+    PollNode, RepeatNode, RouteBranch, RouteNode, SpeculateNode, StepNode, WhileNode,
 };
 use crate::step_runner::StepRunner;
 
@@ -35,6 +35,21 @@ pub(crate) struct BindingId(pub(crate) usize);
 pub(crate) struct TypedBinding {
     pub(crate) id: BindingId,
     pub(crate) value: TypedValue,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedLoopBinding {
+    pub(crate) id: BindingId,
+    pub(crate) name: String,
+    pub(crate) schema: ValueSchema,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedLoopBindings {
+    pub(crate) index: TypedLoopBinding,
+    pub(crate) item: Option<TypedLoopBinding>,
 }
 
 impl TypedValue {
@@ -202,6 +217,32 @@ pub(crate) enum TypedStepKind {
         node: SpeculateNode,
         arms: Vec<TypedArm>,
     },
+    Poll {
+        node: PollNode,
+        bindings: TypedLoopBindings,
+        body: Vec<TypedStep>,
+        until: TypedValue,
+    },
+    ForEach {
+        node: ForEachNode,
+        items: TypedValue,
+        bindings: TypedLoopBindings,
+        body: Vec<TypedStep>,
+        break_if: Option<TypedValue>,
+    },
+    While {
+        node: WhileNode,
+        bindings: TypedLoopBindings,
+        condition: TypedValue,
+        body: Vec<TypedStep>,
+        break_if: Option<TypedValue>,
+    },
+    Repeat {
+        node: RepeatNode,
+        bindings: TypedLoopBindings,
+        body: Vec<TypedStep>,
+        break_if: Option<TypedValue>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -271,7 +312,36 @@ impl TypedPipeline {
                 TypedStepKind::Pipe { .. }
                 | TypedStepKind::JoinAll { .. }
                 | TypedStepKind::RouteOnConfidence { .. }
-                | TypedStepKind::Speculate { .. } => None,
+                | TypedStepKind::Speculate { .. }
+                | TypedStepKind::Poll { .. }
+                | TypedStepKind::ForEach { .. }
+                | TypedStepKind::While { .. }
+                | TypedStepKind::Repeat { .. } => None,
+            })
+            .and_then(|args| args.object_property_schema(argument))
+    }
+
+    /// Return an inferred argument schema from a direct child step of a loop body.
+    pub fn loop_body_step_argument_schema(
+        &self,
+        loop_step: &str,
+        body_step: &str,
+        argument: &str,
+    ) -> Option<&ValueSchema> {
+        self.steps
+            .iter()
+            .find(|typed| typed.name == loop_step)
+            .and_then(|typed| match &typed.kind {
+                TypedStepKind::Poll { body, .. }
+                | TypedStepKind::ForEach { body, .. }
+                | TypedStepKind::While { body, .. }
+                | TypedStepKind::Repeat { body, .. } => Some(body),
+                _ => None,
+            })
+            .and_then(|body| body.iter().find(|typed| typed.name == body_step))
+            .and_then(|typed| match &typed.kind {
+                TypedStepKind::Handler(handler) => handler.args.as_ref(),
+                _ => None,
             })
             .and_then(|args| args.object_property_schema(argument))
     }

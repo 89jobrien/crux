@@ -73,6 +73,7 @@ fn registry() -> HandlerRegistry {
         );
     }
     for (name, output) in [
+        ("test::boolean", ValueSchema::Boolean),
         ("test::route_string", ValueSchema::String),
         ("test::route_integer", ValueSchema::Integer),
         (
@@ -849,4 +850,224 @@ steps:
     let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
 
     assert!(compilation.is_executable());
+}
+
+#[test]
+fn compiler_types_loop_bindings_and_results() {
+    let for_each = crux_script::load(
+        r#"
+pipeline: typed-for-each
+input_schema:
+  type: array
+  definition:
+    items:
+      type: integer
+steps:
+  - for_each: map as number
+    items: "{{ input }}"
+    steps:
+      - step: inspect
+        handler: test::echo
+        args:
+          index: "{{ iter.index }}"
+          item: "{{ iter.number }}"
+      - step: result
+        handler: test::route_string
+"#,
+    )
+    .unwrap();
+    let while_loop = crux_script::load(
+        r#"
+pipeline: typed-while
+input_schema:
+  type: integer
+vars:
+  keep_running: true
+steps:
+  - while: retry
+    condition: "{{ vars.keep_running }}"
+    steps:
+      - step: result
+        handler: test::route_string
+"#,
+    )
+    .unwrap();
+    let repeat = crux_script::load(
+        r#"
+pipeline: typed-repeat
+input_schema:
+  type: integer
+steps:
+  - repeat: retry
+    count: 2
+    steps:
+      - step: inspect
+        handler: test::echo
+        args:
+          index: "{{ iter.index }}"
+      - step: result
+        handler: test::route_string
+"#,
+    )
+    .unwrap();
+    let poll = crux_script::load(
+        r#"
+pipeline: typed-poll
+input_schema:
+  type: integer
+steps:
+  - poll: ready
+    until: "{{ steps.result.output }}"
+    steps:
+      - step: result
+        handler: test::boolean
+"#,
+    )
+    .unwrap();
+
+    let for_each = compile_pipeline(&for_each, &registry(), CompileOptions::strict());
+    let while_loop = compile_pipeline(&while_loop, &registry(), CompileOptions::strict());
+    let repeat = compile_pipeline(&repeat, &registry(), CompileOptions::strict());
+    let poll = compile_pipeline(&poll, &registry(), CompileOptions::strict());
+
+    let zero_iteration_union =
+        ValueSchema::union([ValueSchema::Integer, ValueSchema::String]).unwrap();
+    let for_each_typed = for_each.artifact().unwrap();
+    assert_eq!(
+        for_each_typed.loop_body_step_argument_schema("map", "inspect", "index"),
+        Some(&ValueSchema::Integer)
+    );
+    assert_eq!(
+        for_each_typed.loop_body_step_argument_schema("map", "inspect", "item"),
+        Some(&ValueSchema::Integer)
+    );
+    assert_eq!(
+        for_each_typed.step_output_schema("map"),
+        Some(
+            &ValueSchema::union([
+                ValueSchema::array(ValueSchema::Integer),
+                ValueSchema::String,
+            ])
+            .unwrap()
+        )
+    );
+    assert_eq!(
+        while_loop.artifact().unwrap().step_output_schema("retry"),
+        Some(&zero_iteration_union)
+    );
+    assert_eq!(
+        repeat
+            .artifact()
+            .unwrap()
+            .loop_body_step_argument_schema("retry", "inspect", "index"),
+        Some(&ValueSchema::Integer)
+    );
+    assert_eq!(
+        repeat.artifact().unwrap().step_output_schema("retry"),
+        Some(&zero_iteration_union)
+    );
+    assert_eq!(
+        poll.artifact().unwrap().step_output_schema("ready"),
+        Some(&ValueSchema::Boolean)
+    );
+}
+
+#[test]
+fn compiler_requires_boolean_loop_conditions() {
+    for yaml in [
+        r#"
+pipeline: invalid-while-condition
+input_schema:
+  type: dynamic
+steps:
+  - while: retry
+    condition: not-a-boolean
+    steps:
+      - step: result
+        handler: test::route_string
+"#,
+        r#"
+pipeline: invalid-repeat-break
+input_schema:
+  type: dynamic
+steps:
+  - repeat: retry
+    count: 2
+    break_if: not-a-boolean
+    steps:
+      - step: result
+        handler: test::route_string
+"#,
+        r#"
+pipeline: invalid-poll-until
+input_schema:
+  type: dynamic
+steps:
+  - poll: retry
+    until: not-a-boolean
+    steps:
+      - step: result
+        handler: test::route_string
+"#,
+    ] {
+        let pipeline = crux_script::load(yaml).unwrap();
+        let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+        assert!(compilation.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code == ValidationCode::TypeMismatch
+                && diagnostic.message.contains("boolean")
+        }));
+    }
+}
+
+#[test]
+fn compiler_requires_array_for_each_items() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: invalid-for-each-items
+input_schema:
+  type: integer
+steps:
+  - for_each: map as number
+    items: "{{ input }}"
+    steps:
+      - step: result
+        handler: test::route_string
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(compilation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::TypeMismatch && diagnostic.location == "steps[0].items"
+    }));
+}
+
+#[test]
+fn compiler_rejects_leaked_nested_step_references() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: leaked-loop-step
+input_schema:
+  type: integer
+steps:
+  - repeat: retry
+    count: 1
+    steps:
+      - step: nested
+        handler: test::route_string
+  - step: leaked
+    handler: test::echo
+    args:
+      value: "{{ steps.nested.output }}"
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(compilation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::UnknownReference
+            && diagnostic.location == "steps[1].args"
+    }));
 }
