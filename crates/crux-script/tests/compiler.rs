@@ -1,7 +1,7 @@
 use crux_script::{
     ArgSchema, Compilation, CompileOptions, ConfidenceCapability, DiagnosticSeverity,
-    HandlerMetadata, HandlerRegistry, ValidationCode, ValidationDiagnostic, ValueSchema,
-    compile_pipeline,
+    HandlerMetadata, HandlerRegistry, ObjectSchema, ValidationCode, ValidationDiagnostic,
+    ValueSchema, compile_pipeline,
 };
 use serde_json::Value;
 
@@ -15,6 +15,22 @@ fn registry() -> HandlerRegistry {
             .confidence(ConfidenceCapability::Never),
         |input: Value| async move { Ok(input) },
     );
+    for (name, confidence) in [
+        ("test::producer", ConfidenceCapability::Always),
+        ("test::optional", ConfidenceCapability::Optional),
+        ("test::never", ConfidenceCapability::Never),
+    ] {
+        registry.handler_value_with_metadata(
+            HandlerMetadata::new(name)
+                .args(ArgSchema::strict())
+                .input_schema(ValueSchema::Dynamic)
+                .output_schema(ValueSchema::object(
+                    ObjectSchema::new().required("result", ValueSchema::String),
+                ))
+                .confidence(confidence),
+            |input: Value| async move { Ok(input) },
+        );
+    }
     registry
 }
 
@@ -363,5 +379,129 @@ steps: []
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code == ValidationCode::UnknownReference)
+    );
+}
+
+#[test]
+fn compiler_checks_output_paths_and_confidence() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: prior-step-paths
+input_schema:
+  type: dynamic
+steps:
+  - step: produce
+    handler: test::producer
+  - step: consume
+    handler: test::echo
+    args:
+      value: "{{ steps.produce.output.result }}"
+      score: "{{ steps.produce.confidence }}"
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(
+        typed.step_argument_schema("consume", "value"),
+        Some(&ValueSchema::String)
+    );
+    assert_eq!(
+        typed.step_argument_schema("consume", "score"),
+        Some(&ValueSchema::Number)
+    );
+}
+
+#[test]
+fn compiler_rejects_future_and_missing_step_paths() {
+    let future = crux_script::load(
+        r#"
+pipeline: future-step
+input_schema:
+  type: dynamic
+steps:
+  - step: consume
+    handler: test::echo
+    args:
+      value: "{{ steps.produce.output.result }}"
+  - step: produce
+    handler: test::producer
+"#,
+    )
+    .unwrap();
+    let missing = crux_script::load(
+        r#"
+pipeline: missing-path
+input_schema:
+  type: dynamic
+steps:
+  - step: produce
+    handler: test::producer
+  - step: consume
+    handler: test::echo
+    args:
+      value: "{{ steps.produce.output.missing }}"
+"#,
+    )
+    .unwrap();
+
+    let future = compile_pipeline(&future, &registry(), CompileOptions::strict());
+    let missing = compile_pipeline(&missing, &registry(), CompileOptions::strict());
+    assert!(
+        future
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::ForwardReference)
+    );
+    assert!(
+        missing
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::UnknownReference)
+    );
+}
+
+#[test]
+fn compiler_checks_confidence_capability() {
+    let never = crux_script::load(
+        r#"
+pipeline: no-confidence
+input_schema:
+  type: dynamic
+steps:
+  - step: produce
+    handler: test::never
+  - step: consume
+    handler: test::echo
+    args:
+      score: "{{ steps.produce.confidence }}"
+"#,
+    )
+    .unwrap();
+    let optional = crux_script::load(
+        r#"
+pipeline: optional-confidence
+steps:
+  - step: produce
+    handler: test::optional
+  - step: consume
+    handler: test::echo
+    args:
+      score: "{{ steps.produce.confidence }}"
+"#,
+    )
+    .unwrap();
+
+    let never = compile_pipeline(&never, &registry(), CompileOptions::strict());
+    let optional = compile_pipeline(&optional, &registry(), CompileOptions::permissive());
+    assert!(!never.is_ok());
+    assert!(optional.is_executable());
+    assert!(
+        optional
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::DynamicBoundary)
     );
 }

@@ -1,13 +1,32 @@
 //! Typed pipeline compilation options and results.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::expr::ExprError;
 use crate::ir::{BindingId, TypedBinding, TypedPipeline, TypedStep, TypedValue};
-use crate::metadata::ValueSchema;
+use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
 use crate::schema::{PipelineDef, StepDef};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
+
+struct StepBinding {
+    index: usize,
+    output: ValueSchema,
+    confidence: ConfidenceCapability,
+}
+
+struct ReferenceScope<'a> {
+    input_schema: Option<&'a ValueSchema>,
+    variables: &'a BTreeMap<String, TypedBinding>,
+    variable_positions: &'a HashMap<String, usize>,
+    current_variable: Option<(&'a str, usize)>,
+    steps: &'a BTreeMap<String, StepBinding>,
+    step_positions: &'a HashMap<String, usize>,
+    current_step: Option<usize>,
+    options: CompileOptions,
+    diagnostic_sink: Option<(&'a RefCell<Vec<ValidationDiagnostic>>, &'a str)>,
+}
 
 /// Static validation strictness used while compiling pipeline definitions.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -158,6 +177,16 @@ pub fn compile_pipeline(
     }
 
     let variables = compile_variables(definition, &mut diagnostics, &mut unresolved);
+    let step_positions = definition
+        .steps
+        .iter()
+        .enumerate()
+        .filter_map(|(index, step)| match step {
+            StepDef::Step(node) => Some((node.step.clone(), index)),
+            _ => None,
+        })
+        .collect::<HashMap<_, _>>();
+    let mut step_bindings = BTreeMap::new();
 
     for (index, step) in definition.steps.iter().enumerate() {
         let location = format!("steps[{index}]");
@@ -196,15 +225,30 @@ pub fn compile_pipeline(
             }
         }
 
-        let resolve = |path: &str| {
-            resolve_reference_schema(
-                path,
-                definition.input_schema.as_ref(),
-                &variables,
-                &HashMap::new(),
-                None,
-            )
+        if step_bindings.contains_key(&node.step) {
+            diagnostics.push(ValidationDiagnostic::error_with_code(
+                ValidationCode::DuplicateName,
+                &location,
+                format!("step '{}' is declared more than once", node.step),
+            ));
+            unresolved = true;
+            continue;
+        }
+
+        let expression_diagnostics = RefCell::new(Vec::new());
+        let empty_variable_positions = HashMap::new();
+        let scope = ReferenceScope {
+            input_schema: definition.input_schema.as_ref(),
+            variables: &variables,
+            variable_positions: &empty_variable_positions,
+            current_variable: None,
+            steps: &step_bindings,
+            step_positions: &step_positions,
+            current_step: Some(index),
+            options,
+            diagnostic_sink: Some((&expression_diagnostics, &location)),
         };
+        let resolve = |path: &str| resolve_reference_schema(path, &scope);
         let args = match node
             .args
             .as_ref()
@@ -222,12 +266,28 @@ pub fn compile_pipeline(
                 continue;
             }
         };
+        diagnostics.extend(expression_diagnostics.into_inner());
 
         steps.push(TypedStep {
             node: node.clone(),
-            runner,
+            runner: runner.clone(),
             args,
         });
+        step_bindings.insert(
+            node.step.clone(),
+            StepBinding {
+                index,
+                output: runner
+                    .metadata()
+                    .output_schema
+                    .clone()
+                    .unwrap_or(ValueSchema::Dynamic),
+                confidence: runner
+                    .metadata()
+                    .confidence
+                    .unwrap_or(ConfidenceCapability::Optional),
+            },
+        );
     }
 
     let artifact = (!unresolved).then(|| TypedPipeline::new(definition, variables, steps));
@@ -250,15 +310,20 @@ fn compile_variables(
     let mut variables = BTreeMap::new();
 
     for (index, (name, value)) in definitions.iter().enumerate() {
-        let resolve = |path: &str| {
-            resolve_reference_schema(
-                path,
-                definition.input_schema.as_ref(),
-                &variables,
-                &positions,
-                Some((name.as_str(), index)),
-            )
+        let empty_steps = BTreeMap::new();
+        let empty_step_positions = HashMap::new();
+        let scope = ReferenceScope {
+            input_schema: definition.input_schema.as_ref(),
+            variables: &variables,
+            variable_positions: &positions,
+            current_variable: Some((name.as_str(), index)),
+            steps: &empty_steps,
+            step_positions: &empty_step_positions,
+            current_step: None,
+            options: CompileOptions::permissive(),
+            diagnostic_sink: None,
         };
+        let resolve = |path: &str| resolve_reference_schema(path, &scope);
         match TypedValue::compile_with(value, &resolve) {
             Ok(value) => {
                 variables.insert(
@@ -284,37 +349,88 @@ fn compile_variables(
 
 fn resolve_reference_schema(
     path: &str,
-    input_schema: Option<&ValueSchema>,
-    variables: &BTreeMap<String, TypedBinding>,
-    positions: &HashMap<String, usize>,
-    current: Option<(&str, usize)>,
+    scope: &ReferenceScope<'_>,
 ) -> Result<ValueSchema, ExprError> {
     if path == "input" {
-        return Ok(input_schema.cloned().unwrap_or(ValueSchema::Dynamic));
+        return Ok(scope.input_schema.cloned().unwrap_or(ValueSchema::Dynamic));
     }
     if let Some(rest) = path.strip_prefix("input.") {
-        return schema_at_path(input_schema.unwrap_or(&ValueSchema::Dynamic), rest, path);
+        return schema_at_path(
+            scope.input_schema.unwrap_or(&ValueSchema::Dynamic),
+            rest,
+            path,
+        );
     }
     if let Some(rest) = path.strip_prefix("vars.") {
         let mut parts = rest.splitn(2, '.');
         let name = parts.next().unwrap_or_default();
-        if let Some(binding) = variables.get(name) {
+        if let Some(binding) = scope.variables.get(name) {
             return match parts.next() {
                 Some(subpath) => schema_at_path(&binding.value.schema, subpath, path),
                 None => Ok(binding.value.schema.clone()),
             };
         }
-        if current.is_some_and(|(current_name, _)| current_name == name) {
+        if scope
+            .current_variable
+            .is_some_and(|(current_name, _)| current_name == name)
+        {
             return Err(ExprError::InvalidScope(path.to_string()));
         }
-        if let (Some((_, current_index)), Some(target_index)) = (current, positions.get(name))
+        if let (Some((_, current_index)), Some(target_index)) =
+            (scope.current_variable, scope.variable_positions.get(name))
             && *target_index >= current_index
         {
             return Err(ExprError::ForwardReference(path.to_string()));
         }
         return Err(ExprError::UnknownPath(path.to_string()));
     }
-    if path.starts_with("steps.") || path.starts_with("iter.") {
+    if let Some(rest) = path.strip_prefix("steps.") {
+        let Some(current_step) = scope.current_step else {
+            return Err(ExprError::InvalidScope(path.to_string()));
+        };
+        let mut parts = rest.splitn(3, '.');
+        let name = parts.next().unwrap_or_default();
+        let field = parts.next().unwrap_or_default();
+        let subpath = parts.next();
+        let Some(binding) = scope.steps.get(name) else {
+            if scope
+                .step_positions
+                .get(name)
+                .is_some_and(|target| *target >= current_step)
+            {
+                return Err(ExprError::ForwardReference(path.to_string()));
+            }
+            return Err(ExprError::UnknownStep(name.to_string()));
+        };
+        if binding.index >= current_step {
+            return Err(ExprError::ForwardReference(path.to_string()));
+        }
+        return match (field, subpath) {
+            ("output", None) => Ok(binding.output.clone()),
+            ("output", Some(subpath)) => schema_at_path(&binding.output, subpath, path),
+            ("confidence", None) => match binding.confidence {
+                ConfidenceCapability::Always => Ok(ValueSchema::Number),
+                ConfidenceCapability::Optional
+                    if scope.options.mode() == CompileMode::Permissive =>
+                {
+                    if let Some((sink, location)) = scope.diagnostic_sink {
+                        sink.borrow_mut()
+                            .push(ValidationDiagnostic::warning_with_code(
+                                ValidationCode::DynamicBoundary,
+                                location,
+                                format!("step '{name}' may not report confidence"),
+                            ));
+                    }
+                    Ok(ValueSchema::Number)
+                }
+                ConfidenceCapability::Optional | ConfidenceCapability::Never => {
+                    Err(ExprError::NoConfidence(name.to_string()))
+                }
+            },
+            _ => Err(ExprError::UnknownPath(path.to_string())),
+        };
+    }
+    if path.starts_with("iter.") {
         return Ok(ValueSchema::Dynamic);
     }
     Err(ExprError::UnknownPath(path.to_string()))
