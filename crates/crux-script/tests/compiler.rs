@@ -73,6 +73,8 @@ fn compiler_resolves_simple_handler() {
     let pipeline = crux_script::load(
         r#"
 pipeline: typed-simple
+input_schema:
+  type: dynamic
 steps:
   - step: echo
     handler: test::echo
@@ -93,6 +95,8 @@ fn compiler_rejects_unknown_handler_in_strict_mode() {
     let pipeline = crux_script::load(
         r#"
 pipeline: strict-unknown
+input_schema:
+  type: dynamic
 steps:
   - step: missing
     handler: plugin::missing
@@ -141,6 +145,8 @@ fn expression_pipeline() -> crux_script::schema::PipelineDef {
     crux_script::load(
         r#"
 pipeline: typed-expressions
+input_schema:
+  type: dynamic
 steps:
   - step: echo
     handler: test::echo
@@ -207,5 +213,155 @@ fn interpolation_produces_string() {
             .unwrap()
             .step_argument_schema("echo", "message"),
         Some(&ValueSchema::String)
+    );
+}
+
+#[test]
+fn strict_compiler_requires_input_schema() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: missing-input-schema
+steps:
+  - step: echo
+    handler: test::echo
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(!compilation.is_ok());
+    assert!(
+        compilation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::MissingInputSchema)
+    );
+}
+
+#[test]
+fn compiler_preserves_bare_input_type() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: typed-input
+input_schema:
+  type: string
+steps:
+  - step: echo
+    handler: test::echo
+    args:
+      value: "{{ input }}"
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(typed.input_schema(), Some(&ValueSchema::String));
+    assert_eq!(
+        typed.step_argument_schema("echo", "value"),
+        Some(&ValueSchema::String)
+    );
+}
+
+#[test]
+fn compiler_infers_variables_in_declaration_order() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: typed-vars
+input_schema:
+  type: dynamic
+vars:
+  first: 3
+  second: "{{ vars.first }}"
+steps:
+  - step: echo
+    handler: test::echo
+    args:
+      value: "{{ vars.second }}"
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+
+    assert_eq!(typed.variable_schema("first"), Some(&ValueSchema::Integer));
+    assert_eq!(typed.variable_schema("second"), Some(&ValueSchema::Integer));
+    assert_eq!(
+        typed.step_argument_schema("echo", "value"),
+        Some(&ValueSchema::Integer)
+    );
+}
+
+#[test]
+fn compiler_rejects_forward_variable_reference() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: forward-var
+input_schema:
+  type: dynamic
+vars:
+  second: "{{ vars.first }}"
+  first: 3
+steps:
+  - step: echo
+    handler: test::echo
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+
+    assert!(!compilation.is_ok());
+    assert!(
+        compilation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::ForwardReference)
+    );
+}
+
+#[test]
+fn compiler_rejects_self_and_unknown_variable_references() {
+    let self_reference = crux_script::load(
+        r#"
+pipeline: self-var
+input_schema:
+  type: dynamic
+vars:
+  value: "{{ vars.value }}"
+steps: []
+"#,
+    )
+    .unwrap();
+    let unknown_reference = crux_script::load(
+        r#"
+pipeline: unknown-var
+input_schema:
+  type: dynamic
+vars:
+  value: "{{ vars.missing }}"
+steps: []
+"#,
+    )
+    .unwrap();
+
+    let self_compilation = compile_pipeline(&self_reference, &registry(), CompileOptions::strict());
+    let unknown_compilation =
+        compile_pipeline(&unknown_reference, &registry(), CompileOptions::strict());
+
+    assert!(
+        self_compilation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::InvalidScope)
+    );
+    assert!(
+        unknown_compilation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == ValidationCode::UnknownReference)
     );
 }

@@ -1,6 +1,10 @@
 //! Typed pipeline compilation options and results.
 
-use crate::ir::{TypedPipeline, TypedStep, TypedValue};
+use std::collections::{BTreeMap, HashMap};
+
+use crate::expr::ExprError;
+use crate::ir::{BindingId, TypedBinding, TypedPipeline, TypedStep, TypedValue};
+use crate::metadata::ValueSchema;
 use crate::registry::HandlerRegistry;
 use crate::schema::{PipelineDef, StepDef};
 use crate::validator::{DiagnosticSeverity, ValidationCode, ValidationDiagnostic};
@@ -133,6 +137,28 @@ pub fn compile_pipeline(
     let mut steps = Vec::with_capacity(definition.steps.len());
     let mut unresolved = false;
 
+    if definition.input_schema.is_none() && options.mode() == CompileMode::Strict {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::MissingInputSchema,
+            "input_schema",
+            "strict compilation requires an input schema",
+        ));
+        unresolved = true;
+    }
+
+    if let Some(schema) = &definition.input_schema
+        && let Err(error) = schema.validate_definition()
+    {
+        diagnostics.push(ValidationDiagnostic::error_with_code(
+            ValidationCode::TypeMismatch,
+            "input_schema",
+            error.to_string(),
+        ));
+        unresolved = true;
+    }
+
+    let variables = compile_variables(definition, &mut diagnostics, &mut unresolved);
+
     for (index, step) in definition.steps.iter().enumerate() {
         let location = format!("steps[{index}]");
         let StepDef::Step(node) = step else {
@@ -170,11 +196,25 @@ pub fn compile_pipeline(
             }
         }
 
-        let args = match node.args.as_ref().map(TypedValue::compile).transpose() {
+        let resolve = |path: &str| {
+            resolve_reference_schema(
+                path,
+                definition.input_schema.as_ref(),
+                &variables,
+                &HashMap::new(),
+                None,
+            )
+        };
+        let args = match node
+            .args
+            .as_ref()
+            .map(|args| TypedValue::compile_with(args, &resolve))
+            .transpose()
+        {
             Ok(args) => args,
             Err(error) => {
                 diagnostics.push(ValidationDiagnostic::error_with_code(
-                    ValidationCode::InvalidExpression,
+                    validation_code_for_expression(&error),
                     format!("{location}.args"),
                     error.to_string(),
                 ));
@@ -190,8 +230,131 @@ pub fn compile_pipeline(
         });
     }
 
-    let artifact = (!unresolved).then(|| TypedPipeline::new(definition, steps));
+    let artifact = (!unresolved).then(|| TypedPipeline::new(definition, variables, steps));
     Compilation::new(artifact, diagnostics)
+}
+
+fn compile_variables(
+    definition: &PipelineDef,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) -> BTreeMap<String, TypedBinding> {
+    let Some(definitions) = &definition.vars else {
+        return BTreeMap::new();
+    };
+    let positions = definitions
+        .keys()
+        .enumerate()
+        .map(|(index, name)| (name.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let mut variables = BTreeMap::new();
+
+    for (index, (name, value)) in definitions.iter().enumerate() {
+        let resolve = |path: &str| {
+            resolve_reference_schema(
+                path,
+                definition.input_schema.as_ref(),
+                &variables,
+                &positions,
+                Some((name.as_str(), index)),
+            )
+        };
+        match TypedValue::compile_with(value, &resolve) {
+            Ok(value) => {
+                variables.insert(
+                    name.clone(),
+                    TypedBinding {
+                        id: BindingId(index),
+                        value,
+                    },
+                );
+            }
+            Err(error) => {
+                diagnostics.push(ValidationDiagnostic::error_with_code(
+                    validation_code_for_expression(&error),
+                    format!("vars.{name}"),
+                    error.to_string(),
+                ));
+                *unresolved = true;
+            }
+        }
+    }
+    variables
+}
+
+fn resolve_reference_schema(
+    path: &str,
+    input_schema: Option<&ValueSchema>,
+    variables: &BTreeMap<String, TypedBinding>,
+    positions: &HashMap<String, usize>,
+    current: Option<(&str, usize)>,
+) -> Result<ValueSchema, ExprError> {
+    if path == "input" {
+        return Ok(input_schema.cloned().unwrap_or(ValueSchema::Dynamic));
+    }
+    if let Some(rest) = path.strip_prefix("input.") {
+        return schema_at_path(input_schema.unwrap_or(&ValueSchema::Dynamic), rest, path);
+    }
+    if let Some(rest) = path.strip_prefix("vars.") {
+        let mut parts = rest.splitn(2, '.');
+        let name = parts.next().unwrap_or_default();
+        if let Some(binding) = variables.get(name) {
+            return match parts.next() {
+                Some(subpath) => schema_at_path(&binding.value.schema, subpath, path),
+                None => Ok(binding.value.schema.clone()),
+            };
+        }
+        if current.is_some_and(|(current_name, _)| current_name == name) {
+            return Err(ExprError::InvalidScope(path.to_string()));
+        }
+        if let (Some((_, current_index)), Some(target_index)) = (current, positions.get(name))
+            && *target_index >= current_index
+        {
+            return Err(ExprError::ForwardReference(path.to_string()));
+        }
+        return Err(ExprError::UnknownPath(path.to_string()));
+    }
+    if path.starts_with("steps.") || path.starts_with("iter.") {
+        return Ok(ValueSchema::Dynamic);
+    }
+    Err(ExprError::UnknownPath(path.to_string()))
+}
+
+fn schema_at_path(
+    schema: &ValueSchema,
+    path: &str,
+    original: &str,
+) -> Result<ValueSchema, ExprError> {
+    let mut current = schema.clone();
+    for segment in path.split('.') {
+        current = match current {
+            ValueSchema::Dynamic => ValueSchema::Dynamic,
+            ValueSchema::Object(object) => object
+                .property(segment)
+                .map(|property| property.schema().clone())
+                .or_else(|| object.additional_schema().cloned())
+                .ok_or_else(|| ExprError::UnknownPath(original.to_string()))?,
+            ValueSchema::Union { variants } => {
+                let variants = variants
+                    .iter()
+                    .map(|variant| schema_at_path(variant, segment, original))
+                    .collect::<Result<Vec<_>, _>>()?;
+                ValueSchema::union(variants)
+                    .map_err(|_| ExprError::UnknownPath(original.to_string()))?
+            }
+            _ => return Err(ExprError::UnknownPath(original.to_string())),
+        };
+    }
+    Ok(current)
+}
+
+fn validation_code_for_expression(error: &ExprError) -> ValidationCode {
+    match error {
+        ExprError::ForwardReference(_) => ValidationCode::ForwardReference,
+        ExprError::InvalidScope(_) => ValidationCode::InvalidScope,
+        ExprError::UnknownPath(_) | ExprError::UnknownStep(_) => ValidationCode::UnknownReference,
+        _ => ValidationCode::InvalidExpression,
+    }
 }
 
 fn diagnostic_for_mode(

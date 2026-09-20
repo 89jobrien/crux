@@ -24,8 +24,21 @@ pub(crate) struct TypedValue {
     pub(crate) schema: ValueSchema,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BindingId(pub(crate) usize);
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedBinding {
+    pub(crate) id: BindingId,
+    pub(crate) value: TypedValue,
+}
+
 impl TypedValue {
-    pub(crate) fn compile(value: &Value) -> Result<Self, ExprError> {
+    pub(crate) fn compile_with<F>(value: &Value, resolve: &F) -> Result<Self, ExprError>
+    where
+        F: Fn(&str) -> Result<ValueSchema, ExprError>,
+    {
         match value {
             Value::Null => Ok(Self::literal(value, ValueSchema::Null)),
             Value::Bool(_) => Ok(Self::literal(value, ValueSchema::Boolean)),
@@ -36,8 +49,14 @@ impl TypedValue {
             Value::String(expression) => {
                 let parsed = parse_expression(expression)?;
                 let schema = match &parsed {
-                    ParsedExpression::ExactPath(_) => ValueSchema::Dynamic,
-                    ParsedExpression::Literal(_) | ParsedExpression::Interpolated(_) => {
+                    ParsedExpression::ExactPath(path) => resolve(path)?,
+                    ParsedExpression::Literal(_) => ValueSchema::String,
+                    ParsedExpression::Interpolated(segments) => {
+                        for segment in segments {
+                            if let crate::expr::TemplateSegment::Path(path) = segment {
+                                resolve(path)?;
+                            }
+                        }
                         ValueSchema::String
                     }
                 };
@@ -49,7 +68,7 @@ impl TypedValue {
             Value::Array(values) => {
                 let values = values
                     .iter()
-                    .map(Self::compile)
+                    .map(|value| Self::compile_with(value, resolve))
                     .collect::<Result<Vec<_>, _>>()?;
                 let schema = if values.is_empty() {
                     ValueSchema::array(ValueSchema::Dynamic)
@@ -67,7 +86,7 @@ impl TypedValue {
             Value::Object(values) => {
                 let values = values
                     .iter()
-                    .map(|(name, value)| Ok((name.clone(), Self::compile(value)?)))
+                    .map(|(name, value)| Ok((name.clone(), Self::compile_with(value, resolve)?)))
                     .collect::<Result<BTreeMap<_, _>, ExprError>>()?;
                 let schema = values
                     .iter()
@@ -118,15 +137,23 @@ impl fmt::Debug for TypedStep {
 #[derive(Clone)]
 pub struct TypedPipeline {
     pub(crate) name: String,
+    pub(crate) input_schema: Option<ValueSchema>,
+    pub(crate) variables: BTreeMap<String, TypedBinding>,
     pub(crate) steps: Vec<TypedStep>,
     pub(crate) budget: Option<BudgetDef>,
     pub(crate) display: Option<PipelineDisplayDef>,
 }
 
 impl TypedPipeline {
-    pub(crate) fn new(definition: &PipelineDef, steps: Vec<TypedStep>) -> Self {
+    pub(crate) fn new(
+        definition: &PipelineDef,
+        variables: BTreeMap<String, TypedBinding>,
+        steps: Vec<TypedStep>,
+    ) -> Self {
         Self {
             name: definition.pipeline.clone(),
+            input_schema: definition.input_schema.clone(),
+            variables,
             steps,
             budget: definition.budget.clone(),
             display: definition.display.clone(),
@@ -136,6 +163,18 @@ impl TypedPipeline {
     /// Return the stable pipeline name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Return the declared pipeline input schema.
+    pub fn input_schema(&self) -> Option<&ValueSchema> {
+        self.input_schema.as_ref()
+    }
+
+    /// Return the inferred schema for one pipeline variable.
+    pub fn variable_schema(&self, name: &str) -> Option<&ValueSchema> {
+        self.variables
+            .get(name)
+            .map(|binding| &binding.value.schema)
     }
 
     /// Return the number of compiled top-level steps.
@@ -157,6 +196,8 @@ impl fmt::Debug for TypedPipeline {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypedPipeline")
             .field("name", &self.name)
+            .field("input_schema", &self.input_schema)
+            .field("variables", &self.variables)
             .field("steps", &self.steps)
             .field("budget", &self.budget)
             .field("display", &self.display)

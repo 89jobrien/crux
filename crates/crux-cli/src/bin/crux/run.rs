@@ -250,6 +250,7 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
         } else {
             let tmp = PipelineDef {
                 pipeline: name.to_string(),
+                input_schema: None,
                 budget: None,
                 vars: None,
                 display: None,
@@ -327,6 +328,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
+        input_schema: None,
         budget: None,
         vars: None,
         display: None,
@@ -341,6 +343,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     for (_, tgt) in &cruxfile.targets {
         let tmp_pipeline = PipelineDef {
             pipeline: String::new(),
+            input_schema: None,
             budget: None,
             vars: None,
             display: None,

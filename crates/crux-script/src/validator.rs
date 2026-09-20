@@ -364,6 +364,7 @@ fn validate_nested_steps(
 ) {
     let nested_pipeline = PipelineDef {
         pipeline: parent_location.to_string(),
+        input_schema: None,
         budget: None,
         vars: None,
         display: None,
@@ -400,6 +401,7 @@ pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> 
     for (name, target) in &cruxfile.targets {
         let pipeline = PipelineDef {
             pipeline: name.clone(),
+            input_schema: None,
             budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
             vars: None,
             display: None,

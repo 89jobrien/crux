@@ -11,6 +11,7 @@ pub fn cmd_check(paths: &[String]) {
     // Build a registry once with all built-in handlers for validation.
     let empty_pipeline = PipelineDef {
         pipeline: String::new(),
+        input_schema: None,
         budget: None,
         vars: None,
         display: None,

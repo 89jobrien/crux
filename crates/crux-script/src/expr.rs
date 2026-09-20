@@ -251,6 +251,10 @@ pub enum ExprError {
     UnknownStep(String),
     #[error("unknown path: {0}")]
     UnknownPath(String),
+    #[error("forward reference: {0}")]
+    ForwardReference(String),
+    #[error("invalid scope reference: {0}")]
+    InvalidScope(String),
     #[error("value is not numeric")]
     NotNumeric,
     #[error("value is not a boolean")]

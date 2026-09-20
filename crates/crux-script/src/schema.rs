@@ -3,6 +3,8 @@ use crux_types::budget::UsdAmount;
 use indexmap::IndexMap;
 use serde::Deserialize;
 
+use crate::metadata::ValueSchema;
+
 /// Human-facing presentation metadata for CLI pipeline output.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PipelineDisplayDef {
@@ -33,6 +35,9 @@ pub enum DisplayOutput {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PipelineDef {
     pub pipeline: String,
+    /// Optional static schema for the pipeline's external input value.
+    #[serde(default)]
+    pub input_schema: Option<ValueSchema>,
     #[serde(default)]
     pub budget: Option<BudgetDef>,
     /// Pipeline-level variable bindings (#85), resolved once before any step runs.
