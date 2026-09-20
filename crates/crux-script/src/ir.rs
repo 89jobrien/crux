@@ -7,8 +7,9 @@ use serde_json::Value;
 use crate::expr::{ExprError, ParsedExpression, parse_expression};
 use crate::metadata::{ConfidenceCapability, ObjectSchema, ValueSchema};
 use crate::schema::{
-    ArmDef, BudgetDef, ForEachNode, JoinAllNode, PipeNode, PipelineDef, PipelineDisplayDef,
-    PollNode, RepeatNode, RouteBranch, RouteNode, SpeculateNode, StepNode, WhileNode,
+    ArmDef, BudgetDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode, PipelineDef,
+    PipelineDisplayDef, PollNode, RepeatNode, RouteBranch, RouteNode, SpeculateNode, StepNode,
+    WhileNode,
 };
 use crate::step_runner::StepRunner;
 
@@ -140,12 +141,31 @@ pub(crate) struct TypedHandlerStep {
     pub(crate) node: StepNode,
     pub(crate) runner: Arc<dyn StepRunner>,
     pub(crate) args: Option<TypedValue>,
+    pub(crate) recovery: Option<TypedRecoveryStep>,
 }
 
 impl fmt::Debug for TypedHandlerStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypedHandlerStep")
             .field("name", &self.node.step)
+            .field("handler", &self.runner.metadata().name)
+            .field("args", &self.args)
+            .field("recovery", &self.recovery)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct TypedRecoveryStep {
+    pub(crate) node: OnErrorDef,
+    pub(crate) runner: Arc<dyn StepRunner>,
+    pub(crate) args: Option<TypedValue>,
+}
+
+impl fmt::Debug for TypedRecoveryStep {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypedRecoveryStep")
             .field("handler", &self.runner.metadata().name)
             .field("args", &self.args)
             .finish_non_exhaustive()
@@ -251,6 +271,14 @@ pub(crate) struct TypedStep {
     pub(crate) kind: TypedStepKind,
     pub(crate) output_schema: ValueSchema,
     pub(crate) confidence: ConfidenceCapability,
+}
+
+pub(crate) fn failed_allowed_output_schema() -> ValueSchema {
+    ValueSchema::object(
+        ObjectSchema::new()
+            .required("status", ValueSchema::String)
+            .required("error", ValueSchema::String),
+    )
 }
 
 /// Pipeline definition whose simple handler names have been resolved to executors.

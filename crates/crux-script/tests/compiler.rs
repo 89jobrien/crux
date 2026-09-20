@@ -831,6 +831,70 @@ steps:
 }
 
 #[test]
+fn compiler_unions_recovery_outputs() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: recovery-unions
+input_schema:
+  type: dynamic
+steps:
+  - step: recover
+    handler: test::string_source
+    on_error:
+      handler: test::route_integer
+  - step: tolerate
+    handler: test::producer
+    allow_failure: true
+  - pipe: tolerate-stage
+    stages:
+      - step: source
+        handler: test::string_source
+        allow_failure: true
+"#,
+    )
+    .unwrap();
+
+    let compilation = compile_pipeline(&pipeline, &registry(), CompileOptions::strict());
+    let typed = compilation.artifact().unwrap();
+    let failed_allowed = ValueSchema::object(
+        ObjectSchema::new()
+            .required("status", ValueSchema::String)
+            .required("error", ValueSchema::String),
+    );
+
+    assert_eq!(
+        typed.step_output_schema("recover"),
+        Some(&ValueSchema::union([ValueSchema::String, ValueSchema::Integer]).unwrap())
+    );
+    assert_eq!(
+        typed.step_output_schema("tolerate"),
+        Some(
+            &ValueSchema::union([
+                ValueSchema::object(ObjectSchema::new().required("result", ValueSchema::String)),
+                failed_allowed.clone(),
+            ])
+            .unwrap()
+        )
+    );
+    assert_eq!(
+        typed.step_confidence("recover"),
+        Some(ConfidenceCapability::Optional)
+    );
+    assert_eq!(
+        typed.step_confidence("tolerate"),
+        Some(ConfidenceCapability::Optional)
+    );
+    assert_eq!(
+        typed.step_output_schema("tolerate-stage"),
+        Some(&ValueSchema::union([ValueSchema::String, failed_allowed]).unwrap())
+    );
+    assert_eq!(
+        typed.step_confidence("tolerate-stage"),
+        Some(ConfidenceCapability::Optional)
+    );
+}
+
+#[test]
 fn compiler_accepts_numeric_pick_best_scores() {
     let pipeline = crux_script::load(
         r#"

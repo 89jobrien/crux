@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 use crate::expr::ExprError;
 use crate::ir::{
     BindingId, TypedArm, TypedBinding, TypedHandlerStep, TypedLoopBinding, TypedLoopBindings,
-    TypedPipeline, TypedRouteBranch, TypedStep, TypedStepKind, TypedValue,
+    TypedPipeline, TypedRecoveryStep, TypedRouteBranch, TypedStep, TypedStepKind, TypedValue,
+    failed_allowed_output_schema,
 };
 use crate::metadata::{ConfidenceCapability, ValueSchema};
 use crate::registry::HandlerRegistry;
@@ -387,15 +388,57 @@ fn compile_handler_step(
         diagnostics,
         unresolved,
     )?;
-    let output_schema = runner
+    let primary_output_schema = runner
         .metadata()
         .output_schema
         .clone()
         .unwrap_or(ValueSchema::Dynamic);
-    let confidence = runner
+    let primary_confidence = runner
         .metadata()
         .confidence
         .unwrap_or(ConfidenceCapability::Optional);
+    let recovery = if let Some(on_error) = &node.on_error {
+        let recovery_location = format!("{location}.on_error");
+        let runner = resolve_runner(
+            &on_error.handler,
+            &recovery_location,
+            context,
+            diagnostics,
+            unresolved,
+        )?;
+        let args = compile_args(
+            on_error.args.as_ref(),
+            &recovery_location,
+            context,
+            diagnostics,
+            unresolved,
+        )?;
+        Some(TypedRecoveryStep {
+            node: on_error.clone(),
+            runner,
+            args,
+        })
+    } else {
+        None
+    };
+    let recovery_output_schema = recovery.as_ref().map(|recovery| {
+        recovery
+            .runner
+            .metadata()
+            .output_schema
+            .clone()
+            .unwrap_or(ValueSchema::Dynamic)
+    });
+    let output_schema = ValueSchema::union(
+        std::iter::once(primary_output_schema)
+            .chain(recovery_output_schema)
+            .chain(node.allow_failure.then(failed_allowed_output_schema)),
+    )
+    .unwrap_or(ValueSchema::Dynamic);
+    let confidence = weaken_confidence_for_recovery(
+        primary_confidence,
+        recovery.is_some() || node.allow_failure,
+    );
 
     Some(TypedStep {
         name: node.step.clone(),
@@ -403,6 +446,7 @@ fn compile_handler_step(
             node: node.clone(),
             runner,
             args,
+            recovery,
         })),
         output_schema,
         confidence,
@@ -1487,6 +1531,12 @@ fn compile_arm(
         .metadata()
         .confidence
         .unwrap_or(ConfidenceCapability::Optional);
+    let output_schema = ValueSchema::union(
+        std::iter::once(output_schema)
+            .chain(arm.allow_failure().then(failed_allowed_output_schema)),
+    )
+    .unwrap_or(ValueSchema::Dynamic);
+    let confidence = weaken_confidence_for_recovery(confidence, arm.allow_failure());
 
     Some(TypedArm {
         node: arm.clone(),
@@ -1495,6 +1545,17 @@ fn compile_arm(
         output_schema,
         confidence,
     })
+}
+
+fn weaken_confidence_for_recovery(
+    confidence: ConfidenceCapability,
+    has_recovery_path: bool,
+) -> ConfidenceCapability {
+    if has_recovery_path && confidence == ConfidenceCapability::Always {
+        ConfidenceCapability::Optional
+    } else {
+        confidence
+    }
 }
 
 fn resolve_runner(
