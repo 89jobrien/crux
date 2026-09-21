@@ -1,3 +1,5 @@
+//! Sequential named text transformations recorded through `pipe`.
+
 /// Pipe: chain sequential transformations, each recorded as a named step.
 ///
 /// Shows:

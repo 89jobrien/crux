@@ -1,3 +1,5 @@
+//! Feature-gated tracing events for runtime orchestration boundaries.
+
 /// Conditional tracing helpers — compile to no-ops without the `tracing` feature.
 ///
 /// Uses `tracing::info!` events rather than spans to avoid `EnteredSpan` (not Send)

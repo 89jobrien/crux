@@ -1,3 +1,5 @@
+//! End-to-end execution tests for pipeline steps and combinators.
+
 use crux_runtime::prelude::CruxErr;
 /// Integration tests for YAML-driven pipeline execution.
 use crux_script::{HandlerOutput, HandlerRegistry, Runner, load};

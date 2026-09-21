@@ -1,3 +1,5 @@
+//! Strict and lenient matching of recorded step outputs for deterministic replay.
+
 /// ReplayCache — stores and matches cached step outputs from a prior trace.
 ///
 /// Single responsibility: replay matching. Given an ordinal, name, and input_hash,
@@ -49,6 +51,7 @@ pub struct ReplayCache {
 }
 
 impl ReplayCache {
+    /// Creates a disabled strict-mode cache with no recorded entries.
     pub fn new() -> Self {
         Self::default()
     }
@@ -66,6 +69,7 @@ impl ReplayCache {
         self.mode = mode;
     }
 
+    /// Returns the active replay matching mode.
     pub fn mode(&self) -> ReplayMode {
         self.mode
     }
@@ -177,6 +181,7 @@ impl ReplayCache {
         ReplayResult::Miss
     }
 
+    /// Reports whether the cache has been seeded from a previous trace.
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }

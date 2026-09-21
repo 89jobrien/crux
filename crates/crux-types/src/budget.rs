@@ -1,3 +1,5 @@
+//! Typed execution budgets, exact USD amounts, usage, and enforcement tracking.
+
 /// Budget constraints for agent execution.
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::time::Duration;
@@ -248,38 +250,46 @@ pub enum BudgetKind {
 }
 
 impl Budget {
+    /// Limits the total number of reported tokens.
     pub fn tokens(n: u64) -> Self {
         Self::Tokens { limit: n }
     }
 
+    /// Limits accepted handler invocations.
     pub fn calls(n: u64) -> Self {
         Self::Calls { limit: n }
     }
 
+    /// Limits accepted execution steps.
     pub fn steps(n: u64) -> Self {
         Self::Steps { limit: n }
     }
 
+    /// Limits cumulative completed-handler duration.
     pub fn duration(d: Duration) -> Self {
         Self::Duration {
             limit_ms: d.as_millis() as u64,
         }
     }
 
+    /// Creates a legacy whole-cent cost limit.
     pub fn cost_cents(n: u64) -> Self {
         Self::CostCents { limit: n }
     }
 
+    /// Limits exact reported USD consumption.
     pub fn usd(amount: UsdAmount) -> Self {
         Self::Usd {
             limit_micros: amount.micros(),
         }
     }
 
+    /// Enforces multiple independent budget dimensions together.
     pub fn combined(budgets: Vec<Budget>) -> Self {
         Self::Combined { budgets }
     }
 
+    /// Returns the budget dimension represented by this value.
     pub fn kind(&self) -> BudgetKind {
         match self {
             Self::Tokens { .. } => BudgetKind::Tokens,
@@ -292,6 +302,7 @@ impl Budget {
         }
     }
 
+    /// Returns the scalar limit, or a display-only sum for combined budgets.
     pub fn limit(&self) -> u64 {
         match self {
             Self::Tokens { limit }

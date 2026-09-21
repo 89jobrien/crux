@@ -26,7 +26,7 @@ Pure domain layer with no infrastructure dependencies.
 
 ## Type Graph
 
-```
+```text
 Planner (trait)
  +-- plan(actions) -> PlanResult
  |

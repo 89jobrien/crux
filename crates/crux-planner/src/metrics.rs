@@ -1,3 +1,5 @@
+//! Resource, duration, exit, and success measurements for harness runs.
+
 use serde::{Deserialize, Serialize};
 
 /// Metrics from a single container run.

@@ -1,3 +1,5 @@
+//! Automatic and interactive terminal implementations of the approval gate.
+
 use crux_runtime::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 
 /// Auto-approve gate that approves anything at or below the configured risk threshold.
@@ -7,6 +9,7 @@ pub struct AutoApproveGate {
 }
 
 impl AutoApproveGate {
+    /// Sets the highest risk level that may be approved without prompting.
     pub fn new(max_auto_approve: RiskLevel) -> Self {
         Self { max_auto_approve }
     }

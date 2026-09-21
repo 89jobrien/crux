@@ -1,3 +1,5 @@
+//! Result values fused with causal step and child-agent traces.
+
 /// The core `Crux<T>` type — a value fused with its causal execution trace.
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,5 @@
+//! Integration tests for control handler pass-through and assertion behavior.
+
 use crux_script::HandlerRegistry;
 use crux_stdlib::ctrl;
 use serde_json::json;

@@ -1,3 +1,5 @@
+//! Registration and manifest tests for CLI planning handlers.
+
 /// Tests for `crux plan` CLI wiring (#17).
 ///
 /// Tests verify that:

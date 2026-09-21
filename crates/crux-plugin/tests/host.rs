@@ -1,3 +1,5 @@
+//! Subprocess integration tests for plugin declaration, invocation, and shutdown.
+
 use crux_plugin::host::PluginHost;
 use crux_plugin::manifest::PluginEntry;
 use std::collections::HashMap;

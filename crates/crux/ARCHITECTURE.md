@@ -20,7 +20,7 @@ Thin facade crate. No logic of its own.
 
 ## Dependency Graph
 
-```
+```text
 crux
  +-- crux-macros (proc macros: agent, harness, evolve)
  +-- crux-runtime (all domain logic, re-exported via `pub use *`)

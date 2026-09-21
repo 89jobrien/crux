@@ -1,3 +1,5 @@
+//! Port-level conformance modules shared by the facade integration tests.
+
 /// Conformance test suite — port/adapter contract verification.
 ///
 /// Each module targets one hexagonal boundary:

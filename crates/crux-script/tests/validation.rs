@@ -1,3 +1,5 @@
+//! Tests for compiler-backed validation diagnostics and metadata.
+
 use crux_script::{
     ArgSchema, ArgType, CompileOptions, DiagnosticSeverity, HandlerMetadata, HandlerRegistry,
     RiskLevel, ValidationCode, compile_cruxfile, compile_pipeline, validate_cruxfile,

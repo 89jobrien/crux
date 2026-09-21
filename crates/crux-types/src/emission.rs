@@ -146,13 +146,12 @@ impl Emission {
     }
 }
 
-// ---------------------------------------------------------------------------
 // EventSink trait + adapters
-// ---------------------------------------------------------------------------
 
 /// Write-only broadcast port. Implementations must be non-fatal —
 /// a failed write must never abort the calling workflow.
 pub trait EventSink: Send + Sync {
+    /// Broadcasts an event without propagating sink failures to the workflow.
     fn emit(&self, emission: Emission);
 }
 
@@ -175,6 +174,7 @@ pub struct MultiSink {
 }
 
 impl MultiSink {
+    /// Creates a sink that fans each event out to all supplied sinks.
     pub fn new(sinks: Vec<Arc<dyn EventSink>>) -> Self {
         Self { sinks }
     }
@@ -194,6 +194,7 @@ pub struct JsonlWriter {
 }
 
 impl JsonlWriter {
+    /// Creates a sink that appends serialized events to the given path.
     pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
         Self { path: path.into() }
     }
@@ -216,9 +217,7 @@ impl EventSink for JsonlWriter {
     }
 }
 
-// ---------------------------------------------------------------------------
 // VectorFileSink — JSONL with Vector-friendly envelope (timestamp + source)
-// ---------------------------------------------------------------------------
 
 /// Writes Emission as JSONL with a Vector-friendly envelope.
 /// Each line contains `{ "timestamp": ..., "source": "crux", "event": { ... } }`.
@@ -231,6 +230,7 @@ pub struct VectorFileSink {
 
 #[cfg(feature = "vector-file")]
 impl VectorFileSink {
+    /// Creates a Vector file sink with a custom source label.
     pub fn new(path: impl Into<std::path::PathBuf>, source_label: impl Into<String>) -> Self {
         Self {
             path: path.into(),
@@ -267,9 +267,7 @@ impl EventSink for VectorFileSink {
     }
 }
 
-// ---------------------------------------------------------------------------
 // VectorHttpSink — POST JSON to Vector's HTTP source
-// ---------------------------------------------------------------------------
 
 /// Sends Emission as JSON to Vector's `http` source endpoint.
 /// Non-blocking: spawns a tokio task per emit. Failures are silently dropped
@@ -283,6 +281,7 @@ pub struct VectorHttpSink {
 
 #[cfg(feature = "vector-http")]
 impl VectorHttpSink {
+    /// Creates a Vector HTTP sink for the endpoint and source label.
     pub fn new(url: impl Into<String>, source_label: impl Into<String>) -> Self {
         Self {
             url: url.into(),
@@ -320,16 +319,18 @@ impl EventSink for VectorHttpSink {
     }
 }
 
-// ---------------------------------------------------------------------------
 // MessageRouter trait + InMemoryRouter
-// ---------------------------------------------------------------------------
 
 /// Addressed request-reply port. Every send/request also emits
 /// to the underlying EventSink for auditability.
 pub trait MessageRouter: EventSink {
+    /// Delivers an addressed emission and broadcasts it to the audit sink.
     fn send(&self, emission: Emission);
+    /// Delivers a request and returns its correlation ID.
     fn request(&self, emission: Emission) -> CruxId;
+    /// Removes the oldest queued emission for an agent.
     fn recv(&self, agent: &str) -> Option<Emission>;
+    /// Removes the queued emission matching an agent and correlation ID.
     fn recv_by_correlation(&self, agent: &str, correlation_id: &CruxId) -> Option<Emission>;
 }
 
@@ -340,6 +341,7 @@ pub struct InMemoryRouter {
 }
 
 impl InMemoryRouter {
+    /// Creates an empty mailbox router backed by the supplied audit sink.
     pub fn new(sink: Box<dyn EventSink>) -> Self {
         Self {
             sink,
@@ -392,10 +394,6 @@ impl MessageRouter for InMemoryRouter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,15 +438,11 @@ mod tests {
         assert_eq!(addressed.recipient(), Some("b"));
     }
 
-    // -- NullSink --
-
     #[test]
     fn null_sink_does_not_panic() {
         let sink = NullSink;
         sink.emit(Emission::StepStart { name: "x".into() });
     }
-
-    // -- MultiSink --
 
     #[test]
     fn multi_sink_fans_out() {
@@ -466,8 +460,6 @@ mod tests {
         assert_eq!(*c1.0.lock().unwrap(), 1);
         assert_eq!(*c2.0.lock().unwrap(), 1);
     }
-
-    // -- JsonlWriter --
 
     #[test]
     fn jsonl_writer_appends_valid_jsonl() {
@@ -502,8 +494,6 @@ mod tests {
         writer.emit(Emission::StepStart { name: "x".into() });
     }
 
-    // -- VectorFileSink --
-
     #[cfg(feature = "vector-file")]
     #[test]
     fn vector_file_sink_writes_envelope() {
@@ -533,8 +523,6 @@ mod tests {
         let sink = VectorFileSink::new("/nonexistent/dir/vector.jsonl", "crux");
         sink.emit(Emission::StepStart { name: "x".into() });
     }
-
-    // -- VectorHttpSink --
 
     #[cfg(feature = "vector-http")]
     #[test]

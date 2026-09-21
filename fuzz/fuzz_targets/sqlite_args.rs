@@ -1,3 +1,5 @@
+//! Fuzzes SQLite handlers with arbitrary JSON arguments and a temporary database.
+
 #![no_main]
 
 use crux_agentic::sqlite;

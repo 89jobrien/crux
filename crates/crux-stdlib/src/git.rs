@@ -1,3 +1,5 @@
+//! Read-only Git status, diff, log, and staged-file handlers.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::{
     ArgSchema, ArgType, Capability, HandlerMetadata, HandlerRegistry, RiskLevel, SideEffect,
@@ -9,6 +11,7 @@ use crate::error::opt_str;
 
 const DEFAULT_LOG_COUNT: u64 = 10;
 
+/// Registers Git inspection handlers backed by the `git` subprocess.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("git::staged_files")

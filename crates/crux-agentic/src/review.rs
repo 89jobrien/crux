@@ -1,9 +1,12 @@
+//! Review handlers for architecture checks, finding normalization, and scoring.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel, SideEffect};
 use serde_json::{Value, json};
 
 use crate::handlers;
 
+/// Registers review analysis, scoring, approval, and reporting handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     register_arch_boundary_check(registry);
     register_normalize_findings(registry);

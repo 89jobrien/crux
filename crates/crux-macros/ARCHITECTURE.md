@@ -26,7 +26,7 @@ that takes `proc_macro2::TokenStream` and returns `syn::Result<TokenStream>`.
 
 ## Expansion Pipeline
 
-```
+```text
 #[crux::agent] attr + item
   -> parse::parse_agent_attrs()   — extract options
   -> agent::expand()              — generate wrapper + Agent impl

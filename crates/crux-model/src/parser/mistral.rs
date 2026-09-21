@@ -1,3 +1,5 @@
+//! Normalization of Mistral family, tier, and version model names.
+
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
 /// Mistral naming: `{family}-{tier}[-{version}]`.

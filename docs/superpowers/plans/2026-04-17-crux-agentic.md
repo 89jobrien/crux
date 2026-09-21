@@ -82,7 +82,6 @@ Task 1). For now, args are passed via the pipeline input or from a previous step
 - Create: `crates/crux-agentic/src/lib.rs`
 - Create: `crates/crux-agentic/src/error.rs`
 - Modify: `Cargo.toml` (workspace root)
-
 - [ ] **Step 1: Add `reqwest` to workspace deps**
 
 In `/Users/joe/dev/crux/Cargo.toml`, add to `[workspace.dependencies]`:
@@ -233,7 +232,6 @@ Start with `ctrl` because it has no I/O and makes a clean baseline for the test 
 
 - Modify: `crates/crux-agentic/src/ctrl.rs`
 - Create: `crates/crux-agentic/tests/ctrl.rs`
-
 - [ ] **Step 1: Write failing tests**
 
 Create `crates/crux-agentic/tests/ctrl.rs`:
@@ -517,7 +515,6 @@ Input contracts:
 - `fs::write` — `{ "args": { "path": "...", "content": "..." } }` → `{ "written": true }`
 - `fs::glob` — `{ "args": { "pattern": "src/**/*.rs" } }` → `{ "paths": ["..."] }`
 - `fs::exists` — `{ "args": { "path": "..." } }` → `{ "exists": true|false }`
-
 - [ ] **Step 1: Write failing tests**
 
 Create `crates/crux-agentic/tests/fs.rs`:
@@ -685,7 +682,6 @@ All handlers run `git` subprocesses via `sh -c`. They accept an optional
 - `git::diff` → `{ "diff": "<unified diff text>", "args": { "ref": "HEAD" } }`
 - `git::log` → `{ "commits": [{"hash": "...", "subject": "..."}], "args": { "n": 10 } }`
 - `git::status` → `{ "porcelain": "...", "clean": true|false }`
-
 - [ ] **Step 1: Write failing tests**
 
 Create `crates/crux-agentic/tests/git.rs`:
@@ -1347,7 +1343,6 @@ git commit -m "feat(crux-agentic): implement llm module (openai-compat + anthrop
 
 - Modify: `crates/crux-agentic/src/lib.rs` (remove stubs from Task 1, confirm real modules)
 - Create: `crates/crux-agentic/tests/register_all.rs`
-
 - [ ] **Step 1: Write smoke test**
 
 Create `crates/crux-agentic/tests/register_all.rs`:
@@ -1500,7 +1495,6 @@ This task adds `args: Option<Value>` to `StepNode` and merges it into the input 
 - Modify: `crates/crux-script/src/schema.rs`
 - Modify: `crates/crux-script/src/runner.rs`
 - Create: `crates/crux-script/tests/static_args.rs`
-
 - [ ] **Step 1: Write failing test**
 
 Create `crates/crux-script/tests/static_args.rs`:
@@ -1631,7 +1625,6 @@ can actually execute pipelines with real handlers.
 
 - Modify: `crates/crux-script/src/bin/run.rs`
 - Modify: `crates/crux-script/Cargo.toml`
-
 - [ ] **Step 1: Add `crux-agentic` dep to `crux-script`**
 
 In `crates/crux-script/Cargo.toml`:

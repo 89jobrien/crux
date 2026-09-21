@@ -1,3 +1,5 @@
+//! Integration tests for confidence routing, pipes, and concurrent joins.
+
 /// Integration tests for route_on_confidence, pipe, and join_all.
 use crux::prelude::*;
 
@@ -54,8 +56,6 @@ async fn route_on_confidence_high() {
     assert_eq!(crux.value().unwrap(), "high");
     assert!(crux.steps.iter().any(|s| s.name == "classify::high"));
 }
-
-// -- pipe ---------------------------------------------------------------------
 
 type BoxFutStr =
     std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, CruxErr>> + Send>>;

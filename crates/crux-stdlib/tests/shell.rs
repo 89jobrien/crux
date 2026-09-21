@@ -1,3 +1,5 @@
+//! Integration tests for shell exit behavior, working directories, and free usage.
+
 use crux_script::HandlerRegistry;
 use serde_json::json;
 

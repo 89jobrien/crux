@@ -1,3 +1,5 @@
+//! Filesystem integration tests for read, write, glob, and existence handlers.
+
 use crux_script::HandlerRegistry;
 use crux_stdlib::fs as fs_handlers;
 use serde_json::json;

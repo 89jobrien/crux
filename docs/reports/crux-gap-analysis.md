@@ -127,11 +127,11 @@ while the outer `poll` waits for the desired state.
 - `allow_failure: true` collects partial results
 - `break_if:` — evaluated after each iteration, exits loop early
 - `parallel: true` — concurrency cap is dynamic:
-    - Default: system-determined (runtime picks based on available
-      resources, handler type, budget remaining)
-    - Explicit override: `max_concurrency: 8`
-    - Config-level default: `crux.parallel.max_concurrency` in
-      Cruxfile or runtime config
+  - Default: system-determined (runtime picks based on available
+    resources, handler type, budget remaining)
+  - Explicit override: `max_concurrency: 8`
+  - Config-level default: `crux.parallel.max_concurrency` in
+    Cruxfile or runtime config
 
 ### `while:` (pre-condition loop)
 

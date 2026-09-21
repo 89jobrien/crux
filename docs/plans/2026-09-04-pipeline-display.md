@@ -127,7 +127,6 @@ let pipelines declare friendly display labels.
 
 2. Run `cargo nextest run -p crux-script display_metadata`.
    Expected: compilation fails because `PipelineDef::display` and `DisplayOutput` do not exist.
-
 3. Add these types immediately before `PipelineDef` in `crates/crux-script/src/schema.rs`:
 
    ```rust
@@ -214,6 +213,7 @@ let pipelines declare friendly display labels.
    ```
 
 5. Run `git branch --show-current`; require `feat/pipeline-display`.
+
 6. Stage only the three task files and commit:
 
    ```text
@@ -441,12 +441,13 @@ let pipelines declare friendly display labels.
    ```
 
 9. Run `git branch --show-current`; require `feat/pipeline-display`.
+
 10. Stage only the two task files and commit:
 
-   ```text
-   git add crates/crux-cli/src/bin/crux/output.rs crates/crux-cli/src/bin/crux/run.rs
-   git commit -m "feat(crux-cli): add smart pipeline summary"
-   ```
+    ```text
+    git add crates/crux-cli/src/bin/crux/output.rs crates/crux-cli/src/bin/crux/run.rs
+    git commit -m "feat(crux-cli): add smart pipeline summary"
+    ```
 
 ### Task 4: Preserve JSON and Add Explicit Summary Mode
 
@@ -484,7 +485,6 @@ let pipelines declare friendly display labels.
    ```
 
    Remove the `log_output` step because summary rendering no longer needs `ctrl::log`.
-
 2. Add the explicit summary output example:
 
    ```text
@@ -524,11 +524,11 @@ let pipelines declare friendly display labels.
    Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
    unchanged in saved traces and replay matching. `output` affects both summary and verbose modes;
    useful successful shell stdout is rendered without its envelope.
-   ```
+
+   ```text
 
 5. Update `docs/designs/2026-09-04-pipeline-display-design.md` to explicitly state that `--json`
    is supported for regular pipelines only and Cruxfile JSON aggregation is out of scope.
-
 6. Run `mdbook build` from the repository root and `just ci`; verify both exit code 0.
 7. Run `git branch --show-current`; require `feat/pipeline-display`.
 8. Stage only the three documentation files and commit:
@@ -653,6 +653,7 @@ let pipelines declare friendly display labels.
    while `--json` emits only the compact shell result object.
 
 7. Run `git branch --show-current`; require `feat/pipeline-display`.
+
 8. Stage only the two Bamlish files and commit:
 
    ```text

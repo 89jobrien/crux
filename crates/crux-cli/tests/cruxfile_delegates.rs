@@ -1,3 +1,5 @@
+//! CLI regressions for delegated Cruxfile targets and persisted traces.
+
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -20,11 +22,22 @@ targets:
 const MULTI_TARGET_CRUXFILE: &str = r#"project: trace-project
 default: test
 targets:
-  build:
-    steps: []
   test:
     depends: [build]
     steps: []
+  build:
+    steps: []
+"#;
+
+const INVALID_DISCONNECTED_TARGET_CRUXFILE: &str = r#"project: compile-all-project
+default: build
+targets:
+  build:
+    steps: []
+  disconnected:
+    steps:
+      - step: unavailable
+        handler: vendor::missing
 "#;
 
 fn run_cruxfile(contents: &str, strict: bool) -> (TempDir, Output) {
@@ -96,25 +109,36 @@ fn cruxfile_persists_one_trace_per_executed_target() {
             .count(),
         2
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let build_position = stderr.find("] build (").expect("build target must run");
+    let test_position = stderr.find("] test (").expect("test target must run");
+    assert!(build_position < test_position, "{stderr}");
 }
 
 #[test]
-fn cruxfile_registers_stub_for_nested_delegate() {
+fn cruxfile_never_registers_stub_for_nested_delegate() {
     let (_home, output) = run_cruxfile(CRUXFILE, false);
-    assert!(
-        output.status.success(),
-        "crux run failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(String::from_utf8_lossy(&output.stderr).contains("agent 'missing-agent', using stub"));
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid_control_flow"), "{stderr}");
+    assert!(!stderr.contains("using stub"), "{stderr}");
 }
 
 #[test]
 fn strict_cruxfile_rejects_nested_unregistered_delegate() {
     let (_home, output) = run_cruxfile(CRUXFILE, true);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("--strict mode: unregistered agents: missing-agent")
-    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid_control_flow"), "{stderr}");
+    assert!(!stderr.contains("using stub"), "{stderr}");
+}
+
+#[test]
+fn cruxfile_compiles_all_targets_before_execution() {
+    let (home, output) = run_cruxfile(INVALID_DISCONNECTED_TARGET_CRUXFILE, false);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("targets.disconnected"), "{stderr}");
+    assert!(stderr.contains("unknown_handler"), "{stderr}");
+    assert!(trace_files(&home).is_empty());
 }

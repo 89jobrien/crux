@@ -2,7 +2,9 @@
 title: TrustScore
 tags: [type, runtime, trust]
 ---
-# TrustScore
+
+## TrustScore
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/trust.rs`
 
 Per-agent trust with temporal decay. Fields: score(f64), successes, failures, last_updated.

@@ -1,3 +1,5 @@
+//! Serializable tool and content policies with restrictive composition.
+
 use serde::{Deserialize, Serialize};
 
 /// Result of a policy check against a tool or content.

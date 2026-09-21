@@ -1,3 +1,5 @@
+//! Compiled-runner tests for contracts, combinators, bindings, and replay.
+
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},

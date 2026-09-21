@@ -1,3 +1,5 @@
+//! Expansion of async functions into Crux wrappers and `Agent` implementations.
+
 /// Code generation for `#[crux::agent]`.
 ///
 /// Transforms:
@@ -14,6 +16,7 @@ use syn::{ItemFn, parse2};
 
 use crate::parse::AgentArgs;
 
+/// Expands an attributed async function into its wrapper, context body, and agent type.
 pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
     let args: AgentArgs = parse2(attr)?;
     let func: ItemFn = parse2(item)?;
@@ -123,7 +126,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
                         )
                         .await;
 
-                    // Execute
+                    // Execute through the generated Agent implementation.
                     let mut __crux_ctx = ::crux_runtime::ctx::CruxCtx::new(stringify!(#fn_name));
                     #replay_setup
                     let __crux_result = <#agent_struct as ::crux_runtime::agent::Agent>::run(

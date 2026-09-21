@@ -45,6 +45,7 @@ handlers into a `HandlerRegistry` from crux-script.
 ## Adapters
 
 `adapters/` provides implementations of runtime ports:
+
 - `AutoApproveGate` — approves all actions (for testing/trusted envs)
 - `TerminalApprovalGate` — prompts user via terminal
 

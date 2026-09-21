@@ -18,10 +18,12 @@ pub struct TaskManager<B: RegistryBackend> {
 }
 
 impl<B: RegistryBackend> TaskManager<B> {
+    /// Wraps a registry backend with project task operations.
     pub fn new(backend: B) -> Self {
         Self { backend }
     }
 
+    /// Persists a new task and returns its generated ID.
     pub async fn add(&self, spec: TaskSpec) -> Result<TaskId, TaskErr> {
         let id = TaskId::new();
         let now = Utc::now();
@@ -39,6 +41,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(id)
     }
 
+    /// Loads and deserializes a task by ID.
     pub async fn get(&self, id: &TaskId) -> Result<ProjectTask, TaskErr> {
         let data = self
             .backend
@@ -49,6 +52,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(serde_json::from_slice(&data)?)
     }
 
+    /// Applies status, metadata, label, and dependency changes to a task.
     pub async fn update(&self, id: &TaskId, patch: TaskPatch) -> Result<(), TaskErr> {
         let mut task = self.get(id).await?;
         if let Some(status) = patch.status {
@@ -88,6 +92,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(())
     }
 
+    /// Lists tasks matching the optional status, priority, and label filters.
     pub async fn list(&self, filter: TaskFilter) -> Result<Vec<ProjectTask>, TaskErr> {
         let all = self.all_tasks().await?;
         Ok(all
@@ -106,6 +111,7 @@ impl<B: RegistryBackend> TaskManager<B> {
             .collect())
     }
 
+    /// Lists open or in-progress tasks whose dependencies are resolved.
     pub async fn ready(&self) -> Result<Vec<ProjectTask>, TaskErr> {
         let all = self.all_tasks().await?;
         let mut result = Vec::new();
@@ -131,6 +137,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(result)
     }
 
+    /// Lists tasks with at least one unresolved dependency.
     pub async fn blocked(&self) -> Result<Vec<ProjectTask>, TaskErr> {
         let all = self.all_tasks().await?;
         let mut result = Vec::new();
@@ -150,12 +157,14 @@ impl<B: RegistryBackend> TaskManager<B> {
         Ok(result)
     }
 
+    /// Lists all tasks ordered by priority.
     pub async fn by_priority(&self) -> Result<Vec<ProjectTask>, TaskErr> {
         let mut tasks = self.all_tasks().await?;
         tasks.sort_by_key(|t| t.spec.priority);
         Ok(tasks)
     }
 
+    /// Adds a blocking dependency after rejecting self-links and cycles.
     pub async fn block(&self, id: &TaskId, blocker: &TaskId) -> Result<(), TaskErr> {
         if id == blocker {
             return Err(TaskErr::CycleDetected);
@@ -175,6 +184,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         .await
     }
 
+    /// Removes one blocking dependency from a task.
     pub async fn unblock(&self, id: &TaskId, blocker: &TaskId) -> Result<(), TaskErr> {
         self.update(
             id,
@@ -186,6 +196,7 @@ impl<B: RegistryBackend> TaskManager<B> {
         .await
     }
 
+    /// Counts tasks overall and by status and priority.
     pub async fn stats(&self) -> Result<TaskStats, TaskErr> {
         let tasks = self.all_tasks().await?;
         let mut by_status = HashMap::new();
@@ -308,7 +319,7 @@ mod tests {
     #[tokio::test]
     async fn list_filters_by_priority() {
         let mgr = make_manager();
-        mgr.add(sample_spec()).await.unwrap(); // P1
+        mgr.add(sample_spec()).await.unwrap(); // The shared fixture defaults to P1.
         let mut p0_spec = sample_spec();
         p0_spec.priority = Priority::P0;
         mgr.add(p0_spec).await.unwrap();
@@ -325,7 +336,7 @@ mod tests {
     #[tokio::test]
     async fn list_filters_by_label() {
         let mgr = make_manager();
-        mgr.add(sample_spec()).await.unwrap(); // "backend"
+        mgr.add(sample_spec()).await.unwrap(); // The shared fixture has the backend label.
         let mut other = sample_spec();
         other.labels = vec![TaskLabel("frontend".into())];
         mgr.add(other).await.unwrap();

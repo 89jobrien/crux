@@ -1,3 +1,5 @@
+//! Argument parsing and command dispatch for the `crux` pipeline CLI.
+
 /// crux — pipeline runner and planner for crux-script.
 ///
 /// Subcommands:

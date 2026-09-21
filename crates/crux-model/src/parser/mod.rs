@@ -1,3 +1,5 @@
+//! Vendor-dispatched model ID normalization with a lossless fallback.
+
 pub mod anthropic;
 pub mod fallback;
 pub mod google;
@@ -10,6 +12,7 @@ use crate::{error::ModelParseError, provider_ref::ProviderModelRef, vendor::Vend
 pub struct ProviderModelId;
 
 impl ProviderModelId {
+    /// Parses a provider ID with the selected vendor's normalization rules.
     pub fn parse(vendor: Vendor, raw: &str) -> Result<ProviderModelRef, ModelParseError> {
         let canonical = match vendor {
             Vendor::Anthropic => anthropic::parse(raw)?,
@@ -22,6 +25,7 @@ impl ProviderModelId {
         Ok(ProviderModelRef::new(vendor, raw, canonical))
     }
 
+    /// Parses a provider ID and falls back to preserving the raw name on error.
     pub fn parse_lenient(vendor: Vendor, raw: &str) -> ProviderModelRef {
         match Self::parse(vendor, raw) {
             Ok(r) => r,

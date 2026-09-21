@@ -31,6 +31,7 @@ pub struct PluginHost {
 }
 
 impl PluginHost {
+    /// Creates an empty host with no running plugins or handler routes.
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),

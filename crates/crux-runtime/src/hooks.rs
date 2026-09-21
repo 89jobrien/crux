@@ -1,3 +1,5 @@
+//! Registration and dispatch of scoped runtime lifecycle hooks.
+
 /// HookRegistry — stores and invokes scoped lifecycle hooks.
 ///
 /// Single responsibility: hook storage and dispatch. No step recording,
@@ -57,6 +59,7 @@ pub struct HookRegistry {
 }
 
 impl HookRegistry {
+    /// Creates a registry with no gates or recovery handlers.
     pub fn new() -> Self {
         Self {
             confidence_threshold: None,
@@ -155,6 +158,7 @@ impl HookRegistry {
         self.failure_handler = Some(handler);
     }
 
+    /// Reports whether step-failure recovery has been configured.
     pub fn has_failure_handler(&self) -> bool {
         self.failure_handler.is_some()
     }

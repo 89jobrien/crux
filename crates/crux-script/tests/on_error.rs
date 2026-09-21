@@ -1,3 +1,5 @@
+//! Runtime tests for recovery steps attached through `on_error`.
+
 /// Integration tests for `on_error:` step-level recovery (#88).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

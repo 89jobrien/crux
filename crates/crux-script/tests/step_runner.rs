@@ -1,3 +1,5 @@
+//! Registry and invocation tests for contract-bearing step runners.
+
 use std::sync::{Arc, Mutex};
 
 use crux_script::{

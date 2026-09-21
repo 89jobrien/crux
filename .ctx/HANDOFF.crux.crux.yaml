@@ -1,104 +1,66 @@
 project: crux
 id: crux
-updated: 2026-09-09
+updated: 2026-09-20
 items:
-- id: t6
-  name: adopt-smart-output-in-bamlish-ci
+- id: t14
+  name: infer-pipe-and-join-types
   priority: P2
-  status: blocked
-  title: Adopt Smart Output in Bamlish CI
-  description: Typed USD budget enforcement must land before Bamlish integration
-  extra:
-  - date: 2026-09-09
-    type: blocker
-    note: Typed USD budget enforcement must land before Bamlish integration
+  status: open
+  title: Infer pipe and join types
+  description: Task t14 in progress
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (39 files)
+  title: Uncommitted changes (9 files)
   description: |-
     Working tree has uncommitted changes:
-    .agents/skills/planning-with-crux/SKILL.md
-    .agents/skills/planning-with-crux/references/handler-catalog.md
-    .agents/skills/planning-with-crux/references/rust-agent-patterns.md
-    .agents/skills/using-crux/references/architecture.md
-    .agents/skills/using-crux/references/capabilities.md
-    .agents/skills/using-crux/references/types-and-traits.md
-    AGENTS.md
-    CLAUDE.md
+    .ctx/HANDOFF.crux.crux.yaml
+    .ctx/HANDOFF.md
+    .health-baseline.json
     README.md
-    crates/crux-agentic/src/analysis.rs
-    crates/crux-agentic/src/lib.rs
-    crates/crux-agentic/src/llm.rs
-    crates/crux-cli/src/bin/crux/plan.rs
-    crates/crux-cli/src/bin/crux/registry.rs
-    crates/crux-improve/src/lib.rs
-    crates/crux-plugin/src/protocol.rs
-    crates/crux-runtime/src/ctx.rs
-    crates/crux-runtime/src/lib.rs
-    crates/crux-script/src/lib.rs
-    crates/crux-script/src/runner.rs
-    crates/crux-script/src/step_runner.rs
-    crates/crux-script/src/validator.rs
-    crates/crux-script/tests/allow_failure.rs
-    crates/crux-stdlib/src/shell.rs
-    crates/crux/src/lib.rs
-    docs/crux-capabilities.md
-    docs/crux-syntax-reference.md
-    docs/pipelines/04-budgets-and-errors.md
-    docs/src/README.md
-    docs/src/SUMMARY.md
-    docs/walkthrough/01-setup.md
-    docs/walkthrough/02-core-types.md
-    docs/walkthrough/03-branching-delegation.md
-    docs/walkthrough/05-lifecycle-hooks.md
-    justfile
-    xtask/src/publish.rs
-    .agents/skills/run-crux/
-    crates/crux-cli/tests/
-    crates/crux-script/src/output.rs
+    crates/crux-script/tests/compiler.rs
+    .taskit/telemetry/2026/09/
+    docs/designs/2026-09-19-automatic-cli-trace-persistence-design.md
+    docs/designs/2026-09-19-readme-positioning-design.md
+    docs/designs/2026-09-19-typed-pipeline-ir-design.md
   files:
-  - .agents/skills/planning-with-crux/SKILL.md
-  - .agents/skills/planning-with-crux/references/handler-catalog.md
-  - .agents/skills/planning-with-crux/references/rust-agent-patterns.md
-  - .agents/skills/using-crux/references/architecture.md
-  - .agents/skills/using-crux/references/capabilities.md
-  - .agents/skills/using-crux/references/types-and-traits.md
-  - AGENTS.md
-  - CLAUDE.md
+  - .ctx/HANDOFF.crux.crux.yaml
+  - .ctx/HANDOFF.md
+  - .health-baseline.json
   - README.md
-  - crates/crux-agentic/src/analysis.rs
-  - crates/crux-agentic/src/lib.rs
-  - crates/crux-agentic/src/llm.rs
-  - crates/crux-cli/src/bin/crux/plan.rs
-  - crates/crux-cli/src/bin/crux/registry.rs
-  - crates/crux-improve/src/lib.rs
-  - crates/crux-plugin/src/protocol.rs
-  - crates/crux-runtime/src/ctx.rs
-  - crates/crux-runtime/src/lib.rs
-  - crates/crux-script/src/lib.rs
-  - crates/crux-script/src/runner.rs
-  - crates/crux-script/src/step_runner.rs
-  - crates/crux-script/src/validator.rs
-  - crates/crux-script/tests/allow_failure.rs
-  - crates/crux-stdlib/src/shell.rs
-  - crates/crux/src/lib.rs
-  - docs/crux-capabilities.md
-  - docs/crux-syntax-reference.md
-  - docs/pipelines/04-budgets-and-errors.md
-  - docs/src/README.md
-  - docs/src/SUMMARY.md
-  - docs/walkthrough/01-setup.md
-  - docs/walkthrough/02-core-types.md
-  - docs/walkthrough/03-branching-delegation.md
-  - docs/walkthrough/05-lifecycle-hooks.md
-  - justfile
-  - xtask/src/publish.rs
-  - .agents/skills/run-crux/
-  - crates/crux-cli/tests/
-  - crates/crux-script/src/output.rs
+  - crates/crux-script/tests/compiler.rs
+  - .taskit/telemetry/2026/09/
+  - docs/designs/2026-09-19-automatic-cli-trace-persistence-design.md
+  - docs/designs/2026-09-19-readme-positioning-design.md
+  - docs/designs/2026-09-19-typed-pipeline-ir-design.md
 log:
+- date: '20260920.012242'
+  summary: done=25 running=1 pending=30 blocked=0
+  commits:
+  - 86aa6288c614a9762390fb56c02570bb7abb44e7
+  - b8c7fe8eb985f1a1357594dd60f5c178a01192a3
+  - dc41728cf8900f20ba88d0ffb55f954dd55de6a1
+  - 81a7940043b7badd99fa274b5e9d4b84281f2eaa
+  - e6ced60a34596c9024759a74fabc403a2041755f
+  - 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
+  - 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
+  - de45a1c63e76eb3441dbb88226c040acd39aa5d2
+  - 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
+  - 8b03908184af5e789cf87e7192c932f83f651d89
+- date: '20260920.003720'
+  summary: done=24 running=1 pending=31 blocked=0
+  commits:
+  - b8c7fe8eb985f1a1357594dd60f5c178a01192a3
+  - dc41728cf8900f20ba88d0ffb55f954dd55de6a1
+  - 81a7940043b7badd99fa274b5e9d4b84281f2eaa
+  - e6ced60a34596c9024759a74fabc403a2041755f
+  - 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
+  - 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
+  - de45a1c63e76eb3441dbb88226c040acd39aa5d2
+  - 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
+  - 8b03908184af5e789cf87e7192c932f83f651d89
+  - 6d45857b415b633acde04d005cd6b86dc8147278
 - date: '20260909.015838'
   summary: done=7 running=0 pending=22 blocked=1
   commits:

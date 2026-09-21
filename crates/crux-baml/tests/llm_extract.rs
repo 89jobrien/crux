@@ -1,3 +1,5 @@
+//! Mock-server integration tests for structured BAML extraction handlers.
+
 // Integration tests for llm::extract handler using MockLLM — no API keys required.
 
 mod mock_baml;

@@ -2,5 +2,7 @@
 title: RunMetrics
 tags: [type, planner]
 ---
-# RunMetrics
+
+## RunMetrics
+
 **Crate:** [[crux-planner]] | Fields: duration, memory, exit code. Input to [[EvolutionPlanner]].

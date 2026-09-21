@@ -1,3 +1,5 @@
+//! CLI regressions for output modes, failures, and automatic trace persistence.
+
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};

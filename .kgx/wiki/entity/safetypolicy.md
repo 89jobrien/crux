@@ -2,7 +2,9 @@
 title: SafetyPolicy
 tags: [trait, runtime, port, safety]
 ---
-# SafetyPolicy
+
+## SafetyPolicy
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/safety.rs`
 
 Trait for validating [[HarnessDiff]] against safety constraints.

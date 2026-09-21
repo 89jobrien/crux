@@ -1,3 +1,5 @@
+//! Integration tests for child traces, budgets, failures, and manual delegation.
+
 /// Integration tests for x.delegate::<A>() and DelegationBuilder.
 mod common;
 

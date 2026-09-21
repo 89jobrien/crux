@@ -1,3 +1,5 @@
+//! Supported model vendors and their string representation.
+
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};

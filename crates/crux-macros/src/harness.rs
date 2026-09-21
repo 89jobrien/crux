@@ -1,7 +1,10 @@
+//! Expansion of named harness structs into defaults and runtime profiles.
+
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse2};
 
+/// Adds serialization, resource defaults, and `HarnessProfile` conversion to a named struct.
 pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
     let input: DeriveInput = parse2(item)?;
     let name = &input.ident;

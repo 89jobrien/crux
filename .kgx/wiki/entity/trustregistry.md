@@ -2,7 +2,9 @@
 title: TrustRegistry
 tags: [type, runtime, trust]
 ---
-# TrustRegistry
+
+## TrustRegistry
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/trust.rs`
 
 Maps agent IDs to [[TrustScore]]. Methods: `get_mut(id)` (creates default),

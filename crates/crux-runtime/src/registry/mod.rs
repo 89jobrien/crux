@@ -1,3 +1,5 @@
+//! Persistent task lifecycle API and storage adapters.
+
 /// Task registry — persistent, crash-safe task management.
 pub mod backend;
 pub mod error;

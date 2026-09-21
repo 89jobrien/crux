@@ -1,3 +1,5 @@
+//! Runtime type facade combining wire types with closure-bearing recovery types.
+
 // Core domain types for the crux DSL.
 
 // Re-export all wire-format types from crux-types.

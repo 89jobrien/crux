@@ -1,3 +1,5 @@
+//! Shell command execution and capture handlers with explicit usage accounting.
+
 /// Shell handlers: `shell::exec` (fire-and-forget) and `shell::capture`
 /// (fail on non-zero exit).
 ///
@@ -11,6 +13,7 @@ use tokio::process::Command;
 
 use crate::error::{opt_str, require_str};
 
+/// Registers non-failing execution and fail-on-nonzero capture handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_free_with_metadata(
         shell_metadata("shell::exec", false),

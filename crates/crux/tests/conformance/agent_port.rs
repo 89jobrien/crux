@@ -1,3 +1,5 @@
+//! Conformance tests for macro-generated and manual `Agent` implementations.
+
 /// Conformance tests: Agent port — macro-generated vs hand-written impl equivalence.
 ///
 /// Verifies both paths satisfy the Agent trait contract:

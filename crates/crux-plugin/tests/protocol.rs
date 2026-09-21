@@ -1,3 +1,5 @@
+//! JSON round-trip tests for plugin protocol requests and responses.
+
 use crux_plugin::protocol::{HandlerDecl, Request, Response};
 
 #[test]

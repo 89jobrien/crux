@@ -1,3 +1,5 @@
+//! Integration tests for SQLite mutation, query, and parameter handlers.
+
 use crux_agentic::sqlite;
 use crux_script::HandlerRegistry;
 use serde_json::json;

@@ -89,14 +89,17 @@ pub struct ValidationDiagnostic {
 }
 
 impl ValidationDiagnostic {
+    /// Creates an error diagnostic with the legacy validation code.
     pub fn error(location: impl Into<String>, message: impl Into<String>) -> Self {
         Self::error_with_code(ValidationCode::LegacyValidation, location, message)
     }
 
+    /// Creates a warning diagnostic with the legacy validation code.
     pub fn warning(location: impl Into<String>, message: impl Into<String>) -> Self {
         Self::warning_with_code(ValidationCode::LegacyValidation, location, message)
     }
 
+    /// Creates an error diagnostic with an explicit validation code.
     pub fn error_with_code(
         code: ValidationCode,
         location: impl Into<String>,
@@ -110,6 +113,7 @@ impl ValidationDiagnostic {
         }
     }
 
+    /// Creates a warning diagnostic with an explicit validation code.
     pub fn warning_with_code(
         code: ValidationCode,
         location: impl Into<String>,
@@ -152,10 +156,12 @@ pub struct ValidationReport {
 }
 
 impl ValidationReport {
+    /// Reports whether validation produced no error diagnostics.
     pub fn is_ok(&self) -> bool {
         self.error_count() == 0
     }
 
+    /// Counts diagnostics classified as errors.
     pub fn error_count(&self) -> usize {
         self.diagnostics
             .iter()
@@ -163,6 +169,7 @@ impl ValidationReport {
             .count()
     }
 
+    /// Counts diagnostics classified as warnings.
     pub fn warning_count(&self) -> usize {
         self.diagnostics
             .iter()

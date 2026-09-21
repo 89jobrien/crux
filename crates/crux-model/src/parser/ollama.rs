@@ -1,8 +1,11 @@
+//! Normalization and metadata extraction for Ollama model entries.
+
 use crate::{
     canonical::CanonicalModelId, error::ModelParseError, provider_ref::ModelMetadata,
     vendor::Vendor,
 };
 
+/// Splits an Ollama name and tag into family, generation, and variant components.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     // Split on ':' to get name and tag
     let (name, tag) = match raw.split_once(':') {
@@ -41,6 +44,7 @@ pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     })
 }
 
+/// Extracts family, size, quantization, and format metadata from an Ollama API entry.
 pub fn enrich_from_api_entry(entry: &serde_json::Value) -> ModelMetadata {
     let details = &entry["details"];
     ModelMetadata {

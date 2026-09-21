@@ -2,7 +2,9 @@
 title: ApprovalGate
 tags: [trait, runtime, port, approval]
 ---
-# ApprovalGate
+
+## ApprovalGate
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/approval.rs`
 
 Trait for human-in-the-loop escalation. Method: `request_approval(req: &ApprovalRequest)`

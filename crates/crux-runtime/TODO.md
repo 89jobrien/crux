@@ -25,7 +25,7 @@ items:
     location: "src/ctx.rs::module:5"
 ---
 
-# TODO: crux-runtime
+## TODO: crux-runtime
 
 - [ ] **#78** EDDOS-style event aggregation — unify heterogeneous step
   types into a typed event stream (MPSC -> enrichment -> batching ->

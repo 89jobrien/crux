@@ -1,3 +1,5 @@
+//! Compilation tests for typed pipeline IR and static diagnostics.
+
 use crux_script::{
     ArgSchema, Compilation, CompileOptions, ConfidenceCapability, DiagnosticSeverity,
     HandlerMetadata, HandlerRegistry, ObjectSchema, ValidationCode, ValidationDiagnostic,

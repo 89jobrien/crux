@@ -1,3 +1,5 @@
+//! Handlers for installing, listing, and executing commands from an rx registry.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::HandlerRegistry;
 use serde::{Deserialize, Serialize};

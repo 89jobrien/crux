@@ -1,3 +1,5 @@
+//! Assignability, violation, union, and contract tests for value schemas.
+
 use crux_script::{
     ArgSchema, ConfidenceCapability, HandlerMetadata, ObjectSchema, SchemaBuildError,
     SchemaViolationKind, ValueKind, ValueSchema,

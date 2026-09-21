@@ -1,3 +1,5 @@
+//! Serializable execution, replay, confidence, delegation, and budget errors.
+
 /// Domain error types for crux execution.
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +56,7 @@ pub enum CruxErr {
 }
 
 impl CruxErr {
+    /// Creates a named step failure with a human-readable message.
     pub fn step_failed(name: impl Into<String>, msg: impl Into<String>) -> Self {
         Self::StepFailed {
             step: name.into(),
@@ -61,6 +64,7 @@ impl CruxErr {
         }
     }
 
+    /// Creates an error recording the observed and required confidence scores.
     pub fn low_confidence(name: impl Into<String>, score: f32, threshold: f32) -> Self {
         Self::LowConfidence {
             step: name.into(),

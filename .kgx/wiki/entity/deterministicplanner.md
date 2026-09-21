@@ -2,5 +2,7 @@
 title: DeterministicPlanner
 tags: [type, planner]
 ---
-# DeterministicPlanner
+
+## DeterministicPlanner
+
 **Crate:** [[crux-planner]] | Methods: new(config), plan(goal) → .crux YAML. No LLM dependency.

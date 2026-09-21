@@ -1,3 +1,5 @@
+//! CLI-check tests for pipeline validation and handler discovery.
+
 /// Integration tests for `crux run --check`.
 ///
 /// Tests write temporary pipeline files and invoke the check logic directly

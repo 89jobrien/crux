@@ -1,3 +1,5 @@
+//! Strict-validation tests for unregistered pipeline handlers.
+
 /// Integration tests for `--strict` mode: unregistered handler detection.
 ///
 /// Tests parse pipelines and check which handler names are missing from the

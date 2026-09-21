@@ -1,3 +1,5 @@
+//! Integration tests for repository grouping, deduplication, and urgency scoring.
+
 use crux_script::HandlerRegistry;
 use serde_json::json;
 

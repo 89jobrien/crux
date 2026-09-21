@@ -58,7 +58,6 @@ over traits; no concrete adapters in core.
 - Create: `crates/crux-runtime/src/types/harness.rs`
 - Modify: `crates/crux-runtime/src/types/mod.rs`
 - Modify: `crates/crux-runtime/src/lib.rs` (re-export in prelude)
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -219,7 +218,6 @@ git commit -m "feat(core): add HarnessProfile, ResourceHints, and HarnessDiff ty
 
 - Create: `crates/crux-runtime/src/types/evolution.rs`
 - Modify: `crates/crux-runtime/src/types/mod.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -318,7 +316,6 @@ git commit -m "feat(core): add EvolutionOutcome enum"
 
 - Create: `crates/crux-runtime/src/safety.rs`
 - Modify: `crates/crux-runtime/src/lib.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -471,7 +468,6 @@ git commit -m "feat(core): add SafetyPolicy trait and SafetyViolation error"
 
 - Create: `crates/crux-runtime/src/approval.rs`
 - Modify: `crates/crux-runtime/src/lib.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -703,7 +699,6 @@ git commit -m "feat(core): add on_approval_required hook to HookRegistry"
 - Create: `crates/crux-agentic/src/adapters/container_client.rs`
 - Modify: `crates/crux-agentic/src/adapters/mod.rs`
 - Modify: `crates/crux-agentic/src/lib.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -1030,7 +1025,6 @@ git commit -m "feat(agentic): add harness::evolve and harness::canary step handl
 - Create: `crates/crux-planner/src/evolution.rs`
 - Modify: `crates/crux-planner/src/lib.rs`
 - Modify: `crates/crux-planner/Cargo.toml`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -1279,7 +1273,6 @@ git commit -m "feat(planner): add EvolutionPlanner with metrics-driven profile d
 
 - Create: `crates/crux-macros/src/harness.rs`
 - Modify: `crates/crux-macros/src/lib.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 Add integration test in `crates/crux/tests/harness_macro.rs`:
@@ -1432,7 +1425,6 @@ git commit -m "feat(macros): add #[crux::harness] proc macro"
 
 - Create: `crates/crux-macros/src/evolve.rs`
 - Modify: `crates/crux-macros/src/lib.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -1564,7 +1556,6 @@ git commit -m "feat(macros): add #[crux::evolve] proc macro for evolution agents
 
 - Create: `crates/crux-agentic/src/adapters/terminal_approval.rs`
 - Modify: `crates/crux-agentic/src/adapters/mod.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -1705,7 +1696,6 @@ git commit -m "feat(agentic): add AutoApproveGate and TerminalApprovalGate adapt
 
 - Modify: `crates/crux-runtime/src/lib.rs` (final prelude exports)
 - No new files
-
 - [ ] **Step 1: Ensure all prelude exports are present**
 
 Verify `crates/crux-runtime/src/lib.rs` prelude includes:

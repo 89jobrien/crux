@@ -1,3 +1,5 @@
+//! Credentialed test that generated pipelines parse as Crux definitions.
+
 #[cfg(feature = "baml")]
 #[tokio::test]
 async fn generate_pipeline_returns_valid_yaml() {

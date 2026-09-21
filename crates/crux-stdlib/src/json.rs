@@ -1,9 +1,12 @@
+//! Deterministic JSON projection, merge, and jq-like query handlers.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, RiskLevel};
 use serde_json::{Map, Value, json};
 
 use crate::error::require_str;
 
+/// Registers JSON transformation and query handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("json::pick")

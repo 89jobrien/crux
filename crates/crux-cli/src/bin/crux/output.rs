@@ -1,3 +1,5 @@
+//! Human-readable summary and verbose trace rendering for pipeline runs.
+
 use crux_runtime::prelude::*;
 use crux_script::schema::{DisplayOutput, PipelineDisplayDef};
 use serde_json::Value;

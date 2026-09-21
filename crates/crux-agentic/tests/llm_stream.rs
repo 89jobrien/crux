@@ -1,3 +1,5 @@
+//! Registration and input-validation tests for the stream-shaped LLM handler.
+
 /// Verify that `llm::stream` handler is registered and returns a result.
 /// The current implementation is a stub that buffers the full response;
 /// real streaming requires async-stream trait extension (tracked in #21).

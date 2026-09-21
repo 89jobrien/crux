@@ -2,7 +2,9 @@
 title: StepRecorder
 tags: [type, runtime]
 ---
-# StepRecorder
+
+## StepRecorder
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/recorder.rs`
 
 Single responsibility: constructs and accumulates [[Step]] records.

@@ -1,6 +1,6 @@
-use crux_planner::deterministic::{DeterministicPlanner, PlannerConfig};
+//! Integration tests for deterministic goal-to-pipeline planning rules.
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+use crux_planner::deterministic::{DeterministicPlanner, PlannerConfig};
 
 fn planner() -> DeterministicPlanner {
     DeterministicPlanner::new(PlannerConfig::default())

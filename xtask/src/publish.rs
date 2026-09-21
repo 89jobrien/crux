@@ -1,3 +1,5 @@
+//! Workspace crate publication order, index polling, and release errors.
+
 use std::fmt;
 
 pub(crate) struct CrateSpec {

@@ -2,7 +2,9 @@
 title: HookRegistry
 tags: [type, runtime, hooks]
 ---
-# HookRegistry
+
+## HookRegistry
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/hooks.rs`
 
 Stores and invokes scoped lifecycle hooks. [[CruxCtx]] delegates here.

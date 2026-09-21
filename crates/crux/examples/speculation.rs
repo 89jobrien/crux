@@ -1,3 +1,5 @@
+//! Scored-best and first-success selection across speculative arms.
+
 /// Speculation: run multiple approaches and pick the best result.
 ///
 /// Shows:

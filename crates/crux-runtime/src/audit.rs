@@ -1,3 +1,5 @@
+//! Governance audit records, sink port, and in-memory query adapter.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,16 +28,19 @@ pub struct InMemoryAudit {
 }
 
 impl InMemoryAudit {
+    /// Creates an empty in-memory audit trail.
     pub fn new() -> Self {
         Self {
             entries: std::sync::Mutex::new(Vec::new()),
         }
     }
 
+    /// Returns a snapshot of all recorded decisions in insertion order.
     pub fn entries(&self) -> Vec<AuditEntry> {
         self.entries.lock().unwrap().clone()
     }
 
+    /// Returns recorded decisions whose action is `denied`.
     pub fn denied(&self) -> Vec<AuditEntry> {
         self.entries
             .lock()
@@ -46,6 +51,7 @@ impl InMemoryAudit {
             .collect()
     }
 
+    /// Returns recorded decisions for the specified agent.
     pub fn by_agent(&self, agent_id: &str) -> Vec<AuditEntry> {
         self.entries
             .lock()

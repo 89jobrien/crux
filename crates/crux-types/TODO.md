@@ -31,7 +31,7 @@ items:
     location: "src/step.rs::module:11"
 ---
 
-# TODO: crux-types
+## TODO: crux-types
 
 - [ ] **#75** Schema/runtime split — push all combinators into a
   `crux-schema` crate (no tokio, no LLM deps) so external consumers

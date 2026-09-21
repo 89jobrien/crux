@@ -1,3 +1,5 @@
+//! Step construction, redaction, identity hashing, and trace accumulation.
+
 /// StepRecorder — records steps into the execution trace.
 ///
 /// Single responsibility: step construction and trace accumulation.
@@ -58,6 +60,7 @@ impl std::fmt::Debug for StepRecorder {
 }
 
 impl StepRecorder {
+    /// Creates an empty recorder with ordinal zero and no redactor.
     pub fn new() -> Self {
         Self::default()
     }
@@ -218,6 +221,7 @@ pub fn hash_content(value: &impl serde::Serialize) -> u64 {
     hasher.finish()
 }
 
+/// Hashes a step name and ordinal into the strict replay identity.
 pub fn hash_step_identity(name: &str, ordinal: u32) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

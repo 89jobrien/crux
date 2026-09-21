@@ -1,3 +1,5 @@
+//! Named pipeline handler and delegated-agent registration and lookup.
+
 /// Handler registry — maps string names to type-erased async step handlers.
 use std::collections::HashMap;
 use std::future::Future;
@@ -87,6 +89,7 @@ pub struct HandlerRegistry {
 }
 
 impl HandlerRegistry {
+    /// Creates an empty registry with no handlers, runners, agents, or metadata.
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),

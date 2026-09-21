@@ -1,3 +1,5 @@
+//! Human or policy approval port for risk-gated changes.
+
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -30,6 +32,7 @@ pub enum ApprovalDecision {
 
 /// Port: gates escalation requests (human-in-the-loop or policy engine).
 pub trait ApprovalGate: Send + Sync {
+    /// Evaluates a risk-classified change request and returns a gate decision.
     fn request_approval(
         &self,
         request: &ApprovalRequest,

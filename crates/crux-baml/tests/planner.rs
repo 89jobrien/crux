@@ -1,3 +1,5 @@
+//! Mock-server test for BAML pipeline generation and YAML serialization.
+
 mod mock_baml;
 
 use crate::mock_baml::{MockBamlServer, default_responses};

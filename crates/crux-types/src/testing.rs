@@ -1,3 +1,5 @@
+//! Feature-gated constructors for concise step and trace fixtures.
+
 /// Shared test helpers for constructing `Step` and `Crux<T>` values.
 ///
 /// Enabled via the `test-utils` feature. Intended for use in `#[cfg(test)]`

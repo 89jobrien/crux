@@ -1,3 +1,5 @@
+//! Deserializable definitions for pipelines, Cruxfiles, and control-flow nodes.
+
 use crux_types::budget::UsdAmount;
 /// YAML schema types for pipeline definitions.
 use indexmap::IndexMap;
@@ -364,10 +366,6 @@ fn default_speculate_mode() -> SpeculateMode {
     SpeculateMode::PickBest
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,10 +425,7 @@ steps:
     }
 }
 
-// ---------------------------------------------------------------------------
 // Cruxfile (multi-target) schema
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct CruxfileDef {
     pub project: String,

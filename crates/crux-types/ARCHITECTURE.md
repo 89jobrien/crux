@@ -38,7 +38,7 @@ external consumers can depend on without pulling async or LLM deps.
 
 ## Type Hierarchy
 
-```
+```text
 Crux<T>
  +-- steps: Vec<Step>
  |    +-- kind: StepKind

@@ -1,3 +1,5 @@
+//! Repository integration tests for read-only Git handlers.
+
 use crux_script::HandlerRegistry;
 use crux_stdlib::git;
 use serde_json::json;

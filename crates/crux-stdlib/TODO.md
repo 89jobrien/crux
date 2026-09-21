@@ -13,7 +13,7 @@ items:
     location: "src/json.rs::eval_jq"
 ---
 
-# TODO: crux-stdlib
+## TODO: crux-stdlib
 
 - [x] **#70** Extend `json::jq` beyond dot-path — added `[idx]` indexing,
   `|` pipes, `select(cond)`, `map(expr)`

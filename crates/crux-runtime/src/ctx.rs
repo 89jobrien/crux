@@ -171,6 +171,7 @@ pub struct CruxCtx {
 }
 
 impl CruxCtx {
+    /// Creates a context with default budget, replay, hooks, and passthrough planning.
     pub fn new(agent_name: &str) -> Self {
         Self {
             id: CruxId::new(),
@@ -887,9 +888,7 @@ impl CruxCtx {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Stream drain helpers (pure, no `self`)
-// ---------------------------------------------------------------------------
 
 /// The final outcome of draining an async stream to completion.
 enum StreamDrain<T> {
@@ -1965,8 +1964,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- pipe -----------------------------------------------------------------
-
     #[tokio::test]
     async fn pipe_chains_stages() {
         let mut ctx = CruxCtx::new("test");
@@ -2455,7 +2452,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(val, "result_a");
-        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0); // replayed
+        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0); // Replay hits retain attempt zero.
     }
 }
 
@@ -2633,8 +2630,6 @@ fn resolve_output_ref_for_guard(
         other => other.to_string(),
     })
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod if_guard_tests {
@@ -2877,9 +2872,9 @@ mod final_phase_tests {
 
         #[test]
         fn ord_is_total_and_consistent(a in arb_phase(), b in arb_phase()) {
-            // Reflexive
+            // Every phase compares equal to itself.
             prop_assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
-            // Antisymmetric
+            // Distinct phases cannot compare the same way in both directions.
             if a != b {
                 prop_assert_ne!(a.cmp(&b), b.cmp(&a));
             }

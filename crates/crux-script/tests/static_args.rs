@@ -1,3 +1,5 @@
+//! Runtime tests for merging declarative arguments with upstream input.
+
 use crux_script::{HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;

@@ -1,3 +1,5 @@
+//! Conformance tests for approval decisions, requests, and serialization.
+
 /// Conformance tests: ApprovalGate port — contract verification via test-local adapters.
 ///
 /// Verifies AlwaysApprove / AlwaysDeny adapters satisfy port contract and that

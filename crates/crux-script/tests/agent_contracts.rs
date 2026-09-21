@@ -1,3 +1,5 @@
+//! Compilation tests for delegated-agent input and output contracts.
+
 use crux_script::{AgentMetadata, HandlerRegistry, RegistryError, ValueSchema};
 use serde_json::{Value, json};
 

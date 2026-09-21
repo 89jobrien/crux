@@ -1,16 +1,33 @@
 # Crux
 
-Agentic workflows as YAML pipelines and typed Rust agents, with every
-execution captured as an inspectable, serializable, and replayable trace.
+Crux turns agentic execution into a typed Rust value.
 
-- **Write pipelines in YAML.** Define steps, fan-out, piping, and
-  budgets in `.crux` files. The runtime handles execution, tracing,
-  and error recovery.
-- **Every step is traced.** Each step lands in a typed `Crux<T>` value
-  you can inspect, serialize, or replay after a crash.
-- **Rust when you need it.** Drop into `#[crux::agent]` for custom
-  logic, typed delegation, and confidence-based routing -- same trace,
-  same runtime.
+Every run returns `Crux<T>`: a result or error together with the steps,
+child runs, identity, and timing that produced it. That execution value is
+inspectable in code, serializable as data, and replayable without
+reconstructing the run from logs.
+
+- **Start with YAML.** Define steps, fan-out, piping, and budgets in
+  `.crux` files while the runtime handles execution and recovery.
+- **Use Rust when you need it.** Drop into `#[crux::agent]` for custom
+  logic, typed delegation, speculation, and confidence-based routing.
+- **Keep execution as data.** YAML pipelines and Rust agents produce the
+  same `Crux<T>` value through the same runtime.
+
+## Why Crux?
+
+A plain result tells you what happened. A trace helps explain why. A
+checkpoint records where execution can continue. Crux keeps those concerns
+connected instead of making callers correlate separate runtime systems:
+
+```text
+Crux<T> = Result<T, CruxErr> + steps + child runs + run metadata
+```
+
+The result remains typed as `T`, failures retain their causal steps,
+delegations form a tree of child execution values, and snapshots can drive
+replay. Observability is part of the value returned to the caller, not only
+a side effect exported elsewhere.
 
 ## Quick example
 
@@ -21,13 +38,13 @@ pipeline: summarize
 budget: { calls: 2 }
 
 steps:
-    - step: count_words
-      handler: shell::capture
-      args:
-          cmd: "wc -w < input.txt"
+  - step: count_words
+    handler: shell::capture
+    args:
+      cmd: "wc -w < input.txt"
 
-    - step: log_result
-      handler: ctrl::log
+  - step: log_result
+    handler: ctrl::log
 ```
 
 Run it with the CLI:
@@ -61,17 +78,22 @@ Either way, the returned `Crux<T>` is:
 
 ## Installation
 
+The crates.io names `crux` and `crux-cli` are owned by another publisher, so
+install the facade and CLI directly from the release tag. Supporting workspace
+crates such as `crux-types`, `crux-runtime`, and `crux-script` are available on
+crates.io.
+
 Install the pipeline CLI:
 
 ```bash
-cargo install --git https://github.com/89jobrien/crux --tag v0.3.1 crux-cli
+cargo install --git https://github.com/89jobrien/crux --tag v0.4.2 crux-cli
 ```
 
 Add the Rust DSL to a project:
 
 ```toml
 [dependencies]
-crux = { git = "https://github.com/89jobrien/crux", tag = "v0.3.1" }
+crux = { git = "https://github.com/89jobrien/crux", tag = "v0.4.2" }
 ```
 
 Requires Rust 1.89+ (edition 2024).

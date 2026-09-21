@@ -1,3 +1,5 @@
+//! Parsing and evaluation of pipeline value references and string templates.
+
 /// Minimal expression evaluator for `{{ path }}` references in YAML values.
 ///
 /// Supports: `{{ input }}`, `{{ steps.<name>.output }}`, `{{ steps.<name>.confidence }}`.
@@ -90,6 +92,7 @@ pub struct ExprContext {
 }
 
 impl ExprContext {
+    /// Creates an evaluation context with input and no step, variable, or loop bindings.
     pub fn new(input: Value) -> Self {
         Self {
             input,

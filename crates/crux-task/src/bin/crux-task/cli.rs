@@ -1,3 +1,5 @@
+//! Command-line arguments for task CRUD, filtering, dependencies, and statistics.
+
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]

@@ -1,3 +1,5 @@
+//! Integration tests for parsing and ranking Rust CI diagnostics.
+
 use crux_script::HandlerRegistry;
 use serde_json::json;
 

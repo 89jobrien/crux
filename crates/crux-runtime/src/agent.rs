@@ -1,3 +1,5 @@
+//! Typed agent port and default lifecycle recovery behavior.
+
 /// The Agent trait — a delegatable unit of agentic work.
 ///
 /// Agents have typed inputs and outputs, a name, and optional lifecycle hooks.
@@ -19,6 +21,7 @@ pub trait Agent: Send + Sync + 'static {
     type Input: Serialize + DeserializeOwned + Send;
     type Output: Serialize + DeserializeOwned + Send;
 
+    /// Returns the stable name recorded for this agent's trace.
     fn name() -> &'static str;
 
     /// Execute the agent's logic.
@@ -31,14 +34,17 @@ pub trait Agent: Send + Sync + 'static {
         input: Self::Input,
     ) -> impl std::future::Future<Output = Result<Self::Output, CruxErr>> + Send;
 
+    /// Returns the execution budget applied to a run of this agent.
     fn budget() -> Budget {
         Budget::default()
     }
 
+    /// Chooses recovery behavior when a step reports low confidence.
     fn on_low_confidence(_score: f32) -> Recovery<Self::Output> {
         Recovery::Continue
     }
 
+    /// Chooses recovery behavior after a step fails.
     fn on_step_failure(_err: &CruxErr) -> Recovery<Self::Output> {
         Recovery::Propagate
     }

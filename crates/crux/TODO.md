@@ -13,7 +13,7 @@ items:
     location: "src/lib.rs::module:9"
 ---
 
-# TODO: crux
+## TODO: crux
 
 - [ ] **#83** Trace visualization / export — add `Crux<T>::to_mermaid()`
   or similar to render execution traces as diagrams for debugging and

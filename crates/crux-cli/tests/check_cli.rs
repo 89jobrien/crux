@@ -1,3 +1,5 @@
+//! End-to-end tests for check-mode diagnostics and strict handler validation.
+
 use std::io::Write as _;
 use std::process::{Command, Output};
 
@@ -14,6 +16,17 @@ fn check(file: &NamedTempFile, args: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_crux"));
     command.arg("check").args(args).arg(file.path());
     command.output().expect("crux check must execute")
+}
+
+fn run(file: &NamedTempFile, args: &[&str]) -> Output {
+    let home = tempfile::tempdir().expect("temporary home must be created");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_crux"));
+    command
+        .arg("run")
+        .arg(file.path())
+        .args(args)
+        .env("HOME", home.path());
+    command.output().expect("crux run must execute")
 }
 
 #[test]
@@ -104,4 +117,55 @@ fn run_check_remains_an_alias() {
 
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("missing_input_schema"));
+}
+
+#[test]
+fn run_strict_compiles_before_execution() {
+    let file = pipeline("pipeline: missing-schema\nsteps: []\n");
+    let output = run(&file, &["--strict"]);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error[missing_input_schema]"), "{stderr}");
+    assert!(!stderr.contains("trace saved"), "{stderr}");
+}
+
+#[test]
+fn run_strict_never_installs_fallback_stubs() {
+    let file = pipeline(
+        "pipeline: missing-handler\ninput_schema:\n  type: dynamic\nsteps:\n  - step: call\n    handler: vendor::missing\n",
+    );
+
+    for args in [&[][..], &["--strict"][..]] {
+        let output = run(&file, args);
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("unknown_handler"), "{stderr}");
+        assert!(!stderr.contains("using stub"), "{stderr}");
+        assert!(!stderr.contains("trace saved"), "{stderr}");
+    }
+}
+
+#[test]
+fn run_propagates_registry_errors() {
+    let file = pipeline("pipeline: valid\ninput_schema:\n  type: dynamic\nsteps: []\n");
+    let mut plugins = NamedTempFile::new().expect("temporary plugin manifest must be created");
+    plugins
+        .write_all(b"this is not valid toml = [[[\n")
+        .expect("invalid plugin manifest must be written");
+    let output = run(
+        &file,
+        &[
+            "--plugins",
+            plugins
+                .path()
+                .to_str()
+                .expect("temporary path must be UTF-8"),
+        ],
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("failed to build registry"), "{stderr}");
+    assert!(stderr.contains("plugins"), "{stderr}");
 }

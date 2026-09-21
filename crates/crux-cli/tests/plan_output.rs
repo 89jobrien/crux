@@ -1,3 +1,5 @@
+//! End-to-end tests for rule-planner output formats and file writes.
+
 use std::process::Command;
 
 fn run_rule_plan(goal: &str, output_type: &str) -> std::process::Output {

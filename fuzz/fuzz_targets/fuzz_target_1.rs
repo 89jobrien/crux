@@ -1,3 +1,5 @@
+//! Placeholder byte-input target used to verify the fuzz harness builds.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

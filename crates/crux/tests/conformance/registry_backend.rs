@@ -1,3 +1,5 @@
+//! Conformance tests for task storage, compare-and-swap, and lifecycle operations.
+
 use crux::prelude::TaskId;
 /// Conformance tests: RegistryBackend port — InMemoryBackend adapter.
 ///

@@ -1,3 +1,5 @@
+//! Contract-bearing asynchronous runners and the legacy capability registry.
+
 /// Step runner ports and the legacy capability registry.
 ///
 /// This is separate from [`HandlerRegistry`] (async, closure-based) and serves
@@ -74,8 +76,11 @@ pub struct StepOutput {
 
 /// Legacy synchronous runner retained until the canonical registry migration completes.
 pub trait LegacyStepRunner: Send + Sync {
+    /// Returns the stable handler kind registered for this runner.
     fn kind(&self) -> &'static str;
+    /// Lists the execution capabilities required by this runner.
     fn required_capabilities(&self) -> Vec<RunnerCapability>;
+    /// Executes the legacy runner with its alias and configuration.
     fn run(&self, ctx: StepContext) -> Result<StepOutput>;
 }
 
@@ -88,6 +93,7 @@ pub struct StepRunnerRegistry {
 }
 
 impl StepRunnerRegistry {
+    /// Creates an empty legacy runner registry.
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),

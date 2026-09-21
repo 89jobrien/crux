@@ -1,10 +1,16 @@
+//! Pipeline loading, compilation, execution, replay, and trace persistence.
+
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, collect_agent_names, schema::PipelineDef};
+use crux_script::{
+    Compilation, CompileOptions, DiagnosticSeverity, TargetResolver, TypedCruxfile,
+    ValidationDiagnostic, collect_agent_names, compile_cruxfile, compile_pipeline,
+    schema::PipelineDef,
+};
 use serde_json::{Value, json};
 
 use crate::output::{render_summary, render_trace};
@@ -155,6 +161,70 @@ fn render_json_error(error: &CruxErr) {
             eprintln!("{fallback}");
         }
     }
+}
+
+fn compile_options(strict: bool) -> CompileOptions {
+    if strict {
+        CompileOptions::strict()
+    } else {
+        CompileOptions::permissive()
+    }
+}
+
+fn render_compilation_diagnostic(path: &str, diagnostic: &ValidationDiagnostic) {
+    eprintln!(
+        "{}[{}]: {path} [{}]: {}",
+        diagnostic.severity, diagnostic.code, diagnostic.location, diagnostic.message
+    );
+}
+
+fn require_executable<T>(path: &str, compilation: Compilation<T>) -> T {
+    for diagnostic in compilation.diagnostics() {
+        if diagnostic.code != crux_script::ValidationCode::MissingContract {
+            render_compilation_diagnostic(path, diagnostic);
+        }
+    }
+
+    let (artifact, diagnostics) = compilation.into_parts();
+    if let Some(artifact) = artifact {
+        return artifact;
+    }
+
+    if !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+    {
+        eprintln!("error: {path}: pipeline is not executable");
+    }
+    std::process::exit(1);
+}
+
+fn selected_target_order<'a>(
+    cruxfile: &'a TypedCruxfile,
+    target: &str,
+) -> Result<Vec<&'a str>, String> {
+    if !cruxfile.contains_target(target) {
+        return Err(format!("unknown target: {target}"));
+    }
+
+    let mut selected = std::collections::HashSet::new();
+    let mut pending = vec![target];
+    while let Some(name) = pending.pop() {
+        if !selected.insert(name.to_string()) {
+            continue;
+        }
+        let dependencies = cruxfile
+            .target_dependencies(name)
+            .ok_or_else(|| format!("compiled target is missing: {name}"))?;
+        pending.extend(dependencies.iter().map(String::as_str));
+    }
+
+    Ok(cruxfile
+        .target_order()
+        .iter()
+        .filter(|name| selected.contains(name.as_str()))
+        .map(String::as_str)
+        .collect())
 }
 
 /// Resolve the pipeline path from the config, or discover `Cruxfile` in cwd.
@@ -318,7 +388,6 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let quiet = cfg.quiet;
     let verbose = cfg.verbose;
     let save_trace_path = cfg.save_trace_path;
-    let strict = cfg.strict;
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
         eprintln!("error: failed to parse {path}: {e}");
         std::process::exit(1);
@@ -329,96 +398,33 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         std::process::exit(2);
     }
 
-    let target = target_name.unwrap_or(&cruxfile.default);
+    let target = target_name.unwrap_or(&cruxfile.default).to_string();
 
-    let resolver = TargetResolver::new(&cruxfile).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        std::process::exit(1);
-    });
-
-    let order = resolver.execution_order(target).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let registry = rt
+        .block_on(build_registry(plugins_path))
+        .unwrap_or_else(|error| {
+            eprintln!("error: failed to build registry: {error}");
+            std::process::exit(1);
+        });
+    let compiled = require_executable(
+        path,
+        compile_cruxfile(&cruxfile, &registry, compile_options(cfg.strict)),
+    );
+    let order = selected_target_order(&compiled, &target).unwrap_or_else(|error| {
+        eprintln!("error: {error}");
         std::process::exit(1);
     });
 
     if verbose {
         eprintln!(
             "[crux] Cruxfile: project={}, target={target}, plan: {}",
-            cruxfile.project,
+            compiled.project(),
             order.join(" -> ")
         );
     }
 
-    // Build registry once using an empty pipeline (all handlers registered).
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let empty_pipeline = PipelineDef {
-        pipeline: String::new(),
-        input_schema: None,
-        budget: None,
-        vars: None,
-        display: None,
-        steps: vec![],
-    };
-    let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path, false));
-
-    // Also register any handlers referenced in all targets.
-    let mut full_reg = registry;
-    let mut unregistered_handlers = std::collections::BTreeSet::new();
-    let mut unregistered_agents = std::collections::BTreeSet::new();
-    for (_, tgt) in &cruxfile.targets {
-        let tmp_pipeline = PipelineDef {
-            pipeline: String::new(),
-            input_schema: None,
-            budget: None,
-            vars: None,
-            display: None,
-            steps: tgt.steps.clone(),
-        };
-        for name in collect_handler_names(&tmp_pipeline) {
-            if full_reg.get_handler(&name).is_none() {
-                if strict {
-                    unregistered_handlers.insert(name);
-                } else {
-                    // TODO(automation-7): Make production automation profiles strict by
-                    // default so unregistered handlers can never degrade into successful stubs.
-                    register_stub_handler(&mut full_reg, name);
-                }
-            }
-        }
-        for name in collect_agent_names(&tmp_pipeline) {
-            if full_reg.get_agent(&name).is_none() {
-                if strict {
-                    unregistered_agents.insert(name);
-                } else {
-                    register_stub_agent(&mut full_reg, name);
-                }
-            }
-        }
-    }
-
-    if !unregistered_handlers.is_empty() || !unregistered_agents.is_empty() {
-        if !unregistered_handlers.is_empty() {
-            eprintln!(
-                "[crux] error: --strict mode: unregistered handlers: {}",
-                unregistered_handlers
-                    .into_iter()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        if !unregistered_agents.is_empty() {
-            eprintln!(
-                "[crux] error: --strict mode: unregistered agents: {}",
-                unregistered_agents
-                    .into_iter()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        std::process::exit(1);
-    }
-
-    let runner = crux_script::Runner::new(Arc::new(full_reg));
+    let runner = crux_script::Runner::new(Arc::new(registry));
     let mut failed = false;
     let mut trace_persistence_failed = false;
     let mut skipped: Vec<&str> = Vec::new();
@@ -431,15 +437,16 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
             continue;
         }
 
-        let target_def = &cruxfile.targets[target_name];
-        let budget = target_def.budget.as_ref().or(cruxfile.budget.as_ref());
+        let target_pipeline = compiled
+            .target(target_name)
+            .expect("selected compiled target must exist");
 
         if verbose {
             eprintln!("[crux] running target: {target_name}");
         }
 
         let target_start = Instant::now();
-        let crux = rt.block_on(runner.run_target(target_def, target_name, budget));
+        let crux = rt.block_on(runner.run_compiled(target_pipeline, Value::Null));
         let target_elapsed = target_start.elapsed();
         let is_ok = crux.value().is_ok();
         if !quiet {
@@ -476,7 +483,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
                 )
             });
             home.and_then(|home| {
-                persist_automatic_trace(&crux, &home, &cruxfile.project, Some(target_name))
+                persist_automatic_trace(&crux, &home, compiled.project(), Some(target_name))
             })
         };
         match trace_path {
@@ -522,7 +529,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         };
         eprintln!(
             "Cruxfile: {} [{target}] {status} ({elapsed_str})",
-            cruxfile.project
+            compiled.project()
         );
     }
 
@@ -540,7 +547,6 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let replay_path = cfg.replay_path;
     let replay_mode_str = cfg.replay_mode_str;
     let save_trace_path = cfg.save_trace_path;
-    let strict = cfg.strict;
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")
@@ -566,7 +572,16 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let registry = rt.block_on(build_registry(&pipeline, plugins_path, strict));
+    let registry = rt
+        .block_on(build_registry(plugins_path))
+        .unwrap_or_else(|error| {
+            eprintln!("error: failed to build registry: {error}");
+            std::process::exit(1);
+        });
+    let compiled = require_executable(
+        pipeline_path,
+        compile_pipeline(&pipeline, &registry, compile_options(cfg.strict)),
+    );
     let runner = crux_script::Runner::new(Arc::new(registry));
 
     let previous: Option<Crux<Value>> = replay_path.map(|path| {
@@ -576,9 +591,9 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
 
     let start = Instant::now();
     let crux = if let Some(ref prev) = previous {
-        rt.block_on(runner.run_with_replay(&pipeline, input, prev, replay_mode))
+        rt.block_on(runner.run_compiled_with_replay(&compiled, input, prev, replay_mode))
     } else {
-        rt.block_on(runner.run(&pipeline, input))
+        rt.block_on(runner.run_compiled(&compiled, input))
     };
     let elapsed = start.elapsed();
 
@@ -673,36 +688,6 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     if execution_failed || trace_persistence_error.is_some() {
         std::process::exit(1);
     }
-}
-
-fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
-    let n = name.clone();
-    reg.handler_value(name, move |_input: Value| {
-        let handler_name = n.clone();
-        async move {
-            eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-            Ok(json!({
-                "_stub": handler_name,
-                "confidence": 0.5,
-                "score": 0.5,
-            }))
-        }
-    });
-}
-
-fn register_stub_agent(reg: &mut HandlerRegistry, name: String) {
-    let n = name.clone();
-    reg.agent_fn(name, move |_input: Value| {
-        let agent_name = n.clone();
-        async move {
-            eprintln!("[crux] warning: no builtin for agent '{agent_name}', using stub");
-            Ok(json!({
-                "_stub": agent_name,
-                "confidence": 0.5,
-                "score": 0.5,
-            }))
-        }
-    });
 }
 
 #[cfg(test)]

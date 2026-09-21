@@ -1,3 +1,5 @@
+//! Validation tests for required arguments in built-in handler metadata.
+
 use crux_script::{HandlerRegistry, validate_pipeline};
 
 #[test]

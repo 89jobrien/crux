@@ -1,3 +1,5 @@
+//! OpenAI-compatible Ollama adapter for local LLM completions.
+
 use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use serde_json::json;
@@ -10,6 +12,7 @@ pub struct OllamaAdapter {
 }
 
 impl OllamaAdapter {
+    /// Builds an adapter from `OLLAMA_BASE_URL` with the default local model.
     pub fn from_env() -> Self {
         let base_url = std::env::var("OLLAMA_BASE_URL")
             .unwrap_or_else(|_| "http://localhost:11434".to_string());
@@ -17,6 +20,7 @@ impl OllamaAdapter {
         Self { model, base_url }
     }
 
+    /// Builds an adapter for an explicit model and Ollama endpoint.
     pub fn new(model: ProviderModelRef, base_url: impl Into<String>) -> Self {
         Self {
             model,

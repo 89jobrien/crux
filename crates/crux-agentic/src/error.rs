@@ -1,3 +1,5 @@
+//! Errors and JSON argument helpers shared by agentic handlers.
+
 use crux_runtime::prelude::CruxErr;
 use thiserror::Error;
 

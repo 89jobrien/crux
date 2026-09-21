@@ -68,7 +68,9 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 **Files:**
 
 - Create: `crates/crux-domain/Cargo.toml`
+
 - Create: `crates/crux-domain/src/lib.rs`
+
 - Modify: `Cargo.toml` (workspace members)
 
 - [ ] **Step 1: Write failing test for crate compilation**
@@ -138,7 +140,9 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 **Files:**
 
 - Create: `crates/crux-domain/src/action.rs`
+
 - Create: `crates/crux-domain/src/plan_result.rs`
+
 - Modify: `crates/crux-domain/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests**
@@ -279,6 +283,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 **Files:**
 
 - Create: `crates/crux-domain/src/planner.rs`
+
 - Modify: `crates/crux-domain/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests**
@@ -397,7 +402,6 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
 - Modify: `crates/crux-runtime/Cargo.toml`
 - Modify: `crates/crux-runtime/src/ctx.rs`
 - Modify: `crates/crux-runtime/src/lib.rs`
-
 - [ ] **Step 1: Add `crux-domain` dep to `crux-runtime`**
 
   Edit `crates/crux-runtime/Cargo.toml`, add under `[dependencies]`:
@@ -468,7 +472,6 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
   ```
 
   Expected: compile error — `set_planner` not found on `CruxCtx`.
-
 - [ ] **Step 4: Add `CruxErr::Denied` variant**
 
   Edit `crates/crux-types/src/error.rs`. Find the `CruxErr` enum and add:
@@ -650,6 +653,7 @@ Child contexts created by `delegate()` and `speculate()` should inherit the pare
 **Files:**
 
 - Modify: `crates/crux/Cargo.toml`
+
 - Modify: `crates/crux-runtime/src/lib.rs` (prelude)
 
 - [ ] **Step 1: Add `crux-domain` to `crux` facade**
@@ -935,7 +939,6 @@ consumers are unaffected.
 - Modify: `crates/crux-runtime/src/recorder.rs`
 - Modify: `crates/crux-runtime/src/ctx.rs`
 - Modify: `crates/crux-runtime/Cargo.toml`
-
 - [ ] **Step 1: Enable `tokio-pipeline` feature in `crux-runtime`**
 
   Edit `crates/crux-runtime/Cargo.toml`:
@@ -1028,7 +1031,6 @@ consumers are unaffected.
   ```
 
   Expected: compile error — `set_event_sender` not found.
-
 - [ ] **Step 4: Add `EventSender` field to `CruxCtx`**
 
   In `crates/crux-runtime/src/ctx.rs`:
@@ -1130,7 +1132,6 @@ consumers are unaffected.
 
 - Modify: `crates/crux-types/src/step.rs`
 - Create: `crates/crux/tests/substrate_integration.rs`
-
 - [ ] **Step 1: Add `metadata` to `Step`**
 
   Edit `crates/crux-types/src/step.rs`:

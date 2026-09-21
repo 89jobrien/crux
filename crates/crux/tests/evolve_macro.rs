@@ -1,3 +1,5 @@
+//! Integration tests for evolution-agent generation and execution.
+
 use crux::prelude::*;
 
 #[crux::evolve]

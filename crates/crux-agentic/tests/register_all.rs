@@ -1,3 +1,5 @@
+//! Coverage tests for the aggregate built-in handler registry.
+
 use crux_script::HandlerRegistry;
 
 #[test]

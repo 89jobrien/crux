@@ -1,3 +1,5 @@
+//! Validation, execution, replay, and control-flow interpretation for pipelines.
+
 /// Pipeline runner — interprets a parsed YAML pipeline against CruxCtx + HandlerRegistry.
 use std::sync::{Arc, Mutex};
 
@@ -26,6 +28,7 @@ pub struct Runner {
 }
 
 impl Runner {
+    /// Creates a runner backed by a shared handler and agent registry.
     pub fn new(registry: Arc<HandlerRegistry>) -> Self {
         Self { registry }
     }

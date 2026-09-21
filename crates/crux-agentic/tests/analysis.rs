@@ -1,3 +1,5 @@
+//! Integration tests for trace-analysis and optimization handlers.
+
 use crux_script::HandlerRegistry;
 use serde_json::json;
 

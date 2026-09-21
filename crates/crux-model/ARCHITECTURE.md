@@ -26,7 +26,7 @@ Model ID normalization pipeline:
 
 ## Flow
 
-```
+```text
 Raw string ("gpt-4o-2024-08-06")
   -> parser::ProviderModelId::parse()
   -> vendor detection (Vendor enum)

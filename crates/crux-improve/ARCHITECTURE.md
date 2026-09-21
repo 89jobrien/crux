@@ -17,7 +17,7 @@ Single-file crate defining the improvement protocol vocabulary.
 
 ## Concept Model
 
-```
+```text
 Trace A (baseline)
   vs
 Trace B (candidate)

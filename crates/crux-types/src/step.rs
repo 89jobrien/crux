@@ -1,3 +1,5 @@
+//! Serializable step records, statuses, kinds, state, and cited findings.
+
 /// A single recorded step in an agent's execution.
 use std::collections::HashMap;
 
@@ -68,10 +70,12 @@ pub enum StepStatus {
 }
 
 impl Step {
+    /// Reports whether the step completed successfully.
     pub fn is_ok(&self) -> bool {
         self.status == StepStatus::Ok
     }
 
+    /// Reports whether the step completed with an error.
     pub fn is_err(&self) -> bool {
         self.status == StepStatus::Err
     }

@@ -1,3 +1,5 @@
+//! Deterministic harness resource adjustments derived from run metrics.
+
 use crux_runtime::types::harness::{HarnessDiff, HarnessProfile};
 
 use crate::metrics::RunMetrics;

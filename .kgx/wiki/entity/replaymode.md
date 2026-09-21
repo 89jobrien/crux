@@ -2,7 +2,9 @@
 title: ReplayMode
 tags: [type, runtime, replay]
 ---
-# ReplayMode
+
+## ReplayMode
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/replay.rs`
 
 Enum: Strict (default, fail on mismatch) or Lenient (forward name scan for

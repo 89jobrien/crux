@@ -2,12 +2,15 @@
 title: Crux<T>
 tags: [type, core, trace]
 ---
-# Crux<T>
+
+## Crux<T>
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/crux_value.rs`
 
 Execution trace fused with typed result. Every agent run produces a `Crux<T>`.
 
-## Fields
+### Fields
+
 - `id`: [[CruxId]] -- trace identifier
 - `agent`: String -- agent name
 - `value`: Result<T, [[CruxErr]]> -- final result
@@ -16,7 +19,8 @@ Execution trace fused with typed result. Every agent run produces a `Crux<T>`.
 - `started_at`: DateTime<Utc>
 - `finished_at`: Option<DateTime<Utc>>
 
-## Key Methods
+### Key Methods
+
 - `value()` / `into_value()` -- extract inner result
 - `causal_chain()` -- flat step list
 - `delegations()` -- zips delegation steps with children

@@ -1,3 +1,5 @@
+//! Attribute argument parsing shared by Crux procedural macros.
+
 /// Parse `#[crux::agent]` attribute arguments.
 use syn::parse::{Parse, ParseStream};
 use syn::{Ident, LitStr, Token};

@@ -1,3 +1,5 @@
+//! Canonical vendor, family, generation, and variant model identifiers.
+
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +15,7 @@ pub struct CanonicalModelId {
 }
 
 impl CanonicalModelId {
+    /// Formats the identifier as its stable colon-separated key.
     pub fn as_key(&self) -> String {
         self.to_string()
     }

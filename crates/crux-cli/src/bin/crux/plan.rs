@@ -1,3 +1,5 @@
+//! Rule-based and optional LLM-backed pipeline generation commands.
+
 #[cfg(feature = "baml")]
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_script::{PipelineOutputFormat, format_pipeline_output};
@@ -50,6 +52,7 @@ fn steps_to_yaml(goal: &str, steps: &[String]) -> String {
     out
 }
 
+/// Generates a pipeline with the selected planner and writes it in the requested format.
 pub fn cmd_plan(
     goal: &str,
     output: Option<&str>,

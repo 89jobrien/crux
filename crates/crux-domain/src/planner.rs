@@ -12,6 +12,7 @@ use crate::plan_result::PlanResult;
 /// - Return `Deny` to fail the step with a policy error.
 /// - Return `Simulate` to return a synthetic output without executing.
 pub trait Planner: Send + Sync + 'static {
+    /// Chooses whether to allow, deny, or simulate the requested step.
     fn next_action(&self, step_name: &str, priority: u8) -> PlanResult;
 }
 

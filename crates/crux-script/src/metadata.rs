@@ -427,6 +427,7 @@ pub enum ArgType {
 }
 
 impl ArgType {
+    /// Reports whether a JSON value has this argument type.
     pub fn matches(self, value: &Value) -> bool {
         match self {
             ArgType::Any => true,
@@ -465,6 +466,7 @@ pub struct ArgSpec {
 }
 
 impl ArgSpec {
+    /// Declares a required argument with the given schema.
     pub fn required(name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         Self {
             name: name.into(),
@@ -474,6 +476,7 @@ impl ArgSpec {
         }
     }
 
+    /// Declares an optional argument with the given schema.
     pub fn optional(name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         Self {
             name: name.into(),
@@ -483,6 +486,7 @@ impl ArgSpec {
         }
     }
 
+    /// Attaches a human-readable argument description.
     pub fn describe(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -499,6 +503,7 @@ pub struct ArgSchema {
 }
 
 impl ArgSchema {
+    /// Creates a permissive schema with no declared arguments.
     pub fn new() -> Self {
         Self {
             args: Vec::new(),
@@ -506,6 +511,7 @@ impl ArgSchema {
         }
     }
 
+    /// Creates a schema that rejects undeclared arguments.
     pub fn strict() -> Self {
         Self {
             args: Vec::new(),
@@ -513,25 +519,30 @@ impl ArgSchema {
         }
     }
 
+    /// Adds a required argument declaration.
     pub fn required(mut self, name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         self.args.push(ArgSpec::required(name, schema));
         self
     }
 
+    /// Adds an optional argument declaration.
     pub fn optional(mut self, name: impl Into<String>, schema: impl Into<ValueSchema>) -> Self {
         self.args.push(ArgSpec::optional(name, schema));
         self
     }
 
+    /// Configures whether undeclared arguments are accepted.
     pub fn allow_extra(mut self, allow_extra: bool) -> Self {
         self.allow_extra = allow_extra;
         self
     }
 
+    /// Finds an argument declaration by name.
     pub fn get(&self, name: &str) -> Option<&ArgSpec> {
         self.args.iter().find(|spec| spec.name == name)
     }
 
+    /// Reports whether the schema contains any required arguments.
     pub fn has_required_args(&self) -> bool {
         self.args.iter().any(|spec| spec.required)
     }
@@ -661,6 +672,7 @@ pub struct HandlerMetadata {
 }
 
 impl HandlerMetadata {
+    /// Creates low-risk deterministic metadata with no declared contract.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -676,11 +688,13 @@ impl HandlerMetadata {
         }
     }
 
+    /// Sets the handler description used for introspection.
     pub fn describe(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self
     }
 
+    /// Sets the declarative argument schema.
     pub fn args(mut self, args: ArgSchema) -> Self {
         self.args = args;
         self
@@ -709,21 +723,25 @@ impl HandlerMetadata {
         self.input_schema.is_some() && self.output_schema.is_some() && self.confidence.is_some()
     }
 
+    /// Classifies the handler's execution risk.
     pub fn risk(mut self, risk: RiskLevel) -> Self {
         self.risk = risk;
         self
     }
 
+    /// Declares the side effects the handler may perform.
     pub fn side_effects(mut self, side_effects: impl Into<Vec<SideEffect>>) -> Self {
         self.side_effects = side_effects.into();
         self
     }
 
+    /// Declares the execution capabilities required by the handler.
     pub fn capabilities(mut self, capabilities: impl Into<Vec<Capability>>) -> Self {
         self.capabilities = capabilities.into();
         self
     }
 
+    /// Marks whether identical inputs are expected to produce identical results.
     pub fn deterministic(mut self, deterministic: bool) -> Self {
         self.deterministic = deterministic;
         self

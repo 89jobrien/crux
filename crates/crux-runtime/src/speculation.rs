@@ -1,3 +1,5 @@
+//! Multi-arm speculative execution with scored winner selection.
+
 /// SpeculationBuilder — run several approaches, pick the best.
 ///
 /// Created by `CruxCtx::speculate(name, arms)`. Arms run sequentially

@@ -1,3 +1,5 @@
+//! Runtime tests for `for_each` iteration bindings and early exit.
+
 /// Integration tests for the `for_each:` loop (#84).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

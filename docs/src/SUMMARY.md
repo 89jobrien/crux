@@ -2,11 +2,11 @@
 
 [crux](./README.md)
 
-# Architecture
+## Architecture
 
 - [Overview](./architecture/overview.md)
 
-# Crates
+## Crates
 
 <!-- TODO(docs): Add the missing crux-task crate page and index entry. -->
 
@@ -26,7 +26,7 @@
 - [crux-planner](./crates/crux-planner.md)
 - [xtask](./crates/xtask.md)
 
-# Reference
+## Reference
 
 - [Configuration](./reference/configuration.md)
 - [CI Pipeline](./reference/ci-pipeline.md)

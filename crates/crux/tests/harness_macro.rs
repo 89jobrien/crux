@@ -1,3 +1,5 @@
+//! Integration tests for generated harness defaults and profile conversion.
+
 #[crux::harness]
 pub struct MyHarness {
     pub memory_mb: u64,

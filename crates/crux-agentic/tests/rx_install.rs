@@ -1,3 +1,5 @@
+//! Filesystem integration tests for installing and listing rx commands.
+
 use crux_agentic::rx;
 use crux_script::HandlerRegistry;
 use serde_json::json;

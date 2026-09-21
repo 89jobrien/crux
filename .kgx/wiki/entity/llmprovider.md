@@ -2,5 +2,7 @@
 title: LlmProvider
 tags: [trait, agentic, port, llm]
 ---
-# LlmProvider
+
+## LlmProvider
+
 **Crate:** [[crux-agentic]] | Trait: complete(req: [[LlmRequest]]) → [[LlmResponse]]. Adapters: [[AnthropicAdapter]], [[OpenAiAdapter]], [[OllamaAdapter]].

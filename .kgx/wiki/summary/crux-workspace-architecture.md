@@ -4,15 +4,15 @@ source_document: crux_types_crate, crux_runtime_crate, crux_macros_crate, crux_r
 tags: [architecture, overview, workspace]
 ---
 
-# Crux Workspace Architecture
+## Crux Workspace Architecture
 
 Crux is an agentic DSL for Rust. Every step, delegation, speculation, and
 failure is a first-class value ([[Crux<T>]]) that is inspectable, serializable,
 and replayable. Rust edition 2024, MSRV 1.88.
 
-## Crate Dependency Graph
+### Crate Dependency Graph
 
-```
+```text
 crux (facade)
  +-- crux-macros (proc macros: agent, harness, evolve)
  +-- crux-runtime (core domain logic)
@@ -33,9 +33,10 @@ crux-plugin (subprocess plugin host)
 crux-model (standalone, no internal deps)
 ```
 
-## Hexagonal Architecture
+### Hexagonal Architecture
 
 Ports (traits):
+
 - [[Agent]] -- agentic work units
 - [[Context]] -- runtime abstraction (DIP)
 - [[RegistryBackend]] -- task persistence
@@ -49,13 +50,14 @@ Ports (traits):
 - [[PluginDiscovery]] -- plugin loading
 
 Adapters:
+
 - [[InMemoryBackend]], [[RedbBackend]] for [[RegistryBackend]]
 - [[AnthropicAdapter]], [[OpenAiAdapter]], [[OllamaAdapter]] for [[LlmProvider]]
 - [[DockerContainerClient]] for [[ContainerClient]]
 - [[AutoApproveGate]], [[TerminalApprovalGate]] for [[ApprovalGate]]
 - [[InMemoryAudit]] for [[AuditSink]]
 
-## Key Design Patterns
+### Key Design Patterns
 
 1. **Trace-as-value**: [[Crux<T>]] fuses result with execution trace
 2. **SOLID decomposition**: [[CruxCtx]] delegates to [[StepRecorder]],

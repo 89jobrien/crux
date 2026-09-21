@@ -1,3 +1,5 @@
+//! Conformance tests for step recording, results, errors, budgets, and completion.
+
 /// Conformance tests: Context port — CruxCtx adapter.
 ///
 /// Verifies CruxCtx satisfies the observable clauses of the Context trait

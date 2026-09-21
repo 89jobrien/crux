@@ -15,10 +15,6 @@ pub use crux_types::crux_value::Crux;
 pub use crux_types::id::CruxId;
 pub use crux_types::step::{Step, StepKind, StepStatus};
 
-// ---------------------------------------------------------------------------
-// TraceMetrics
-// ---------------------------------------------------------------------------
-
 const SUCCESS_WEIGHT: f32 = 0.60;
 const CONFIDENCE_WEIGHT: f32 = 0.40;
 
@@ -38,6 +34,7 @@ pub struct TraceMetrics {
 }
 
 impl TraceMetrics {
+    /// Computes success, confidence, timing, delegation, and speculation metrics.
     pub fn extract<T>(trace: &Crux<T>) -> Self {
         let step_count = trace.steps.len();
         let ok_count = trace.steps.iter().filter(|s| s.is_ok()).count();
@@ -110,10 +107,6 @@ impl TraceMetrics {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Strategy
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Strategy {
     pub version: u64,
@@ -123,6 +116,7 @@ pub struct Strategy {
 }
 
 impl Strategy {
+    /// Applies a strategy diff and increments the strategy version.
     pub fn apply(&mut self, diff: &StrategyDiff) {
         for (k, v) in &diff.tool_preferences {
             self.tool_preferences.insert(k.clone(), *v);
@@ -152,10 +146,6 @@ pub struct PromptPatch {
     pub content: String,
 }
 
-// ---------------------------------------------------------------------------
-// Improvement
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Improvement {
     pub id: CruxId,
@@ -175,10 +165,6 @@ pub enum ImprovementKind {
     ToolPreference,
 }
 
-// ---------------------------------------------------------------------------
-// Comparison / Verdict
-// ---------------------------------------------------------------------------
-
 const VERDICT_THRESHOLD: f32 = 0.05;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,6 +183,7 @@ pub enum Verdict {
     Neutral,
 }
 
+/// Compares two traces and classifies the score delta against the verdict threshold.
 pub fn replay_compare<T>(old: &Crux<T>, new: &Crux<T>) -> Comparison {
     let old_metrics = TraceMetrics::extract(old);
     let new_metrics = TraceMetrics::extract(new);
@@ -218,10 +205,6 @@ pub fn replay_compare<T>(old: &Crux<T>, new: &Crux<T>) -> Comparison {
     }
 }
 
-// ---------------------------------------------------------------------------
-// StrategyPolicy
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, thiserror::Error)]
 #[error("strategy violation: {message}")]
 pub struct StrategyViolation {
@@ -229,7 +212,9 @@ pub struct StrategyViolation {
 }
 
 pub trait StrategyPolicy: Send + Sync {
+    /// Rejects strategy changes that violate policy limits.
     fn validate_strategy(&self, diff: &StrategyDiff) -> Result<(), StrategyViolation>;
+    /// Reports whether a strategy change requires explicit approval.
     fn requires_strategy_approval(&self, diff: &StrategyDiff) -> bool;
 }
 
@@ -256,10 +241,6 @@ impl StrategyPolicy for DefaultStrategyPolicy {
         !diff.prompt_patches.is_empty()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

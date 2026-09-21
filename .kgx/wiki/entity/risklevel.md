@@ -2,7 +2,9 @@
 title: RiskLevel
 tags: [type, runtime, approval]
 ---
-# RiskLevel
+
+## RiskLevel
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/approval.rs`
 
 Enum: Low, Medium, High, Critical. Used in ApprovalRequest and by [[AutoApproveGate]]

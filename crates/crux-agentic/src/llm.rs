@@ -1,3 +1,5 @@
+//! Pipeline handlers for direct, fallback, and stream-shaped LLM completions.
+
 use crate::adapters::{AnthropicAdapter, OllamaAdapter, OpenAiAdapter};
 use crate::error::opt_str;
 use crate::provider::LlmProvider;
@@ -134,6 +136,7 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
     });
 }
 
+/// Registers the single-provider `llm::invoke` completion handler.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::invoke", |input: Value| async move {
         let p = parse_llm_input(&input, "llm::invoke")?;

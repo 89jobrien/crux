@@ -1,3 +1,5 @@
+//! HTTP-level integration tests for OpenAI and Anthropic completion handlers.
+
 use crux_agentic::llm;
 use crux_script::HandlerRegistry;
 use serde_json::json;

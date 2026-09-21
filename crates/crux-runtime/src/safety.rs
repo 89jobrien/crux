@@ -1,3 +1,5 @@
+//! Safety-policy port for validating and approving harness changes.
+
 use crate::types::harness::{HarnessDiff, HarnessProfile};
 use thiserror::Error;
 

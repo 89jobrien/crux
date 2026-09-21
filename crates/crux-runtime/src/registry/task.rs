@@ -1,3 +1,5 @@
+//! Typed task lifecycle operations over a registry storage backend.
+
 /// TaskRegistry — typed, high-level API over a RegistryBackend.
 ///
 /// Provides submit/get/update_status/checkpoint/pending/resume lifecycle
@@ -38,6 +40,7 @@ pub struct TaskRegistry<B> {
 }
 
 impl<B: RegistryBackend> TaskRegistry<B> {
+    /// Wraps a storage backend with typed task lifecycle operations.
     pub fn new(backend: B) -> Self {
         Self { backend }
     }

@@ -1,3 +1,5 @@
+//! Fluent child-agent delegation with per-call budgets and recovery hooks.
+
 /// DelegationBuilder — fluent builder for delegating to a sub-agent.
 ///
 /// Created by `CruxCtx::delegate::<A>(name, input)`. Supports per-call-site

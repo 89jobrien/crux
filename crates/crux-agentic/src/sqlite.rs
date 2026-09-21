@@ -124,6 +124,7 @@ fn exec_with_params(
 
 // ── handler registration ──────────────────────────────────────────────────────
 
+/// Registers SQLite execution, query, transaction, and schema handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     // sqlite::exec — DDL / fire-and-forget DML
     registry.handler_value("sqlite::exec", |input: Value| async move {

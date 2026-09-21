@@ -1,3 +1,5 @@
+//! CI diagnostic parsing, normalization, ownership, and fixability handlers.
+
 use crux_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel, SideEffect};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -10,6 +12,7 @@ const MAX_CONTEXT_LINES: usize = 5;
 /// Expected number of parts when splitting a `file:line:col` location string.
 const LOCATION_PARTS: usize = 3;
 
+/// Registers handlers that turn Rust CI output into ranked diagnostics.
 pub fn register(registry: &mut HandlerRegistry) {
     register_compile_errors(registry);
     register_clippy_violations(registry);

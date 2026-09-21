@@ -1,3 +1,5 @@
+//! Runtime recovery actions, including closure- and future-bearing variants.
+
 /// Recovery strategies for lifecycle hooks.
 use std::future::Future;
 use std::pin::Pin;

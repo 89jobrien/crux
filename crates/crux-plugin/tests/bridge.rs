@@ -1,3 +1,5 @@
+//! Subprocess integration tests for bridging plugin handlers into a registry.
+
 use crux_plugin::bridge::register_plugins;
 use crux_plugin::manifest::PluginEntry;
 use crux_script::HandlerRegistry;

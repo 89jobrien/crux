@@ -35,5 +35,6 @@ here. This crate re-exports them when the `baml` feature is enabled.
 ### Adapters
 
 `adapters/` contains implementations of runtime ports:
+
 - Add new `ApprovalGate` impls here
 - Add new `SafetyPolicy` impls here

@@ -1,3 +1,5 @@
+//! Credentialed integration tests for structured BAML extraction handlers.
+
 // Integration tests for llm::extract handler.
 //
 // These tests make real API calls and are skipped when OPENAI_API_KEY is not set.

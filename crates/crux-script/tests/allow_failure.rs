@@ -1,3 +1,5 @@
+//! Execution tests for tolerated failures in join and pipe arms.
+
 /// Integration tests for `allow_failure` on steps, pipe stages, and join_all arms (#80).
 use crux_runtime::prelude::{CruxErr, HandlerUsage, ReplayMode, StepStatus, UsdAmount};
 use crux_script::{HandlerExecution, HandlerRegistry, Runner, load};

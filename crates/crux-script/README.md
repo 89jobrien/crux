@@ -1,60 +1,66 @@
----
-crate: crux-script
-type: engine
-description: "YAML-driven pipeline scripting for the crux agentic DSL"
-version: "0.3.0"
-edition: "2024"
-dependencies:
-  - serde_saphyr
-  - thiserror
-file_extension: ".crux"
-formats:
-  - name: Pipeline
-    key: "pipeline:"
-    description: "Single execution flow"
-  - name: Cruxfile
-    key: "targets:"
-    description: "Multi-target build file"
-modules:
-  - name: schema
-    purpose: "PipelineDef, CruxfileDef YAML schema types"
-  - name: runner
-    purpose: "Pipeline execution engine"
-  - name: step_runner
-    purpose: "Per-step dispatch and StepRunner trait"
-  - name: registry
-    purpose: "HandlerRegistry for handler registration"
-  - name: resolve
-    purpose: "TargetResolver for Cruxfile target resolution"
-  - name: validator
-    purpose: "Static validation of pipelines and Cruxfiles"
-  - name: expr
-    purpose: "Expression evaluation in pipeline templates"
-  - name: metadata
-    purpose: "HandlerMetadata, capabilities, risk levels"
-  - name: handler_output
-    purpose: "HandlerOutput return type"
----
-
 # crux-script
 
-YAML-driven pipeline scripting for the crux agentic DSL. Define agent
-pipelines declaratively in `.crux` files (YAML syntax), register step
-handlers in Rust, and execute without recompilation.
+Parser, validator, typed compiler, registry, and interpreter for YAML `.crux` pipelines. It lets
+applications define orchestration without recompiling Rust code.
 
-## Usage
+## Architecture role
 
-```rust
-use crux_script::{load_file, HandlerRegistry, Runner};
+The crate owns the declarative execution model. `HandlerRegistry` is the extension boundary;
+`crux-stdlib`, `crux-agentic`, `crux-baml`, and `crux-plugin` supply handlers. `Runner` executes a
+validated `PipelineDef` against `CruxCtx` and returns a complete `Crux<Value>` trace.
 
-let pipeline = load_file("my_pipeline.crux")?;
-let mut registry = HandlerRegistry::new();
-// register handlers...
-let runner = Runner::new(registry);
-runner.run(&pipeline, input).await?;
+## Pipeline formats
+
+- A pipeline has a top-level `pipeline:` key and one execution flow.
+- A Cruxfile has `targets:` and resolves named targets, dependencies, and budgets.
+- Expressions interpolate input, variables, iteration bindings, and prior step output/confidence.
+- Step forms include handler calls, delegation, pipes, joins, confidence routes, speculation,
+  `for_each`, `while`, `repeat`, and polling, with retry/error/expectation controls.
+
+```yaml
+pipeline: read-file
+steps:
+  - step: read
+    handler: fs::read
+    args:
+      path: README.md
 ```
 
-## Cruxfile vs Pipeline
+## Rust usage
 
-- **Pipeline** — single execution flow with `pipeline:` key
-- **Cruxfile** — multi-target build file with `targets:` key
+```rust
+use std::sync::Arc;
+use crux_script::{HandlerRegistry, Runner, load};
+
+let pipeline = load("pipeline: noop\nsteps: []\n")?;
+let runner = Runner::new(Arc::new(HandlerRegistry::new()));
+let trace = runner.run(&pipeline, serde_json::Value::Null).await;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+## Key API
+
+- `load`, `load_file`, `load_cruxfile`, `is_cruxfile`: parsing entry points.
+- `HandlerRegistry`, `StepRunner`, `StepRunnerRegistry`: handler and typed runner registration.
+- `Runner`: checked execution, replay execution, unchecked execution, and Cruxfile targets.
+- `validate_pipeline`, `validate_cruxfile`: diagnostics without execution.
+- `compile_pipeline`, `CompileOptions`, `CompileMode`, `TypedPipeline`: permissive or strict typed
+  compilation. Strict mode rejects dynamic boundaries and missing contracts/input schemas.
+- Metadata/schema types describe arguments, values, confidence, risk, capabilities, and effects.
+
+## Features and status
+
+There are no Cargo features. The typed compiler currently compiles simple handler-oriented steps and
+emits diagnostics for unresolved or dynamic contracts; the interpreter remains the full execution
+surface. Pipelines are hand-authored YAML, not generated Rust source.
+
+## Development and testing
+
+```console
+cargo nextest run -p crux-script
+cargo clippy -p crux-script --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+Integration tests cover parsing, validation, typed compilation, expressions, retries, errors,
+timeouts, loops, budgets, confidence, and runner contracts.

@@ -1,3 +1,5 @@
+//! Compile-check command for pipelines and multi-target Cruxfiles.
+
 use crux_script::{
     Compilation, CompileOptions, DiagnosticSeverity, ValidationDiagnostic, compile_cruxfile,
     compile_pipeline,
