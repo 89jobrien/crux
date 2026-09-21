@@ -82,6 +82,39 @@ impl Runner {
 
     /// Execute a pipeline whose handlers were resolved during compilation.
     pub async fn run_compiled(&self, pipeline: &TypedPipeline, input: Value) -> Crux<Value> {
+        self.run_compiled_core(pipeline, input, None, ReplayMode::Strict)
+            .await
+    }
+
+    /// Execute a compiled pipeline using values cached in a previous trace.
+    ///
+    /// Typed pipelines that read handler-reported confidence cannot be replayed
+    /// because replay traces currently retain handler values but not confidence.
+    pub async fn run_compiled_with_replay(
+        &self,
+        pipeline: &TypedPipeline,
+        input: Value,
+        previous: &Crux<Value>,
+        mode: ReplayMode,
+    ) -> Crux<Value> {
+        if pipeline.is_confidence_dependent() {
+            let ctx = CruxCtx::new(&pipeline.name);
+            return ctx.finalize(Err(CruxErr::step_failed(
+                &pipeline.name,
+                "confidence-dependent typed pipelines cannot be replayed",
+            )));
+        }
+        self.run_compiled_core(pipeline, input, Some(previous), mode)
+            .await
+    }
+
+    async fn run_compiled_core(
+        &self,
+        pipeline: &TypedPipeline,
+        input: Value,
+        previous: Option<&Crux<Value>>,
+        mode: ReplayMode,
+    ) -> Crux<Value> {
         let mut ctx = CruxCtx::new(&pipeline.name);
         if let Some(schema) = &pipeline.input_schema
             && let Err(violation) = schema.validate(&input)
@@ -96,6 +129,10 @@ impl Runner {
                 Ok(budget) => ctx.set_budget(budget),
                 Err(error) => return ctx.finalize(Err(error)),
             }
+        }
+        if let Some(previous) = previous {
+            ctx.set_replay_mode(mode);
+            ctx.replay_from(previous);
         }
 
         let mut expr_ctx = ExprContext::new(input.clone());

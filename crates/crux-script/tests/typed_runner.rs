@@ -1,6 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
-use crux_runtime::prelude::CruxErr;
+use crux_runtime::prelude::{CruxErr, ReplayMode};
 use crux_script::{
     ArgSchema, CompileOptions, ConfidenceCapability, HandlerExecution, HandlerMetadata,
     HandlerOutput, HandlerRegistry, ObjectSchema, Runner, StepFuture, StepInvocation, StepRunner,
@@ -21,6 +24,11 @@ struct ContractRunner {
 struct InvocationLogRunner {
     metadata: HandlerMetadata,
     invocations: Arc<Mutex<Vec<StepInvocation>>>,
+}
+
+struct CountingRunner {
+    metadata: HandlerMetadata,
+    calls: Arc<AtomicUsize>,
 }
 
 impl StepRunner for ContractRunner {
@@ -44,6 +52,20 @@ impl StepRunner for InvocationLogRunner {
         Box::pin(async move {
             invocations.lock().unwrap().push(invocation);
             HandlerExecution::free(Ok(HandlerOutput::new(json!(null))))
+        })
+    }
+}
+
+impl StepRunner for CountingRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        &self.metadata
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let calls = Arc::clone(&self.calls);
+        Box::pin(async move {
+            calls.fetch_add(1, Ordering::SeqCst);
+            HandlerExecution::free(Ok(HandlerOutput::new(invocation.args().clone())))
         })
     }
 }
@@ -604,4 +626,91 @@ steps:
             .map(|step| (step.name.as_str(), step.output.as_ref()))
             .collect::<Vec<_>>()
     );
+}
+
+#[tokio::test]
+async fn replay_preserves_value_only_compiled_pipeline() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = HandlerRegistry::new();
+    registry
+        .register(CountingRunner {
+            metadata: HandlerMetadata::new("test::count")
+                .args(ArgSchema::strict().required("value", ValueSchema::String))
+                .input_schema(ValueSchema::Dynamic)
+                .output_schema(ValueSchema::object(
+                    ObjectSchema::new().required("value", ValueSchema::String),
+                ))
+                .confidence(ConfidenceCapability::Never),
+            calls: Arc::clone(&calls),
+        })
+        .unwrap();
+    let pipeline = crux_script::load(
+        r#"
+pipeline: value-only-replay
+input_schema:
+  type: dynamic
+steps:
+  - step: first
+    handler: test::count
+    args:
+      value: initial
+  - step: second
+    handler: test::count
+    args:
+      value: "{{ steps.first.output.value }}"
+"#,
+    )
+    .unwrap();
+    let compiled = compile_pipeline(&pipeline, &registry, CompileOptions::strict())
+        .into_artifact()
+        .unwrap();
+    let runner = Runner::new(Arc::new(HandlerRegistry::new()));
+
+    let first = runner.run_compiled(&compiled, json!(null)).await;
+    let replayed = runner
+        .run_compiled_with_replay(&compiled, json!(null), &first, ReplayMode::Strict)
+        .await;
+
+    assert_eq!(first.value().unwrap(), &json!({"value": "initial"}));
+    assert_eq!(replayed.value().unwrap(), first.value().unwrap());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn replay_rejects_confidence_dependent_pipeline() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: confidence-replay
+input_schema:
+  type: dynamic
+steps:
+  - step: confidence
+    handler: test::confidence
+  - route_on_confidence: route
+    value: "{{ steps.confidence.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: low
+        handler: test::low
+      - range: "[0.5, 1.0]"
+        label: high
+        handler: test::high
+"#,
+    )
+    .unwrap();
+    let registry = combinator_registry();
+    let compiled = compile_pipeline(&pipeline, &registry, CompileOptions::strict())
+        .into_artifact()
+        .unwrap();
+    let runner = Runner::new(Arc::new(HandlerRegistry::new()));
+    let first = runner.run_compiled(&compiled, json!(null)).await;
+
+    let replayed = runner
+        .run_compiled_with_replay(&compiled, json!(null), &first, ReplayMode::Strict)
+        .await;
+
+    let error = replayed.value().unwrap_err().to_string();
+    assert!(error.contains("confidence-dependent"), "{error}");
+    assert!(error.contains("cannot be replayed"), "{error}");
+    assert!(replayed.steps.is_empty());
 }

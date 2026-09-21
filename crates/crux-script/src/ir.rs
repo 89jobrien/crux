@@ -237,6 +237,33 @@ impl TypedValue {
                 .collect(),
         }
     }
+
+    fn reads_handler_confidence(&self) -> bool {
+        match &self.kind {
+            TypedValueKind::Literal(_) => false,
+            TypedValueKind::Expression(ParsedExpression::Literal(_)) => false,
+            TypedValueKind::Expression(ParsedExpression::ExactPath(path)) => {
+                is_handler_confidence_path(path)
+            }
+            TypedValueKind::Expression(ParsedExpression::Interpolated(segments)) => {
+                segments.iter().any(|segment| {
+                    matches!(segment, TemplateSegment::Path(path) if is_handler_confidence_path(path))
+                })
+            }
+            TypedValueKind::Array(values) => {
+                values.iter().any(TypedValue::reads_handler_confidence)
+            }
+            TypedValueKind::Object(values) => {
+                values.values().any(TypedValue::reads_handler_confidence)
+            }
+        }
+    }
+}
+
+fn is_handler_confidence_path(path: &str) -> bool {
+    path.strip_prefix("steps.")
+        .and_then(|path| path.split_once('.'))
+        .is_some_and(|(_, field)| field == "confidence")
 }
 
 fn resolve_path(
@@ -395,6 +422,80 @@ pub(crate) struct TypedStep {
     pub(crate) confidence: ConfidenceCapability,
 }
 
+impl TypedStep {
+    fn reads_handler_confidence(&self) -> bool {
+        let arm_reads_confidence = |arm: &TypedArm| {
+            arm.args
+                .as_ref()
+                .is_some_and(TypedValue::reads_handler_confidence)
+        };
+        let route_reads_confidence = |branch: &TypedRouteBranch| {
+            branch
+                .args
+                .as_ref()
+                .is_some_and(TypedValue::reads_handler_confidence)
+        };
+        let body_reads_confidence =
+            |body: &[TypedStep]| body.iter().any(TypedStep::reads_handler_confidence);
+
+        match &self.kind {
+            TypedStepKind::Handler(handler) => {
+                handler
+                    .args
+                    .as_ref()
+                    .is_some_and(TypedValue::reads_handler_confidence)
+                    || handler.recovery.as_ref().is_some_and(|recovery| {
+                        recovery
+                            .args
+                            .as_ref()
+                            .is_some_and(TypedValue::reads_handler_confidence)
+                    })
+            }
+            TypedStepKind::Pipe { stages, .. }
+            | TypedStepKind::JoinAll { arms: stages, .. }
+            | TypedStepKind::Speculate { arms: stages, .. } => {
+                stages.iter().any(arm_reads_confidence)
+            }
+            TypedStepKind::RouteOnConfidence {
+                value, branches, ..
+            } => value.reads_handler_confidence() || branches.iter().any(route_reads_confidence),
+            TypedStepKind::Poll { body, until, .. } => {
+                body_reads_confidence(body) || until.reads_handler_confidence()
+            }
+            TypedStepKind::ForEach {
+                items,
+                body,
+                break_if,
+                ..
+            } => {
+                items.reads_handler_confidence()
+                    || body_reads_confidence(body)
+                    || break_if
+                        .as_ref()
+                        .is_some_and(TypedValue::reads_handler_confidence)
+            }
+            TypedStepKind::While {
+                condition,
+                body,
+                break_if,
+                ..
+            } => {
+                condition.reads_handler_confidence()
+                    || body_reads_confidence(body)
+                    || break_if
+                        .as_ref()
+                        .is_some_and(TypedValue::reads_handler_confidence)
+            }
+            TypedStepKind::Repeat { body, break_if, .. } => {
+                body_reads_confidence(body)
+                    || break_if
+                        .as_ref()
+                        .is_some_and(TypedValue::reads_handler_confidence)
+            }
+        }
+    }
+}
+
 pub(crate) fn failed_allowed_output_schema() -> ValueSchema {
     ValueSchema::object(
         ObjectSchema::new()
@@ -412,6 +513,7 @@ pub struct TypedPipeline {
     pub(crate) steps: Vec<TypedStep>,
     pub(crate) budget: Option<BudgetDef>,
     pub(crate) display: Option<PipelineDisplayDef>,
+    confidence_dependent: bool,
 }
 
 impl TypedPipeline {
@@ -420,6 +522,10 @@ impl TypedPipeline {
         variables: BTreeMap<String, TypedBinding>,
         steps: Vec<TypedStep>,
     ) -> Self {
+        let confidence_dependent = variables
+            .values()
+            .any(|binding| binding.value.reads_handler_confidence())
+            || steps.iter().any(TypedStep::reads_handler_confidence);
         Self {
             name: definition.pipeline.clone(),
             input_schema: definition.input_schema.clone(),
@@ -427,6 +533,7 @@ impl TypedPipeline {
             steps,
             budget: definition.budget.clone(),
             display: definition.display.clone(),
+            confidence_dependent,
         }
     }
 
@@ -456,6 +563,10 @@ impl TypedPipeline {
         self.steps
             .iter()
             .all(|step| matches!(step.kind, TypedStepKind::Handler(_)))
+    }
+
+    pub(crate) fn is_confidence_dependent(&self) -> bool {
+        self.confidence_dependent
     }
 
     /// Return the inferred schema for one top-level step argument.
@@ -528,6 +639,7 @@ impl fmt::Debug for TypedPipeline {
             .field("steps", &self.steps)
             .field("budget", &self.budget)
             .field("display", &self.display)
+            .field("confidence_dependent", &self.confidence_dependent)
             .finish()
     }
 }
