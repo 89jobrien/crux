@@ -63,3 +63,52 @@ async fn shell_capture_with_cwd() {
     let stdout = result["stdout"].as_str().unwrap().trim();
     assert!(stdout.contains("tmp"), "expected /tmp, got {stdout}");
 }
+
+#[tokio::test]
+async fn process_run_passes_untrusted_arguments_literally() {
+    let reg = registry();
+    let handler = reg.get_handler("process::run").unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let marker = temp.path().join("injected");
+    let untrusted = format!("$(touch {})", marker.display());
+    let result = handler(json!({
+        "args": {
+            "program": "printf",
+            "argv": ["%s", untrusted]
+        }
+    }))
+    .await
+    .outcome
+    .unwrap()
+    .value;
+
+    assert_eq!(result["stdout"], untrusted);
+    assert!(!marker.exists(), "argument was interpreted by a shell");
+}
+
+#[tokio::test]
+async fn process_run_supports_cwd_env_and_nonzero_policy() {
+    let reg = registry();
+    let handler = reg.get_handler("process::run").unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let canonical_temp = temp.path().canonicalize().unwrap();
+    let result = handler(json!({
+        "args": {
+            "program": "sh",
+            "argv": ["-c", "printf '%s:%s' \"$PWD\" \"$CRUX_TYPED\"; exit 7"],
+            "cwd": temp.path(),
+            "env": {"CRUX_TYPED": "yes"},
+            "fail_on_nonzero": false
+        }
+    }))
+    .await
+    .outcome
+    .unwrap()
+    .value;
+
+    assert_eq!(result["exit_code"], 7);
+    assert_eq!(
+        result["stdout"],
+        format!("{}:yes", canonical_temp.display())
+    );
+}
