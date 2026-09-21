@@ -145,7 +145,11 @@ impl<T: Serialize> Crux<T> {
 
         for (i, step) in self.steps.iter().enumerate() {
             let id = format!("s{i}");
-            let label = format!("{} {}ms", step.name, step.duration_ms);
+            let label = format!(
+                "{} {}ms",
+                escape_mermaid_label(&step.name),
+                step.duration_ms
+            );
             lines.push(format!("    {id}[\"{label}\"]"));
 
             if i > 0 {
@@ -154,7 +158,7 @@ impl<T: Serialize> Crux<T> {
                     if let Some(child) = child_iter.next() {
                         lines.push(format!(
                             "    {prev} -->|\"delegate: {}\"| {id}",
-                            child.agent
+                            escape_mermaid_label(&child.agent)
                         ));
                     } else {
                         lines.push(format!("    {prev} --> {id}"));
@@ -202,6 +206,13 @@ impl<T: Serialize> Crux<T> {
             finished_at: self.finished_at,
         })
     }
+}
+
+fn escape_mermaid_label(label: &str) -> String {
+    label
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace(['\n', '\r'], " ")
 }
 
 /// Severity-ordered outcome of a workflow execution.
@@ -306,6 +317,16 @@ mod tests {
             mermaid.contains("fill:#D3D3D3"),
             "rejected steps should be gray"
         );
+    }
+
+    #[test]
+    fn to_mermaid_escapes_step_labels() {
+        let mut crux = sample_crux();
+        crux.steps[0].name = "say \"hello\"\nnext".into();
+
+        let mermaid = crux.to_mermaid();
+
+        assert!(mermaid.contains(r#"s0["say \"hello\" next 0ms"]"#));
     }
 
     #[test]

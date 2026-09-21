@@ -6,10 +6,6 @@
 pub use crux_derive::{agent, evolve, harness};
 pub use crux_runtime::*;
 
-// TODO(feature-idea-4): Implement the trace visualization tracked by #98.
-// TODO(#98): trace visualization / export — add a Crux<T>::to_mermaid() or similar
-//   to render execution traces as diagrams for debugging and documentation
-
 #[cfg(feature = "script")]
 pub use crux_script as script;
 
