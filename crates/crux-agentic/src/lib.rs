@@ -21,6 +21,9 @@ pub mod sqlite;
 pub mod task;
 pub mod triage;
 
+/// Backwards-compatible re-export of shell handlers now owned by `crux-stdlib`.
+pub use crux_stdlib::shell;
+
 pub use llm_step::LlmStep;
 pub use provider::{LlmProvider, LlmRequest, LlmResponse};
 
