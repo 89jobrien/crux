@@ -10,7 +10,9 @@ use serde_json::Value;
 
 use crate::expr::IterFrame;
 use crate::expr::{ExprContext, ExprError, StepResult};
-use crate::ir::{TypedHandlerStep, TypedPipeline, TypedRecoveryStep, TypedStepKind};
+use crate::ir::{
+    RuntimeScopes, TypedHandlerStep, TypedPipeline, TypedRecoveryStep, TypedStep, TypedStepKind,
+};
 use crate::registry::HandlerRegistry;
 use crate::schema::{
     BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
@@ -97,6 +99,7 @@ impl Runner {
         }
 
         let mut expr_ctx = ExprContext::new(input.clone());
+        let mut scopes = RuntimeScopes::default();
         let mut variables = pipeline.variables.iter().collect::<Vec<_>>();
         variables.sort_by_key(|(_, binding)| binding.id.0);
         for (name, binding) in variables {
@@ -110,23 +113,10 @@ impl Runner {
             }
         }
 
-        let mut current = input;
-        for step in &pipeline.steps {
-            let TypedStepKind::Handler(handler) = &step.kind else {
-                return ctx.finalize(Err(CruxErr::step_failed(
-                    &step.name,
-                    "typed execution for this combinator is not implemented",
-                )));
-            };
-            match self
-                .execute_typed_handler_step(&mut ctx, handler, &current, &mut expr_ctx)
-                .await
-            {
-                Ok(output) => current = output,
-                Err(error) => return ctx.finalize(Err(error)),
-            }
-        }
-        ctx.finalize(Ok(current))
+        let result = self
+            .execute_typed_steps(&mut ctx, &pipeline.steps, input, &mut expr_ctx, &mut scopes)
+            .await;
+        ctx.finalize(result)
     }
 
     /// Run a pipeline with replay from a previous trace.
@@ -766,11 +756,12 @@ impl Runner {
         handler: &TypedHandlerStep,
         current_input: &Value,
         expr_ctx: &mut ExprContext,
+        scopes: &RuntimeScopes,
     ) -> Result<Value, CruxErr> {
         let args = handler
             .args
             .as_ref()
-            .map(|args| args.evaluate(expr_ctx))
+            .map(|args| args.evaluate_scoped(expr_ctx, scopes))
             .transpose()
             .map_err(|error| CruxErr::step_failed(&handler.node.step, error.to_string()))?
             .unwrap_or(Value::Null);
@@ -822,6 +813,7 @@ impl Runner {
                             recovery,
                             current_input,
                             expr_ctx,
+                            scopes,
                         )
                         .await
                     {
@@ -859,11 +851,12 @@ impl Runner {
         recovery: &TypedRecoveryStep,
         current_input: &Value,
         expr_ctx: &ExprContext,
+        scopes: &RuntimeScopes,
     ) -> Result<Value, CruxErr> {
         let args = recovery
             .args
             .as_ref()
-            .map(|args| args.evaluate(expr_ctx))
+            .map(|args| args.evaluate_scoped(expr_ctx, scopes))
             .transpose()
             .map_err(|error| CruxErr::step_failed(step_name, error.to_string()))?
             .unwrap_or(Value::Null);
@@ -877,6 +870,94 @@ impl Runner {
         )
         .await
         .map(|(value, _)| value)
+    }
+
+    fn execute_typed_steps<'a>(
+        &'a self,
+        ctx: &'a mut CruxCtx,
+        steps: &'a [TypedStep],
+        input: Value,
+        expr_ctx: &'a mut ExprContext,
+        scopes: &'a mut RuntimeScopes,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, CruxErr>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let mut current = input;
+            for step in steps {
+                current = match &step.kind {
+                    TypedStepKind::Handler(handler) => {
+                        self.execute_typed_handler_step(ctx, handler, &current, expr_ctx, scopes)
+                            .await?
+                    }
+                    TypedStepKind::ForEach {
+                        items,
+                        bindings,
+                        body,
+                        break_if,
+                        ..
+                    } => {
+                        let values = items
+                            .evaluate_scoped(expr_ctx, scopes)
+                            .map_err(|error| CruxErr::step_failed(&step.name, error.to_string()))?
+                            .as_array()
+                            .cloned()
+                            .ok_or_else(|| {
+                                CruxErr::step_failed(
+                                    &step.name,
+                                    "for_each items did not resolve to an array",
+                                )
+                            })?;
+                        let mut output = current.clone();
+                        for (index, item) in values.into_iter().enumerate() {
+                            scopes.push_iteration(bindings, index, Some(item));
+                            let iteration = self
+                                .execute_typed_steps(ctx, body, output.clone(), expr_ctx, scopes)
+                                .await;
+                            let iteration = match iteration {
+                                Ok(value) => {
+                                    let should_break = break_if
+                                        .as_ref()
+                                        .map(|expression| {
+                                            expression.evaluate_scoped(expr_ctx, scopes).and_then(
+                                                |value| {
+                                                    value.as_bool().ok_or(ExprError::NotBoolean)
+                                                },
+                                            )
+                                        })
+                                        .transpose()
+                                        .map_err(|error| {
+                                            CruxErr::step_failed(&step.name, error.to_string())
+                                        });
+                                    should_break.map(|should_break| (value, should_break))
+                                }
+                                Err(error) => Err(error),
+                            };
+                            scopes.pop_iteration();
+                            let (value, should_break) = iteration?;
+                            output = value;
+                            if should_break.unwrap_or(false) {
+                                break;
+                            }
+                        }
+                        expr_ctx.steps.insert(
+                            step.name.clone(),
+                            StepResult {
+                                output: output.clone(),
+                                confidence: None,
+                            },
+                        );
+                        output
+                    }
+                    _ => {
+                        return Err(CruxErr::step_failed(
+                            &step.name,
+                            "typed execution for this combinator is not implemented",
+                        ));
+                    }
+                };
+            }
+            Ok(current)
+        })
     }
 
     /// Run a step's `on_error:` fallback handler (#88) as a traced sub-step named

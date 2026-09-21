@@ -1,6 +1,10 @@
 //! Runtime-only typed pipeline intermediate representation.
 
-use std::{collections::BTreeMap, fmt, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt,
+    sync::Arc,
+};
 
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -52,6 +56,64 @@ pub(crate) struct TypedLoopBinding {
 pub(crate) struct TypedLoopBindings {
     pub(crate) index: TypedLoopBinding,
     pub(crate) item: Option<TypedLoopBinding>,
+}
+
+#[derive(Debug, Default)]
+struct RuntimeScopeFrame {
+    names: HashMap<String, BindingId>,
+    values: HashMap<BindingId, Value>,
+}
+
+/// Lexical runtime frames keyed by compiler-assigned binding IDs.
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeScopes {
+    frames: Vec<RuntimeScopeFrame>,
+}
+
+impl RuntimeScopes {
+    pub(crate) fn push_iteration(
+        &mut self,
+        bindings: &TypedLoopBindings,
+        index: usize,
+        item: Option<Value>,
+    ) {
+        let mut frame = RuntimeScopeFrame::default();
+        frame
+            .names
+            .insert(bindings.index.name.clone(), bindings.index.id);
+        frame.values.insert(bindings.index.id, Value::from(index));
+        if let (Some(binding), Some(value)) = (&bindings.item, item) {
+            frame.names.insert(binding.name.clone(), binding.id);
+            frame.values.insert(binding.id, value);
+        }
+        self.frames.push(frame);
+    }
+
+    pub(crate) fn pop_iteration(&mut self) {
+        let popped = self.frames.pop();
+        debug_assert!(popped.is_some(), "iteration scope stack underflow");
+    }
+
+    fn resolve(&self, path: &str) -> Option<Result<Value, ExprError>> {
+        let rest = path.strip_prefix("iter.")?;
+        let (name, tail) = rest
+            .split_once('.')
+            .map_or((rest, None), |(name, tail)| (name, Some(tail)));
+        for frame in self.frames.iter().rev() {
+            if let Some(value) = frame
+                .names
+                .get(name)
+                .and_then(|binding_id| frame.values.get(binding_id))
+            {
+                return Some(match tail {
+                    Some(tail) => value_at_path(value, tail)
+                        .ok_or_else(|| ExprError::UnknownPath(path.to_string())),
+                    None => Ok(value.clone()),
+                });
+            }
+        }
+        Some(Err(ExprError::UnknownPath(path.to_string())))
+    }
 }
 
 impl TypedValue {
@@ -136,18 +198,26 @@ impl TypedValue {
     }
 
     pub(crate) fn evaluate(&self, context: &ExprContext) -> Result<Value, ExprError> {
+        self.evaluate_scoped(context, &RuntimeScopes::default())
+    }
+
+    pub(crate) fn evaluate_scoped(
+        &self,
+        context: &ExprContext,
+        scopes: &RuntimeScopes,
+    ) -> Result<Value, ExprError> {
         match &self.kind {
             TypedValueKind::Literal(value) => Ok(value.clone()),
             TypedValueKind::Expression(expression) => match expression {
                 ParsedExpression::Literal(value) => Ok(Value::String(value.clone())),
-                ParsedExpression::ExactPath(path) => context.eval(&format!("{{{{ {path} }}}}")),
+                ParsedExpression::ExactPath(path) => resolve_path(context, scopes, path),
                 ParsedExpression::Interpolated(segments) => {
                     let mut value = String::new();
                     for segment in segments {
                         match segment {
                             TemplateSegment::Text(text) => value.push_str(text),
                             TemplateSegment::Path(path) => {
-                                match context.eval(&format!("{{{{ {path} }}}}"))? {
+                                match resolve_path(context, scopes, path)? {
                                     Value::String(text) => value.push_str(&text),
                                     resolved => value.push_str(&resolved.to_string()),
                                 }
@@ -157,15 +227,34 @@ impl TypedValue {
                     Ok(Value::String(value))
                 }
             },
-            TypedValueKind::Array(values) => {
-                values.iter().map(|value| value.evaluate(context)).collect()
-            }
+            TypedValueKind::Array(values) => values
+                .iter()
+                .map(|value| value.evaluate_scoped(context, scopes))
+                .collect(),
             TypedValueKind::Object(values) => values
                 .iter()
-                .map(|(name, value)| Ok((name.clone(), value.evaluate(context)?)))
+                .map(|(name, value)| Ok((name.clone(), value.evaluate_scoped(context, scopes)?)))
                 .collect(),
         }
     }
+}
+
+fn resolve_path(
+    context: &ExprContext,
+    scopes: &RuntimeScopes,
+    path: &str,
+) -> Result<Value, ExprError> {
+    scopes
+        .resolve(path)
+        .unwrap_or_else(|| context.eval(&format!("{{{{ {path} }}}}")))
+}
+
+fn value_at_path(value: &Value, path: &str) -> Option<Value> {
+    let mut current = value;
+    for key in path.split('.') {
+        current = current.get(key)?;
+    }
+    Some(current.clone())
 }
 
 #[derive(Clone)]
