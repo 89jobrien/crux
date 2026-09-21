@@ -1,6 +1,7 @@
 use crux_script::{
-    ArgSchema, ArgType, HandlerMetadata, HandlerRegistry, ObjectSchema, RiskLevel, ValueSchema,
-    validate_cruxfile, validate_pipeline,
+    ArgSchema, ArgType, CompileOptions, DiagnosticSeverity, HandlerMetadata, HandlerRegistry,
+    RiskLevel, ValidationCode, compile_cruxfile, compile_pipeline, validate_cruxfile,
+    validate_pipeline,
 };
 use serde_json::Value;
 
@@ -22,47 +23,61 @@ fn registry() -> HandlerRegistry {
             .args(ArgSchema::new().optional("fields", ArgType::Array)),
         |input: Value| async move { Ok(input) },
     );
-    registry.handler_value_with_metadata(
-        HandlerMetadata::new("test::nested").args(ArgSchema::strict().required(
-            "config",
-            ValueSchema::object(ObjectSchema::new().required("name", ValueSchema::String)),
-        )),
-        |input: Value| async move { Ok(input) },
-    );
     registry
 }
 
-#[test]
-fn recursive_argument_schema_validation() {
-    let valid = crux_script::load(
-        r#"
-pipeline: nested
-steps:
-  - step: validate
-    handler: test::nested
-    args:
-      config:
-        name: crux
-"#,
-    )
-    .unwrap();
-    assert!(validate_pipeline(&valid, &registry()).is_ok());
+fn codes_and_locations(
+    diagnostics: &[crux_script::ValidationDiagnostic],
+) -> Vec<(ValidationCode, &str)> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| (diagnostic.code, diagnostic.location.as_str()))
+        .collect()
+}
 
-    let invalid = crux_script::load(
+#[test]
+fn legacy_validation_uses_compiler_diagnostics() {
+    let pipeline = crux_script::load(
         r#"
-pipeline: nested
+pipeline: duplicate
 steps:
-  - step: validate
-    handler: test::nested
-    args:
-      config:
-        name: false
+  - step: repeated
+    handler: json::pick
+  - step: repeated
+    handler: json::pick
 "#,
     )
     .unwrap();
-    let report = validate_pipeline(&invalid, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("expected object"));
+    let registry = registry();
+    let compiler = compile_pipeline(&pipeline, &registry, CompileOptions::permissive());
+    let legacy = validate_pipeline(&pipeline, &registry);
+
+    assert_eq!(
+        codes_and_locations(&legacy.diagnostics),
+        codes_and_locations(compiler.diagnostics())
+    );
+
+    let cruxfile = crux_script::load_cruxfile(
+        r#"
+project: duplicate
+default: check
+targets:
+  check:
+    steps:
+      - step: repeated
+        handler: json::pick
+      - step: repeated
+        handler: json::pick
+"#,
+    )
+    .unwrap();
+    let compiler = compile_cruxfile(&cruxfile, &registry, CompileOptions::permissive());
+    let legacy = validate_cruxfile(&cruxfile, &registry);
+
+    assert_eq!(
+        codes_and_locations(&legacy.diagnostics),
+        codes_and_locations(compiler.diagnostics())
+    );
 }
 
 #[test]
@@ -78,7 +93,7 @@ fn metadata_is_registered_with_handler() {
 }
 
 #[test]
-fn validation_accepts_known_handler_with_required_args() {
+fn validation_accepts_compiler_success() {
     let pipeline = crux_script::load(
         r#"
 pipeline: valid
@@ -96,125 +111,30 @@ steps:
 }
 
 #[test]
-fn validation_reports_unknown_handler() {
+fn validation_preserves_compiler_codes_and_locations() {
     let pipeline = crux_script::load(
         r#"
 pipeline: invalid
 steps:
   - step: missing
-    handler: unknown::handler
+    handler: plugin::missing
 "#,
     )
     .unwrap();
 
     let report = validate_pipeline(&pipeline, &registry());
-    // Unknown namespace → warning (aspirational/plugin handler).
     assert_eq!(report.error_count(), 0);
     assert_eq!(report.warning_count(), 1);
-    assert!(report.diagnostics[0].message.contains("not registered"));
+    assert_eq!(report.diagnostics[0].code, ValidationCode::UnknownHandler);
+    assert_eq!(report.diagnostics[0].location, "steps[0]");
+    assert_eq!(report.diagnostics[0].severity, DiagnosticSeverity::Warning);
 }
 
 #[test]
-fn validation_errors_on_known_namespace_unknown_handler() {
+fn validation_reports_compiler_duplicate_name() {
     let pipeline = crux_script::load(
         r#"
-pipeline: invalid
-steps:
-  - step: bad
-    handler: shell::nonexistent
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    // Known namespace (shell) → error.
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("namespace exists"));
-}
-
-#[test]
-fn validation_reports_missing_required_args() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: invalid
-steps:
-  - step: run
-    handler: shell::capture
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("cmd"));
-}
-
-#[test]
-fn validation_reports_wrong_arg_type() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: invalid
-steps:
-  - step: run
-    handler: shell::capture
-    args:
-      cmd: ["echo", "hello"]
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("expected string"));
-}
-
-#[test]
-fn validation_allows_templated_static_args() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: valid
-steps:
-  - step: run
-    handler: shell::capture
-    args:
-      cmd: "{{ input.command }}"
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    assert!(report.is_ok(), "{:?}", report.diagnostics);
-}
-
-#[test]
-fn validation_checks_nested_handler_positions() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: invalid
-steps:
-  - join_all: fetch
-    arms:
-      - step: a
-        handler: json::pick
-        args:
-          fields: [name]
-      - missing::handler
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    // Unknown namespace → warning, not error.
-    assert_eq!(report.error_count(), 0);
-    assert_eq!(report.warning_count(), 1);
-    assert!(report.diagnostics[0].location.contains("arms[1]"));
-}
-
-#[test]
-fn validation_detects_duplicate_step_names() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: dup-test
+pipeline: duplicate
 steps:
   - step: read
     handler: json::pick
@@ -225,79 +145,7 @@ steps:
     .unwrap();
 
     let report = validate_pipeline(&pipeline, &registry());
-    assert!(
-        report.diagnostics.iter().any(|d| {
-            d.severity == crux_script::DiagnosticSeverity::Error
-                && d.message.contains("duplicate step name")
-        }),
-        "expected duplicate step name error, got: {:?}",
-        report.diagnostics
-    );
-}
-
-#[test]
-fn validation_reports_overlapping_confidence_routes() {
-    let pipeline = crux_script::load(
-        r#"
-pipeline: invalid
-steps:
-  - route_on_confidence: route
-    value: "{{ steps.analyze.confidence }}"
-    routes:
-      - range: "[0.0, 0.8]"
-        label: low
-        handler: json::pick
-      - range: "[0.8, 1.0]"
-        label: high
-        handler: json::pick
-"#,
-    )
-    .unwrap();
-
-    let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("overlap"));
-}
-
-#[test]
-fn budget_alias_conflicts_are_rejected_in_pipeline_and_cruxfile() {
-    let pipeline = crux_script::load(
-        "pipeline: aliases\nbudget:\n  steps: 1\n  calls: 1\n  usd: 1\n  cost_cents: 100\nsteps: []\n",
-    )
-    .unwrap();
-    let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 2);
-
-    let cruxfile = crux_script::load_cruxfile(
-        "project: aliases\ndefault: check\ntargets:\n  check:\n    budget:\n      steps: 1\n      calls: 1\n      usd: 1\n      cost_cents: 100\n    steps: []\n",
-    )
-    .unwrap();
-    let report = validate_cruxfile(&cruxfile, &registry());
-    assert_eq!(report.error_count(), 2);
-    assert!(
-        report
-            .diagnostics
-            .iter()
-            .all(|d| d.location.starts_with("targets.check.budget"))
-    );
-}
-
-#[test]
-fn cost_cents_overflow_is_rejected_in_pipeline_and_cruxfile() {
-    let overflow = u64::MAX / 10_000 + 1;
-    let pipeline = crux_script::load(&format!(
-        "pipeline: overflow\nbudget:\n  cost_cents: {overflow}\nsteps: []\n"
-    ))
-    .unwrap();
-    let report = validate_pipeline(&pipeline, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("too large"));
-
-    let cruxfile = crux_script::load_cruxfile(&format!(
-        "project: overflow\ndefault: check\nbudget:\n  cost_cents: {overflow}\ntargets:\n  check:\n    steps: []\n"
-    ))
-    .unwrap();
-    let report = validate_cruxfile(&cruxfile, &registry());
-    assert_eq!(report.error_count(), 1);
-    assert!(report.diagnostics[0].message.contains("too large"));
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::DuplicateName && diagnostic.location == "steps[1]"
+    }));
 }

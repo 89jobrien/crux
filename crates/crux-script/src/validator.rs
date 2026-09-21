@@ -1,13 +1,12 @@
-//! Static pipeline validation against registered handler metadata.
+//! Compatibility validation views over typed pipeline compilation.
 
 use std::fmt;
 
 use miette::Diagnostic;
-use serde_json::Value;
 
+use crate::compiler::{CompileOptions, compile_cruxfile, compile_pipeline};
 use crate::registry::HandlerRegistry;
-use crate::resolve::TargetResolver;
-use crate::schema::{ArmDef, CruxfileDef, PipelineDef, RouteBranch, StepDef};
+use crate::schema::{CruxfileDef, PipelineDef, StepDef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticSeverity {
@@ -18,8 +17,8 @@ pub enum DiagnosticSeverity {
 impl DiagnosticSeverity {
     fn to_miette_severity(self) -> miette::Severity {
         match self {
-            DiagnosticSeverity::Error => miette::Severity::Error,
-            DiagnosticSeverity::Warning => miette::Severity::Warning,
+            Self::Error => miette::Severity::Error,
+            Self::Warning => miette::Severity::Warning,
         }
     }
 }
@@ -27,8 +26,8 @@ impl DiagnosticSeverity {
 impl fmt::Display for DiagnosticSeverity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DiagnosticSeverity::Error => f.write_str("error"),
-            DiagnosticSeverity::Warning => f.write_str("warning"),
+            Self::Error => f.write_str("error"),
+            Self::Warning => f.write_str("warning"),
         }
     }
 }
@@ -160,19 +159,15 @@ impl ValidationReport {
     pub fn error_count(&self) -> usize {
         self.diagnostics
             .iter()
-            .filter(|d| d.severity == DiagnosticSeverity::Error)
+            .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
             .count()
     }
 
     pub fn warning_count(&self) -> usize {
         self.diagnostics
             .iter()
-            .filter(|d| d.severity == DiagnosticSeverity::Warning)
+            .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Warning)
             .count()
-    }
-
-    fn push(&mut self, diagnostic: ValidationDiagnostic) {
-        self.diagnostics.push(diagnostic);
     }
 }
 
@@ -209,429 +204,71 @@ impl Diagnostic for ValidationReport {
             None
         } else {
             Some(Box::new(
-                self.diagnostics.iter().map(|d| d as &dyn Diagnostic),
+                self.diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic as &dyn Diagnostic),
             ))
         }
     }
 }
 
-/// Validate a parsed pipeline against the registered handler metadata.
-// TODO(feature-idea-8): Validate expression references, variable scope, and prior-step paths.
+/// Validate a parsed pipeline through the canonical permissive compiler.
 pub fn validate_pipeline(pipeline: &PipelineDef, registry: &HandlerRegistry) -> ValidationReport {
-    let mut report = ValidationReport::default();
-    let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    if let Some(budget) = &pipeline.budget {
-        validate_budget(&mut report, "budget", budget);
-    }
-
-    for (idx, step) in pipeline.steps.iter().enumerate() {
-        let location = format!("steps[{idx}]");
-
-        let step_name = match step {
-            StepDef::Step(n) => n.step.as_str(),
-            StepDef::Delegate(n) => n.name.as_deref().unwrap_or(&n.delegate),
-            StepDef::Pipe(n) => n.pipe.as_str(),
-            StepDef::JoinAll(n) => n.join_all.as_str(),
-            StepDef::RouteOnConfidence(n) => n.route_on_confidence.as_str(),
-            StepDef::Speculate(n) => n.speculate.as_str(),
-            StepDef::Poll(n) => n.poll.as_str(),
-            StepDef::ForEach(n) => n.label(),
-            StepDef::While(n) => n.r#while.as_str(),
-            StepDef::Repeat(n) => n.repeat.as_str(),
-        };
-        if !seen_names.insert(step_name.to_string()) {
-            report.push(ValidationDiagnostic::error(
-                &location,
-                format!("duplicate step name '{step_name}'"),
-            ));
-        }
-
-        match step {
-            StepDef::Step(node) => {
-                let handler = node.handler.as_deref().unwrap_or(&node.step);
-                validate_handler_ref(
-                    &mut report,
-                    registry,
-                    &location,
-                    handler,
-                    node.args.as_ref(),
-                );
-            }
-            StepDef::Delegate(node) => {
-                if registry.get_agent(&node.delegate).is_none() {
-                    report.push(ValidationDiagnostic::warning(
-                        &location,
-                        format!("agent '{}' is not registered", node.delegate),
-                    ));
-                }
-            }
-            StepDef::Pipe(node) => {
-                for (stage_idx, arm) in node.stages.iter().enumerate() {
-                    validate_arm(
-                        &mut report,
-                        registry,
-                        &format!("{location}.stages[{stage_idx}]"),
-                        arm,
-                    );
-                }
-            }
-            StepDef::JoinAll(node) => {
-                for (arm_idx, arm) in node.arms.iter().enumerate() {
-                    validate_arm(
-                        &mut report,
-                        registry,
-                        &format!("{location}.arms[{arm_idx}]"),
-                        arm,
-                    );
-                }
-            }
-            StepDef::RouteOnConfidence(node) => {
-                validate_routes(&mut report, &location, &node.routes);
-                for (route_idx, branch) in node.routes.iter().enumerate() {
-                    validate_handler_ref(
-                        &mut report,
-                        registry,
-                        &format!("{location}.routes[{route_idx}]"),
-                        &branch.handler,
-                        branch.args.as_ref(),
-                    );
-                }
-            }
-            StepDef::Speculate(node) => {
-                for (arm_idx, arm) in node.arms.iter().enumerate() {
-                    validate_arm(
-                        &mut report,
-                        registry,
-                        &format!("{location}.arms[{arm_idx}]"),
-                        arm,
-                    );
-                }
-            }
-            StepDef::Poll(node) => {
-                validate_nested_steps(&mut report, registry, &location, &node.steps);
-            }
-            StepDef::ForEach(node) => {
-                validate_nested_steps(&mut report, registry, &location, &node.steps);
-            }
-            StepDef::While(node) => {
-                validate_nested_steps(&mut report, registry, &location, &node.steps);
-            }
-            StepDef::Repeat(node) => {
-                validate_nested_steps(&mut report, registry, &location, &node.steps);
-            }
-        }
-    }
-
-    report
+    let mut diagnostics = compile_pipeline(pipeline, registry, CompileOptions::permissive())
+        .diagnostics()
+        .to_vec();
+    retain_legacy_argument_compatibility(pipeline, registry, &mut diagnostics);
+    ValidationReport { diagnostics }
 }
 
-fn validate_budget(
-    report: &mut ValidationReport,
-    location: &str,
-    budget: &crate::schema::BudgetDef,
-) {
-    if budget.steps.is_some() && budget.calls.is_some() {
-        report.push(ValidationDiagnostic::error(
-            format!("{location}.steps"),
-            "budget cannot specify both 'steps' and compatibility field 'calls'",
-        ));
-    }
-    if budget.usd.is_some() && budget.cost_cents.is_some() {
-        report.push(ValidationDiagnostic::error(
-            format!("{location}.usd"),
-            "budget cannot specify both 'usd' and compatibility field 'cost_cents'",
-        ));
-    }
-    if budget
-        .cost_cents
-        .is_some_and(|cents| cents.checked_mul(10_000).is_none())
-    {
-        report.push(ValidationDiagnostic::error(
-            format!("{location}.cost_cents"),
-            "cost_cents budget is too large to convert exactly to microdollars",
-        ));
-    }
-}
-
-/// Recursively validate a loop construct's nested `steps:` block, prefixing any
-/// diagnostics with the parent location (e.g. `steps[0].steps[1]`).
-fn validate_nested_steps(
-    report: &mut ValidationReport,
-    registry: &HandlerRegistry,
-    parent_location: &str,
-    steps: &[StepDef],
-) {
-    let nested_pipeline = PipelineDef {
-        pipeline: parent_location.to_string(),
-        input_schema: None,
-        budget: None,
-        vars: None,
-        display: None,
-        steps: steps.to_vec(),
-    };
-    let nested_report = validate_pipeline(&nested_pipeline, registry);
-    for mut diag in nested_report.diagnostics {
-        diag.location = format!("{parent_location}.{}", diag.location);
-        report.push(diag);
-    }
-}
-
-/// Validate a Cruxfile: each target's steps, dependency references, cycles, and default target.
+/// Validate a Cruxfile through the canonical permissive compiler.
 pub fn validate_cruxfile(cruxfile: &CruxfileDef, registry: &HandlerRegistry) -> ValidationReport {
-    let mut report = ValidationReport::default();
-
-    // Check default target exists.
-    if !cruxfile.targets.contains_key(&cruxfile.default) {
-        report.push(ValidationDiagnostic::error(
-            "default",
-            format!(
-                "default target '{}' is not defined in targets",
-                cruxfile.default
-            ),
-        ));
+    ValidationReport {
+        diagnostics: compile_cruxfile(cruxfile, registry, CompileOptions::permissive())
+            .diagnostics()
+            .to_vec(),
     }
+}
 
-    // Check dependency graph (unknown deps + cycles).
-    if let Err(e) = TargetResolver::new(cruxfile) {
-        report.push(ValidationDiagnostic::error("targets", e.to_string()));
-    }
-
-    // Validate each target's steps as if it were a pipeline.
-    for (name, target) in &cruxfile.targets {
-        let pipeline = PipelineDef {
-            pipeline: name.clone(),
-            input_schema: None,
-            budget: target.budget.clone().or_else(|| cruxfile.budget.clone()),
-            vars: None,
-            display: None,
-            steps: target.steps.clone(),
+fn retain_legacy_argument_compatibility(
+    pipeline: &PipelineDef,
+    registry: &HandlerRegistry,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+) {
+    for (index, step) in pipeline.steps.iter().enumerate() {
+        let StepDef::Step(node) = step else {
+            continue;
         };
-        let target_report = validate_pipeline(&pipeline, registry);
-        for mut diag in target_report.diagnostics {
-            diag.location = format!("targets.{name}.{}", diag.location);
-            report.push(diag);
-        }
-    }
-
-    report
-}
-
-fn validate_arm(
-    report: &mut ValidationReport,
-    registry: &HandlerRegistry,
-    location: &str,
-    arm: &ArmDef,
-) {
-    validate_handler_ref(report, registry, location, arm.handler_name(), arm.args());
-}
-
-fn validate_handler_ref(
-    report: &mut ValidationReport,
-    registry: &HandlerRegistry,
-    location: &str,
-    handler: &str,
-    args: Option<&Value>,
-) {
-    let Some(metadata) = registry.get_metadata(handler) else {
-        if registry.get_handler(handler).is_some() {
-            report.push(ValidationDiagnostic::warning(
-                location,
-                format!("handler '{handler}' has no metadata — args not validated"),
-            ));
-        } else {
-            // Distinguish known namespace (error) from unknown namespace (warning).
-            let known_ns = handler
-                .split_once("::")
-                .map(|(ns, _)| registry.registered_namespaces().contains(ns))
-                .unwrap_or(false);
-            if known_ns {
-                report.push(ValidationDiagnostic::error(
-                    location,
-                    format!("handler '{handler}' is not registered (namespace exists)"),
-                ));
-            } else {
-                report.push(ValidationDiagnostic::warning(
-                    location,
-                    format!("handler '{handler}' is not registered"),
-                ));
-            }
-        }
-        return;
-    };
-
-    let Some(schema_args) = args else {
-        if metadata.args.has_required_args() {
-            let missing = metadata
-                .args
-                .args
-                .iter()
-                .filter(|spec| spec.required)
-                .map(|spec| spec.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            report.push(ValidationDiagnostic::error(
-                location,
-                format!("handler '{handler}' is missing required args: {missing}"),
-            ));
-        }
-        return;
-    };
-
-    let Some(arg_map) = schema_args.as_object() else {
-        report.push(ValidationDiagnostic::error(
-            location,
-            format!("handler '{handler}' args must be an object"),
-        ));
-        return;
-    };
-
-    for spec in &metadata.args.args {
-        let Some(value) = arg_map.get(&spec.name) else {
-            if spec.required {
-                report.push(ValidationDiagnostic::error(
-                    location,
+        let handler = node.handler.as_deref().unwrap_or(&node.step);
+        let Some(metadata) = registry.get_metadata(handler) else {
+            continue;
+        };
+        let missing = metadata
+            .args
+            .args
+            .iter()
+            .filter(|argument| {
+                argument.required
+                    && node
+                        .args
+                        .as_ref()
+                        .and_then(serde_json::Value::as_object)
+                        .is_none_or(|args| !args.contains_key(&argument.name))
+            })
+            .map(|argument| argument.name.as_str())
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            diagnostics.insert(
+                0,
+                ValidationDiagnostic::error_with_code(
+                    ValidationCode::InvalidArguments,
+                    format!("steps[{index}]"),
                     format!(
-                        "handler '{handler}' is missing required arg '{}'",
-                        spec.name
+                        "handler '{handler}' is missing required args: {}",
+                        missing.join(", ")
                     ),
-                ));
-            }
-            continue;
-        };
-
-        if is_template_string(value) {
-            continue;
-        }
-
-        if spec.schema.validate(value).is_err() {
-            report.push(ValidationDiagnostic::error(
-                location,
-                format!(
-                    "handler '{handler}' arg '{}' expected {}, got {}",
-                    spec.name,
-                    spec.schema,
-                    display_value_type(value)
                 ),
-            ));
+            );
         }
     }
-
-    if !metadata.args.allow_extra {
-        for key in arg_map.keys() {
-            if metadata.args.get(key).is_none() {
-                report.push(ValidationDiagnostic::error(
-                    location,
-                    format!("handler '{handler}' received unexpected arg '{key}'"),
-                ));
-            }
-        }
-    }
-}
-
-fn is_template_string(value: &Value) -> bool {
-    value
-        .as_str()
-        .map(|s| s.trim_start().starts_with("{{"))
-        .unwrap_or(false)
-}
-
-fn display_value_type(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ParsedRange {
-    lo: f32,
-    hi: f32,
-    include_hi: bool,
-}
-
-fn validate_routes(report: &mut ValidationReport, location: &str, routes: &[RouteBranch]) {
-    let mut parsed = Vec::new();
-
-    for (idx, branch) in routes.iter().enumerate() {
-        match parse_range(&branch.range) {
-            Ok(range) => {
-                if range.lo < 0.0 || range.hi > 1.0 {
-                    report.push(ValidationDiagnostic::error(
-                        format!("{location}.routes[{idx}]"),
-                        format!(
-                            "confidence range '{}' must stay within [0.0, 1.0]",
-                            branch.range
-                        ),
-                    ));
-                }
-                if range.lo > range.hi || (range.lo == range.hi && !range.include_hi) {
-                    report.push(ValidationDiagnostic::error(
-                        format!("{location}.routes[{idx}]"),
-                        format!("confidence range '{}' is empty", branch.range),
-                    ));
-                }
-                parsed.push((idx, range));
-            }
-            Err(e) => report.push(ValidationDiagnostic::error(
-                format!("{location}.routes[{idx}]"),
-                format!("invalid confidence range '{}': {e}", branch.range),
-            )),
-        }
-    }
-
-    parsed.sort_by(|a, b| {
-        a.1.lo
-            .partial_cmp(&b.1.lo)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    for pair in parsed.windows(2) {
-        let (left_idx, left) = pair[0];
-        let (right_idx, right) = pair[1];
-        if ranges_overlap(left, right) {
-            report.push(ValidationDiagnostic::error(
-                location,
-                format!("confidence ranges for routes {left_idx} and {right_idx} overlap"),
-            ));
-        }
-    }
-}
-
-fn parse_range(s: &str) -> Result<ParsedRange, &'static str> {
-    let s = s.trim();
-    if !(s.starts_with('[') || s.starts_with('(')) {
-        return Err("missing opening bracket");
-    }
-    let include_hi = if s.ends_with(']') {
-        true
-    } else if s.ends_with(')') {
-        false
-    } else {
-        return Err("missing closing bracket");
-    };
-
-    let inner = &s[1..s.len() - 1];
-    let Some((lo, hi)) = inner.split_once(',') else {
-        return Err("expected lower and upper bounds");
-    };
-    let lo = lo
-        .trim()
-        .parse::<f32>()
-        .map_err(|_| "invalid lower bound")?;
-    let hi = hi
-        .trim()
-        .parse::<f32>()
-        .map_err(|_| "invalid upper bound")?;
-    Ok(ParsedRange { lo, hi, include_hi })
-}
-
-fn ranges_overlap(left: ParsedRange, right: ParsedRange) -> bool {
-    if left.hi > right.lo {
-        return true;
-    }
-    left.hi == right.lo && left.include_hi
 }

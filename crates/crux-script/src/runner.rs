@@ -167,7 +167,7 @@ impl Runner {
         previous: &Crux<Value>,
         mode: ReplayMode,
     ) -> Crux<Value> {
-        if let Some(crux) = self.validate_or_fail(pipeline) {
+        if let Some(crux) = self.compile_or_fail(pipeline) {
             return crux;
         }
         self.run_core(pipeline, input, Some(previous), mode).await
@@ -179,8 +179,8 @@ impl Runner {
             .await
     }
 
-    /// Validate and return a failed Crux if errors exist, or None to proceed.
-    fn validate_or_fail(&self, pipeline: &PipelineDef) -> Option<Crux<Value>> {
+    /// Compile through the compatibility validation view, preserving raw replay execution.
+    fn compile_or_fail(&self, pipeline: &PipelineDef) -> Option<Crux<Value>> {
         let report = crate::validator::validate_pipeline(pipeline, &self.registry);
         for diag in &report.diagnostics {
             if diag.severity == crate::validator::DiagnosticSeverity::Warning {
