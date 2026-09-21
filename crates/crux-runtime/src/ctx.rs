@@ -243,7 +243,8 @@ impl CruxCtx {
 
     /// Ask the planner for the abstract action governing an orchestration operation.
     pub(crate) fn plan_action(&self, name: &str) -> PlanResult {
-        self.planner.next_action(name, 0)
+        let priority = crate::agent::infer_priority(name).score() as u8;
+        self.planner.next_action(name, priority)
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.
@@ -977,7 +978,7 @@ impl CruxCtx {
         trace_step!(name, confidence);
 
         // Planner check — before replay cache and closure execution.
-        match self.planner.next_action(name, 0) {
+        match self.plan_action(name) {
             PlanResult::Deny { reason } => {
                 return Err(CruxErr::Denied {
                     step: name.to_string(),

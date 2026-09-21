@@ -25,7 +25,7 @@
     {
       "name": "crux-runtime-agent",
       "path": "crates/crux-runtime/src/agent.rs",
-      "hash": "f54a2cb044b0d2e74163452901c5cad83528195d07c498d75d29e60e011ef0b0"
+      "hash": "aeef75bafbaac847f6b5281b321d995f3385cf940c4e4a29d61d19160ee00d1c"
     },
     {
       "name": "crux-runtime-approval",

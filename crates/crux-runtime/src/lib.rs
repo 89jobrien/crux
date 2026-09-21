@@ -34,7 +34,7 @@ pub mod prelude {
     pub use crux_domain::plan_result::PlanResult;
     pub use crux_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
 
-    pub use crate::agent::Agent;
+    pub use crate::agent::{Agent, infer_priority};
     pub use crate::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
     pub use crate::audit::{AuditEntry, AuditSink, InMemoryAudit};
     pub use crate::context::{BudgetedInvocation, Context, InvocationMeter};
