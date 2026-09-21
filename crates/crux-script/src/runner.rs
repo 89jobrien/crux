@@ -678,18 +678,7 @@ impl Runner {
         // Merge static step args into the current input under the "args" key.
         // Template strings (`{{ input.field }}`, `{{ steps.X.output.field }}`) in
         // args string values are expanded against the current ExprContext before merge.
-        let input = if let Some(step_args) = &node.args {
-            let expanded = expand_args(step_args.clone(), expr_ctx);
-            let mut merged = current_input.clone();
-            if let Value::Object(ref mut map) = merged {
-                map.insert("args".to_string(), expanded);
-            } else {
-                merged = serde_json::json!({ "args": expanded, "input": current_input });
-            }
-            merged
-        } else {
-            current_input.clone()
-        };
+        let input = merge_expanded_args(current_input.clone(), node.args.as_ref(), expr_ctx);
 
         // Retry-with-backoff (#79): attempt 1 (initial) plus `retry.count` more,
         // each recorded as its own traced sub-step so replay/inspection can see
@@ -1431,13 +1420,7 @@ impl Runner {
             })?
             .clone();
 
-        let input = merge_args(
-            current_input.clone(),
-            on_err
-                .args
-                .as_ref()
-                .map(|a| expand_args(a.clone(), expr_ctx)),
-        );
+        let input = merge_expanded_args(current_input.clone(), on_err.args.as_ref(), expr_ctx);
 
         let label = format!("{step_name}::on_error");
         run_step_once(ctx, &label, handler, input, None)
@@ -1498,7 +1481,7 @@ impl Runner {
                 .get_handler(stage.handler_name())
                 .ok_or_else(|| CruxErr::step_failed(stage.handler_name(), "handler not found"))?
                 .clone();
-            let input = merge_args(output, stage.args().cloned());
+            let input = merge_expanded_args(output, stage.args(), expr_ctx);
             let step_name = format!("{}::{}", node.pipe, stage.label());
             match run_step_once(ctx, &step_name, handler, input, None).await {
                 Ok((value, stage_confidence)) => {
@@ -1549,7 +1532,7 @@ impl Runner {
             .zip(usage_cells.iter())
             .map(|((arm, cell), usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
-                let input = merge_args(current_input.clone(), arm.args().cloned());
+                let input = merge_expanded_args(current_input.clone(), arm.args(), expr_ctx);
                 let name_owned = arm.handler_name().to_string();
                 let cell = Arc::clone(cell);
                 let usage_cell = Arc::clone(usage_cell);
@@ -1637,7 +1620,8 @@ impl Runner {
             .map(|((branch, cell), usage_cell)| {
                 let range = parse_range(&branch.range);
                 let handler = self.registry.get_handler(&branch.handler).cloned();
-                let input = merge_args(current_input.clone(), branch.args.clone());
+                let input =
+                    merge_expanded_args(current_input.clone(), branch.args.as_ref(), expr_ctx);
                 let handler_name = branch.handler.clone();
                 let cell = Arc::clone(cell);
                 let usage_cell = Arc::clone(usage_cell);
@@ -1702,7 +1686,7 @@ impl Runner {
             .zip(usage_cells.iter())
             .map(|(arm, usage_cell)| {
                 let handler = self.registry.get_handler(arm.handler_name()).cloned();
-                let input = merge_args(current_input.clone(), arm.args().cloned());
+                let input = merge_expanded_args(current_input.clone(), arm.args(), expr_ctx);
                 let name_owned = arm.handler_name().to_string();
                 let usage_cell = Arc::clone(usage_cell);
                 let fut: BoxFut<Value> = Box::pin(async move {
@@ -2195,13 +2179,14 @@ fn check_expect(step_name: &str, output: &Value, expect: &ExpectDef) -> Result<(
     Ok(())
 }
 
-/// Merge static step args into handler input under the "args" key.
-fn merge_args(mut input: Value, args: Option<Value>) -> Value {
-    if let Some(a) = args {
+/// Expand declarative arguments and merge them into handler input under `args`.
+fn merge_expanded_args(mut input: Value, args: Option<&Value>, ctx: &ExprContext) -> Value {
+    if let Some(args) = args {
+        let expanded = expand_args(args.clone(), ctx);
         if let Value::Object(ref mut map) = input {
-            map.insert("args".to_string(), a);
+            map.insert("args".to_string(), expanded);
         } else {
-            input = serde_json::json!({ "args": a, "input": input });
+            input = serde_json::json!({ "args": expanded, "input": input });
         }
     }
     input
