@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use crux_runtime::prelude::CruxErr;
 use crux_script::{
     ArgSchema, CompileOptions, ConfidenceCapability, HandlerExecution, HandlerMetadata,
-    HandlerOutput, HandlerRegistry, Runner, StepFuture, StepInvocation, StepRunner, ValueSchema,
-    compile_pipeline,
+    HandlerOutput, HandlerRegistry, ObjectSchema, Runner, StepFuture, StepInvocation, StepRunner,
+    ValueSchema, compile_pipeline,
 };
 use serde_json::json;
 
@@ -396,5 +396,212 @@ steps:
             json!({"index": 1, "value": "beta"}),
             json!({"index": 2, "value": "gamma"}),
         ]
+    );
+}
+
+fn combinator_registry() -> Arc<HandlerRegistry> {
+    fn metadata(name: &str, input: ValueSchema, output: ValueSchema) -> HandlerMetadata {
+        HandlerMetadata::new(name)
+            .args(ArgSchema::strict())
+            .input_schema(input)
+            .output_schema(output)
+            .confidence(ConfidenceCapability::Never)
+    }
+
+    let mut registry = HandlerRegistry::new();
+    registry.handler_value_free_with_metadata(
+        metadata(
+            "test::pipe_source",
+            ValueSchema::Dynamic,
+            ValueSchema::String,
+        ),
+        |_| async { Ok(json!("pipe")) },
+    );
+    registry.handler_value_free_with_metadata(
+        metadata("test::append", ValueSchema::String, ValueSchema::String),
+        |input| async move {
+            let value = input.as_str().or_else(|| input["input"].as_str()).unwrap();
+            Ok(json!(format!("{value}-done")))
+        },
+    );
+    registry.handler_value_free_with_metadata(
+        metadata("test::join_text", ValueSchema::String, ValueSchema::String),
+        |_| async { Ok(json!("joined")) },
+    );
+    registry.handler_value_free_with_metadata(
+        metadata(
+            "test::join_count",
+            ValueSchema::String,
+            ValueSchema::Integer,
+        ),
+        |_| async { Ok(json!(2)) },
+    );
+    registry.handler_free_with_metadata(
+        HandlerMetadata::new("test::confidence")
+            .args(ArgSchema::strict())
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::object(
+                ObjectSchema::new().required("classified", ValueSchema::Boolean),
+            ))
+            .confidence(ConfidenceCapability::Always),
+        |_| async {
+            Ok(HandlerOutput::with_confidence(
+                json!({"classified": true}),
+                0.8,
+            ))
+        },
+    );
+    for (name, value) in [
+        ("test::low", json!("low")),
+        ("test::high", json!("high")),
+        ("test::recover", json!("recovered")),
+    ] {
+        registry.handler_value_free_with_metadata(
+            metadata(name, ValueSchema::Dynamic, ValueSchema::String),
+            move |_| {
+                let value = value.clone();
+                async move { Ok(value) }
+            },
+        );
+    }
+    let scored_schema = ValueSchema::object(
+        ObjectSchema::new()
+            .required("name", ValueSchema::String)
+            .required("score", ValueSchema::Number),
+    );
+    for (name, value) in [
+        ("test::candidate_a", json!({"name": "a", "score": 0.4})),
+        ("test::candidate_b", json!({"name": "b", "score": 0.9})),
+    ] {
+        registry.handler_value_free_with_metadata(
+            metadata(name, ValueSchema::Dynamic, scored_schema.clone()),
+            move |_| {
+                let value = value.clone();
+                async move { Ok(value) }
+            },
+        );
+    }
+    registry.handler_value_free_with_metadata(
+        metadata("test::identity", ValueSchema::Dynamic, ValueSchema::Dynamic),
+        |input| async move {
+            let mut value = input.get("input").cloned().unwrap_or(input);
+            if let Some(object) = value.as_object_mut()
+                && object.get("args").is_some_and(serde_json::Value::is_null)
+            {
+                object.remove("args");
+            }
+            Ok(value)
+        },
+    );
+    registry.handler_value_free_with_metadata(
+        metadata("test::true", ValueSchema::Dynamic, ValueSchema::Boolean),
+        |_| async { Ok(json!(true)) },
+    );
+    for name in ["test::fail", "test::also_fail"] {
+        let failure_name = name.to_string();
+        registry.handler_value_free_with_metadata(
+            metadata(name, ValueSchema::Dynamic, ValueSchema::String),
+            move |_| {
+                let failure_name = failure_name.clone();
+                async move {
+                    Err(CruxErr::step_failed(
+                        failure_name,
+                        "intentional parity failure",
+                    ))
+                }
+            },
+        );
+    }
+    Arc::new(registry)
+}
+
+#[tokio::test]
+async fn compiled_combinators_match_existing_results() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: typed-combinator-parity
+input_schema:
+  type: dynamic
+vars:
+  items: [alpha, beta]
+  keep_running: true
+steps:
+  - pipe: transform
+    stages:
+      - test::pipe_source
+      - test::append
+  - join_all: collect
+    arms:
+      - test::join_text
+      - test::join_count
+  - step: confidence
+    handler: test::confidence
+  - route_on_confidence: route
+    value: "{{ steps.confidence.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: low
+        handler: test::low
+      - range: "[0.5, 1.0]"
+        label: high
+        handler: test::high
+  - speculate: choose
+    mode: pick_best
+    arms:
+      - test::candidate_a
+      - test::candidate_b
+  - for_each: map as item
+    items: "{{ vars.items }}"
+    steps:
+      - step: mapped
+        handler: test::identity
+  - while: guarded
+    condition: "{{ vars.keep_running }}"
+    break_if: "{{ steps.stop.output }}"
+    steps:
+      - step: stop
+        handler: test::true
+  - repeat: twice
+    count: 2
+    steps:
+      - step: repeated
+        handler: test::identity
+  - poll: ready
+    until: "{{ steps.poll-ready.output }}"
+    max_attempts: 2
+    steps:
+      - step: poll-ready
+        handler: test::true
+  - step: recovered
+    handler: test::fail
+    on_error:
+      handler: test::recover
+  - step: tolerated
+    handler: test::also_fail
+    allow_failure: true
+"#,
+    )
+    .unwrap();
+    let registry = combinator_registry();
+    let compiled = compile_pipeline(&pipeline, &registry, CompileOptions::strict())
+        .into_artifact()
+        .unwrap();
+    let runner = Runner::new(Arc::clone(&registry));
+
+    let existing = runner.run_unchecked(&pipeline, json!({"seed": true})).await;
+    let typed = runner.run_compiled(&compiled, json!({"seed": true})).await;
+
+    assert_eq!(typed.value().unwrap(), existing.value().unwrap());
+    assert_eq!(
+        typed
+            .steps
+            .iter()
+            .map(|step| (step.name.as_str(), step.output.as_ref()))
+            .collect::<Vec<_>>(),
+        existing
+            .steps
+            .iter()
+            .map(|step| (step.name.as_str(), step.output.as_ref()))
+            .collect::<Vec<_>>()
     );
 }

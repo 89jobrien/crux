@@ -872,6 +872,452 @@ impl Runner {
         .map(|(value, _)| value)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_pipe(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        node: &PipeNode,
+        stages: &[crate::ir::TypedArm],
+        current: Value,
+        expr_ctx: &mut ExprContext,
+        scopes: &RuntimeScopes,
+    ) -> Result<Value, CruxErr> {
+        let confidence_cells = typed_confidence_cells(stages.len());
+        let usage_cells = typed_usage_cells(stages.len());
+        let mut runtime_stages: Vec<RecoverablePipeStage<'_, Value>> =
+            Vec::with_capacity(stages.len());
+        for ((stage, confidence), usage) in stages
+            .iter()
+            .zip(confidence_cells.iter())
+            .zip(usage_cells.iter())
+        {
+            let args = evaluate_typed_args(stage.args.as_ref(), expr_ctx, scopes, &step.name)?;
+            let runner = Arc::clone(&stage.runner);
+            let label = stage.node.label();
+            let step_label = format!("{}::{label}", node.pipe);
+            let confidence = Arc::clone(confidence);
+            let usage = Arc::clone(usage);
+            let run = Box::new(move |input| {
+                Box::pin(run_typed_runner_direct(
+                    step_label,
+                    runner,
+                    crate::StepInvocation::new(input, args),
+                    confidence,
+                    usage,
+                )) as BoxFut<Value>
+            });
+            let policy = if stage.node.allow_failure() {
+                PipeFailurePolicy::SubstituteWith(Box::new(|error| {
+                    Ok(failed_allowed_value(&error))
+                }))
+            } else {
+                PipeFailurePolicy::Propagate
+            };
+            runtime_stages.push((label, run, policy));
+        }
+        let output = ctx
+            .pipe_with_recovery(&node.pipe, current, runtime_stages)
+            .await;
+        record_usage_cells(
+            ctx,
+            stages.iter().map(|stage| stage.node.label()),
+            &usage_cells,
+            output.as_ref().err(),
+        )?;
+        let output = output?;
+        let confidence = confidence_cells.last().and_then(typed_confidence);
+        record_typed_result(expr_ctx, &step.name, &output, confidence);
+        Ok(output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_join(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        node: &JoinAllNode,
+        arms: &[crate::ir::TypedArm],
+        current: &Value,
+        expr_ctx: &mut ExprContext,
+        scopes: &RuntimeScopes,
+    ) -> Result<Value, CruxErr> {
+        let confidence_cells = typed_confidence_cells(arms.len());
+        let usage_cells = typed_usage_cells(arms.len());
+        let mut runtime_arms = Vec::with_capacity(arms.len());
+        for ((arm, confidence), usage) in arms
+            .iter()
+            .zip(confidence_cells.iter())
+            .zip(usage_cells.iter())
+        {
+            let args = evaluate_typed_args(arm.args.as_ref(), expr_ctx, scopes, &step.name)?;
+            let runner = Arc::clone(&arm.runner);
+            let label = arm.node.label();
+            let step_label = format!("{}::{label}", node.join_all);
+            let confidence = Arc::clone(confidence);
+            let usage = Arc::clone(usage);
+            let input = current.clone();
+            let allow_failure = arm.node.allow_failure();
+            let future: BoxFut<Value> = Box::pin(async move {
+                match run_typed_runner_direct(
+                    step_label,
+                    runner,
+                    crate::StepInvocation::new(input, args),
+                    confidence,
+                    usage,
+                )
+                .await
+                {
+                    Err(error) if allow_failure => Ok(failed_allowed_value(&error)),
+                    result => result,
+                }
+            });
+            runtime_arms.push((label, future));
+        }
+        let results = ctx.join_all(&node.join_all, runtime_arms).await;
+        record_usage_cells(
+            ctx,
+            arms.iter().map(|arm| arm.node.label()),
+            &usage_cells,
+            results.as_ref().err(),
+        )?;
+        let output = Value::Array(results?);
+        let scores = confidence_cells
+            .iter()
+            .filter_map(typed_confidence)
+            .collect::<Vec<_>>();
+        let confidence =
+            (!scores.is_empty()).then(|| scores.iter().sum::<f32>() / scores.len() as f32);
+        record_typed_result(expr_ctx, &step.name, &output, confidence);
+        Ok(output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_route(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        node: &RouteNode,
+        value: &crate::ir::TypedValue,
+        branches: &[crate::ir::TypedRouteBranch],
+        current: &Value,
+        expr_ctx: &mut ExprContext,
+        scopes: &RuntimeScopes,
+    ) -> Result<Value, CruxErr> {
+        let routing_confidence = value
+            .evaluate_scoped(expr_ctx, scopes)
+            .map_err(|error| CruxErr::step_failed(&step.name, error.to_string()))?
+            .as_f64()
+            .map(|value| value as f32)
+            .ok_or_else(|| CruxErr::step_failed(&step.name, ExprError::NotNumeric.to_string()))?;
+        let confidence_cells = typed_confidence_cells(branches.len());
+        let usage_cells = typed_usage_cells(branches.len());
+        let mut routes = Vec::with_capacity(branches.len());
+        for ((branch, confidence), usage) in branches
+            .iter()
+            .zip(confidence_cells.iter())
+            .zip(usage_cells.iter())
+        {
+            let args = evaluate_typed_args(branch.args.as_ref(), expr_ctx, scopes, &step.name)?;
+            let runner = Arc::clone(&branch.runner);
+            let step_label = format!("{}::{}", node.route_on_confidence, branch.node.label);
+            let confidence = Arc::clone(confidence);
+            let usage = Arc::clone(usage);
+            let input = current.clone();
+            routes.push((
+                parse_range(&branch.node.range),
+                branch.node.label.as_str(),
+                Box::pin(run_typed_runner_direct(
+                    step_label,
+                    runner,
+                    crate::StepInvocation::new(input, args),
+                    confidence,
+                    usage,
+                )) as BoxFut<Value>,
+            ));
+        }
+        let output = ctx
+            .route_on_confidence(&node.route_on_confidence, routing_confidence, routes)
+            .await;
+        record_usage_cells(
+            ctx,
+            branches.iter().map(|branch| branch.node.label.as_str()),
+            &usage_cells,
+            output.as_ref().err(),
+        )?;
+        let output = output?;
+        let confidence = confidence_cells
+            .iter()
+            .find_map(typed_confidence)
+            .or(Some(routing_confidence));
+        record_typed_result(expr_ctx, &step.name, &output, confidence);
+        Ok(output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_speculation(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        node: &SpeculateNode,
+        arms: &[crate::ir::TypedArm],
+        current: &Value,
+        expr_ctx: &mut ExprContext,
+        scopes: &RuntimeScopes,
+    ) -> Result<Value, CruxErr> {
+        let confidence_cells = typed_confidence_cells(arms.len());
+        let usage_cells = typed_usage_cells(arms.len());
+        let mut runtime_arms = Vec::with_capacity(arms.len());
+        for ((arm, confidence), usage) in arms
+            .iter()
+            .zip(confidence_cells.iter())
+            .zip(usage_cells.iter())
+        {
+            let args = evaluate_typed_args(arm.args.as_ref(), expr_ctx, scopes, &step.name)?;
+            let runner = Arc::clone(&arm.runner);
+            let step_label = format!("{}::{}", node.speculate, arm.node.label());
+            let confidence = Arc::clone(confidence);
+            let usage = Arc::clone(usage);
+            let input = current.clone();
+            runtime_arms.push((
+                arm.node.label(),
+                Box::pin(run_typed_runner_direct(
+                    step_label,
+                    runner,
+                    crate::StepInvocation::new(input, args),
+                    confidence,
+                    usage,
+                )) as BoxFut<Value>,
+            ));
+        }
+        let builder = ctx.speculate(&node.speculate, runtime_arms);
+        let mut usage_iter = usage_cells.iter();
+        let report = move |_arm: &str| {
+            usage_iter
+                .next()
+                .and_then(|cell| cell.lock().unwrap().take())
+        };
+        let output = match node.mode {
+            SpeculateMode::PickBest => {
+                builder
+                    .pick_best_by_metered(
+                        |value: &Value| {
+                            value.get("score").and_then(Value::as_f64).unwrap_or(0.0) as f32
+                        },
+                        report,
+                    )
+                    .await
+            }
+            SpeculateMode::FirstOk => builder.first_ok_metered(report).await,
+        }?;
+        record_typed_result(expr_ctx, &step.name, &output, None);
+        Ok(output)
+    }
+
+    async fn execute_typed_loop(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        current: Value,
+        expr_ctx: &mut ExprContext,
+        scopes: &mut RuntimeScopes,
+    ) -> Result<Value, CruxErr> {
+        match &step.kind {
+            TypedStepKind::ForEach {
+                items,
+                bindings,
+                body,
+                break_if,
+                ..
+            } => {
+                let values = items
+                    .evaluate_scoped(expr_ctx, scopes)
+                    .map_err(|error| CruxErr::step_failed(&step.name, error.to_string()))?
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(|| {
+                        CruxErr::step_failed(
+                            &step.name,
+                            "for_each items did not resolve to an array",
+                        )
+                    })?;
+                self.execute_typed_iterations(
+                    ctx,
+                    step,
+                    bindings,
+                    body,
+                    break_if.as_ref(),
+                    current,
+                    values.into_iter().map(Some),
+                    expr_ctx,
+                    scopes,
+                )
+                .await
+            }
+            TypedStepKind::While {
+                bindings,
+                condition,
+                body,
+                break_if,
+                ..
+            } => {
+                let mut output = current;
+                let mut index = 0;
+                while evaluate_typed_bool(condition, expr_ctx, scopes, &step.name)? {
+                    let (value, should_break) = self
+                        .execute_typed_iteration(
+                            ctx,
+                            step,
+                            bindings,
+                            body,
+                            break_if.as_ref(),
+                            output,
+                            index,
+                            None,
+                            expr_ctx,
+                            scopes,
+                        )
+                        .await?;
+                    output = value;
+                    index += 1;
+                    if should_break {
+                        break;
+                    }
+                }
+                record_typed_result(expr_ctx, &step.name, &output, None);
+                Ok(output)
+            }
+            TypedStepKind::Repeat {
+                node,
+                bindings,
+                body,
+                break_if,
+            } => {
+                self.execute_typed_iterations(
+                    ctx,
+                    step,
+                    bindings,
+                    body,
+                    break_if.as_ref(),
+                    current,
+                    (0..node.count).map(|_| None),
+                    expr_ctx,
+                    scopes,
+                )
+                .await
+            }
+            TypedStepKind::Poll {
+                node,
+                bindings,
+                body,
+                until,
+            } => {
+                let mut output = current;
+                let mut index = 0_u32;
+                loop {
+                    let (value, done) = self
+                        .execute_typed_iteration(
+                            ctx,
+                            step,
+                            bindings,
+                            body,
+                            Some(until),
+                            output,
+                            index as usize,
+                            None,
+                            expr_ctx,
+                            scopes,
+                        )
+                        .await?;
+                    output = value;
+                    index += 1;
+                    if done || node.max_attempts.is_some_and(|max| index >= max) {
+                        break;
+                    }
+                    if let Some(milliseconds) = node.interval_ms {
+                        tokio::time::sleep(std::time::Duration::from_millis(milliseconds)).await;
+                    }
+                }
+                record_typed_result(expr_ctx, &step.name, &output, None);
+                Ok(output)
+            }
+            _ => unreachable!("execute_typed_loop only accepts typed loop nodes"),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_iterations<I>(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        bindings: &crate::ir::TypedLoopBindings,
+        body: &[TypedStep],
+        break_if: Option<&crate::ir::TypedValue>,
+        mut output: Value,
+        items: I,
+        expr_ctx: &mut ExprContext,
+        scopes: &mut RuntimeScopes,
+    ) -> Result<Value, CruxErr>
+    where
+        I: IntoIterator<Item = Option<Value>>,
+    {
+        for (index, item) in items.into_iter().enumerate() {
+            let (value, should_break) = self
+                .execute_typed_iteration(
+                    ctx, step, bindings, body, break_if, output, index, item, expr_ctx, scopes,
+                )
+                .await?;
+            output = value;
+            if should_break {
+                break;
+            }
+        }
+        record_typed_result(expr_ctx, &step.name, &output, None);
+        Ok(output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_typed_iteration(
+        &self,
+        ctx: &mut CruxCtx,
+        step: &TypedStep,
+        bindings: &crate::ir::TypedLoopBindings,
+        body: &[TypedStep],
+        break_if: Option<&crate::ir::TypedValue>,
+        input: Value,
+        index: usize,
+        item: Option<Value>,
+        expr_ctx: &mut ExprContext,
+        scopes: &mut RuntimeScopes,
+    ) -> Result<(Value, bool), CruxErr> {
+        scopes.push_iteration(bindings, index, item);
+        let iteration = self
+            .execute_typed_steps(ctx, body, input, expr_ctx, scopes)
+            .await;
+        let result = match iteration {
+            Ok(output) => {
+                let marker = output.clone();
+                match ctx
+                    .step(&format!("{}[{index}]", step.name), move || async move {
+                        Ok::<Value, CruxErr>(marker)
+                    })
+                    .await
+                {
+                    Ok(_) => break_if
+                        .map(|expression| {
+                            evaluate_typed_bool(expression, expr_ctx, scopes, &step.name)
+                        })
+                        .transpose()
+                        .map(|should_break| (output, should_break.unwrap_or(false))),
+                    Err(error) => Err(error),
+                }
+            }
+            Err(error) => Err(error),
+        };
+        scopes.pop_iteration();
+        result
+    }
+
     fn execute_typed_steps<'a>(
         &'a self,
         ctx: &'a mut CruxCtx,
@@ -889,70 +1335,36 @@ impl Runner {
                         self.execute_typed_handler_step(ctx, handler, &current, expr_ctx, scopes)
                             .await?
                     }
-                    TypedStepKind::ForEach {
-                        items,
-                        bindings,
-                        body,
-                        break_if,
-                        ..
-                    } => {
-                        let values = items
-                            .evaluate_scoped(expr_ctx, scopes)
-                            .map_err(|error| CruxErr::step_failed(&step.name, error.to_string()))?
-                            .as_array()
-                            .cloned()
-                            .ok_or_else(|| {
-                                CruxErr::step_failed(
-                                    &step.name,
-                                    "for_each items did not resolve to an array",
-                                )
-                            })?;
-                        let mut output = current.clone();
-                        for (index, item) in values.into_iter().enumerate() {
-                            scopes.push_iteration(bindings, index, Some(item));
-                            let iteration = self
-                                .execute_typed_steps(ctx, body, output.clone(), expr_ctx, scopes)
-                                .await;
-                            let iteration = match iteration {
-                                Ok(value) => {
-                                    let should_break = break_if
-                                        .as_ref()
-                                        .map(|expression| {
-                                            expression.evaluate_scoped(expr_ctx, scopes).and_then(
-                                                |value| {
-                                                    value.as_bool().ok_or(ExprError::NotBoolean)
-                                                },
-                                            )
-                                        })
-                                        .transpose()
-                                        .map_err(|error| {
-                                            CruxErr::step_failed(&step.name, error.to_string())
-                                        });
-                                    should_break.map(|should_break| (value, should_break))
-                                }
-                                Err(error) => Err(error),
-                            };
-                            scopes.pop_iteration();
-                            let (value, should_break) = iteration?;
-                            output = value;
-                            if should_break.unwrap_or(false) {
-                                break;
-                            }
-                        }
-                        expr_ctx.steps.insert(
-                            step.name.clone(),
-                            StepResult {
-                                output: output.clone(),
-                                confidence: None,
-                            },
-                        );
-                        output
+                    TypedStepKind::Pipe { node, stages } => {
+                        self.execute_typed_pipe(ctx, step, node, stages, current, expr_ctx, scopes)
+                            .await?
                     }
-                    _ => {
-                        return Err(CruxErr::step_failed(
-                            &step.name,
-                            "typed execution for this combinator is not implemented",
-                        ));
+                    TypedStepKind::JoinAll { node, arms } => {
+                        self.execute_typed_join(ctx, step, node, arms, &current, expr_ctx, scopes)
+                            .await?
+                    }
+                    TypedStepKind::RouteOnConfidence {
+                        node,
+                        value,
+                        branches,
+                    } => {
+                        self.execute_typed_route(
+                            ctx, step, node, value, branches, &current, expr_ctx, scopes,
+                        )
+                        .await?
+                    }
+                    TypedStepKind::Speculate { node, arms } => {
+                        self.execute_typed_speculation(
+                            ctx, step, node, arms, &current, expr_ctx, scopes,
+                        )
+                        .await?
+                    }
+                    TypedStepKind::Poll { .. }
+                    | TypedStepKind::ForEach { .. }
+                    | TypedStepKind::While { .. }
+                    | TypedStepKind::Repeat { .. } => {
+                        self.execute_typed_loop(ctx, step, current, expr_ctx, scopes)
+                            .await?
                     }
                 };
             }
@@ -1299,6 +1711,76 @@ impl Runner {
 }
 
 type UsageCell = Arc<Mutex<Option<(HandlerUsage, std::time::Duration)>>>;
+type ConfidenceCell = Arc<Mutex<Option<f32>>>;
+
+fn typed_usage_cells(count: usize) -> Vec<UsageCell> {
+    (0..count).map(|_| Arc::new(Mutex::new(None))).collect()
+}
+
+fn typed_confidence_cells(count: usize) -> Vec<ConfidenceCell> {
+    (0..count).map(|_| Arc::new(Mutex::new(None))).collect()
+}
+
+fn typed_confidence(cell: &ConfidenceCell) -> Option<f32> {
+    *cell.lock().unwrap()
+}
+
+fn evaluate_typed_args(
+    args: Option<&crate::ir::TypedValue>,
+    expr_ctx: &ExprContext,
+    scopes: &RuntimeScopes,
+    step: &str,
+) -> Result<Value, CruxErr> {
+    args.map(|args| args.evaluate_scoped(expr_ctx, scopes))
+        .transpose()
+        .map_err(|error| CruxErr::step_failed(step, error.to_string()))
+        .map(|args| args.unwrap_or(Value::Null))
+}
+
+fn evaluate_typed_bool(
+    expression: &crate::ir::TypedValue,
+    expr_ctx: &ExprContext,
+    scopes: &RuntimeScopes,
+    step: &str,
+) -> Result<bool, CruxErr> {
+    expression
+        .evaluate_scoped(expr_ctx, scopes)
+        .map_err(|error| CruxErr::step_failed(step, error.to_string()))?
+        .as_bool()
+        .ok_or_else(|| CruxErr::step_failed(step, ExprError::NotBoolean.to_string()))
+}
+
+fn record_typed_result(
+    expr_ctx: &mut ExprContext,
+    name: &str,
+    output: &Value,
+    confidence: Option<f32>,
+) {
+    expr_ctx.steps.insert(
+        name.to_string(),
+        StepResult {
+            output: output.clone(),
+            confidence,
+        },
+    );
+}
+
+async fn run_typed_runner_direct(
+    step_label: String,
+    runner: Arc<dyn crate::StepRunner>,
+    invocation: crate::StepInvocation,
+    confidence_cell: ConfidenceCell,
+    usage_cell: UsageCell,
+) -> Result<Value, CruxErr> {
+    validate_handler_invocation(&step_label, runner.metadata(), &invocation)?;
+    let started = std::time::Instant::now();
+    let execution = runner.run(invocation).await;
+    *usage_cell.lock().unwrap() = Some((execution.usage, started.elapsed()));
+    let output = execution.outcome?;
+    validate_handler_output(&step_label, runner.metadata(), &output)?;
+    *confidence_cell.lock().unwrap() = output.confidence;
+    Ok(output.value)
+}
 
 fn compilation_failure(name: &str, diagnostics: &[crate::ValidationDiagnostic]) -> Crux<Value> {
     let details = diagnostics
