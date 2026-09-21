@@ -60,11 +60,9 @@ fn parse_llm_input(input: &Value, handler: &str) -> Result<ParsedInput, CruxErr>
     })
 }
 
-// TODO(#102): consider taking &str for api_key — fallback handler clones
-//   per vendor attempt; clone inside only when adapter constructor needs owned
 async fn dispatch_llm(
     vendor: Vendor,
-    api_key: String,
+    api_key: &str,
     model_ref: ProviderModelRef,
     base_url_override: Option<&str>,
     req: LlmRequest,
@@ -122,7 +120,7 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
             max_tokens: p.max_tokens,
         };
 
-        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
+        let resp = dispatch_llm(p.vendor, &p.api_key, p.model_ref, base_url, req).await?;
 
         let mut out = json!({
             "content": resp.text,
@@ -144,7 +142,7 @@ pub fn register(registry: &mut HandlerRegistry) {
             max_tokens: p.max_tokens,
         };
 
-        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
+        let resp = dispatch_llm(p.vendor, &p.api_key, p.model_ref, base_url, req).await?;
 
         let mut out = json!({ "content": resp.text, "provider": resp.provider });
         merge_metadata(&mut out, &resp);
@@ -204,8 +202,7 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
                 system: Some(system.clone()),
                 max_tokens,
             };
-            let result =
-                dispatch_llm(*vendor, api_key.clone(), model_ref, base_url_override, req).await;
+            let result = dispatch_llm(*vendor, &api_key, model_ref, base_url_override, req).await;
             match result {
                 Ok(resp) => {
                     let mut out = json!({ "content": resp.text, "provider": resp.provider });
@@ -220,4 +217,24 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
         }
         Err(last_err)
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dispatch_accepts_a_borrowed_api_key() {
+        let api_key = String::from("borrowed-key");
+        let model = ProviderModelId::parse_lenient(Vendor::Ollama, "test-model");
+        let request = LlmRequest {
+            prompt: "test".into(),
+            system: None,
+            max_tokens: 1,
+        };
+
+        let future = dispatch_llm(Vendor::Ollama, api_key.as_str(), model, None, request);
+        drop(future);
+        assert_eq!(api_key, "borrowed-key");
+    }
 }
