@@ -78,6 +78,7 @@ pub struct IterFrame {
 }
 
 /// Evaluation context holding pipeline state.
+#[derive(Clone)]
 pub struct ExprContext {
     pub input: Value,
     pub steps: HashMap<String, StepResult>,

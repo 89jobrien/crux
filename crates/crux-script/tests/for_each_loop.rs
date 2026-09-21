@@ -2,7 +2,10 @@
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 fn registry() -> Arc<HandlerRegistry> {
     let mut reg = HandlerRegistry::new();
@@ -107,4 +110,53 @@ steps:
     let crux = runner.run(&pipeline, json!({ "numbers": [] })).await;
     assert!(crux.value().is_ok());
     assert_eq!(crux.steps.len(), 0, "empty items means zero traced steps");
+}
+
+#[tokio::test]
+async fn parallel_for_each_bounds_concurrency_and_merges_traces_in_item_order() {
+    let active = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+    let mut reg = HandlerRegistry::new();
+    let active_handler = Arc::clone(&active);
+    let peak_handler = Arc::clone(&peak);
+    reg.handler_value("delayed", move |input: Value| {
+        let active = Arc::clone(&active_handler);
+        let peak = Arc::clone(&peak_handler);
+        async move {
+            let running = active.fetch_add(1, Ordering::SeqCst) + 1;
+            peak.fetch_max(running, Ordering::SeqCst);
+            let value = input["args"]["value"].as_u64().unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis((4 - value) * 15)).await;
+            active.fetch_sub(1, Ordering::SeqCst);
+            Ok::<Value, CruxErr>(json!(value))
+        }
+    });
+
+    let pipeline = load(
+        r#"
+pipeline: parallel_map
+steps:
+  - for_each: items as item
+    items: "{{ input.items }}"
+    parallel: true
+    max_concurrency: 2
+    steps:
+      - step: work
+        handler: delayed
+        args:
+          value: "{{ iter.item }}"
+"#,
+    )
+    .unwrap();
+    let crux = Runner::new(Arc::new(reg))
+        .run(&pipeline, json!({ "items": [1, 2, 3] }))
+        .await;
+
+    assert_eq!(peak.load(Ordering::SeqCst), 2);
+    assert_eq!(crux.value().unwrap(), &json!(3));
+    let names: Vec<_> = crux.steps.iter().map(|step| step.name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["work", "items[0]", "work", "items[1]", "work", "items[2]"]
+    );
 }

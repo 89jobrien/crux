@@ -15,9 +15,9 @@ use crate::ir::{
 };
 use crate::registry::HandlerRegistry;
 use crate::schema::{
-    BudgetDef, DelegateNode, ExpectDef, ForEachNode, JoinAllNode, OnErrorDef, PipeNode,
-    PipelineDef, PollNode, RepeatNode, RouteNode, SpeculateMode, SpeculateNode, StepDef, StepNode,
-    TargetDef, WhileNode,
+    BudgetDef, DEFAULT_MAX_CONCURRENCY, DelegateNode, ExpectDef, ForEachNode, JoinAllNode,
+    OnErrorDef, PipeNode, PipelineDef, PollNode, RepeatNode, RouteNode, SpeculateMode,
+    SpeculateNode, StepDef, StepNode, TargetDef, WhileNode,
 };
 
 /// Executes parsed pipelines against a handler registry.
@@ -513,13 +513,10 @@ impl Runner {
     /// `<for_each>[<index>]`. `break_if:` (evaluated after each iteration) stops
     /// the loop early.
     ///
-    /// Iterations run sequentially even when `parallel: true` — `CruxCtx` is a
-    /// single mutable trace recorder in this crate's architecture (unlike
-    /// `join_all`, whose arms don't touch `ctx` until the runtime's own internal
-    /// fan-out), so concurrent nested `ctx.step()` calls across iterations aren't
-    /// sound without a `crux-runtime` change, which is out of scope here.
-    /// `parallel`/`max_concurrency` are accepted for forward compatibility.
-    // TODO(feature-idea-17): Add bounded parallel iteration with deterministic trace merging.
+    /// With `parallel: true`, isolated iteration contexts execute concurrently up
+    /// to `max_concurrency`; their traces are merged in item order afterward.
+    /// Loops with `break_if` remain sequential because later iterations cannot be
+    /// scheduled until the preceding break condition is known.
     async fn execute_for_each_step(
         &self,
         ctx: &mut CruxCtx,
@@ -527,6 +524,12 @@ impl Runner {
         current_input: &Value,
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
+        if node.parallel && node.break_if.is_none() {
+            return self
+                .execute_parallel_for_each_step(ctx, node, current_input, expr_ctx)
+                .await;
+        }
+
         let label = node.label();
         let binding = node.binding();
 
@@ -591,6 +594,92 @@ impl Runner {
 
         expr_ctx.steps.insert(
             label.to_string(),
+            StepResult {
+                output: last_output.clone(),
+                confidence: None,
+            },
+        );
+        Ok(last_output)
+    }
+
+    async fn execute_parallel_for_each_step(
+        &self,
+        ctx: &mut CruxCtx,
+        node: &ForEachNode,
+        current_input: &Value,
+        expr_ctx: &mut ExprContext,
+    ) -> Result<Value, CruxErr> {
+        let label = node.label().to_string();
+        let binding = node.binding().to_string();
+        let items_value = expr_ctx
+            .eval(&node.items)
+            .map_err(|error| CruxErr::step_failed(&label, error.to_string()))?;
+        let items = items_value.as_array().cloned().ok_or_else(|| {
+            CruxErr::step_failed(
+                &label,
+                format!("items: did not resolve to an array: {items_value}"),
+            )
+        })?;
+        let concurrency = node
+            .max_concurrency
+            .unwrap_or(DEFAULT_MAX_CONCURRENCY)
+            .max(1);
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
+        let mut tasks = tokio::task::JoinSet::new();
+
+        for (index, item) in items.into_iter().enumerate() {
+            let permit = Arc::clone(&semaphore);
+            let runner = Self::new(Arc::clone(&self.registry));
+            let steps = node.steps.clone();
+            let input = current_input.clone();
+            let mut iteration_expr = expr_ctx.clone();
+            let iteration_label = format!("{label}[{index}]");
+            let binding = binding.clone();
+            tasks.spawn(async move {
+                let _permit = permit
+                    .acquire_owned()
+                    .await
+                    .map_err(|error| CruxErr::step_failed(&iteration_label, error.to_string()))?;
+                iteration_expr.iter = Some(IterFrame {
+                    index,
+                    values: std::collections::HashMap::from([(binding, item)]),
+                });
+                let mut iteration_ctx = CruxCtx::new(&iteration_label);
+                let result = runner
+                    .execute_steps_with_ctx(&mut iteration_ctx, &steps, input, &mut iteration_expr)
+                    .await;
+                let result = match result {
+                    Ok(output) => {
+                        let marker = output.clone();
+                        iteration_ctx
+                            .step(&iteration_label, move || async move {
+                                Ok::<Value, CruxErr>(marker)
+                            })
+                            .await?;
+                        Ok(output)
+                    }
+                    Err(error) => Err(error),
+                };
+                Ok::<_, CruxErr>((index, iteration_ctx.finalize(result), iteration_expr.steps))
+            });
+        }
+
+        let mut completed = Vec::new();
+        while let Some(joined) = tasks.join_next().await {
+            let iteration =
+                joined.map_err(|error| CruxErr::step_failed(&label, error.to_string()))??;
+            completed.push(iteration);
+        }
+        completed.sort_by_key(|(index, _, _)| *index);
+
+        let mut last_output = current_input.clone();
+        for (_, trace, iteration_steps) in completed {
+            ctx.append_trace_steps(trace.steps);
+            last_output = trace.value?;
+            expr_ctx.steps.extend(iteration_steps);
+        }
+        expr_ctx.steps.insert(
+            label,
             StepResult {
                 output: last_output.clone(),
                 confidence: None,
