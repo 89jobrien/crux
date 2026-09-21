@@ -643,6 +643,10 @@ pub struct HandlerMetadata {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature_flag: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<Value>,
     #[serde(default)]
     pub args: ArgSchema,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -658,6 +662,8 @@ pub struct HandlerMetadata {
     pub capabilities: Vec<Capability>,
     #[serde(default = "default_deterministic")]
     pub deterministic: bool,
+    #[serde(default = "default_deterministic")]
+    pub replay_safe: bool,
 }
 
 impl HandlerMetadata {
@@ -665,6 +671,8 @@ impl HandlerMetadata {
         Self {
             name: name.into(),
             description: String::new(),
+            feature_flag: None,
+            examples: Vec::new(),
             args: ArgSchema::new(),
             input_schema: None,
             output_schema: None,
@@ -673,11 +681,22 @@ impl HandlerMetadata {
             side_effects: vec![SideEffect::None],
             capabilities: Vec::new(),
             deterministic: true,
+            replay_safe: true,
         }
     }
 
     pub fn describe(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn feature_flag(mut self, feature_flag: impl Into<String>) -> Self {
+        self.feature_flag = Some(feature_flag.into());
+        self
+    }
+
+    pub fn example(mut self, example: Value) -> Self {
+        self.examples.push(example);
         self
     }
 
@@ -726,6 +745,14 @@ impl HandlerMetadata {
 
     pub fn deterministic(mut self, deterministic: bool) -> Self {
         self.deterministic = deterministic;
+        if !deterministic {
+            self.replay_safe = false;
+        }
+        self
+    }
+
+    pub fn replay_safe(mut self, replay_safe: bool) -> Self {
+        self.replay_safe = replay_safe;
         self
     }
 }
