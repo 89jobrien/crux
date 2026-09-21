@@ -269,6 +269,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "test".into(),
+            pipeline_version: None,
             value: Ok(serde_json::json!({})),
             steps: vec![],
             children: vec![],
@@ -279,6 +280,7 @@ mod tests {
 
     fn step(name: &str, status: StepStatus, confidence: f32) -> Step {
         Step {
+            stable_id: None,
             name: name.into(),
             kind: StepKind::Plain,
             status,

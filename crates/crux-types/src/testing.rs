@@ -13,6 +13,7 @@ use crate::step::{Step, StepKind, StepStatus};
 /// Build a plain, successful `Step` with the given name, input hash, and output.
 pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> Step {
     Step {
+        stable_id: None,
         name: name.into(),
         kind: StepKind::Plain,
         status: StepStatus::Ok,
@@ -48,6 +49,7 @@ pub fn crux_ok<T>(agent: &str, value: T, steps: Vec<Step>) -> Crux<T> {
     Crux {
         id: CruxId::new(),
         agent: agent.into(),
+        pipeline_version: None,
         value: Ok(value),
         steps,
         children: vec![],

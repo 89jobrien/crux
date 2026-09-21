@@ -10,6 +10,9 @@ use crate::step::{Step, StepKind, StepStatus};
 pub struct Crux<T> {
     pub id: CruxId,
     pub agent: String,
+    /// Immutable identity of the pipeline definition that produced this trace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline_version: Option<String>,
     pub value: Result<T, CruxErr>,
     pub steps: Vec<Step>,
     pub children: Vec<Crux<serde_json::Value>>,
@@ -191,6 +194,7 @@ impl<T: Serialize> Crux<T> {
         Ok(Crux {
             id: self.id.clone(),
             agent: self.agent.clone(),
+            pipeline_version: self.pipeline_version.clone(),
             value,
             steps: self.steps.clone(),
             children: self.children.clone(),

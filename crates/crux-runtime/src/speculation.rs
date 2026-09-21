@@ -118,6 +118,7 @@ where
                     Ok(_) => unreachable!(),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status: StepStatus::Err,
@@ -147,6 +148,7 @@ where
                 match result {
                     Ok(val) => {
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Ok,
@@ -167,6 +169,7 @@ where
                     Err(e) => {
                         let err_msg = e.to_string();
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Err,
@@ -191,6 +194,7 @@ where
                     Err(e) => (StepStatus::Err, None, Some(e.to_string())),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status,
@@ -265,6 +269,7 @@ where
             match result {
                 Ok(val) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Ok,
@@ -284,6 +289,7 @@ where
                 }
                 Err(e) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Rejected,

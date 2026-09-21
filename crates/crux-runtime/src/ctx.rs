@@ -158,6 +158,7 @@ const DEFAULT_MAX_RETRIES: u32 = 3;
 pub struct CruxCtx {
     id: CruxId,
     agent_name: String,
+    pipeline_version: Option<String>,
     recorder: StepRecorder,
     hooks: HookRegistry,
     replay: ReplayCache,
@@ -175,6 +176,7 @@ impl CruxCtx {
         Self {
             id: CruxId::new(),
             agent_name: agent_name.to_string(),
+            pipeline_version: None,
             recorder: StepRecorder::new(),
             hooks: HookRegistry::new(),
             replay: ReplayCache::new(),
@@ -278,6 +280,13 @@ impl CruxCtx {
         self.replay.set_mode(mode);
     }
 
+    /// Set the immutable pipeline definition version persisted in trace snapshots.
+    pub fn set_pipeline_version(&mut self, version: impl Into<String>) {
+        let version = version.into();
+        self.replay.set_pipeline_version(version.clone());
+        self.pipeline_version = Some(version);
+    }
+
     /// Take a mid-run checkpoint: snapshot the current trace into a `Crux<Value>`.
     ///
     /// The snapshot can be persisted to a `TaskRegistry` and later used to
@@ -286,6 +295,7 @@ impl CruxCtx {
         Crux {
             id: self.id.clone(),
             agent: self.agent_name.clone(),
+            pipeline_version: self.pipeline_version.clone(),
             value: Ok(serde_json::Value::Null),
             steps: self.recorder.steps().to_vec(),
             children: self.children.clone(),
@@ -331,6 +341,7 @@ impl CruxCtx {
         Crux {
             id: self.id,
             agent: self.agent_name,
+            pipeline_version: self.pipeline_version,
             value: result,
             steps: self.recorder.into_steps(),
             children: self.children,
@@ -388,6 +399,7 @@ impl CruxCtx {
         };
 
         self.push_step(crate::types::step::Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Delegation,
             status,

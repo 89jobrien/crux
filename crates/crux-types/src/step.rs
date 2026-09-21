@@ -27,6 +27,9 @@ pub struct CitedFinding {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Step {
+    /// Stable identity used by strict replay independently of trace position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_id: Option<String>,
     pub name: String,
     pub kind: StepKind,
     pub status: StepStatus,

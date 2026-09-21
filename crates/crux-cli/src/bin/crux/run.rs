@@ -716,6 +716,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "test-agent".to_string(),
+            pipeline_version: None,
             value: Ok(v),
             steps: vec![],
             children: vec![],
@@ -726,6 +727,7 @@ mod tests {
 
     fn ok_step(name: &str, duration_ms: u64) -> Step {
         Step {
+            stable_id: None,
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,

@@ -169,6 +169,7 @@ mod tests {
 
     fn step(name: &str, status: StepStatus, duration_ms: u64) -> Step {
         Step {
+            stable_id: None,
             name: name.to_string(),
             kind: StepKind::Plain,
             status,
@@ -190,6 +191,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "renderer".to_string(),
+            pipeline_version: None,
             value,
             steps,
             children: vec![],
