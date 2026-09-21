@@ -91,6 +91,50 @@ pub struct Step<T = serde_json::Value> {
     pub findings: Vec<CitedFinding>,
 }
 
+/// A step paired with its strongly typed input channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypedStep<I, O> {
+    pub input: I,
+    pub step: Step<O>,
+}
+
+/// Runtime-schema fallback used by YAML pipelines and plugin handlers.
+pub type DynamicStep = TypedStep<serde_json::Value, serde_json::Value>;
+
+impl<I, O> TypedStep<I, O> {
+    pub fn new(input: I, step: Step<O>) -> Self {
+        Self { input, step }
+    }
+}
+
+impl<I, O> TypedStep<I, O>
+where
+    I: serde::de::DeserializeOwned,
+    O: serde::de::DeserializeOwned,
+{
+    /// Validate dynamic input and output values against Rust channel types.
+    pub fn try_from_dynamic(dynamic: DynamicStep) -> Result<Self, serde_json::Error> {
+        Ok(Self {
+            input: serde_json::from_value(dynamic.input)?,
+            step: dynamic.step.try_map_output(serde_json::from_value)?,
+        })
+    }
+}
+
+impl<I, O> TypedStep<I, O>
+where
+    I: Serialize,
+    O: Serialize,
+{
+    /// Erase Rust channel types for YAML or plugin transport.
+    pub fn try_into_dynamic(self) -> Result<DynamicStep, serde_json::Error> {
+        Ok(DynamicStep {
+            input: serde_json::to_value(self.input)?,
+            step: self.step.try_map_output(serde_json::to_value)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepKind {
@@ -135,6 +179,27 @@ impl<T> Step<T> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|subscriber| subscriber.send(event.clone()).is_ok());
+    }
+
+    fn try_map_output<U, E>(self, map: impl FnOnce(T) -> Result<U, E>) -> Result<Step<U>, E> {
+        Ok(Step {
+            name: self.name,
+            kind: self.kind,
+            status: self.status,
+            confidence: self.confidence,
+            started_at: self.started_at,
+            duration_ms: self.duration_ms,
+            input_hash: self.input_hash,
+            content_hash: self.content_hash,
+            output: self.output.map(map).transpose()?,
+            error: self.error,
+            cited_reason: self.cited_reason,
+            attempt: self.attempt,
+            events: self.events,
+            event_subscribers: self.event_subscribers,
+            metadata: self.metadata,
+            findings: self.findings,
+        })
     }
 }
 
@@ -234,5 +299,30 @@ mod tests {
             serde_json::json!({"token": "hello"})
         );
         assert_eq!(step.events.len(), 1);
+    }
+
+    #[test]
+    fn dynamic_channels_check_input_and_output_compatibility() {
+        let dynamic: DynamicStep = serde_json::from_value(serde_json::json!({
+            "input": "not a number",
+            "step": {
+                "name": "typed-edge",
+                "kind": "plain",
+                "status": "ok",
+                "confidence": 1.0,
+                "started_at": Utc::now(),
+                "duration_ms": 0,
+                "input_hash": 0,
+                "content_hash": null,
+                "output": "done",
+                "error": null,
+                "attempt": 1
+            }
+        }))
+        .unwrap();
+
+        let result = TypedStep::<u64, String>::try_from_dynamic(dynamic);
+
+        assert!(result.is_err());
     }
 }
