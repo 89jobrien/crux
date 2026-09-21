@@ -5,9 +5,6 @@ use std::collections::HashMap;
 //   broadcast channel (Step::events_subscribe()) for real-time trace consumption
 //   without waiting for step completion (cf. romp)
 
-// TODO(#95): cited findings on failures — add a `cited_reason` field with source
-//   traceability (file, symbol, line) for richer failure diagnostics (cf. devloop)
-
 /// Shared mutable output map for `pipe()` stages — maps alias names to their outputs.
 pub type StepState = HashMap<String, serde_json::Value>;
 
@@ -20,6 +17,23 @@ pub struct CitedFinding {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+}
+
+/// Source location supporting a failure reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceCitation {
+    pub file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+}
+
+/// Failure explanation paired with a precise source citation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CitedReason {
+    pub reason: String,
+    pub source: SourceCitation,
 }
 
 /// A recorded step whose output type is checked at compile time.
@@ -60,6 +74,9 @@ pub struct Step<T = serde_json::Value> {
     pub content_hash: Option<u64>,
     pub output: Option<T>,
     pub error: Option<String>,
+    /// Traceable explanation for a failed step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cited_reason: Option<CitedReason>,
     pub attempt: u32,
     /// Intermediate events emitted during streaming steps.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -129,6 +146,7 @@ mod tests {
             content_hash: None,
             output: Some(42),
             error: None,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
             metadata: HashMap::new(),
@@ -138,5 +156,34 @@ mod tests {
         let json = serde_json::to_string(&step).unwrap();
         let decoded: Step<u32> = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.output, Some(42));
+    }
+
+    #[test]
+    fn cited_failure_reason_round_trips_with_source_location() {
+        let json = serde_json::json!({
+            "name": "compile",
+            "kind": "plain",
+            "status": "err",
+            "confidence": 1.0,
+            "started_at": Utc::now(),
+            "duration_ms": 1,
+            "input_hash": 0,
+            "content_hash": null,
+            "output": null,
+            "error": "compile failed",
+            "attempt": 1,
+            "cited_reason": {
+                "reason": "type mismatch",
+                "source": {
+                    "file": "src/lib.rs",
+                    "symbol": "build",
+                    "line": 42
+                }
+            }
+        });
+
+        let step: Step = serde_json::from_value(json).unwrap();
+        let encoded = serde_json::to_value(step).unwrap();
+        assert_eq!(encoded["cited_reason"]["source"]["line"], 42);
     }
 }

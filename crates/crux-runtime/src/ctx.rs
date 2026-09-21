@@ -398,6 +398,7 @@ impl CruxCtx {
             content_hash: None,
             output,
             error,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
             metadata: std::collections::HashMap::new(),

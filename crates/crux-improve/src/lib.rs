@@ -289,6 +289,7 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
             metadata: Default::default(),

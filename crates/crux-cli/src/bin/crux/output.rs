@@ -179,6 +179,7 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
             metadata: HashMap::new(),
