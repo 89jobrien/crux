@@ -172,17 +172,9 @@ pub struct ForEachNode {
     /// the per-iteration item binding (e.g. `doubles as n`). Defaults to `item`
     /// when no `as` suffix is given.
     ///
-    /// NOTE: this packs the binding name into `for_each` instead of a separate
-    /// `as:` field due to a confirmed parser limitation in `serde-saphyr` 0.0.23:
-    /// untagged enum struct-variants silently fail to deserialize once they carry
-    /// more than 3 non-`#[serde(default)]` fields (verified via an extensive
-    /// bisection — see PR discussion for #84). `for_each` + `items` + `steps` is
-    /// exactly 3 required fields, the proven-safe ceiling; adding a 4th required
-    /// `as` field pushes it over and breaks parsing for every pipeline using this
-    /// node, not just ones that set a custom binding. Use [`Self::label`] and
-    /// [`Self::binding`] to read the parsed pieces.
-    // TODO(automation-8): Remove the encoded `" as "` workaround after upgrading or replacing
-    // serde-saphyr with a parser that supports the intended untagged node shape.
+    /// This packs the binding name into `for_each` because serde-saphyr 1.3.0
+    /// still rejects this untagged variant when a dedicated `as:` field is present.
+    /// See the isolated regression test in `tests/serde_saphyr_regression.rs`.
     pub for_each: String,
     /// Template expression evaluated once (against the outer scope) to produce
     /// the array to iterate over.
