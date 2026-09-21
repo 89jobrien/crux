@@ -131,6 +131,7 @@ where
                     cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -161,6 +162,7 @@ where
                             cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -182,6 +184,7 @@ where
                             cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -207,6 +210,7 @@ where
                     cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -282,6 +286,7 @@ where
                         cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });
@@ -302,6 +307,7 @@ where
                         cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });

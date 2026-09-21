@@ -292,6 +292,7 @@ mod tests {
             cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: Default::default(),
             findings: vec![],
         }

@@ -182,6 +182,7 @@ mod tests {
             cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         }

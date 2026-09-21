@@ -10,7 +10,7 @@
     {
       "name": "crux-runtime-recorder",
       "path": "crates/crux-runtime/src/recorder.rs",
-      "hash": "e5c4152d5adc998bf6d56ecb06e0dc4f84a9ae514b5f5a050e2e0cd8cc495c0e"
+      "hash": "cad324c84fe630a0046499eaaec9aa4c0d09eb54b66fc078a6cc6385e798b817"
     },
     {
       "name": "crux-runtime-audit",

@@ -1,9 +1,6 @@
 /// A single recorded step in an agent's execution.
 use std::collections::HashMap;
-
-// TODO(#94): streaming step subscriptions — formalize `events: Vec<Value>` as a
-//   broadcast channel (Step::events_subscribe()) for real-time trace consumption
-//   without waiting for step completion (cf. romp)
+use std::sync::{Arc, Mutex, mpsc};
 
 /// Shared mutable output map for `pipe()` stages — maps alias names to their outputs.
 pub type StepState = HashMap<String, serde_json::Value>;
@@ -58,6 +55,7 @@ pub struct CitedReason {
 ///     error: None,
 ///     attempt: 1,
 ///     events: vec![],
+///     event_subscribers: Default::default(),
 ///     metadata: HashMap::new(),
 ///     findings: vec![],
 /// };
@@ -81,6 +79,10 @@ pub struct Step<T = serde_json::Value> {
     /// Intermediate events emitted during streaming steps.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<serde_json::Value>,
+    /// Live subscribers for intermediate events. This runtime-only state is not serialized.
+    #[doc(hidden)]
+    #[serde(skip)]
+    pub event_subscribers: Arc<Mutex<Vec<mpsc::Sender<serde_json::Value>>>>,
     /// Arbitrary per-step metadata for extensibility.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -114,6 +116,25 @@ impl<T> Step<T> {
 
     pub fn is_err(&self) -> bool {
         self.status == StepStatus::Err
+    }
+
+    /// Subscribe to intermediate events emitted after this call.
+    pub fn events_subscribe(&self) -> mpsc::Receiver<serde_json::Value> {
+        let (sender, receiver) = mpsc::channel();
+        self.event_subscribers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(sender);
+        receiver
+    }
+
+    /// Record and immediately broadcast an intermediate event.
+    pub fn emit_event(&mut self, event: serde_json::Value) {
+        self.events.push(event.clone());
+        self.event_subscribers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|subscriber| subscriber.send(event.clone()).is_ok());
     }
 }
 
@@ -149,6 +170,7 @@ mod tests {
             cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         };
@@ -185,5 +207,32 @@ mod tests {
         let step: Step = serde_json::from_value(json).unwrap();
         let encoded = serde_json::to_value(step).unwrap();
         assert_eq!(encoded["cited_reason"]["source"]["line"], 42);
+    }
+
+    #[test]
+    fn event_subscribers_receive_events_as_they_are_emitted() {
+        let mut step: Step = serde_json::from_value(serde_json::json!({
+            "name": "stream",
+            "kind": "plain",
+            "status": "ok",
+            "confidence": 1.0,
+            "started_at": Utc::now(),
+            "duration_ms": 0,
+            "input_hash": 0,
+            "content_hash": null,
+            "output": null,
+            "error": null,
+            "attempt": 1
+        }))
+        .unwrap();
+        let events = step.events_subscribe();
+
+        step.emit_event(serde_json::json!({"token": "hello"}));
+
+        assert_eq!(
+            events.recv().unwrap(),
+            serde_json::json!({"token": "hello"})
+        );
+        assert_eq!(step.events.len(), 1);
     }
 }
