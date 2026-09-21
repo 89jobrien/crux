@@ -938,6 +938,13 @@ fn compile_repeat_step(
     diagnostics: &mut Vec<ValidationDiagnostic>,
     unresolved: &mut bool,
 ) -> Option<TypedStep> {
+    if node.count == 0 && !node.steps.is_empty() {
+        diagnostics.push(ValidationDiagnostic::warning_with_code(
+            ValidationCode::UnreachableStep,
+            format!("{location}.steps"),
+            "repeat body is unreachable because count is zero",
+        ));
+    }
     let bindings = allocate_loop_bindings(context.binding_ids, None);
     let mut frames = context.loop_bindings.to_vec();
     frames.push(bindings.clone());

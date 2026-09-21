@@ -2,8 +2,6 @@
 //!
 //! Define agent pipelines declaratively in YAML files, register step handlers
 //! in Rust, and execute without recompilation.
-// TODO(#99): pipeline validation pass — catch bad refs, missing handlers, type
-//   mismatches, and unreachable steps before execution starts (static analysis)
 pub mod compiler;
 pub mod expr;
 pub mod handler_output;
