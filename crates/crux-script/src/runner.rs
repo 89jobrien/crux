@@ -81,6 +81,14 @@ impl Runner {
     /// Execute a pipeline whose handlers were resolved during compilation.
     pub async fn run_compiled(&self, pipeline: &TypedPipeline, input: Value) -> Crux<Value> {
         let mut ctx = CruxCtx::new(&pipeline.name);
+        if let Some(schema) = &pipeline.input_schema
+            && let Err(violation) = schema.validate(&input)
+        {
+            return ctx.finalize(Err(CruxErr::step_failed(
+                &pipeline.name,
+                format!("pipeline input contract violated: {violation}"),
+            )));
+        }
         if let Some(budget_def) = &pipeline.budget {
             match budget_from_def(budget_def) {
                 Ok(budget) => ctx.set_budget(budget),
@@ -1363,6 +1371,7 @@ async fn run_typed_step_once<M: InvocationMeter>(
     invocation: crate::StepInvocation,
     timeout_ms: Option<u64>,
 ) -> Result<(Value, Option<f32>), CruxErr> {
+    validate_handler_invocation(step_label, runner.metadata(), &invocation)?;
     let started_cell = Arc::new(Mutex::new(None));
     let confidence_cell = Arc::new(Mutex::new(None));
     let usage_cell = Arc::new(Mutex::new(None));
@@ -1373,10 +1382,12 @@ async fn run_typed_step_once<M: InvocationMeter>(
     let invocation_result = ctx
         .invoke_budgeted_step(step_label, move || async move {
             *started.lock().unwrap() = Some(std::time::Instant::now());
+            let output_step_name = step_name.clone();
             let future = async move {
                 let execution = runner.run(invocation).await;
                 *usage.lock().unwrap() = Some(execution.usage);
                 let output = execution.outcome?;
+                validate_handler_output(&output_step_name, runner.metadata(), &output)?;
                 *confidence.lock().unwrap() = output.confidence;
                 Ok::<Value, CruxErr>(output.value)
             };
@@ -1421,6 +1432,94 @@ async fn run_typed_step_once<M: InvocationMeter>(
     invocation_result
         .outcome
         .map(|value| (value, *confidence_cell.lock().unwrap()))
+}
+
+fn validate_handler_invocation(
+    step: &str,
+    metadata: &crate::HandlerMetadata,
+    invocation: &crate::StepInvocation,
+) -> Result<(), CruxErr> {
+    if let Some(schema) = &metadata.input_schema {
+        schema.validate(invocation.input()).map_err(|violation| {
+            CruxErr::step_failed(
+                step,
+                format!(
+                    "handler '{}' input contract violated: {violation}",
+                    metadata.name
+                ),
+            )
+        })?;
+    }
+    validate_handler_args(step, metadata, invocation.args())
+}
+
+fn validate_handler_args(
+    step: &str,
+    metadata: &crate::HandlerMetadata,
+    args: &Value,
+) -> Result<(), CruxErr> {
+    if args.is_null() && !metadata.args.has_required_args() {
+        return Ok(());
+    }
+
+    let mut schema = crate::ObjectSchema::new();
+    for argument in &metadata.args.args {
+        schema = if argument.required {
+            schema.required(&argument.name, argument.schema.clone())
+        } else {
+            schema.optional(&argument.name, argument.schema.clone())
+        };
+    }
+    if metadata.args.allow_extra {
+        schema = schema.additional(crate::ValueSchema::Dynamic);
+    }
+    crate::ValueSchema::object(schema)
+        .validate(args)
+        .map_err(|violation| {
+            CruxErr::step_failed(
+                step,
+                format!(
+                    "handler '{}' arguments contract violated: {violation}",
+                    metadata.name
+                ),
+            )
+        })
+}
+
+fn validate_handler_output(
+    step: &str,
+    metadata: &crate::HandlerMetadata,
+    output: &crate::HandlerOutput,
+) -> Result<(), CruxErr> {
+    if let Some(schema) = &metadata.output_schema {
+        schema.validate(&output.value).map_err(|violation| {
+            CruxErr::step_failed(
+                step,
+                format!(
+                    "handler '{}' output contract violated: {violation}",
+                    metadata.name
+                ),
+            )
+        })?;
+    }
+
+    match (metadata.confidence, output.confidence) {
+        (Some(crate::ConfidenceCapability::Always), None) => Err(CruxErr::step_failed(
+            step,
+            format!(
+                "handler '{}' confidence contract violated: expected handler to always report confidence",
+                metadata.name
+            ),
+        )),
+        (Some(crate::ConfidenceCapability::Never), Some(_)) => Err(CruxErr::step_failed(
+            step,
+            format!(
+                "handler '{}' confidence contract violated: expected handler to never report confidence",
+                metadata.name
+            ),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {

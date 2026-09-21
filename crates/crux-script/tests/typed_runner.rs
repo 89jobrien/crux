@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use crux_runtime::prelude::CruxErr;
 use crux_script::{
     ArgSchema, CompileOptions, ConfidenceCapability, HandlerExecution, HandlerMetadata,
     HandlerOutput, HandlerRegistry, Runner, StepFuture, StepInvocation, StepRunner, ValueSchema,
@@ -10,6 +11,58 @@ use serde_json::json;
 struct RecordingRunner {
     metadata: HandlerMetadata,
     invocation: Arc<Mutex<Option<StepInvocation>>>,
+}
+
+struct ContractRunner {
+    metadata: HandlerMetadata,
+    output: HandlerOutput,
+}
+
+impl StepRunner for ContractRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        &self.metadata
+    }
+
+    fn run(&self, _invocation: StepInvocation) -> StepFuture<'_> {
+        let output = self.output.clone();
+        Box::pin(async move { HandlerExecution::free(Ok(output)) })
+    }
+}
+
+async fn contract_failure(
+    metadata: HandlerMetadata,
+    output: HandlerOutput,
+    input_schema: &str,
+    args: &str,
+    input: serde_json::Value,
+) -> (String, String) {
+    let mut registry = HandlerRegistry::new();
+    registry
+        .register(ContractRunner { metadata, output })
+        .unwrap();
+    let source = format!(
+        r#"
+pipeline: runtime-contracts
+input_schema:
+  type: {input_schema}
+steps:
+  - step: contract
+    handler: test::contract
+{args}
+"#
+    );
+    let pipeline = crux_script::load(&source).unwrap();
+    let compiled = compile_pipeline(&pipeline, &registry, CompileOptions::strict())
+        .into_artifact()
+        .unwrap();
+    let result = Runner::new(Arc::new(HandlerRegistry::new()))
+        .run_compiled(&compiled, input)
+        .await;
+
+    match result.value().unwrap_err() {
+        CruxErr::StepFailed { step, source_msg } => (step.clone(), source_msg.clone()),
+        error => panic!("expected StepFailed, got {error}"),
+    }
 }
 
 impl StepRunner for RecordingRunner {
@@ -68,4 +121,120 @@ steps:
     let invocation = invocation.as_ref().unwrap();
     assert_eq!(invocation.input(), &json!({"source": "compiled"}));
     assert_eq!(invocation.args(), &json!({"source": "compiled"}));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_pipeline_input_mismatch() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Never),
+        HandlerOutput::new(json!(1)),
+        "string",
+        "",
+        json!(42),
+    )
+    .await;
+
+    assert_eq!(step, "runtime-contracts");
+    assert!(message.contains("pipeline input"));
+    assert!(message.contains("expected string"));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_handler_input_mismatch() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .input_schema(ValueSchema::String)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Never),
+        HandlerOutput::new(json!(1)),
+        "dynamic",
+        "",
+        json!(42),
+    )
+    .await;
+
+    assert_eq!(step, "contract");
+    assert!(message.contains("handler 'test::contract' input"));
+    assert!(message.contains("expected string"));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_argument_mismatch() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .args(ArgSchema::strict().required("count", ValueSchema::Integer))
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Never),
+        HandlerOutput::new(json!(1)),
+        "dynamic",
+        "    args:\n      count: wrong",
+        json!(null),
+    )
+    .await;
+
+    assert_eq!(step, "contract");
+    assert!(message.contains("handler 'test::contract' arguments"));
+    assert!(message.contains("$.count"));
+    assert!(message.contains("expected integer"));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_output_mismatch() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Never),
+        HandlerOutput::new(json!("wrong")),
+        "dynamic",
+        "",
+        json!(null),
+    )
+    .await;
+
+    assert_eq!(step, "contract");
+    assert!(message.contains("handler 'test::contract' output"));
+    assert!(message.contains("expected integer"));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_always_without_confidence() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Always),
+        HandlerOutput::new(json!(1)),
+        "dynamic",
+        "",
+        json!(null),
+    )
+    .await;
+
+    assert_eq!(step, "contract");
+    assert!(message.contains("handler 'test::contract' confidence"));
+    assert!(message.contains("always report confidence"));
+}
+
+#[tokio::test]
+async fn run_compiled_rejects_contract_violations_never_with_confidence() {
+    let (step, message) = contract_failure(
+        HandlerMetadata::new("test::contract")
+            .input_schema(ValueSchema::Dynamic)
+            .output_schema(ValueSchema::Integer)
+            .confidence(ConfidenceCapability::Never),
+        HandlerOutput::with_confidence(json!(1), 0.8),
+        "dynamic",
+        "",
+        json!(null),
+    )
+    .await;
+
+    assert_eq!(step, "contract");
+    assert!(message.contains("handler 'test::contract' confidence"));
+    assert!(message.contains("never report confidence"));
 }
