@@ -2,9 +2,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::error::CruxErr;
-use crate::id::CruxId;
-use crate::step::{Step, StepKind, StepStatus};
+use crux_types::error::CruxErr;
+use crux_types::id::CruxId;
+use crux_types::step::{Step, StepKind, StepStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Crux<T> {
@@ -222,7 +222,8 @@ pub struct StepRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{crux_ok, step_ok};
+    use crate::testing::crux_ok;
+    use crux_types::testing::step_ok;
 
     fn sample_crux() -> Crux<String> {
         let rejected = Step {
@@ -306,7 +307,7 @@ mod tests {
 
     #[test]
     fn step_with_findings_roundtrips() {
-        use crate::step::CitedFinding;
+        use crux_types::step::CitedFinding;
         let mut step = step_ok("analyze", 0, None);
         step.findings.push(CitedFinding {
             message: "unused import".into(),
@@ -314,7 +315,7 @@ mod tests {
         });
         let json = serde_json::to_string(&step).unwrap();
         assert!(json.contains("unused import"));
-        let back: crate::step::Step = serde_json::from_str(&json).unwrap();
+        let back: crux_types::step::Step = serde_json::from_str(&json).unwrap();
         assert_eq!(back.findings.len(), 1);
         assert_eq!(
             back.findings[0].source.as_deref(),

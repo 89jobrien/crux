@@ -1,8 +1,8 @@
 // Core domain types for the crux DSL.
 
-// Re-export all wire-format types from crux-types.
+// Re-export trace schema combinators and primitive wire-format types.
+pub use crux_schema::crux_value;
 pub use crux_types::budget;
-pub use crux_types::crux_value;
 pub use crux_types::error;
 pub use crux_types::id;
 pub use crux_types::recovery::RecoveryKind;

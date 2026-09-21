@@ -2,8 +2,8 @@
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
+use crux_schema::crux_value::Crux;
 use crux_types::budget::{Budget, HandlerUsage, UsdAmount};
-use crux_types::crux_value::Crux;
 use crux_types::error::CruxErr;
 use indexmap::IndexMap;
 use serde_json::Value;

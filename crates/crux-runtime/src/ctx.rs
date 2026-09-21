@@ -1428,10 +1428,10 @@ impl Context for CruxCtx {
 /// Determines the worst-case outcome across all steps.
 /// Steps flagged `continue_on_error` are excluded unless `ignore_continue_on_error` is true.
 pub fn determine_final_phase(
-    steps: &[crux_types::crux_value::StepRecord],
+    steps: &[crux_schema::crux_value::StepRecord],
     ignore_continue_on_error: bool,
-) -> crux_types::crux_value::FinalPhase {
-    use crux_types::crux_value::FinalPhase;
+) -> crux_schema::crux_value::FinalPhase {
+    use crux_schema::crux_value::FinalPhase;
     steps
         .iter()
         .filter(|s| ignore_continue_on_error || !s.continue_on_error)
@@ -2778,7 +2778,7 @@ mod step_state_tests {
 #[cfg(test)]
 mod final_phase_tests {
     use super::determine_final_phase;
-    use crux_types::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
+    use crux_schema::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
     use proptest::prelude::*;
 
     #[test]

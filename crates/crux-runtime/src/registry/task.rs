@@ -207,13 +207,14 @@ mod tests {
             self.inner.cas(id, expected, new).await
         }
     }
-    use crux_types::testing::{crux_ok, step_ok};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::step_ok;
 
     fn make_registry() -> TaskRegistry<InMemoryBackend> {
         TaskRegistry::new(InMemoryBackend::new())
     }
 
-    fn make_crux() -> crux_types::crux_value::Crux<String> {
+    fn make_crux() -> crux_schema::crux_value::Crux<String> {
         crux_ok(
             "test",
             "result".into(),
