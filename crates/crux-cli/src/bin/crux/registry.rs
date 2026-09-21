@@ -12,11 +12,7 @@ pub fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
 }
 
 /// Build a registry seeded with all crux-agentic built-in handlers.
-pub async fn build_registry(
-    pipeline: &PipelineDef,
-    plugins_path: Option<&str>,
-    strict: bool,
-) -> HandlerRegistry {
+pub async fn build_base_registry(plugins_path: Option<&str>) -> HandlerRegistry {
     let disc = TomlFileDiscovery::new(resolve_plugins_path(plugins_path));
     let entries = disc.discover().unwrap_or_default();
     let manifest = crux_plugin::manifest::PluginManifest { plugin: entries };
@@ -35,6 +31,17 @@ pub async fn build_registry(
     {
         eprintln!("[crux] warning: failed to load plugins: {e}");
     }
+
+    reg
+}
+
+/// Build the execution registry and install compatibility stubs when allowed.
+pub async fn build_registry(
+    pipeline: &PipelineDef,
+    plugins_path: Option<&str>,
+    strict: bool,
+) -> HandlerRegistry {
+    let mut reg = build_base_registry(plugins_path).await;
 
     let mut unregistered_handlers = std::collections::HashSet::new();
     for name in collect_handler_names(pipeline) {

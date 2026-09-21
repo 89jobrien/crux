@@ -1,6 +1,7 @@
 /// crux — pipeline runner and planner for crux-script.
 ///
 /// Subcommands:
+///   check Validate one or more YAML pipelines
 ///   run   Execute a YAML pipeline
 ///   plan  Generate a pipeline from a natural language goal
 use std::collections::BTreeMap;
@@ -35,6 +36,18 @@ enum Cli {
         /// Root directory to scan (default: current directory)
         #[arg(default_value = ".")]
         root: String,
+    },
+    /// Compile-check one or more .crux pipelines or Cruxfiles
+    Check {
+        /// Pipeline/Cruxfile paths to check
+        #[arg(required = true)]
+        paths: Vec<String>,
+        /// Require complete contracts and reject dynamic boundaries
+        #[arg(short = 'S', long)]
+        strict: bool,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -110,6 +123,11 @@ fn main() {
 
     match cli {
         Cli::List { root } => cmd_list(&root),
+        Cli::Check {
+            paths,
+            strict,
+            plugins,
+        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict),
         Cli::Run {
             pipeline,
             target_or_input,
@@ -126,23 +144,36 @@ fn main() {
             replay_mode,
             save_trace,
             strict,
-        } => run::cmd_run_dispatch(&run::RunConfig {
-            pipeline_arg: pipeline.as_deref(),
-            target_or_input: target_or_input.as_deref(),
-            check,
-            target_flag: target.as_deref(),
-            input_flag: input.as_deref(),
-            plugins_path: plugins.as_deref(),
-            quiet,
-            summary,
-            json,
-            verbose,
-            dry_run,
-            replay_path: replay.as_deref(),
-            replay_mode_str: &replay_mode,
-            save_trace_path: save_trace.as_deref(),
-            strict,
-        }),
+        } => {
+            if check
+                && let Some(path) = pipeline.as_ref()
+                && path != "-"
+            {
+                check::cmd_check_with_options(
+                    std::slice::from_ref(path),
+                    plugins.as_deref(),
+                    strict,
+                );
+                return;
+            }
+            run::cmd_run_dispatch(&run::RunConfig {
+                pipeline_arg: pipeline.as_deref(),
+                target_or_input: target_or_input.as_deref(),
+                check,
+                target_flag: target.as_deref(),
+                input_flag: input.as_deref(),
+                plugins_path: plugins.as_deref(),
+                quiet,
+                summary,
+                json,
+                verbose,
+                dry_run,
+                replay_path: replay.as_deref(),
+                replay_mode_str: &replay_mode,
+                save_trace_path: save_trace.as_deref(),
+                strict,
+            });
+        }
         Cli::Plan {
             goal,
             output,

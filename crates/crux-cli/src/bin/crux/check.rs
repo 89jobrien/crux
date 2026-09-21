@@ -1,23 +1,27 @@
-use crux_script::schema::PipelineDef;
+use crux_script::{
+    Compilation, CompileOptions, DiagnosticSeverity, ValidationDiagnostic, compile_cruxfile,
+    compile_pipeline,
+};
 
-use crate::registry::{build_registry, collect_handler_names};
+use crate::registry::{build_base_registry, collect_handler_names};
 
+/// Compatibility entry point used by `crux run --check`.
 pub fn cmd_check(paths: &[String]) {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let mut parse_errors = 0u32;
-    let mut errors = 0u32;
-    let mut warnings = 0u32;
+    cmd_check_with_options(paths, None, false);
+}
 
-    // Build a registry once with all built-in handlers for validation.
-    let empty_pipeline = PipelineDef {
-        pipeline: String::new(),
-        input_schema: None,
-        budget: None,
-        vars: None,
-        display: None,
-        steps: vec![],
+/// Compile-check pipeline files with the same registry used for execution.
+pub fn cmd_check_with_options(paths: &[String], plugins_path: Option<&str>, strict: bool) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut parse_errors = 0usize;
+    let mut errors = 0usize;
+    let mut warnings = 0usize;
+    let options = if strict {
+        CompileOptions::strict()
+    } else {
+        CompileOptions::permissive()
     };
-    let registry = rt.block_on(build_registry(&empty_pipeline, None, false));
+    let registry = rt.block_on(build_base_registry(plugins_path));
 
     for path in paths {
         // Try as Cruxfile first if it looks like one.
@@ -40,32 +44,18 @@ pub fn cmd_check(paths: &[String]) {
                 }
             };
 
-            let report = crux_script::validate_cruxfile(&cruxfile, &registry);
             let target_count = cruxfile.targets.len();
-
-            if report.is_ok() && report.warning_count() == 0 {
-                println!(
-                    "\x1b[32mok\x1b[0m: {path} (Cruxfile, {target_count} targets, default: {})",
+            let compilation = compile_cruxfile(&cruxfile, &registry, options);
+            render_compilation(
+                path,
+                &compilation,
+                &format!(
+                    "Cruxfile, {target_count} targets, default: {}",
                     cruxfile.default
-                );
-            } else {
-                for diag in &report.diagnostics {
-                    let (color, label) = match diag.severity {
-                        crux_script::DiagnosticSeverity::Error => {
-                            errors += 1;
-                            ("\x1b[31m", "error")
-                        }
-                        crux_script::DiagnosticSeverity::Warning => {
-                            warnings += 1;
-                            ("\x1b[33m", "warning")
-                        }
-                    };
-                    eprintln!(
-                        "{color}{label}\x1b[0m: {path} [{}]: {}",
-                        diag.location, diag.message
-                    );
-                }
-            }
+                ),
+                &mut errors,
+                &mut warnings,
+            );
             continue;
         }
 
@@ -78,34 +68,16 @@ pub fn cmd_check(paths: &[String]) {
             }
         };
 
-        let report = crux_script::validate_pipeline(&pipeline, &registry);
-
         let step_count = pipeline.steps.len();
         let handlers = collect_handler_names(&pipeline);
-
-        if report.is_ok() && report.warning_count() == 0 {
-            println!(
-                "\x1b[32mok\x1b[0m: {path} ({step_count} steps, handlers: {})",
-                handlers.join(", ")
-            );
-        } else {
-            for diag in &report.diagnostics {
-                let (color, label) = match diag.severity {
-                    crux_script::DiagnosticSeverity::Error => {
-                        errors += 1;
-                        ("\x1b[31m", "error")
-                    }
-                    crux_script::DiagnosticSeverity::Warning => {
-                        warnings += 1;
-                        ("\x1b[33m", "warning")
-                    }
-                };
-                eprintln!(
-                    "{color}{label}\x1b[0m: {path} [{}]: {}",
-                    diag.location, diag.message
-                );
-            }
-        }
+        let compilation = compile_pipeline(&pipeline, &registry, options);
+        render_compilation(
+            path,
+            &compilation,
+            &format!("{step_count} steps, handlers: {}", handlers.join(", ")),
+            &mut errors,
+            &mut warnings,
+        );
     }
 
     let total_errors = parse_errors + errors;
@@ -122,4 +94,37 @@ pub fn cmd_check(paths: &[String]) {
     if total_errors > 0 {
         std::process::exit(1);
     }
+}
+
+fn render_compilation<T>(
+    path: &str,
+    compilation: &Compilation<T>,
+    description: &str,
+    errors: &mut usize,
+    warnings: &mut usize,
+) {
+    for diagnostic in compilation.diagnostics() {
+        render_diagnostic(path, diagnostic);
+        match diagnostic.severity {
+            DiagnosticSeverity::Error => *errors += 1,
+            DiagnosticSeverity::Warning => *warnings += 1,
+        }
+    }
+
+    if compilation.diagnostics().is_empty() {
+        println!("\x1b[32mok\x1b[0m: {path} ({description})");
+    } else if compilation.is_ok() && !compilation.is_executable() {
+        eprintln!("\x1b[33mwarning\x1b[0m: {path}: check passed, but pipeline is not executable");
+    }
+}
+
+fn render_diagnostic(path: &str, diagnostic: &ValidationDiagnostic) {
+    let color = match diagnostic.severity {
+        DiagnosticSeverity::Error => "\x1b[31m",
+        DiagnosticSeverity::Warning => "\x1b[33m",
+    };
+    eprintln!(
+        "{color}{}[{}]\x1b[0m: {path} [{}]: {}",
+        diagnostic.severity, diagnostic.code, diagnostic.location, diagnostic.message
+    );
 }
