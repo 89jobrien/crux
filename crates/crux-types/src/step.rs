@@ -8,9 +8,6 @@ use std::collections::HashMap;
 // TODO(#95): cited findings on failures — add a `cited_reason` field with source
 //   traceability (file, symbol, line) for richer failure diagnostics (cf. devloop)
 
-// TODO(#96): step output type safety — step outputs are all `Value` today; explore
-//   generic `Step<T>` or a typed-output registry to catch mismatches at compile time
-
 /// Shared mutable output map for `pipe()` stages — maps alias names to their outputs.
 pub type StepState = HashMap<String, serde_json::Value>;
 
@@ -25,8 +22,34 @@ pub struct CitedFinding {
     pub source: Option<String>,
 }
 
+/// A recorded step whose output type is checked at compile time.
+///
+/// Dynamic pipeline and plugin callers retain the wire-compatible
+/// `serde_json::Value` output through the default type parameter.
+///
+/// ```compile_fail
+/// use crux_types::step::{Step, StepKind, StepStatus};
+/// # use chrono::Utc;
+/// # use std::collections::HashMap;
+/// let _: Step<u32> = Step {
+///     name: "typed".into(),
+///     kind: StepKind::Plain,
+///     status: StepStatus::Ok,
+///     confidence: 1.0,
+///     started_at: Utc::now(),
+///     duration_ms: 0,
+///     input_hash: 0,
+///     content_hash: None,
+///     output: Some("not a number"),
+///     error: None,
+///     attempt: 1,
+///     events: vec![],
+///     metadata: HashMap::new(),
+///     findings: vec![],
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Step {
+pub struct Step<T = serde_json::Value> {
     pub name: String,
     pub kind: StepKind,
     pub status: StepStatus,
@@ -35,7 +58,7 @@ pub struct Step {
     pub duration_ms: u64,
     pub input_hash: u64,
     pub content_hash: Option<u64>,
-    pub output: Option<serde_json::Value>,
+    pub output: Option<T>,
     pub error: Option<String>,
     pub attempt: u32,
     /// Intermediate events emitted during streaming steps.
@@ -67,7 +90,7 @@ pub enum StepStatus {
     Skipped,
 }
 
-impl Step {
+impl<T> Step<T> {
     pub fn is_ok(&self) -> bool {
         self.status == StepStatus::Ok
     }
@@ -91,5 +114,29 @@ mod tests {
     fn step_status_serializes_snake_case() {
         let json = serde_json::to_string(&StepStatus::Ok).unwrap();
         assert_eq!(json, "\"ok\"");
+    }
+
+    #[test]
+    fn typed_step_output_round_trips_without_json_erasure() {
+        let step = Step::<u32> {
+            name: "count".into(),
+            kind: StepKind::Plain,
+            status: StepStatus::Ok,
+            confidence: 1.0,
+            started_at: Utc::now(),
+            duration_ms: 1,
+            input_hash: 0,
+            content_hash: None,
+            output: Some(42),
+            error: None,
+            attempt: 1,
+            events: vec![],
+            metadata: HashMap::new(),
+            findings: vec![],
+        };
+
+        let json = serde_json::to_string(&step).unwrap();
+        let decoded: Step<u32> = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.output, Some(42));
     }
 }
