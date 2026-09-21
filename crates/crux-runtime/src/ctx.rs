@@ -2,10 +2,6 @@
 //!
 //! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
 
-// TODO(#100): planner-based action dispatch — refactor step/delegate/speculate to return
-//   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
-//   simulation, and side-effect-free testing
-
 /// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
 /// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
@@ -243,6 +239,11 @@ impl CruxCtx {
     /// Clone the current planner handle for child contexts.
     pub(crate) fn planner_arc(&self) -> std::sync::Arc<dyn Planner> {
         std::sync::Arc::clone(&self.planner)
+    }
+
+    /// Ask the planner for the abstract action governing an orchestration operation.
+    pub(crate) fn plan_action(&self, name: &str) -> PlanResult {
+        self.planner.next_action(name, 0)
     }
 
     /// Attach an event sender so this context emits `StepEvent`s on every step.

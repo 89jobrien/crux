@@ -13,6 +13,7 @@ use crate::ctx::CruxCtx;
 use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepStatus};
+use crux_domain::plan_result::PlanResult;
 
 /// A named speculation arm.
 pub struct SpecArm<T> {
@@ -78,6 +79,9 @@ where
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
         trace_speculate!(&self.name, self.arms.len());
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         // Run all arms, collect results
@@ -251,6 +255,9 @@ where
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
         trace_speculate!(&self.name, self.arms.len());
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
@@ -312,6 +319,21 @@ where
 
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
     }
+
+    fn planned_result(&self) -> Result<Option<T>, CruxErr> {
+        match self.ctx.plan_action(&self.name) {
+            PlanResult::Allow(_) => Ok(None),
+            PlanResult::Deny { reason } => Err(CruxErr::Denied {
+                step: self.name.clone(),
+                reason,
+            }),
+            PlanResult::Simulate { output } => {
+                serde_json::from_value(output).map(Some).map_err(|error| {
+                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
+                })
+            }
+        }
+    }
 }
 
 fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
@@ -334,6 +356,38 @@ mod tests {
     use crate::ctx::CruxCtx;
     use crate::types::error::CruxErr;
     use crate::types::step::StepStatus;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[tokio::test]
+    async fn planner_denies_speculation_before_arms_are_polled() {
+        use crux_domain::planner::DenyAllPlanner;
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let arm_polls = Arc::clone(&polls);
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no speculation".into(),
+        });
+        let result = ctx
+            .speculate(
+                "choose",
+                vec![(
+                    "arm",
+                    Box::pin(async move {
+                        arm_polls.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, CruxErr>(1)
+                    }),
+                )],
+            )
+            .first_ok()
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
+        assert_eq!(polls.load(Ordering::SeqCst), 0);
+    }
 
     fn ok_arm<T: Send + 'static>(name: &str, val: T) -> SpecArm<T> {
         SpecArm {
