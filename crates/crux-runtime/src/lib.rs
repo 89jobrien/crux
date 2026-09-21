@@ -22,6 +22,7 @@ pub mod recorder;
 pub mod registry;
 pub mod replay;
 pub mod safety;
+pub mod sandbox;
 pub mod secrets;
 pub mod speculation;
 pub mod trust;
@@ -48,6 +49,7 @@ pub mod prelude {
     pub use crate::registry::{Task, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
     pub use crate::safety::{SafetyPolicy, SafetyViolation};
+    pub use crate::sandbox::{SandboxProfile, SandboxRequest, SandboxViolation};
     pub use crate::secrets::{SecretRedactor, SecretRef, SecretResolver, SecretValue};
     pub use crate::trust::{TrustRegistry, TrustScore};
     pub use crate::types::budget::{Budget, BudgetUsage, HandlerUsage, UsdAmount};
