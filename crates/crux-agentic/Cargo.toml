@@ -29,11 +29,13 @@ crux-script = { workspace = true } #unified
 crux-stdlib = { workspace = true } #unified
 futures = { workspace = true, optional = true }
 ignore = "0.4"
+hex = "0.4"
 reqwest = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+sha2 = "0.10"
 thiserror = { workspace = true }
 tokio = { workspace = true }
 

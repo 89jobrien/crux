@@ -6,6 +6,8 @@ use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::time::Instant;
 
 const DEFAULT_MAX_TOKENS: u32 = 1024;
 const DEFAULT_MODEL: &str = "gpt-4o-mini";
@@ -101,6 +103,36 @@ fn merge_metadata(out: &mut Value, resp: &crate::provider::LlmResponse) {
             map.insert(k.clone(), v.clone());
         }
     }
+}
+
+fn normalized_trace(
+    vendor: Vendor,
+    model: &str,
+    prompt: &str,
+    max_tokens: u32,
+    started: Instant,
+    metadata: Option<&Value>,
+) -> Value {
+    let prompt_sha256 = hex::encode(Sha256::digest(prompt.as_bytes()));
+    let token_usage = metadata
+        .and_then(|value| value.get("usage"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let tool_calls = metadata
+        .and_then(|value| value.get("tool_calls"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    json!({
+        "prompt_sha256": prompt_sha256,
+        "provider": vendor.to_string().to_lowercase(),
+        "model": model,
+        "parameters": {"max_tokens": max_tokens},
+        "tool_calls": tool_calls,
+        "token_usage": token_usage,
+        "latency_ms": started.elapsed().as_millis() as u64,
+        "schema_valid": Value::Null,
+        "redacted": true,
+    })
 }
 
 async fn dispatch_llm_stream(
@@ -226,6 +258,9 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::stream", |input: Value| async move {
         let p = parse_llm_input(&input, "llm::stream")?;
         let base_url = opt_str(&input, "base_url");
+        let prompt = p.prompt.clone();
+        let model = p.model_ref.provider_id.clone();
+        let started = Instant::now();
         let req = LlmRequest {
             prompt: p.prompt,
             system: Some(p.system),
@@ -240,6 +275,14 @@ pub fn register_stream(registry: &mut HandlerRegistry) {
             "chunks": chunks,
             "provider": provider,
             "streaming": true,
+            "trace": normalized_trace(
+                p.vendor,
+                &model,
+                &prompt,
+                p.max_tokens,
+                started,
+                None,
+            ),
         }))
     });
 }
@@ -248,6 +291,9 @@ pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::invoke", |input: Value| async move {
         let p = parse_llm_input(&input, "llm::invoke")?;
         let base_url = opt_str(&input, "base_url");
+        let prompt = p.prompt.clone();
+        let model = p.model_ref.provider_id.clone();
+        let started = Instant::now();
         let req = LlmRequest {
             prompt: p.prompt,
             system: Some(p.system),
@@ -258,6 +304,14 @@ pub fn register(registry: &mut HandlerRegistry) {
 
         let mut out = json!({ "content": resp.text, "provider": resp.provider });
         merge_metadata(&mut out, &resp);
+        out["trace"] = normalized_trace(
+            p.vendor,
+            &model,
+            &prompt,
+            p.max_tokens,
+            started,
+            resp.metadata.as_ref(),
+        );
         Ok(out)
     });
 }
@@ -309,6 +363,8 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
 
         for vendor in &tiers {
             let model_ref = ProviderModelId::parse_lenient(*vendor, model_str);
+            let model = model_ref.provider_id.clone();
+            let started = Instant::now();
             let req = LlmRequest {
                 prompt: prompt.clone(),
                 system: Some(system.clone()),
@@ -319,6 +375,14 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
                 Ok(resp) => {
                     let mut out = json!({ "content": resp.text, "provider": resp.provider });
                     merge_metadata(&mut out, &resp);
+                    out["trace"] = normalized_trace(
+                        *vendor,
+                        &model,
+                        &prompt,
+                        max_tokens,
+                        started,
+                        resp.metadata.as_ref(),
+                    );
                     return Ok(out);
                 }
                 Err(e) => {

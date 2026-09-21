@@ -72,6 +72,13 @@ async fn complete_openai_compat() {
 
     assert_eq!(result["content"].as_str().unwrap(), "4");
     assert!(result["usage"].is_object());
+    assert_eq!(result["trace"]["provider"], "openai");
+    assert_eq!(result["trace"]["model"], "test-model");
+    assert_eq!(result["trace"]["parameters"]["max_tokens"], 1024);
+    assert_eq!(result["trace"]["token_usage"]["total_tokens"], 6);
+    assert_eq!(result["trace"]["redacted"], true);
+    assert!(result["trace"]["prompt_sha256"].as_str().unwrap().len() == 64);
+    assert!(!result["trace"].to_string().contains("What is 2+2?"));
 }
 
 #[tokio::test]
