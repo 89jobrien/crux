@@ -22,6 +22,7 @@ fn register_all_installs_expected_handlers() {
         "json::pick",
         "json::merge",
         "json::jq",
+        "http::request",
         "llm::invoke",
         "analysis::latency_profile",
         "analysis::token_spend",
