@@ -13,6 +13,7 @@ mod output;
 mod plan;
 mod registry;
 mod run;
+mod schema;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -48,6 +49,12 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+    },
+    /// Export the JSON Schema for .crux pipeline definitions
+    Schema {
+        /// Serialization format
+        #[arg(long, value_enum, default_value_t = schema::SchemaFormat::Json)]
+        format: schema::SchemaFormat,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -128,6 +135,7 @@ fn main() {
             strict,
             plugins,
         } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict),
+        Cli::Schema { format } => schema::cmd_schema(format),
         Cli::Run {
             pipeline,
             target_or_input,

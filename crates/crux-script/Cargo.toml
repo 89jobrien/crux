@@ -17,6 +17,7 @@ crux-runtime = { workspace = true } #unified
 crux-types = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 miette = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }

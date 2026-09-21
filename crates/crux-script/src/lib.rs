@@ -30,6 +30,11 @@ pub fn load_file(path: impl AsRef<std::path::Path>) -> Result<PipelineDef, LoadE
     Ok(serde_saphyr::from_str(&contents)?)
 }
 
+/// Generate the JSON Schema used to validate declarative pipeline files.
+pub fn pipeline_json_schema() -> schemars::Schema {
+    schemars::schema_for!(PipelineDef)
+}
+
 /// Detect whether a YAML string is a Cruxfile (multi-target) rather than a pipeline.
 pub fn is_cruxfile(yaml: &str) -> bool {
     // Quick heuristic: Cruxfile has `targets:` key, pipelines have `pipeline:`.
