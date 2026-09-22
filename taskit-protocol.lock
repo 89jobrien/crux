@@ -60,7 +60,7 @@
     {
       "name": "crux-improve-lib",
       "path": "crates/crux-improve/src/lib.rs",
-      "hash": "eef982852e9b97d1eeb3892eb8c61ff3d77edb1fb3893945d32c2b5a3eb68c25"
+      "hash": "e212050ce60ccba4f80f87e6c770e3a33c305c45101ebb6efa16d2e024648b1a"
     },
     {
       "name": "crux-planner-generator",
