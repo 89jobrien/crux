@@ -11,6 +11,7 @@ pub mod audit;
 pub mod context;
 pub mod ctx;
 pub mod delegation;
+pub mod event_log;
 pub mod event_sink;
 pub mod governance;
 pub mod hooks;
@@ -41,6 +42,7 @@ pub mod prelude {
         BoxFut, ConfidenceRange, ConfidenceRoute, CruxCtx, JoinArm, PipeFailurePolicy, PipeStage,
         RecoverablePipeStage,
     };
+    pub use crate::event_log::{EventLog, EventLogError, LoggedEvent};
     pub use crate::governance::{GovernancePolicy, PolicyAction, compose_policies};
     #[cfg(feature = "tracing")]
     pub use crate::observability::emit_trace_spans;

@@ -29,6 +29,30 @@ mod tests {
         assert!(row["duration_ms"].is_number());
     }
 
+    #[test]
+    fn durable_event_log_replays_append_order() {
+        let path = std::env::temp_dir().join(format!(
+            "crux-events-{}.jsonl",
+            crate::types::id::CruxId::new()
+        ));
+        let log = crate::event_log::EventLog::open(&path);
+        log.append(&StepEvent::Started {
+            step_name: "a".into(),
+        })
+        .unwrap();
+        log.append(&StepEvent::Completed {
+            step_name: "a".into(),
+            duration_ms: 1,
+        })
+        .unwrap();
+
+        let replayed = log.replay().unwrap();
+        assert_eq!(replayed[0].sequence, 0);
+        assert_eq!(replayed[1].sequence, 1);
+        assert!(matches!(replayed[1].event, StepEvent::Completed { .. }));
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[tokio::test]
     async fn ctx_emits_started_event_on_step() {
         let pipeline = EventPipeline::new(64);
