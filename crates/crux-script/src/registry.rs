@@ -202,6 +202,19 @@ impl HandlerRegistry {
             .or_else(|| self.runners.get(name).map(|runner| runner.metadata()))
     }
 
+    /// Return all handler metadata sorted by registered name.
+    pub fn handler_metadata(&self) -> Vec<&HandlerMetadata> {
+        let mut metadata: Vec<_> = self
+            .handlers
+            .keys()
+            .chain(self.runners.keys())
+            .filter_map(|name| self.get_metadata(name))
+            .collect();
+        metadata.sort_by(|left, right| left.name.cmp(&right.name));
+        metadata.dedup_by(|left, right| left.name == right.name);
+        metadata
+    }
+
     /// Register a handler that returns [`HandlerOutput`] directly.
     ///
     /// Use this when the handler needs to control confidence. The returned
