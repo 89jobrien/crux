@@ -4,11 +4,16 @@
 /// (fail on non-zero exit).
 ///
 /// Both handlers require a `cmd` arg. Optional: `cwd`, `env`, `ignore_exit`.
+use std::collections::BTreeMap;
+use std::process::Stdio;
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::{
     ArgSchema, ArgType, Capability, HandlerMetadata, HandlerRegistry, RiskLevel, SideEffect,
 };
+use serde::Deserialize;
 use serde_json::{Value, json};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::error::{opt_str, require_str};
@@ -24,6 +29,41 @@ pub fn register(registry: &mut HandlerRegistry) {
         shell_metadata("shell::capture", true),
         |input: Value| async move { run_shell(input, true).await },
     );
+
+    registry.handler_value_free_with_metadata(
+        HandlerMetadata::new("process::run")
+            .describe("Run a program with a typed argument vector without shell interpolation.")
+            .args(
+                ArgSchema::new()
+                    .required("program", ArgType::String)
+                    .required("argv", ArgType::Array)
+                    .optional("cwd", ArgType::String)
+                    .optional("env", ArgType::Object)
+                    .optional("stdin", ArgType::String)
+                    .optional("fail_on_nonzero", ArgType::Boolean),
+            )
+            .risk(RiskLevel::High)
+            .side_effects(vec![SideEffect::Process])
+            .capabilities(vec![Capability::Process])
+            .deterministic(false),
+        run_process,
+    );
+}
+
+#[derive(Debug, Deserialize)]
+struct ProcessArgs {
+    program: String,
+    argv: Vec<String>,
+    cwd: Option<String>,
+    #[serde(default)]
+    env: BTreeMap<String, String>,
+    stdin: Option<String>,
+    #[serde(default = "default_true")]
+    fail_on_nonzero: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 fn shell_metadata(name: &str, fail_on_nonzero: bool) -> HandlerMetadata {
@@ -52,9 +92,6 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
     let cmd = require_str(&input, "cmd").map_err(CruxErr::from)?;
     let cwd = opt_str(&input, "cwd");
 
-    // TODO(feature-idea-7): Implement the typed argv process handler described by automation-14.
-    // TODO(automation-14): Add a typed argv process handler for untrusted automation input;
-    // never interpolate issue text, prompts, branch names, or paths into `sh -c` commands.
     let mut command = Command::new("sh");
     command.arg("-c").arg(cmd);
     if let Some(dir) = cwd {
@@ -91,6 +128,64 @@ async fn run_shell(input: Value, fail_on_nonzero: bool) -> Result<Value, CruxErr
         return Err(CruxErr::step_failed(
             "shell::capture",
             format!("command exited {exit_code}: {stderr}"),
+        ));
+    }
+
+    Ok(json!({
+        "exit_code": exit_code,
+        "stdout": stdout,
+        "stderr": stderr,
+    }))
+}
+
+async fn run_process(input: Value) -> Result<Value, CruxErr> {
+    let args = input
+        .get("args")
+        .cloned()
+        .ok_or_else(|| CruxErr::step_failed("process::run", "missing args object"))?;
+    let args: ProcessArgs = serde_json::from_value(args).map_err(|error| {
+        CruxErr::step_failed("process::run", format!("invalid process args: {error}"))
+    })?;
+
+    let mut command = Command::new(&args.program);
+    command.args(&args.argv).envs(&args.env);
+    if let Some(cwd) = args.cwd {
+        command.current_dir(cwd);
+    }
+    if args.stdin.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command.spawn().map_err(|error| {
+        CruxErr::step_failed(
+            "process::run",
+            format!("failed to spawn '{}': {error}", args.program),
+        )
+    })?;
+    if let Some(stdin) = args.stdin
+        && let Some(mut child_stdin) = child.stdin.take()
+    {
+        child_stdin
+            .write_all(stdin.as_bytes())
+            .await
+            .map_err(|error| {
+                CruxErr::step_failed("process::run", format!("failed to write stdin: {error}"))
+            })?;
+    }
+    let output = child.wait_with_output().await.map_err(|error| {
+        CruxErr::step_failed(
+            "process::run",
+            format!("failed to wait for process: {error}"),
+        )
+    })?;
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    if args.fail_on_nonzero && !output.status.success() {
+        return Err(CruxErr::step_failed(
+            "process::run",
+            format!("process exited {exit_code}: {stderr}"),
         ));
     }
 

@@ -8,6 +8,8 @@ use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::time::Instant;
 
 const DEFAULT_MAX_TOKENS: u32 = 1024;
 const DEFAULT_MODEL: &str = "gpt-4o-mini";
@@ -62,11 +64,9 @@ fn parse_llm_input(input: &Value, handler: &str) -> Result<ParsedInput, CruxErr>
     })
 }
 
-// TODO(#102): consider taking &str for api_key — fallback handler clones
-//   per vendor attempt; clone inside only when adapter constructor needs owned
 async fn dispatch_llm(
     vendor: Vendor,
-    api_key: String,
+    api_key: &str,
     model_ref: ProviderModelRef,
     base_url_override: Option<&str>,
     req: LlmRequest,
@@ -107,32 +107,185 @@ fn merge_metadata(out: &mut Value, resp: &crate::provider::LlmResponse) {
     }
 }
 
+fn normalized_trace(
+    vendor: Vendor,
+    model: &str,
+    prompt: &str,
+    max_tokens: u32,
+    started: Instant,
+    metadata: Option<&Value>,
+) -> Value {
+    let prompt_sha256 = hex::encode(Sha256::digest(prompt.as_bytes()));
+    let token_usage = metadata
+        .and_then(|value| value.get("usage"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let tool_calls = metadata
+        .and_then(|value| value.get("tool_calls"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    json!({
+        "prompt_sha256": prompt_sha256,
+        "provider": vendor.to_string().to_lowercase(),
+        "model": model,
+        "parameters": {"max_tokens": max_tokens},
+        "tool_calls": tool_calls,
+        "token_usage": token_usage,
+        "latency_ms": started.elapsed().as_millis() as u64,
+        "schema_valid": Value::Null,
+        "redacted": true,
+    })
+}
+
+async fn dispatch_llm_stream(
+    vendor: Vendor,
+    api_key: &str,
+    model_ref: ProviderModelRef,
+    base_url_override: Option<&str>,
+    req: LlmRequest,
+) -> Result<(Vec<String>, String), CruxErr> {
+    let base_url = base_url_override.unwrap_or(match vendor {
+        Vendor::Anthropic => DEFAULT_BASE_URL_ANTHROPIC,
+        Vendor::Ollama => DEFAULT_BASE_URL_OLLAMA,
+        _ => DEFAULT_BASE_URL_OPENAI,
+    });
+    let base_url = base_url.trim_end_matches('/');
+    let provider = format!(
+        "{}/{}",
+        vendor.to_string().to_lowercase(),
+        model_ref.provider_id
+    );
+    let system = req.system.unwrap_or_else(|| DEFAULT_SYSTEM.into());
+    let (url, body) = if vendor == Vendor::Anthropic {
+        (
+            format!("{base_url}/v1/messages"),
+            json!({
+                "model": model_ref.provider_id,
+                "max_tokens": req.max_tokens,
+                "stream": true,
+                "system": system,
+                "messages": [{"role": "user", "content": req.prompt}]
+            }),
+        )
+    } else {
+        (
+            format!("{base_url}/v1/chat/completions"),
+            json!({
+                "model": model_ref.provider_id,
+                "max_tokens": req.max_tokens,
+                "stream": true,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": req.prompt}
+                ]
+            }),
+        )
+    };
+    let client = reqwest::Client::new();
+    let mut request = client.post(url).json(&body);
+    if !api_key.is_empty() {
+        request = match vendor {
+            Vendor::Anthropic => request
+                .header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01"),
+            Vendor::Ollama => request,
+            _ => request.bearer_auth(api_key),
+        };
+    }
+    let mut response = request
+        .send()
+        .await
+        .map_err(|error| CruxErr::step_failed("llm::stream", format!("HTTP error: {error}")))?;
+    if !response.status().is_success() {
+        return Err(CruxErr::step_failed(
+            "llm::stream",
+            format!("HTTP status {}", response.status()),
+        ));
+    }
+
+    let mut pending = Vec::new();
+    let mut deltas = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| CruxErr::step_failed("llm::stream", error.to_string()))?
+    {
+        pending.extend_from_slice(&chunk);
+        while let Some(newline) = pending.iter().position(|byte| *byte == b'\n') {
+            let line = pending.drain(..=newline).collect::<Vec<_>>();
+            parse_stream_line(vendor, &line, &mut deltas)?;
+        }
+    }
+    if !pending.is_empty() {
+        parse_stream_line(vendor, &pending, &mut deltas)?;
+    }
+    Ok((deltas, provider))
+}
+
+fn parse_stream_line(
+    vendor: Vendor,
+    bytes: &[u8],
+    deltas: &mut Vec<String>,
+) -> Result<(), CruxErr> {
+    let line = std::str::from_utf8(bytes)
+        .map_err(|error| CruxErr::step_failed("llm::stream", error.to_string()))?
+        .trim();
+    if !line.starts_with("data:") && !line.starts_with('{') {
+        return Ok(());
+    }
+    let data = line.strip_prefix("data:").map(str::trim).unwrap_or(line);
+    if data.is_empty() || data == "[DONE]" {
+        return Ok(());
+    }
+    let event: Value = serde_json::from_str(data).map_err(|error| {
+        CruxErr::step_failed("llm::stream", format!("invalid stream event: {error}"))
+    })?;
+    let delta = match vendor {
+        Vendor::Anthropic => event.pointer("/delta/text"),
+        _ => event.pointer("/choices/0/delta/content"),
+    };
+    if let Some(delta) = delta.and_then(Value::as_str)
+        && !delta.is_empty()
+    {
+        deltas.push(delta.to_owned());
+    }
+    Ok(())
+}
+
 /// Register the `llm::stream` handler.
-// TODO(feature-idea-12): Stream provider deltas into trace chunk events with usage accounting.
 ///
-/// **Stub implementation**: emits the full response as a single output rather than
-/// streaming deltas.  Real streaming requires an async-stream variant on `LlmProvider`
-/// (tracked in issue #21).  The handler is wire-compatible: callers get `content`,
-/// `provider`, and `streaming: false` in the output.
+/// Provider deltas are consumed incrementally and returned as ordered chunks alongside
+/// the assembled content.
 pub fn register_stream(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::stream", |input: Value| async move {
         let p = parse_llm_input(&input, "llm::stream")?;
         let base_url = opt_str(&input, "base_url");
+        let prompt = p.prompt.clone();
+        let model = p.model_ref.provider_id.clone();
+        let started = Instant::now();
         let req = LlmRequest {
             prompt: p.prompt,
             system: Some(p.system),
             max_tokens: p.max_tokens,
         };
 
-        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
-
-        let mut out = json!({
-            "content": resp.text,
-            "provider": resp.provider,
-            "streaming": false,
-        });
-        merge_metadata(&mut out, &resp);
-        Ok(out)
+        let (chunks, provider) =
+            dispatch_llm_stream(p.vendor, &p.api_key, p.model_ref, base_url, req).await?;
+        let content = chunks.concat();
+        Ok(json!({
+            "content": content,
+            "chunks": chunks,
+            "provider": provider,
+            "streaming": true,
+            "trace": normalized_trace(
+                p.vendor,
+                &model,
+                &prompt,
+                p.max_tokens,
+                started,
+                None,
+            ),
+        }))
     });
 }
 
@@ -141,16 +294,27 @@ pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("llm::invoke", |input: Value| async move {
         let p = parse_llm_input(&input, "llm::invoke")?;
         let base_url = opt_str(&input, "base_url");
+        let prompt = p.prompt.clone();
+        let model = p.model_ref.provider_id.clone();
+        let started = Instant::now();
         let req = LlmRequest {
             prompt: p.prompt,
             system: Some(p.system),
             max_tokens: p.max_tokens,
         };
 
-        let resp = dispatch_llm(p.vendor, p.api_key, p.model_ref, base_url, req).await?;
+        let resp = dispatch_llm(p.vendor, &p.api_key, p.model_ref, base_url, req).await?;
 
         let mut out = json!({ "content": resp.text, "provider": resp.provider });
         merge_metadata(&mut out, &resp);
+        out["trace"] = normalized_trace(
+            p.vendor,
+            &model,
+            &prompt,
+            p.max_tokens,
+            started,
+            resp.metadata.as_ref(),
+        );
         Ok(out)
     });
 }
@@ -202,17 +366,26 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
 
         for vendor in &tiers {
             let model_ref = ProviderModelId::parse_lenient(*vendor, model_str);
+            let model = model_ref.provider_id.clone();
+            let started = Instant::now();
             let req = LlmRequest {
                 prompt: prompt.clone(),
                 system: Some(system.clone()),
                 max_tokens,
             };
-            let result =
-                dispatch_llm(*vendor, api_key.clone(), model_ref, base_url_override, req).await;
+            let result = dispatch_llm(*vendor, &api_key, model_ref, base_url_override, req).await;
             match result {
                 Ok(resp) => {
                     let mut out = json!({ "content": resp.text, "provider": resp.provider });
                     merge_metadata(&mut out, &resp);
+                    out["trace"] = normalized_trace(
+                        *vendor,
+                        &model,
+                        &prompt,
+                        max_tokens,
+                        started,
+                        resp.metadata.as_ref(),
+                    );
                     return Ok(out);
                 }
                 Err(e) => {
@@ -223,4 +396,24 @@ pub fn register_fallback(registry: &mut HandlerRegistry) {
         }
         Err(last_err)
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dispatch_accepts_a_borrowed_api_key() {
+        let api_key = String::from("borrowed-key");
+        let model = ProviderModelId::parse_lenient(Vendor::Ollama, "test-model");
+        let request = LlmRequest {
+            prompt: "test".into(),
+            system: None,
+            max_tokens: 1,
+        };
+
+        let future = dispatch_llm(Vendor::Ollama, api_key.as_str(), model, None, request);
+        drop(future);
+        assert_eq!(api_key, "borrowed-key");
+    }
 }
