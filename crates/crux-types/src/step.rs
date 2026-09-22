@@ -45,6 +45,7 @@ pub struct CitedReason {
 /// # use chrono::Utc;
 /// # use std::collections::HashMap;
 /// let _: Step<u32> = Step {
+///     stable_id: None,
 ///     name: "typed".into(),
 ///     kind: StepKind::Plain,
 ///     status: StepStatus::Ok,
@@ -55,6 +56,7 @@ pub struct CitedReason {
 ///     content_hash: None,
 ///     output: Some("not a number"),
 ///     error: None,
+///     cited_reason: None,
 ///     attempt: 1,
 ///     events: vec![],
 ///     event_subscribers: Default::default(),
@@ -64,6 +66,9 @@ pub struct CitedReason {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Step<T = serde_json::Value> {
+    /// Stable identity used by strict replay independently of trace position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_id: Option<String>,
     pub name: String,
     pub kind: StepKind,
     pub status: StepStatus,
@@ -187,6 +192,7 @@ impl<T> Step<T> {
 
     fn try_map_output<U, E>(self, map: impl FnOnce(T) -> Result<U, E>) -> Result<Step<U>, E> {
         Ok(Step {
+            stable_id: self.stable_id,
             name: self.name,
             kind: self.kind,
             status: self.status,
@@ -226,6 +232,7 @@ mod tests {
     #[test]
     fn typed_step_output_round_trips_without_json_erasure() {
         let step = Step::<u32> {
+            stable_id: None,
             name: "count".into(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,

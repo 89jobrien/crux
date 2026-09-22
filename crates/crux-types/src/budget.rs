@@ -213,7 +213,7 @@ impl HandlerUsage {
 }
 
 /// Aggregate typed usage recorded against a budget.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BudgetUsage {
     /// Accepted handler attempts.
     pub steps: u64,
@@ -223,6 +223,59 @@ pub struct BudgetUsage {
     pub duration_ms: u64,
     /// Reported USD total, or `None` if no handler has reported USD usage.
     pub usd: Option<UsdAmount>,
+}
+
+/// One auditable per-step budget charge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BudgetLedgerEntry {
+    pub step: String,
+    pub tokens: u64,
+    pub duration_ms: u64,
+    pub usd: Option<UsdAmount>,
+}
+
+/// Append-only accounting ledger with aggregate usage.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BudgetLedger {
+    entries: Vec<BudgetLedgerEntry>,
+    total: BudgetUsage,
+}
+
+impl BudgetLedger {
+    pub fn record(
+        &mut self,
+        step: impl Into<String>,
+        tokens: u64,
+        duration_ms: u64,
+        usd: Option<UsdAmount>,
+    ) {
+        self.entries.push(BudgetLedgerEntry {
+            step: step.into(),
+            tokens,
+            duration_ms,
+            usd,
+        });
+        self.total.steps = self.total.steps.saturating_add(1);
+        self.total.tokens = self.total.tokens.saturating_add(tokens);
+        self.total.duration_ms = self.total.duration_ms.saturating_add(duration_ms);
+        if let Some(amount) = usd {
+            self.total.usd = Some(
+                self.total
+                    .usd
+                    .unwrap_or(UsdAmount::ZERO)
+                    .checked_add(amount)
+                    .unwrap_or(UsdAmount::from_micros(u64::MAX)),
+            );
+        }
+    }
+
+    pub fn entries(&self) -> &[BudgetLedgerEntry] {
+        &self.entries
+    }
+
+    pub const fn total(&self) -> BudgetUsage {
+        self.total
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -644,6 +697,18 @@ mod tests {
     fn handler_usage_distinguishes_free_from_unreported() {
         assert_eq!(HandlerUsage::free().usd, Some(UsdAmount::ZERO));
         assert_eq!(HandlerUsage::unreported().usd, None);
+    }
+
+    #[test]
+    fn budget_ledger_records_auditable_per_step_usage() {
+        let mut ledger = BudgetLedger::default();
+        ledger.record("fetch", 100, 20, Some(UsdAmount::from_micros(50)));
+        ledger.record("parse", 25, 5, Some(UsdAmount::ZERO));
+
+        assert_eq!(ledger.entries().len(), 2);
+        assert_eq!(ledger.total().tokens, 125);
+        assert_eq!(ledger.total().duration_ms, 25);
+        assert_eq!(ledger.total().usd.unwrap().micros(), 50);
     }
 
     #[test]

@@ -595,6 +595,13 @@ pub enum Capability {
     Process,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("handler '{handler}' requires unapproved capabilities: {missing:?}")]
+pub struct CapabilityViolation {
+    pub handler: String,
+    pub missing: Vec<Capability>,
+}
+
 /// Whether a handler reports a confidence score with its output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -741,6 +748,27 @@ impl HandlerMetadata {
         self
     }
 
+    /// Verifies that every capability required by this handler is approved.
+    pub fn authorize_capabilities(
+        &self,
+        approved: &[Capability],
+    ) -> Result<(), CapabilityViolation> {
+        let missing: Vec<_> = self
+            .capabilities
+            .iter()
+            .copied()
+            .filter(|capability| !approved.contains(capability))
+            .collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(CapabilityViolation {
+                handler: self.name.clone(),
+                missing,
+            })
+        }
+    }
+
     /// Marks whether identical inputs are expected to produce identical results.
     pub fn deterministic(mut self, deterministic: bool) -> Self {
         self.deterministic = deterministic;
@@ -750,4 +778,21 @@ impl HandlerMetadata {
 
 fn default_deterministic() -> bool {
     true
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn handler_capabilities_require_explicit_approval() {
+        let handler = HandlerMetadata::new("shell").capabilities(vec![Capability::Shell]);
+
+        assert!(
+            handler
+                .authorize_capabilities(&[Capability::ReadFs])
+                .is_err()
+        );
+        assert!(handler.authorize_capabilities(&[Capability::Shell]).is_ok());
+    }
 }

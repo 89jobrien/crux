@@ -89,6 +89,7 @@ impl StepRecorder {
             (_, v) => v,
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
@@ -115,6 +116,7 @@ impl StepRecorder {
             None => error.to_string(),
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Err,
@@ -137,6 +139,7 @@ impl StepRecorder {
     /// Record a skipped step.
     pub fn record_skipped(&mut self, name: &str, input_hash: u64, confidence: f32) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Skipped,
@@ -166,6 +169,7 @@ impl StepRecorder {
         output: serde_json::Value,
     ) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,

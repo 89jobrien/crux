@@ -5,6 +5,7 @@
 
 pub mod action;
 pub mod event;
+pub mod phase;
 #[cfg(feature = "tokio-pipeline")]
 pub mod pipeline;
 pub mod plan_result;
@@ -14,12 +15,29 @@ pub mod planner;
 mod tests {
     use crate::action::{Action, StepIntent};
     use crate::event::StepEvent;
+    use crate::phase::{ExecutionPhase, PhaseTransition};
     use crate::plan_result::PlanResult;
 
     use crate::planner::{PassthroughPlanner, Planner};
 
     #[test]
     fn domain_crate_compiles() {}
+
+    #[test]
+    fn execution_phases_enforce_architecture_order() {
+        assert_eq!(
+            ExecutionPhase::Planning.advance(ExecutionPhase::Policy),
+            Ok(PhaseTransition {
+                from: ExecutionPhase::Planning,
+                to: ExecutionPhase::Policy,
+            })
+        );
+        assert!(
+            ExecutionPhase::Planning
+                .advance(ExecutionPhase::Recording)
+                .is_err()
+        );
+    }
 
     #[test]
     fn action_execute_roundtrips_serde() {

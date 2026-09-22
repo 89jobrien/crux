@@ -11,6 +11,7 @@ pub fn crux_ok<T>(agent: &str, value: T, steps: Vec<Step>) -> Crux<T> {
     Crux {
         id: CruxId::new(),
         agent: agent.into(),
+        pipeline_version: None,
         value: Ok(value),
         steps,
         children: vec![],

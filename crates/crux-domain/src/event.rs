@@ -30,3 +30,51 @@ pub enum StepEvent {
         payload: serde_json::Value,
     },
 }
+
+impl StepEvent {
+    /// Return the associated step name for lifecycle events.
+    pub fn step_name(&self) -> Option<&str> {
+        match self {
+            Self::Started { step_name }
+            | Self::Chunk { step_name, .. }
+            | Self::Completed { step_name, .. }
+            | Self::Failed { step_name, .. }
+            | Self::Skipped { step_name, .. }
+            | Self::Denied { step_name, .. } => Some(step_name),
+            Self::Custom { .. } => None,
+        }
+    }
+
+    /// Whether this event closes a step lifecycle.
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self,
+            Self::Completed { .. }
+                | Self::Failed { .. }
+                | Self::Skipped { .. }
+                | Self::Denied { .. }
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_events_expose_filtering_metadata() {
+        let completed = StepEvent::Completed {
+            step_name: "compile".into(),
+            duration_ms: 12,
+        };
+        let custom = StepEvent::Custom {
+            tag: "metric".into(),
+            payload: serde_json::json!(1),
+        };
+
+        assert_eq!(completed.step_name(), Some("compile"));
+        assert!(completed.is_terminal());
+        assert_eq!(custom.step_name(), None);
+        assert!(!custom.is_terminal());
+    }
+}

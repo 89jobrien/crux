@@ -7,6 +7,52 @@ mod tests {
     use crux_domain::event::StepEvent;
     use crux_domain::pipeline::EventPipeline;
 
+    #[test]
+    fn trace_jsonl_exports_step_span_fields_and_metadata() {
+        let mut ctx = CruxCtx::new("agent");
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime
+            .block_on(ctx.step("compile", || async { Ok::<_, CruxErr>(1) }))
+            .unwrap();
+        let mut trace = ctx.finalize(Ok::<_, CruxErr>(1));
+        trace.steps[0]
+            .metadata
+            .insert("handler".into(), serde_json::json!("shell::run"));
+
+        let jsonl = crate::observability::trace_to_jsonl(&trace).unwrap();
+        let row: serde_json::Value = serde_json::from_str(jsonl.trim()).unwrap();
+
+        assert_eq!(row["step"], "compile");
+        assert_eq!(row["status"], "ok");
+        assert_eq!(row["metadata"]["handler"], "shell::run");
+        assert!(row["started_at"].is_string());
+        assert!(row["duration_ms"].is_number());
+    }
+
+    #[test]
+    fn durable_event_log_replays_append_order() {
+        let path = std::env::temp_dir().join(format!(
+            "crux-events-{}.jsonl",
+            crate::types::id::CruxId::new()
+        ));
+        let log = crate::event_log::EventLog::open(&path);
+        log.append(&StepEvent::Started {
+            step_name: "a".into(),
+        })
+        .unwrap();
+        log.append(&StepEvent::Completed {
+            step_name: "a".into(),
+            duration_ms: 1,
+        })
+        .unwrap();
+
+        let replayed = log.replay().unwrap();
+        assert_eq!(replayed[0].sequence, 0);
+        assert_eq!(replayed[1].sequence, 1);
+        assert!(matches!(replayed[1].event, StepEvent::Completed { .. }));
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[tokio::test]
     async fn ctx_emits_started_event_on_step() {
         let pipeline = EventPipeline::new(64);

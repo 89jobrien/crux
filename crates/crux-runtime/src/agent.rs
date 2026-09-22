@@ -5,14 +5,46 @@
 /// Agents have typed inputs and outputs, a name, and optional lifecycle hooks.
 /// You rarely implement this directly — the `#[crux::agent]` macro generates
 /// an impl from a free function.
-// TODO(#93): token-shape step priority — infer priority from naming convention
-//   (ALL_CAPS -> Max, TitleCase -> High, snake_case -> Lowest) as lightweight
-//   scheduling hints (cf. slash)
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::types::budget::Budget;
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
+
+/// Infer a lightweight scheduling hint from a step name's token shape.
+///
+/// `ALL_CAPS` names are critical, `TitleCase` names are high priority,
+/// `snake_case` names are deferred, and unrecognized shapes remain medium.
+pub fn infer_priority(name: &str) -> slashcrux::Priority {
+    let letters: Vec<char> = name
+        .chars()
+        .filter(|character| character.is_alphabetic())
+        .collect();
+    if !letters.is_empty() && letters.iter().all(|character| character.is_uppercase()) {
+        return slashcrux::Priority::Critical;
+    }
+
+    let mut characters = name.chars();
+    if let Some(first) = characters.next()
+        && first.is_uppercase()
+        && characters
+            .filter(|character| character.is_alphabetic())
+            .all(|character| character.is_lowercase())
+        && !name.contains('_')
+    {
+        return slashcrux::Priority::High;
+    }
+
+    if name.contains('_')
+        && name.chars().all(|character| {
+            character.is_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+    {
+        return slashcrux::Priority::Deferred;
+    }
+
+    slashcrux::Priority::Medium
+}
 
 /// Port: defines what an agent must provide.
 ///
@@ -47,5 +79,19 @@ pub trait Agent: Send + Sync + 'static {
     /// Chooses recovery behavior after a step fails.
     fn on_step_failure(_err: &CruxErr) -> Recovery<Self::Output> {
         Recovery::Propagate
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use slashcrux::Priority;
+
+    #[test]
+    fn token_shape_infers_scheduling_priority() {
+        assert_eq!(infer_priority("RELEASE"), Priority::Critical);
+        assert_eq!(infer_priority("Review"), Priority::High);
+        assert_eq!(infer_priority("review_changes"), Priority::Deferred);
+        assert_eq!(infer_priority("review-changes"), Priority::Medium);
     }
 }
