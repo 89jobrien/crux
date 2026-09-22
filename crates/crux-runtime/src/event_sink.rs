@@ -7,6 +7,28 @@ mod tests {
     use crux_domain::event::StepEvent;
     use crux_domain::pipeline::EventPipeline;
 
+    #[test]
+    fn trace_jsonl_exports_step_span_fields_and_metadata() {
+        let mut ctx = CruxCtx::new("agent");
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime
+            .block_on(ctx.step("compile", || async { Ok::<_, CruxErr>(1) }))
+            .unwrap();
+        let mut trace = ctx.finalize(Ok::<_, CruxErr>(1));
+        trace.steps[0]
+            .metadata
+            .insert("handler".into(), serde_json::json!("shell::run"));
+
+        let jsonl = crate::observability::trace_to_jsonl(&trace).unwrap();
+        let row: serde_json::Value = serde_json::from_str(jsonl.trim()).unwrap();
+
+        assert_eq!(row["step"], "compile");
+        assert_eq!(row["status"], "ok");
+        assert_eq!(row["metadata"]["handler"], "shell::run");
+        assert!(row["started_at"].is_string());
+        assert!(row["duration_ms"].is_number());
+    }
+
     #[tokio::test]
     async fn ctx_emits_started_event_on_step() {
         let pipeline = EventPipeline::new(64);

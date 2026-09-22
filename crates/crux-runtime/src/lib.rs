@@ -14,6 +14,7 @@ pub mod delegation;
 pub mod event_sink;
 pub mod governance;
 pub mod hooks;
+pub mod observability;
 pub mod planner_gate;
 pub mod recorder;
 pub mod registry;
@@ -40,6 +41,9 @@ pub mod prelude {
         RecoverablePipeStage,
     };
     pub use crate::governance::{GovernancePolicy, PolicyAction, compose_policies};
+    #[cfg(feature = "tracing")]
+    pub use crate::observability::emit_trace_spans;
+    pub use crate::observability::trace_to_jsonl;
     pub use crate::recorder::hash_content;
     pub use crate::registry::{Task, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
