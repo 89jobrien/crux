@@ -43,7 +43,9 @@ pub mod prelude {
         RecoverablePipeStage,
     };
     pub use crate::event_log::{EventLog, EventLogError, LoggedEvent};
-    pub use crate::governance::{GovernancePolicy, PolicyAction, compose_policies};
+    pub use crate::governance::{
+        GovernancePolicy, PolicyAction, PolicyDecision, PolicyDslError, compose_policies,
+    };
     #[cfg(feature = "tracing")]
     pub use crate::observability::emit_trace_spans;
     pub use crate::observability::trace_to_jsonl;

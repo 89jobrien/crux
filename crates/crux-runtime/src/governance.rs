@@ -9,6 +9,20 @@ pub enum PolicyAction {
     Review,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PolicyDecision {
+    pub action: PolicyAction,
+    pub reason: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PolicyDslError {
+    #[error("invalid policy directive on line {line}: {directive}")]
+    InvalidDirective { line: usize, directive: String },
+    #[error("invalid max-calls value on line {line}: {value}")]
+    InvalidMaxCalls { line: usize, value: String },
+}
+
 /// Composable, serializable governance policy for agent tool access.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GovernancePolicy {
@@ -43,18 +57,79 @@ impl Default for GovernancePolicy {
 }
 
 impl GovernancePolicy {
+    pub fn parse_dsl(input: &str) -> Result<Self, PolicyDslError> {
+        let mut policy = Self::default();
+        for (index, raw) in input.lines().enumerate() {
+            let line = index + 1;
+            let directive = raw.trim();
+            if directive.is_empty() || directive.starts_with('#') {
+                continue;
+            }
+            let Some((command, value)) = directive.split_once(char::is_whitespace) else {
+                return Err(PolicyDslError::InvalidDirective {
+                    line,
+                    directive: directive.into(),
+                });
+            };
+            let value = value.trim();
+            match command {
+                "policy" => policy.name = value.into(),
+                "allow" => policy.allowed_tools.push(value.into()),
+                "deny" => policy.blocked_tools.push(value.into()),
+                "approve" => policy.require_human_approval.push(value.into()),
+                "block-pattern" => policy.blocked_patterns.push(value.into()),
+                "max-calls" => {
+                    policy.max_calls_per_request =
+                        value.parse().map_err(|_| PolicyDslError::InvalidMaxCalls {
+                            line,
+                            value: value.into(),
+                        })?;
+                }
+                _ => {
+                    return Err(PolicyDslError::InvalidDirective {
+                        line,
+                        directive: directive.into(),
+                    });
+                }
+            }
+        }
+        Ok(policy)
+    }
+
+    pub fn evaluate_tool(&self, tool_name: &str) -> PolicyDecision {
+        if self.blocked_tools.iter().any(|tool| tool == tool_name) {
+            return PolicyDecision {
+                action: PolicyAction::Deny,
+                reason: format!("tool '{tool_name}' is explicitly denied"),
+            };
+        }
+        if self
+            .require_human_approval
+            .iter()
+            .any(|tool| tool == tool_name)
+        {
+            return PolicyDecision {
+                action: PolicyAction::Review,
+                reason: format!("tool '{tool_name}' requires human approval"),
+            };
+        }
+        if !self.allowed_tools.is_empty()
+            && !self.allowed_tools.iter().any(|tool| tool == tool_name)
+        {
+            return PolicyDecision {
+                action: PolicyAction::Deny,
+                reason: format!("tool '{tool_name}' is not in the allowlist"),
+            };
+        }
+        PolicyDecision {
+            action: PolicyAction::Allow,
+            reason: format!("tool '{tool_name}' is allowed"),
+        }
+    }
+
     /// Check whether a tool is permitted by this policy.
     pub fn check_tool(&self, tool_name: &str) -> PolicyAction {
-        if self.blocked_tools.iter().any(|t| t == tool_name) {
-            return PolicyAction::Deny;
-        }
-        if self.require_human_approval.iter().any(|t| t == tool_name) {
-            return PolicyAction::Review;
-        }
-        if !self.allowed_tools.is_empty() && !self.allowed_tools.iter().any(|t| t == tool_name) {
-            return PolicyAction::Deny;
-        }
-        PolicyAction::Allow
+        self.evaluate_tool(tool_name).action
     }
 
     /// Check content against blocked patterns. Returns the first matched pattern.
@@ -248,5 +323,20 @@ mod tests {
         assert_eq!(back.name, "test");
         assert_eq!(back.max_calls_per_request, 25);
         assert_eq!(back.allowed_tools, vec!["search"]);
+    }
+
+    #[test]
+    fn policy_dsl_parses_approval_rules_and_explains_decisions() {
+        let policy = GovernancePolicy::parse_dsl(
+            "policy production\nallow read\ndeny shell\napprove git\nmax-calls 10",
+        )
+        .unwrap();
+
+        assert_eq!(policy.name, "production");
+        assert_eq!(policy.evaluate_tool("shell").action, PolicyAction::Deny);
+        let review = policy.evaluate_tool("git");
+        assert_eq!(review.action, PolicyAction::Review);
+        assert!(review.reason.contains("approval"));
+        assert_eq!(policy.max_calls_per_request, 10);
     }
 }
