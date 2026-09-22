@@ -10,7 +10,7 @@ pub mod redb;
 pub use backend::RegistryBackend;
 pub use error::RegistryErr;
 pub use in_memory::InMemoryBackend;
-pub use task::{Task, TaskRegistry, TaskStatus};
+pub use task::{Task, TaskQuery, TaskRegistry, TaskStatus};
 
 #[cfg(feature = "redb")]
 pub use self::redb::RedbBackend;

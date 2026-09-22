@@ -45,7 +45,7 @@ pub mod prelude {
     pub use crate::observability::emit_trace_spans;
     pub use crate::observability::trace_to_jsonl;
     pub use crate::recorder::hash_content;
-    pub use crate::registry::{Task, TaskRegistry, TaskStatus};
+    pub use crate::registry::{Task, TaskQuery, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
     pub use crate::safety::{SafetyPolicy, SafetyViolation};
     pub use crate::trust::{TrustRegistry, TrustScore};
