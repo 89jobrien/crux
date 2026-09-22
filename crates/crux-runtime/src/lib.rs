@@ -29,6 +29,7 @@ mod kani_proofs;
 
 pub mod prelude {
     pub use crux_domain::action::{Action, StepIntent};
+    pub use crux_domain::phase::{ExecutionPhase, InvalidPhaseTransition, PhaseTransition};
     pub use crux_domain::plan_result::PlanResult;
     pub use crux_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
 
