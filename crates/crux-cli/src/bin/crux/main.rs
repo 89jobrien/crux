@@ -17,6 +17,7 @@ mod plan;
 mod registry;
 mod run;
 mod schema;
+mod test_cmd;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -61,6 +62,11 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+    },
+    /// Run a JSON pipeline fixture with deterministic mocked handlers
+    Test {
+        /// Fixture JSON path
+        fixture: String,
     },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
@@ -162,6 +168,7 @@ fn main() {
         }
         Cli::Init { path } => init::cmd_init(&path),
         Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
+        Cli::Test { fixture } => test_cmd::cmd_test(&fixture),
         Cli::Check {
             paths,
             strict,

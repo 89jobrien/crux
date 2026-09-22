@@ -534,6 +534,7 @@ dependencies = [
  "crux-types",
  "miette",
  "proptest",
+ "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
