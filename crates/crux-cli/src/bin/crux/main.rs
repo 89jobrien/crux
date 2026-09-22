@@ -55,6 +55,9 @@ enum Cli {
         /// Serialization format
         #[arg(long, value_enum, default_value_t = schema::SchemaFormat::Json)]
         format: schema::SchemaFormat,
+        /// Write the schema to a file for editor configuration
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -135,7 +138,7 @@ fn main() {
             strict,
             plugins,
         } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict),
-        Cli::Schema { format } => schema::cmd_schema(format),
+        Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
         Cli::Run {
             pipeline,
             target_or_input,

@@ -46,3 +46,22 @@ fn schema_can_render_yaml() {
     assert!(rendered.contains("$schema:"), "{rendered}");
     assert!(rendered.contains("PipelineDef"), "{rendered}");
 }
+
+#[test]
+fn schema_can_write_editor_schema_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("crux.schema.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_crux"))
+        .args(["schema", "--output"])
+        .arg(&path)
+        .output()
+        .expect("crux schema --output must execute");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let schema: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(schema["title"], "PipelineDef");
+}
