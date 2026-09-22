@@ -15,6 +15,7 @@ mod init;
 mod output;
 mod plan;
 mod registry;
+mod replay_debug;
 mod run;
 mod schema;
 mod test_cmd;
@@ -67,6 +68,17 @@ enum Cli {
     Test {
         /// Fixture JSON path
         fixture: String,
+    },
+    /// Inspect serialized replay traces and explain drift
+    ReplayDebug {
+        /// Serialized Crux trace
+        trace: String,
+        /// Show one step in detail
+        #[arg(long)]
+        step: Option<usize>,
+        /// Compare against another trace
+        #[arg(long)]
+        compare: Option<String>,
     },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
@@ -172,6 +184,11 @@ fn main() {
         Cli::Init { path } => init::cmd_init(&path),
         Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
         Cli::Test { fixture } => test_cmd::cmd_test(&fixture),
+        Cli::ReplayDebug {
+            trace,
+            step,
+            compare,
+        } => replay_debug::cmd_replay_debug(&trace, step, compare.as_deref()),
         Cli::Check {
             paths,
             strict,
