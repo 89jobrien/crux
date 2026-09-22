@@ -24,6 +24,33 @@ pub enum Recovery<T> {
     Continue,
 }
 
+/// Ordered, inspectable fallback strategies for graph-like recovery flows.
+#[derive(Debug, Default)]
+pub struct RecoveryChain<T> {
+    strategies: std::collections::VecDeque<Recovery<T>>,
+}
+
+impl<T> RecoveryChain<T> {
+    pub fn new() -> Self {
+        Self {
+            strategies: std::collections::VecDeque::new(),
+        }
+    }
+
+    pub fn then(mut self, strategy: Recovery<T>) -> Self {
+        self.strategies.push_back(strategy);
+        self
+    }
+}
+
+impl<T> Iterator for RecoveryChain<T> {
+    type Item = Recovery<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.strategies.pop_front()
+    }
+}
+
 impl<T> std::fmt::Debug for Recovery<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -35,5 +62,21 @@ impl<T> std::fmt::Debug for Recovery<T> {
             Self::Skip => write!(f, "Recovery::Skip"),
             Self::Continue => write!(f, "Recovery::Continue"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_chain_preserves_declared_fallback_order() {
+        let mut chain = RecoveryChain::new()
+            .then(Recovery::Retry)
+            .then(Recovery::Substitute(42));
+
+        assert!(matches!(chain.next(), Some(Recovery::Retry)));
+        assert!(matches!(chain.next(), Some(Recovery::Substitute(42))));
+        assert!(chain.next().is_none());
     }
 }
