@@ -54,9 +54,9 @@ pub use compiler::{Compilation, CompileMode, CompileOptions, compile_cruxfile, c
 pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use ir::{TypedCruxfile, TypedPipeline};
 pub use metadata::{
-    AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, ConfidenceCapability, HandlerMetadata,
-    ObjectSchema, RiskLevel, SchemaBuildError, SchemaProperty, SchemaViolation,
-    SchemaViolationKind, SideEffect, ValueKind, ValueSchema,
+    AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, CapabilityViolation,
+    ConfidenceCapability, HandlerMetadata, ObjectSchema, RiskLevel, SchemaBuildError,
+    SchemaProperty, SchemaViolation, SchemaViolationKind, SideEffect, ValueKind, ValueSchema,
 };
 pub use output::{
     PipelineOutputError, PipelineOutputFormat, collect_agent_names, collect_handler_names,
