@@ -20,6 +20,40 @@ pub struct SpecArm<T> {
     pub name: String,
     pub fut: Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BranchScore {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl BranchScore {
+    pub const fn new(quality: f32, cost: f32, latency: f32) -> Self {
+        Self {
+            quality,
+            cost,
+            latency,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScoreWeights {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl Default for ScoreWeights {
+    fn default() -> Self {
+        Self {
+            quality: 1.0,
+            cost: 0.25,
+            latency: 0.25,
+        }
+    }
+}
 impl CruxCtx {
     /// Start a speculation: run multiple approaches, pick the best.
     #[allow(clippy::type_complexity)]
@@ -70,6 +104,19 @@ where
         F: Fn(&T) -> f32,
     {
         self.pick_best_by_metered(f, |_| None).await
+    }
+
+    pub async fn pick_best_scored<F>(self, weights: ScoreWeights, score: F) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> BranchScore,
+    {
+        self.pick_best_by(|value| {
+            let score = score(value);
+            score.quality * weights.quality
+                - score.cost * weights.cost
+                - score.latency * weights.latency
+        })
+        .await
     }
 
     /// Run all arms while recording each completed arm before starting the next.
@@ -462,6 +509,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.as_i64().unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn multi_metric_scoring_balances_quality_cost_and_latency() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![ok_arm("expensive", 1_i32), ok_arm("efficient", 2_i32)];
+        let winner = SpeculationBuilder::new(&mut ctx, "rank", arms)
+            .pick_best_scored(ScoreWeights::default(), |value| {
+                if *value == 1 {
+                    BranchScore::new(1.0, 1.0, 1.0)
+                } else {
+                    BranchScore::new(0.9, 0.1, 0.1)
+                }
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(winner, 2);
     }
 
     #[tokio::test]

@@ -48,6 +48,7 @@ pub mod prelude {
     pub use crate::registry::{Task, TaskQuery, TaskRegistry, TaskStatus};
     pub use crate::replay::ReplayMode;
     pub use crate::safety::{SafetyPolicy, SafetyViolation};
+    pub use crate::speculation::{BranchScore, ScoreWeights};
     pub use crate::trust::{TrustRegistry, TrustScore};
     pub use crate::types::budget::{
         Budget, BudgetLedger, BudgetLedgerEntry, BudgetUsage, HandlerUsage, UsdAmount,
