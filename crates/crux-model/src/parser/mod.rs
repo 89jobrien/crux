@@ -1,6 +1,7 @@
 //! Vendor-dispatched model ID normalization with a lossless fallback.
 
 pub mod anthropic;
+pub mod cohere;
 pub mod fallback;
 pub mod google;
 pub mod mistral;
@@ -16,6 +17,7 @@ impl ProviderModelId {
     pub fn parse(vendor: Vendor, raw: &str) -> Result<ProviderModelRef, ModelParseError> {
         let canonical = match vendor {
             Vendor::Anthropic => anthropic::parse(raw)?,
+            Vendor::Cohere => cohere::parse(raw)?,
             Vendor::OpenAi => openai::parse(raw)?,
             Vendor::Google => google::parse(raw)?,
             Vendor::Mistral => mistral::parse(raw)?,
@@ -55,6 +57,15 @@ mod tests {
         assert_eq!(r.provider_id, raw);
         assert_eq!(r.vendor, Vendor::OpenAi);
     }
+
+    #[test]
+    fn cohere_command_r_plus_uses_provider_parser() {
+        let parsed = ProviderModelId::parse(Vendor::Cohere, "command-r-plus-08-2024").unwrap();
+
+        assert_eq!(parsed.canonical.family, "command-r-plus");
+        assert_eq!(parsed.canonical.generation, "08-2024");
+        assert_eq!(parsed.canonical.variant, "");
+    }
 }
 
 #[cfg(test)]
@@ -73,6 +84,7 @@ mod proptest_roundtrip {
     fn all_vendors() -> Vec<Vendor> {
         vec![
             Vendor::Anthropic,
+            Vendor::Cohere,
             Vendor::OpenAi,
             Vendor::Google,
             Vendor::Mistral,

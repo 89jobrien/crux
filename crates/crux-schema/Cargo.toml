@@ -1,0 +1,22 @@
+[package]
+name = "crux-schema"
+description = "Runtime-independent trace schema and combinators for Crux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+test-utils = ["crux-types/test-utils"]
+
+[dependencies]
+chrono = { workspace = true, features = ["serde"] }
+crux-types = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+crux-types = { workspace = true, features = ["test-utils"] }

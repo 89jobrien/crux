@@ -721,8 +721,10 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         }

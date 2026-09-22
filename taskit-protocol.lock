@@ -10,7 +10,7 @@
     {
       "name": "crux-runtime-recorder",
       "path": "crates/crux-runtime/src/recorder.rs",
-      "hash": "f9dcfec327327c157dc485af758823dc32fd8763cf0530929e12b625a24ec14f"
+      "hash": "cad324c84fe630a0046499eaaec9aa4c0d09eb54b66fc078a6cc6385e798b817"
     },
     {
       "name": "crux-runtime-audit",
@@ -60,7 +60,7 @@
     {
       "name": "crux-improve-lib",
       "path": "crates/crux-improve/src/lib.rs",
-      "hash": "eef982852e9b97d1eeb3892eb8c61ff3d77edb1fb3893945d32c2b5a3eb68c25"
+      "hash": "4feb19bba84816265267b146429f33e6e62722cbc672c225d158a476ed6ef389"
     },
     {
       "name": "crux-planner-generator",

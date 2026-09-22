@@ -563,6 +563,7 @@ name = "crux-improve"
 version = "0.4.0"
 dependencies = [
  "chrono",
+ "crux-schema",
  "crux-types",
  "serde",
  "serde_json",
@@ -615,6 +616,7 @@ version = "0.4.0"
 dependencies = [
  "chrono",
  "crux-domain",
+ "crux-schema",
  "crux-types",
  "futures",
  "miette",
@@ -630,10 +632,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crux-schema"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "crux-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crux-script"
 version = "0.4.0"
 dependencies = [
  "crux-runtime",
+ "crux-schema",
  "crux-types",
  "indexmap",
  "miette",

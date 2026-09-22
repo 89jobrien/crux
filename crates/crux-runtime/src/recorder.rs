@@ -99,8 +99,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output,
             error: None,
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -123,8 +125,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output: None,
             error: Some(error),
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -143,8 +147,10 @@ impl StepRecorder {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -170,8 +176,10 @@ impl StepRecorder {
             content_hash,
             output: Some(output),
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });

@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export trace types so downstream only needs `crux-improve`.
-pub use crux_types::crux_value::Crux;
+pub use crux_schema::crux_value::Crux;
 pub use crux_types::id::CruxId;
 pub use crux_types::step::{Step, StepKind, StepStatus};
 
@@ -270,8 +270,10 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: Default::default(),
             findings: vec![],
         }

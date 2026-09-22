@@ -211,11 +211,12 @@ pub fn deserialize_replay<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok, step_with_content};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::{step_ok, step_with_content};
 
     fn make_snapshot(
         steps: Vec<crux_types::step::Step>,
-    ) -> crux_types::crux_value::Crux<serde_json::Value> {
+    ) -> crux_schema::crux_value::Crux<serde_json::Value> {
         crux_ok("test", serde_json::json!(null), steps)
     }
 
@@ -481,7 +482,8 @@ mod tests {
 #[cfg(test)]
 mod proptest_replay {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::step_ok;
     use proptest::prelude::*;
 
     fn arb_step_name() -> impl Strategy<Value = String> {
