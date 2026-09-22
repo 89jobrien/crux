@@ -79,6 +79,9 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Emit diagnostics as JSON for editors and CI
+        #[arg(long)]
+        json: bool,
     },
     /// Export the JSON Schema for .crux pipeline definitions
     Schema {
@@ -173,7 +176,8 @@ fn main() {
             paths,
             strict,
             plugins,
-        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict),
+            json,
+        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict, json),
         Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
         Cli::Run {
             pipeline,
@@ -200,6 +204,7 @@ fn main() {
                     std::slice::from_ref(path),
                     plugins.as_deref(),
                     strict,
+                    false,
                 );
                 return;
             }

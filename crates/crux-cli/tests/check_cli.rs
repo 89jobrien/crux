@@ -105,3 +105,15 @@ fn run_check_remains_an_alias() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("missing_input_schema"));
 }
+
+#[test]
+fn check_json_emits_machine_readable_diagnostics() {
+    let file = pipeline(
+        "pipeline: invalid\ninput_schema:\n  type: dynamic\nsteps:\n  - step: missing\n    handler: plugin::missing\n",
+    );
+    let output = check(&file, &["--strict", "--json"]);
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report[0]["code"], "unknown_handler");
+    assert_eq!(report[0]["severity"], "error");
+}
