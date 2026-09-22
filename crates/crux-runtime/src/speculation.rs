@@ -15,11 +15,46 @@ use crate::ctx::CruxCtx;
 use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepStatus};
+use crux_domain::plan_result::PlanResult;
 
 /// A named speculation arm.
 pub struct SpecArm<T> {
     pub name: String,
     pub fut: Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BranchScore {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl BranchScore {
+    pub const fn new(quality: f32, cost: f32, latency: f32) -> Self {
+        Self {
+            quality,
+            cost,
+            latency,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScoreWeights {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl Default for ScoreWeights {
+    fn default() -> Self {
+        Self {
+            quality: 1.0,
+            cost: 0.25,
+            latency: 0.25,
+        }
+    }
 }
 impl CruxCtx {
     /// Start a speculation: run multiple approaches, pick the best.
@@ -73,6 +108,19 @@ where
         self.pick_best_by_metered(f, |_| None).await
     }
 
+    pub async fn pick_best_scored<F>(self, weights: ScoreWeights, score: F) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> BranchScore,
+    {
+        self.pick_best_by(|value| {
+            let score = score(value);
+            score.quality * weights.quality
+                - score.cost * weights.cost
+                - score.latency * weights.latency
+        })
+        .await
+    }
+
     /// Run all arms while recording each completed arm before starting the next.
     pub async fn pick_best_by_metered<F, R>(self, f: F, mut report: R) -> Result<T, CruxErr>
     where
@@ -80,6 +128,9 @@ where
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
         trace_speculate!(&self.name, self.arms.len());
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         // Run all arms, collect results
@@ -120,6 +171,7 @@ where
                     Ok(_) => unreachable!(),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status: StepStatus::Err,
@@ -130,8 +182,10 @@ where
                     content_hash: None,
                     output: None,
                     error: Some(error),
+                    cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -149,6 +203,7 @@ where
                 match result {
                     Ok(val) => {
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Ok,
@@ -159,8 +214,10 @@ where
                             content_hash: None,
                             output: serde_json::to_value(&val).ok(),
                             error: None,
+                            cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -169,6 +226,7 @@ where
                     Err(e) => {
                         let err_msg = e.to_string();
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Err,
@@ -179,8 +237,10 @@ where
                             content_hash: None,
                             output: None,
                             error: Some(err_msg.clone()),
+                            cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -193,6 +253,7 @@ where
                     Err(e) => (StepStatus::Err, None, Some(e.to_string())),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status,
@@ -203,8 +264,10 @@ where
                     content_hash: None,
                     output,
                     error,
+                    cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -249,6 +312,9 @@ where
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
         trace_speculate!(&self.name, self.arms.len());
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
@@ -267,6 +333,7 @@ where
             match result {
                 Ok(val) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Ok,
@@ -277,8 +344,10 @@ where
                         content_hash: None,
                         output: serde_json::to_value(&val).ok(),
                         error: None,
+                        cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });
@@ -286,6 +355,7 @@ where
                 }
                 Err(e) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Rejected,
@@ -296,8 +366,10 @@ where
                         content_hash: None,
                         output: None,
                         error: Some(e.to_string()),
+                        cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });
@@ -307,6 +379,21 @@ where
         }
 
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
+    }
+
+    fn planned_result(&self) -> Result<Option<T>, CruxErr> {
+        match self.ctx.plan_action(&self.name) {
+            PlanResult::Allow(_) => Ok(None),
+            PlanResult::Deny { reason } => Err(CruxErr::Denied {
+                step: self.name.clone(),
+                reason,
+            }),
+            PlanResult::Simulate { output } => {
+                serde_json::from_value(output).map(Some).map_err(|error| {
+                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
+                })
+            }
+        }
     }
 }
 
@@ -330,6 +417,38 @@ mod tests {
     use crate::ctx::CruxCtx;
     use crate::types::error::CruxErr;
     use crate::types::step::StepStatus;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[tokio::test]
+    async fn planner_denies_speculation_before_arms_are_polled() {
+        use crux_domain::planner::DenyAllPlanner;
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let arm_polls = Arc::clone(&polls);
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no speculation".into(),
+        });
+        let result = ctx
+            .speculate(
+                "choose",
+                vec![(
+                    "arm",
+                    Box::pin(async move {
+                        arm_polls.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, CruxErr>(1)
+                    }),
+                )],
+            )
+            .first_ok()
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
+        assert_eq!(polls.load(Ordering::SeqCst), 0);
+    }
 
     fn ok_arm<T: Send + 'static>(name: &str, val: T) -> SpecArm<T> {
         SpecArm {
@@ -404,6 +523,24 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.as_i64().unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn multi_metric_scoring_balances_quality_cost_and_latency() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![ok_arm("expensive", 1_i32), ok_arm("efficient", 2_i32)];
+        let winner = SpeculationBuilder::new(&mut ctx, "rank", arms)
+            .pick_best_scored(ScoreWeights::default(), |value| {
+                if *value == 1 {
+                    BranchScore::new(1.0, 1.0, 1.0)
+                } else {
+                    BranchScore::new(0.9, 0.1, 0.1)
+                }
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(winner, 2);
     }
 
     #[tokio::test]

@@ -13,6 +13,7 @@ use crate::agent::Agent;
 use crate::ctx::CruxCtx;
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
+use crux_domain::plan_result::PlanResult;
 
 type BoxRecoveryFut = Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>;
 impl CruxCtx {
@@ -89,6 +90,20 @@ where
     /// Execute the delegation.
     pub async fn run(self) -> Result<A::Output, CruxErr> {
         trace_delegate!(&self.name, A::name());
+        match self.ctx.plan_action(&self.name) {
+            PlanResult::Deny { reason } => {
+                return Err(CruxErr::Denied {
+                    step: self.name,
+                    reason,
+                });
+            }
+            PlanResult::Simulate { output } => {
+                return serde_json::from_value(output).map_err(|error| {
+                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
+                });
+            }
+            PlanResult::Allow(_) => {}
+        }
         let input_hash = self.ctx.next_child_run_hash(&self.name);
 
         // Create child context, inheriting the parent's planner
@@ -181,6 +196,40 @@ mod tests {
         ) -> Result<Self::Output, CruxErr> {
             Err(CruxErr::step_failed("fail", "always fails"))
         }
+    }
+
+    struct PlannerBypassAgent;
+
+    impl crate::agent::Agent for PlannerBypassAgent {
+        type Input = ();
+        type Output = i32;
+
+        fn name() -> &'static str {
+            "planner_bypass"
+        }
+
+        async fn run(
+            _ctx: &mut crate::ctx::CruxCtx,
+            _input: Self::Input,
+        ) -> Result<Self::Output, CruxErr> {
+            Ok(7)
+        }
+    }
+
+    #[tokio::test]
+    async fn planner_denies_delegation_before_agent_body_runs() {
+        use crux_domain::planner::DenyAllPlanner;
+
+        let mut ctx = CruxCtx::new("parent");
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no delegation".into(),
+        });
+
+        let result = DelegationBuilder::<PlannerBypassAgent>::new(&mut ctx, "child", ())
+            .run()
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
     }
 
     #[tokio::test]

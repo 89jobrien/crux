@@ -89,6 +89,7 @@ impl StepRecorder {
             (_, v) => v,
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
@@ -99,8 +100,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output,
             error: None,
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -113,6 +116,7 @@ impl StepRecorder {
             None => error.to_string(),
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Err,
@@ -123,8 +127,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output: None,
             error: Some(error),
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -133,6 +139,7 @@ impl StepRecorder {
     /// Record a skipped step.
     pub fn record_skipped(&mut self, name: &str, input_hash: u64, confidence: f32) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Skipped,
@@ -143,8 +150,10 @@ impl StepRecorder {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -160,6 +169,7 @@ impl StepRecorder {
         output: serde_json::Value,
     ) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
@@ -170,8 +180,10 @@ impl StepRecorder {
             content_hash,
             output: Some(output),
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });

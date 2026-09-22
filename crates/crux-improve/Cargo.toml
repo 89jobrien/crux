@@ -9,6 +9,7 @@ description = "Improvement protocol types for the crux agent runtime"
 
 [dependencies]
 chrono = { workspace = true }
+crux-schema = { workspace = true }
 crux-types = { workspace = true } #unified
 serde = { workspace = true }
 serde_json = { workspace = true }

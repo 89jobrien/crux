@@ -15,10 +15,13 @@ impl AutoApproveGate {
     }
 }
 
-// TODO(#101): verify RiskLevel discriminants — old code mapped Low->1..Critical->4;
-//   `as u8` gives Low->0 if no #[repr]. Check enum definition.
 fn risk_severity(level: RiskLevel) -> u8 {
-    level as u8
+    match level {
+        RiskLevel::Low => 1,
+        RiskLevel::Medium => 2,
+        RiskLevel::High => 3,
+        RiskLevel::Critical => 4,
+    }
 }
 
 impl ApprovalGate for AutoApproveGate {
@@ -63,5 +66,18 @@ impl ApprovalGate for TerminalApprovalGate {
                 reason: "user denied".into(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn risk_severity_uses_documented_one_based_scale() {
+        assert_eq!(risk_severity(RiskLevel::Low), 1);
+        assert_eq!(risk_severity(RiskLevel::Medium), 2);
+        assert_eq!(risk_severity(RiskLevel::High), 3);
+        assert_eq!(risk_severity(RiskLevel::Critical), 4);
     }
 }

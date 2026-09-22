@@ -10,7 +10,7 @@
     {
       "name": "crux-runtime-recorder",
       "path": "crates/crux-runtime/src/recorder.rs",
-      "hash": "f9dcfec327327c157dc485af758823dc32fd8763cf0530929e12b625a24ec14f"
+      "hash": "8d6ca55939ffa0c4abdc7b5d01042e2a9f8c33dc067e854e864781acab6aafcc"
     },
     {
       "name": "crux-runtime-audit",
@@ -25,7 +25,7 @@
     {
       "name": "crux-runtime-agent",
       "path": "crates/crux-runtime/src/agent.rs",
-      "hash": "f54a2cb044b0d2e74163452901c5cad83528195d07c498d75d29e60e011ef0b0"
+      "hash": "aeef75bafbaac847f6b5281b321d995f3385cf940c4e4a29d61d19160ee00d1c"
     },
     {
       "name": "crux-runtime-approval",
@@ -40,12 +40,12 @@
     {
       "name": "crux-types-emission",
       "path": "crates/crux-types/src/emission.rs",
-      "hash": "28e469fcb6a7601b59c01630c6ff79f124019c5f405abd579704ed03bd898860"
+      "hash": "2db5fda847f731ecafe9377807297d2f57ed748e1d83919704d1db26385028f7"
     },
     {
       "name": "crux-script-step_runner",
       "path": "crates/crux-script/src/step_runner.rs",
-      "hash": "f20421090ac343535b80b92b515145040d56f83cc5f040584c199b9f7f12cb55"
+      "hash": "0f8135f4dba6724582987be7d6f792d57affd6d9771097b2dc9cb822629de7be"
     },
     {
       "name": "crux-agentic-provider",
@@ -60,7 +60,7 @@
     {
       "name": "crux-improve-lib",
       "path": "crates/crux-improve/src/lib.rs",
-      "hash": "eef982852e9b97d1eeb3892eb8c61ff3d77edb1fb3893945d32c2b5a3eb68c25"
+      "hash": "2e8a3f35b9d3bd803e4ab9365e1e5e01ba459205cdf079999e5ce4c6eb2af32a"
     },
     {
       "name": "crux-planner-generator",

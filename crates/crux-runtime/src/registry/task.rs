@@ -34,6 +34,14 @@ pub struct Task {
     pub attempts: u32,
 }
 
+/// Filters for historical task and run discovery.
+#[derive(Debug, Clone, Default)]
+pub struct TaskQuery {
+    pub kind: Option<String>,
+    pub status: Option<TaskStatus>,
+    pub step_name: Option<String>,
+}
+
 /// High-level typed API for task lifecycle management.
 pub struct TaskRegistry<B> {
     backend: B,
@@ -69,6 +77,37 @@ impl<B: RegistryBackend> TaskRegistry<B> {
             .await?
             .ok_or_else(|| RegistryErr::NotFound(id.to_string()))?;
         Ok(serde_json::from_slice(&data)?)
+    }
+
+    /// List all historical tasks stored by the backend.
+    pub async fn list(&self) -> Result<Vec<Task>, RegistryErr> {
+        let ids = self.backend.list("").await?;
+        let mut tasks = Vec::with_capacity(ids.len());
+        for id in ids {
+            tasks.push(self.get(&id).await?);
+        }
+        Ok(tasks)
+    }
+
+    /// Search historical runs by kind, status, and checkpoint step name.
+    pub async fn search(&self, query: &TaskQuery) -> Result<Vec<Task>, RegistryErr> {
+        Ok(self
+            .list()
+            .await?
+            .into_iter()
+            .filter(|task| {
+                query.kind.as_ref().is_none_or(|kind| &task.kind == kind)
+                    && query
+                        .status
+                        .as_ref()
+                        .is_none_or(|status| &task.status == status)
+                    && query.step_name.as_ref().is_none_or(|step_name| {
+                        task.checkpoint.as_ref().is_some_and(|trace| {
+                            trace.steps.iter().any(|step| &step.name == step_name)
+                        })
+                    })
+            })
+            .collect())
     }
 
     /// Update a task's status using a bounded CAS retry loop.
@@ -210,13 +249,14 @@ mod tests {
             self.inner.cas(id, expected, new).await
         }
     }
-    use crux_types::testing::{crux_ok, step_ok};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::step_ok;
 
     fn make_registry() -> TaskRegistry<InMemoryBackend> {
         TaskRegistry::new(InMemoryBackend::new())
     }
 
-    fn make_crux() -> crux_types::crux_value::Crux<String> {
+    fn make_crux() -> crux_schema::crux_value::Crux<String> {
         crux_ok(
             "test",
             "result".into(),
@@ -262,6 +302,30 @@ mod tests {
         reg.update_status(&id, TaskStatus::Done).await.unwrap();
         let task = reg.get(&id).await.unwrap();
         assert_eq!(task.status, TaskStatus::Done);
+    }
+
+    #[tokio::test]
+    async fn search_lists_historical_runs_by_status_and_step() {
+        let reg = make_registry();
+        let completed = reg.submit("build", serde_json::json!(null)).await.unwrap();
+        reg.checkpoint(&completed, &make_crux()).await.unwrap();
+        reg.update_status(&completed, TaskStatus::Done)
+            .await
+            .unwrap();
+        let _pending = reg.submit("deploy", serde_json::json!(null)).await.unwrap();
+
+        let runs = reg
+            .search(&TaskQuery {
+                status: Some(TaskStatus::Done),
+                step_name: Some("fetch".into()),
+                ..TaskQuery::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].id, completed);
+        assert_eq!(reg.list().await.unwrap().len(), 2);
     }
 
     #[tokio::test]

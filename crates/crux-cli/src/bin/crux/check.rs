@@ -9,11 +9,16 @@ use crate::registry::{build_base_registry, collect_handler_names};
 
 /// Compatibility entry point used by `crux run --check`.
 pub fn cmd_check(paths: &[String]) {
-    cmd_check_with_options(paths, None, false);
+    cmd_check_with_options(paths, None, false, false);
 }
 
 /// Compile-check pipeline files with the same registry used for execution.
-pub fn cmd_check_with_options(paths: &[String], plugins_path: Option<&str>, strict: bool) {
+pub fn cmd_check_with_options(
+    paths: &[String],
+    plugins_path: Option<&str>,
+    strict: bool,
+    json: bool,
+) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let mut parse_errors = 0usize;
     let mut errors = 0usize;
@@ -24,6 +29,7 @@ pub fn cmd_check_with_options(paths: &[String], plugins_path: Option<&str>, stri
         CompileOptions::permissive()
     };
     let registry = rt.block_on(build_base_registry(plugins_path));
+    let mut machine_diagnostics = Vec::new();
 
     for path in paths {
         // Try as Cruxfile first if it looks like one.
@@ -57,6 +63,8 @@ pub fn cmd_check_with_options(paths: &[String], plugins_path: Option<&str>, stri
                 ),
                 &mut errors,
                 &mut warnings,
+                json,
+                &mut machine_diagnostics,
             );
             continue;
         }
@@ -79,6 +87,15 @@ pub fn cmd_check_with_options(paths: &[String], plugins_path: Option<&str>, stri
             &format!("{step_count} steps, handlers: {}", handlers.join(", ")),
             &mut errors,
             &mut warnings,
+            json,
+            &mut machine_diagnostics,
+        );
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&machine_diagnostics).unwrap()
         );
     }
 
@@ -104,18 +121,30 @@ fn render_compilation<T>(
     description: &str,
     errors: &mut usize,
     warnings: &mut usize,
+    json: bool,
+    machine_diagnostics: &mut Vec<serde_json::Value>,
 ) {
     for diagnostic in compilation.diagnostics() {
-        render_diagnostic(path, diagnostic);
+        if json {
+            machine_diagnostics.push(serde_json::json!({
+                "path": path,
+                "code": diagnostic.code.to_string(),
+                "severity": diagnostic.severity.to_string(),
+                "location": diagnostic.location,
+                "message": diagnostic.message,
+            }));
+        } else {
+            render_diagnostic(path, diagnostic);
+        }
         match diagnostic.severity {
             DiagnosticSeverity::Error => *errors += 1,
             DiagnosticSeverity::Warning => *warnings += 1,
         }
     }
 
-    if compilation.diagnostics().is_empty() {
+    if !json && compilation.diagnostics().is_empty() {
         println!("\x1b[32mok\x1b[0m: {path} ({description})");
-    } else if compilation.is_ok() && !compilation.is_executable() {
+    } else if !json && compilation.is_ok() && !compilation.is_executable() {
         eprintln!("\x1b[33mwarning\x1b[0m: {path}: check passed, but pipeline is not executable");
     }
 }

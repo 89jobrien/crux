@@ -4,9 +4,11 @@
 //! newline-delimited JSON over stdin/stdout.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
+use tokio::sync::Mutex;
 
 use crate::manifest::PluginEntry;
 use crate::protocol::{HandlerDecl, Request, Response};
@@ -23,7 +25,7 @@ struct PluginProcess {
 /// Manages all loaded plugins and routes handler invocations.
 pub struct PluginHost {
     /// plugin name -> process
-    plugins: HashMap<String, PluginProcess>,
+    plugins: HashMap<String, Arc<Mutex<PluginProcess>>>,
     /// handler name -> plugin name
     handler_map: HashMap<String, String>,
     /// All declared handlers (for introspection).
@@ -89,7 +91,8 @@ impl PluginHost {
             self.declarations.push(decl.clone());
         }
 
-        self.plugins.insert(entry.name.clone(), proc);
+        self.plugins
+            .insert(entry.name.clone(), Arc::new(Mutex::new(proc)));
         Ok(())
     }
 
@@ -100,7 +103,7 @@ impl PluginHost {
 
     /// Invoke a handler by name, routing to the correct plugin.
     pub async fn invoke(
-        &mut self,
+        &self,
         handler: &str,
         input: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
@@ -112,14 +115,15 @@ impl PluginHost {
 
         let proc = self
             .plugins
-            .get_mut(&plugin_name)
+            .get(&plugin_name)
             .ok_or_else(|| PluginError::Protocol(format!("plugin '{plugin_name}' not running")))?;
+        let mut proc = proc.lock().await;
 
         let req = Request::Invoke {
             handler: handler.into(),
             input,
         };
-        let resp = send_recv(proc, &req).await?;
+        let resp = send_recv(&mut proc, &req).await?;
 
         match resp {
             Response::InvokeOk { output } => Ok(output),
@@ -137,7 +141,8 @@ impl PluginHost {
     pub async fn shutdown_all(&mut self) {
         let names: Vec<String> = self.plugins.keys().cloned().collect();
         for name in names {
-            if let Some(mut proc) = self.plugins.remove(&name) {
+            if let Some(proc) = self.plugins.remove(&name) {
+                let mut proc = proc.lock().await;
                 let _ = send_recv(&mut proc, &Request::Shutdown).await;
                 let _ = proc.child.kill().await;
             }

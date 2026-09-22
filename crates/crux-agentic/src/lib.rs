@@ -11,17 +11,18 @@ pub mod discover;
 pub mod error;
 pub mod handlers;
 pub mod harness;
+pub mod http;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
-// TODO(feature-idea-6): Implement the policy-aware typed HTTP handler described by automation-12.
-// TODO(automation-12): Add a typed generic HTTP handler with explicit method, URL, headers,
-// response limits, timeout, and network policy instead of routing research fetches through shell.
 pub mod review;
 pub mod rx;
 pub mod sqlite;
 pub mod task;
 pub mod triage;
+
+/// Backwards-compatible re-export of shell handlers now owned by `crux-stdlib`.
+pub use crux_stdlib::shell;
 
 pub use llm_step::LlmStep;
 pub use provider::{LlmProvider, LlmRequest, LlmResponse};
@@ -58,6 +59,7 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     ci::register(registry);
     container::register(registry);
     harness::register(registry);
+    http::register(registry);
     review::register(registry);
     rx::register(registry);
     sqlite::register(registry);

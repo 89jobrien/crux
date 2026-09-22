@@ -15,8 +15,6 @@ use crate::types::error::CruxErr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReplayMode {
     /// Ordinal-based lookup. Hash must match exactly or Mismatch is returned.
-    // TODO(automation-10): Introduce immutable pipeline versions and stable step IDs so strict
-    // replay survives safe edits without relying on brittle name and ordinal identity.
     #[default]
     Strict,
     /// By-name lookup with ordinal hint. If the name at the expected ordinal
@@ -27,6 +25,7 @@ pub enum ReplayMode {
 
 #[derive(Debug, Clone)]
 struct ReplayEntry {
+    stable_id: Option<String>,
     name: String,
     input_hash: u64,
     content_hash: Option<u64>,
@@ -48,6 +47,8 @@ pub struct ReplayCache {
     entries: Vec<ReplayEntry>,
     enabled: bool,
     mode: ReplayMode,
+    pipeline_version: Option<String>,
+    replay_pipeline_version: Option<String>,
 }
 
 impl ReplayCache {
@@ -74,12 +75,19 @@ impl ReplayCache {
         self.mode
     }
 
+    /// Set the immutable version of the pipeline requesting replay.
+    pub fn set_pipeline_version(&mut self, version: impl Into<String>) {
+        self.pipeline_version = Some(version.into());
+    }
+
     /// Seed replay from a previous trace.
     pub fn seed_from(&mut self, previous: &Crux<serde_json::Value>) {
+        self.replay_pipeline_version = previous.pipeline_version.clone();
         self.entries = previous
             .steps
             .iter()
             .map(|s| ReplayEntry {
+                stable_id: s.stable_id.clone(),
                 name: s.name.clone(),
                 input_hash: s.input_hash,
                 content_hash: s.content_hash,
@@ -93,6 +101,9 @@ impl ReplayCache {
     pub fn check(&self, ordinal: u32, input_hash: u64) -> ReplayResult {
         if !self.enabled {
             return ReplayResult::Miss;
+        }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
         }
 
         match self.entries.get(ordinal as usize) {
@@ -127,6 +138,29 @@ impl ReplayCache {
     ) -> ReplayResult {
         if !self.enabled {
             return ReplayResult::Miss;
+        }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
+        }
+
+        if self.mode == ReplayMode::Strict
+            && let Some(entry) = self
+                .entries
+                .iter()
+                .find(|entry| entry.stable_id.as_deref() == Some(name))
+        {
+            if let (Some(current), Some(cached)) = (content_hash, entry.content_hash)
+                && current != cached
+            {
+                return ReplayResult::Mismatch {
+                    expected: cached,
+                    actual: current,
+                };
+            }
+            return match &entry.output {
+                Some(output) => ReplayResult::Hit(output.clone()),
+                None => ReplayResult::Miss,
+            };
         }
 
         // Try ordinal-based match first (works in both modes).
@@ -181,9 +215,71 @@ impl ReplayCache {
         ReplayResult::Miss
     }
 
+    /// Check replay using a stable identity that is independent of trace position.
+    ///
+    /// Versioned traces record stable IDs for every step. Strict replay locates
+    /// such a step anywhere in the prior trace, allowing unrelated steps to be
+    /// inserted or reordered without invalidating compatible cached work. Legacy
+    /// traces without stable IDs retain ordinal-and-hash matching.
+    pub fn check_by_identity(
+        &self,
+        stable_id: &str,
+        name: &str,
+        ordinal: u32,
+        input_hash: u64,
+        content_hash: Option<u64>,
+    ) -> ReplayResult {
+        if !self.enabled {
+            return ReplayResult::Miss;
+        }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
+        }
+
+        if let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| entry.stable_id.as_deref() == Some(stable_id))
+        {
+            if let (Some(current), Some(cached)) = (content_hash, entry.content_hash)
+                && current != cached
+            {
+                return match self.mode {
+                    ReplayMode::Strict => ReplayResult::Mismatch {
+                        expected: cached,
+                        actual: current,
+                    },
+                    ReplayMode::Lenient => ReplayResult::Miss,
+                };
+            }
+            return match &entry.output {
+                Some(output) => ReplayResult::Hit(output.clone()),
+                None => ReplayResult::Miss,
+            };
+        }
+
+        self.check_by_name(name, ordinal, input_hash, content_hash)
+    }
+
     /// Reports whether the cache has been seeded from a previous trace.
     pub fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    fn version_mismatch(&self) -> Option<ReplayResult> {
+        if self.mode != ReplayMode::Strict {
+            return None;
+        }
+        let (Some(expected), Some(actual)) = (
+            self.replay_pipeline_version.as_ref(),
+            self.pipeline_version.as_ref(),
+        ) else {
+            return None;
+        };
+        (expected != actual).then(|| ReplayResult::Mismatch {
+            expected: crate::recorder::hash_content(expected),
+            actual: crate::recorder::hash_content(actual),
+        })
     }
 }
 
@@ -211,11 +307,12 @@ pub fn deserialize_replay<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok, step_with_content};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::{step_ok, step_with_content};
 
     fn make_snapshot(
         steps: Vec<crux_types::step::Step>,
-    ) -> crux_types::crux_value::Crux<serde_json::Value> {
+    ) -> crux_schema::crux_value::Crux<serde_json::Value> {
         crux_ok("test", serde_json::json!(null), steps)
     }
 
@@ -341,6 +438,58 @@ mod tests {
         // Name "parse" at ordinal 0 where "fetch" is cached — strict rejects.
         assert!(matches!(
             cache.check_by_name("parse", 0, 10, None),
+            ReplayResult::Mismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn strict_mode_matches_stable_id_after_step_insertion() {
+        let mut inserted = make_step("new_step", 10, Some(serde_json::json!("new")));
+        inserted.stable_id = Some("pipeline.new".into());
+        let mut parse = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        parse.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![inserted, parse]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let mut cache = ReplayCache::with_mode(ReplayMode::Strict);
+        cache.seed_from(&snapshot);
+
+        match cache.check_by_identity("pipeline.parse", "renamed parse", 0, 999, None) {
+            ReplayResult::Hit(value) => assert_eq!(value, serde_json::json!("parsed")),
+            other => panic!("expected stable-id replay hit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn trace_identity_contract_survives_serialization() {
+        let mut step = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        step.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![step]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded: Crux<serde_json::Value> = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded.pipeline_version.as_deref(), Some("orders-v1"));
+        assert_eq!(
+            decoded.steps[0].stable_id.as_deref(),
+            Some("pipeline.parse")
+        );
+    }
+
+    #[test]
+    fn strict_mode_rejects_incompatible_pipeline_version() {
+        let mut step = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        step.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![step]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let mut cache = ReplayCache::with_mode(ReplayMode::Strict);
+        cache.set_pipeline_version("orders-v2");
+        cache.seed_from(&snapshot);
+
+        assert!(matches!(
+            cache.check_by_identity("pipeline.parse", "parse", 0, 20, None),
             ReplayResult::Mismatch { .. }
         ));
     }
@@ -481,7 +630,8 @@ mod tests {
 #[cfg(test)]
 mod proptest_replay {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::step_ok;
     use proptest::prelude::*;
 
     fn arb_step_name() -> impl Strategy<Value = String> {

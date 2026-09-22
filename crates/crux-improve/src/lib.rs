@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // Re-export trace types so downstream only needs `crux-improve`.
-pub use crux_types::crux_value::Crux;
+pub use crux_schema::crux_value::Crux;
 pub use crux_types::id::CruxId;
 pub use crux_types::step::{Step, StepKind, StepStatus};
 
@@ -205,6 +205,93 @@ pub fn replay_compare<T>(old: &Crux<T>, new: &Crux<T>) -> Comparison {
     }
 }
 
+/// Regression thresholds applied by [`EvalHarness`].
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct EvalThresholds {
+    /// Lowest acceptable candidate score delta relative to the baseline.
+    pub min_score_delta: f32,
+    /// Highest acceptable candidate-to-baseline duration ratio.
+    pub max_latency_ratio: f32,
+}
+
+/// Reusable trace evaluation harness for candidate pipeline or model runs.
+#[derive(Debug, Clone)]
+pub struct EvalHarness {
+    thresholds: EvalThresholds,
+    golden_answer: Option<serde_json::Value>,
+}
+
+/// Result of evaluating a candidate trace against a baseline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalReport {
+    pub passed: bool,
+    pub comparison: Comparison,
+    pub latency_ratio: f32,
+    pub failures: Vec<String>,
+}
+
+impl EvalHarness {
+    pub fn new(thresholds: EvalThresholds) -> Self {
+        Self {
+            thresholds,
+            golden_answer: None,
+        }
+    }
+
+    pub fn with_golden_answer(mut self, answer: serde_json::Value) -> Self {
+        self.golden_answer = Some(answer);
+        self
+    }
+
+    pub fn evaluate<T: Serialize>(&self, baseline: &Crux<T>, candidate: &Crux<T>) -> EvalReport {
+        let comparison = replay_compare(baseline, candidate);
+        let baseline_latency = comparison.old_metrics.total_duration_ms;
+        let candidate_latency = comparison.new_metrics.total_duration_ms;
+        let latency_ratio = if baseline_latency == 0 {
+            if candidate_latency == 0 {
+                1.0
+            } else {
+                f32::INFINITY
+            }
+        } else {
+            candidate_latency as f32 / baseline_latency as f32
+        };
+        let mut failures = Vec::new();
+        if comparison.delta < self.thresholds.min_score_delta {
+            failures.push(format!(
+                "quality delta {} is below {}",
+                comparison.delta, self.thresholds.min_score_delta
+            ));
+        }
+        if latency_ratio > self.thresholds.max_latency_ratio {
+            failures.push(format!(
+                "latency ratio {latency_ratio} exceeds {}",
+                self.thresholds.max_latency_ratio
+            ));
+        }
+        if let Some(expected) = &self.golden_answer {
+            let actual = candidate
+                .value
+                .as_ref()
+                .ok()
+                .and_then(|value| serde_json::to_value(value).ok());
+            if actual.as_ref() != Some(expected) {
+                failures.push("candidate did not match golden answer".into());
+            }
+        }
+        EvalReport {
+            passed: failures.is_empty(),
+            comparison,
+            latency_ratio,
+            failures,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// StrategyPolicy
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, thiserror::Error)]
 #[error("strategy violation: {message}")]
 pub struct StrategyViolation {
@@ -250,6 +337,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "test".into(),
+            pipeline_version: None,
             value: Ok(serde_json::json!({})),
             steps: vec![],
             children: vec![],
@@ -260,6 +348,7 @@ mod tests {
 
     fn step(name: &str, status: StepStatus, confidence: f32) -> Step {
         Step {
+            stable_id: None,
             name: name.into(),
             kind: StepKind::Plain,
             status,
@@ -270,8 +359,10 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: Default::default(),
             findings: vec![],
         }
@@ -331,6 +422,37 @@ mod tests {
         new.steps = vec![step("a", StepStatus::Err, 0.2)];
         let cmp = replay_compare(&old, &new);
         assert_eq!(cmp.verdict, Verdict::Regressed);
+    }
+
+    #[test]
+    fn eval_harness_enforces_quality_latency_and_golden_answer() {
+        let mut baseline = empty_trace();
+        baseline.steps.push(step("answer", StepStatus::Ok, 0.8));
+        baseline.value = Ok(serde_json::json!({"answer": 42}));
+        let mut candidate = baseline.clone();
+        candidate.steps[0].duration_ms = 150;
+        candidate.value = Ok(serde_json::json!({"answer": 41}));
+
+        let harness = EvalHarness::new(EvalThresholds {
+            min_score_delta: -0.01,
+            max_latency_ratio: 1.2,
+        })
+        .with_golden_answer(serde_json::json!({"answer": 42}));
+        let report = harness.evaluate(&baseline, &candidate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("latency"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("golden"))
+        );
     }
 
     #[test]

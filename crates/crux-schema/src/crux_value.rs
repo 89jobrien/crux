@@ -4,14 +4,17 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::error::CruxErr;
-use crate::id::CruxId;
-use crate::step::{Step, StepKind, StepStatus};
+use crux_types::error::CruxErr;
+use crux_types::id::CruxId;
+use crux_types::step::{Step, StepKind, StepStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Crux<T> {
     pub id: CruxId,
     pub agent: String,
+    /// Immutable identity of the pipeline definition that produced this trace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline_version: Option<String>,
     pub value: Result<T, CruxErr>,
     pub steps: Vec<Step>,
     pub children: Vec<Crux<serde_json::Value>>,
@@ -144,7 +147,11 @@ impl<T: Serialize> Crux<T> {
 
         for (i, step) in self.steps.iter().enumerate() {
             let id = format!("s{i}");
-            let label = format!("{} {}ms", step.name, step.duration_ms);
+            let label = format!(
+                "{} {}ms",
+                escape_mermaid_label(&step.name),
+                step.duration_ms
+            );
             lines.push(format!("    {id}[\"{label}\"]"));
 
             if i > 0 {
@@ -153,7 +160,7 @@ impl<T: Serialize> Crux<T> {
                     if let Some(child) = child_iter.next() {
                         lines.push(format!(
                             "    {prev} -->|\"delegate: {}\"| {id}",
-                            child.agent
+                            escape_mermaid_label(&child.agent)
                         ));
                     } else {
                         lines.push(format!("    {prev} --> {id}"));
@@ -193,6 +200,7 @@ impl<T: Serialize> Crux<T> {
         Ok(Crux {
             id: self.id.clone(),
             agent: self.agent.clone(),
+            pipeline_version: self.pipeline_version.clone(),
             value,
             steps: self.steps.clone(),
             children: self.children.clone(),
@@ -200,6 +208,13 @@ impl<T: Serialize> Crux<T> {
             finished_at: self.finished_at,
         })
     }
+}
+
+fn escape_mermaid_label(label: &str) -> String {
+    label
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace(['\n', '\r'], " ")
 }
 
 /// Severity-ordered outcome of a workflow execution.
@@ -224,7 +239,8 @@ pub struct StepRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{crux_ok, step_ok};
+    use crate::testing::crux_ok;
+    use crux_types::testing::step_ok;
 
     fn sample_crux() -> Crux<String> {
         let rejected = Step {
@@ -307,8 +323,18 @@ mod tests {
     }
 
     #[test]
+    fn to_mermaid_escapes_step_labels() {
+        let mut crux = sample_crux();
+        crux.steps[0].name = "say \"hello\"\nnext".into();
+
+        let mermaid = crux.to_mermaid();
+
+        assert!(mermaid.contains(r#"s0["say \"hello\" next 0ms"]"#));
+    }
+
+    #[test]
     fn step_with_findings_roundtrips() {
-        use crate::step::CitedFinding;
+        use crux_types::step::CitedFinding;
         let mut step = step_ok("analyze", 0, None);
         step.findings.push(CitedFinding {
             message: "unused import".into(),
@@ -316,7 +342,7 @@ mod tests {
         });
         let json = serde_json::to_string(&step).unwrap();
         assert!(json.contains("unused import"));
-        let back: crate::step::Step = serde_json::from_str(&json).unwrap();
+        let back: crux_types::step::Step = serde_json::from_str(&json).unwrap();
         assert_eq!(back.findings.len(), 1);
         assert_eq!(
             back.findings[0].source.as_deref(),

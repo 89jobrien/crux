@@ -6,7 +6,7 @@
 /// as an auditable catalog of built-in step kinds with their required capabilities.
 use std::{future::Future, pin::Pin};
 
-use miette::Result;
+use miette::{IntoDiagnostic, Result, miette};
 use serde_json::Value;
 
 use crate::{HandlerExecution, HandlerMetadata};
@@ -137,9 +137,8 @@ impl Default for StepRunnerRegistry {
     }
 }
 
-// ── Built-in runner stubs ──────────────────────────────────────────────────
-// TODO(feature-idea-11): Consolidate these stubs with the production HandlerRegistry surface.
-// TODO(#63): implement real step runners — all return Value::Null today
+// ── Built-in runners ────────────────────────────────────────────────────────
+// TODO(feature-idea-11): Consolidate these runners with the production HandlerRegistry surface.
 
 pub struct ShellRunner;
 impl LegacyStepRunner for ShellRunner {
@@ -149,9 +148,18 @@ impl LegacyStepRunner for ShellRunner {
     fn required_capabilities(&self) -> Vec<RunnerCapability> {
         vec![RunnerCapability::Shell]
     }
-    fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
+    fn run(&self, ctx: StepContext) -> Result<StepOutput> {
+        let cmd = config_str(&ctx.config, "cmd")?;
+        let output = std::process::Command::new("sh")
+            .args(["-c", cmd])
+            .output()
+            .into_diagnostic()?;
         Ok(StepOutput {
-            value: serde_json::Value::Null,
+            value: serde_json::json!({
+                "exit_code": output.status.code(),
+                "stdout": String::from_utf8_lossy(&output.stdout),
+                "stderr": String::from_utf8_lossy(&output.stderr),
+            }),
         })
     }
 }
@@ -164,9 +172,12 @@ impl LegacyStepRunner for FsWriteRunner {
     fn required_capabilities(&self) -> Vec<RunnerCapability> {
         vec![RunnerCapability::Filesystem]
     }
-    fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
+    fn run(&self, ctx: StepContext) -> Result<StepOutput> {
+        let path = config_str(&ctx.config, "path")?;
+        let content = config_str(&ctx.config, "content")?;
+        std::fs::write(path, content).into_diagnostic()?;
         Ok(StepOutput {
-            value: serde_json::Value::Null,
+            value: serde_json::json!({"path": path, "bytes_written": content.len()}),
         })
     }
 }
@@ -179,9 +190,14 @@ impl LegacyStepRunner for GitCommitRunner {
     fn required_capabilities(&self) -> Vec<RunnerCapability> {
         vec![RunnerCapability::Git, RunnerCapability::Filesystem]
     }
-    fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
+    fn run(&self, ctx: StepContext) -> Result<StepOutput> {
+        let repo = config_str(&ctx.config, "repo")?;
+        let message = config_str(&ctx.config, "message")?;
+        run_git(repo, &["add", "-A"])?;
+        run_git(repo, &["commit", "-m", message])?;
+        let commit = run_git(repo, &["rev-parse", "HEAD"])?;
         Ok(StepOutput {
-            value: serde_json::Value::Null,
+            value: serde_json::json!({"committed": true, "commit": commit.trim()}),
         })
     }
 }
@@ -194,10 +210,23 @@ impl LegacyStepRunner for JsonUpdateRunner {
     fn required_capabilities(&self) -> Vec<RunnerCapability> {
         vec![RunnerCapability::JsonMutation, RunnerCapability::Filesystem]
     }
-    fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
-        Ok(StepOutput {
-            value: serde_json::Value::Null,
-        })
+    fn run(&self, ctx: StepContext) -> Result<StepOutput> {
+        let mut document = ctx
+            .config
+            .get("document")
+            .cloned()
+            .ok_or_else(|| miette!("{} requires config.document", ctx.alias))?;
+        let pointer = config_str(&ctx.config, "pointer")?;
+        let replacement = ctx
+            .config
+            .get("value")
+            .cloned()
+            .ok_or_else(|| miette!("{} requires config.value", ctx.alias))?;
+        let slot = document
+            .pointer_mut(pointer)
+            .ok_or_else(|| miette!("JSON pointer does not exist: {pointer}"))?;
+        *slot = replacement;
+        Ok(StepOutput { value: document })
     }
 }
 
@@ -212,11 +241,50 @@ impl LegacyStepRunner for LlmCallRunner {
             RunnerCapability::OutputPropagation,
         ]
     }
-    fn run(&self, _ctx: StepContext) -> Result<StepOutput> {
+    fn run(&self, ctx: StepContext) -> Result<StepOutput> {
+        let cmd = config_str(&ctx.config, "cmd")?;
+        let prompt = config_str(&ctx.config, "prompt")?;
+        let output = std::process::Command::new("sh")
+            .args(["-c", cmd])
+            .env("CRUX_PROMPT", prompt)
+            .output()
+            .into_diagnostic()?;
+        if !output.status.success() {
+            return Err(miette!(
+                "LLM provider command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
         Ok(StepOutput {
-            value: serde_json::Value::Null,
+            value: serde_json::json!({
+                "response": String::from_utf8_lossy(&output.stdout),
+                "provider": "command"
+            }),
         })
     }
+}
+
+fn config_str<'a>(config: &'a Value, key: &str) -> Result<&'a str> {
+    config
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| miette!("missing string config field '{key}'"))
+}
+
+fn run_git(repo: &str, args: &[&str]) -> Result<String> {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .into_diagnostic()?;
+    if !output.status.success() {
+        return Err(miette!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 // ── Conformance helper ─────────────────────────────────────────────────────
@@ -293,5 +361,80 @@ mod step_runner_registry_tests {
                 .expect("runner must be findable by its own kind");
             assert_step_runner_contract(runner);
         }
+    }
+
+    #[test]
+    fn builtin_runners_perform_declared_operations() {
+        let temp = tempfile::tempdir().unwrap();
+        let written = temp.path().join("written.txt");
+
+        let shell = ShellRunner
+            .run(StepContext {
+                alias: "shell".into(),
+                config: serde_json::json!({"cmd": "printf hello"}),
+            })
+            .unwrap();
+        assert_eq!(shell.value["stdout"], "hello");
+
+        let write = FsWriteRunner
+            .run(StepContext {
+                alias: "write".into(),
+                config: serde_json::json!({"path": written, "content": "saved"}),
+            })
+            .unwrap();
+        assert_eq!(write.value["bytes_written"], 5);
+        assert_eq!(std::fs::read_to_string(&written).unwrap(), "saved");
+
+        let updated = JsonUpdateRunner
+            .run(StepContext {
+                alias: "json".into(),
+                config: serde_json::json!({
+                    "document": {"status": "old"},
+                    "pointer": "/status",
+                    "value": "new"
+                }),
+            })
+            .unwrap();
+        assert_eq!(updated.value["status"], "new");
+
+        let llm = LlmCallRunner
+            .run(StepContext {
+                alias: "llm".into(),
+                config: serde_json::json!({
+                    "cmd": "printf response:$CRUX_PROMPT",
+                    "prompt": "hello"
+                }),
+            })
+            .unwrap();
+        assert_eq!(llm.value["response"], "response:hello");
+    }
+
+    #[test]
+    fn git_commit_runner_creates_commit() {
+        let temp = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init"],
+            vec!["config", "user.email", "crux@example.test"],
+            vec!["config", "user.name", "Crux Test"],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(temp.path())
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        std::fs::write(temp.path().join("file.txt"), "content").unwrap();
+
+        let output = GitCommitRunner
+            .run(StepContext {
+                alias: "commit".into(),
+                config: serde_json::json!({"repo": temp.path(), "message": "test commit"}),
+            })
+            .unwrap();
+        assert_eq!(output.value["committed"], true);
+        assert!(output.value["commit"].as_str().unwrap().len() >= 7);
     }
 }

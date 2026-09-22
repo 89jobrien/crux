@@ -2,10 +2,6 @@
 //!
 //! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
 
-// TODO(#100): planner-based action dispatch — refactor step/delegate/speculate to return
-//   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
-//   simulation, and side-effect-free testing
-
 /// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
 /// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
@@ -158,6 +154,7 @@ const DEFAULT_MAX_RETRIES: u32 = 3;
 pub struct CruxCtx {
     id: CruxId,
     agent_name: String,
+    pipeline_version: Option<String>,
     recorder: StepRecorder,
     hooks: HookRegistry,
     replay: ReplayCache,
@@ -176,6 +173,7 @@ impl CruxCtx {
         Self {
             id: CruxId::new(),
             agent_name: agent_name.to_string(),
+            pipeline_version: None,
             recorder: StepRecorder::new(),
             hooks: HookRegistry::new(),
             replay: ReplayCache::new(),
@@ -244,6 +242,12 @@ impl CruxCtx {
         std::sync::Arc::clone(&self.planner)
     }
 
+    /// Ask the planner for the abstract action governing an orchestration operation.
+    pub(crate) fn plan_action(&self, name: &str) -> PlanResult {
+        let priority = crate::agent::infer_priority(name).score() as u8;
+        self.planner.next_action(name, priority)
+    }
+
     /// Attach an event sender so this context emits `StepEvent`s on every step.
     // TODO(feature-idea-14): Unify runtime emissions and expose an ordered CLI JSONL stream.
     // TODO(automation-13): Unify EventPipeline and crux-types EventSink emissions, then attach
@@ -279,6 +283,13 @@ impl CruxCtx {
         self.replay.set_mode(mode);
     }
 
+    /// Set the immutable pipeline definition version persisted in trace snapshots.
+    pub fn set_pipeline_version(&mut self, version: impl Into<String>) {
+        let version = version.into();
+        self.replay.set_pipeline_version(version.clone());
+        self.pipeline_version = Some(version);
+    }
+
     /// Take a mid-run checkpoint: snapshot the current trace into a `Crux<Value>`.
     ///
     /// The snapshot can be persisted to a `TaskRegistry` and later used to
@@ -287,11 +298,27 @@ impl CruxCtx {
         Crux {
             id: self.id.clone(),
             agent: self.agent_name.clone(),
+            pipeline_version: self.pipeline_version.clone(),
             value: Ok(serde_json::Value::Null),
             steps: self.recorder.steps().to_vec(),
             children: self.children.clone(),
             started_at: self.started_at,
             finished_at: None,
+        }
+    }
+
+    /// Append steps produced by isolated child execution in caller-defined order.
+    ///
+    /// Replay identities are reassigned against this context's ordinal sequence so
+    /// independently recorded traces can be merged deterministically.
+    pub fn append_trace_steps(
+        &mut self,
+        steps: impl IntoIterator<Item = crate::types::step::Step>,
+    ) {
+        for mut step in steps {
+            let (_, input_hash) = self.recorder.next_ordinal(&step.name);
+            step.input_hash = input_hash;
+            self.recorder.push_raw(step);
         }
     }
 
@@ -332,6 +359,7 @@ impl CruxCtx {
         Crux {
             id: self.id,
             agent: self.agent_name,
+            pipeline_version: self.pipeline_version,
             value: result,
             steps: self.recorder.into_steps(),
             children: self.children,
@@ -389,6 +417,7 @@ impl CruxCtx {
         };
 
         self.push_step(crate::types::step::Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Delegation,
             status,
@@ -399,8 +428,10 @@ impl CruxCtx {
             content_hash: None,
             output,
             error,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: std::collections::HashMap::new(),
             findings: vec![],
         });
@@ -963,7 +994,7 @@ impl CruxCtx {
         trace_step!(name, confidence);
 
         // Planner check — before replay cache and closure execution.
-        match self.planner.next_action(name, 0) {
+        match self.plan_action(name) {
             PlanResult::Deny { reason } => {
                 return Err(CruxErr::Denied {
                     step: name.to_string(),
@@ -1427,10 +1458,10 @@ impl Context for CruxCtx {
 /// Determines the worst-case outcome across all steps.
 /// Steps flagged `continue_on_error` are excluded unless `ignore_continue_on_error` is true.
 pub fn determine_final_phase(
-    steps: &[crux_types::crux_value::StepRecord],
+    steps: &[crux_schema::crux_value::StepRecord],
     ignore_continue_on_error: bool,
-) -> crux_types::crux_value::FinalPhase {
-    use crux_types::crux_value::FinalPhase;
+) -> crux_schema::crux_value::FinalPhase {
+    use crux_schema::crux_value::FinalPhase;
     steps
         .iter()
         .filter(|s| ignore_continue_on_error || !s.continue_on_error)
@@ -2773,7 +2804,7 @@ mod step_state_tests {
 #[cfg(test)]
 mod final_phase_tests {
     use super::determine_final_phase;
-    use crux_types::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
+    use crux_schema::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
     use proptest::prelude::*;
 
     #[test]

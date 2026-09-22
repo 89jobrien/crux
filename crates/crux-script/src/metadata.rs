@@ -595,6 +595,13 @@ pub enum Capability {
     Process,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("handler '{handler}' requires unapproved capabilities: {missing:?}")]
+pub struct CapabilityViolation {
+    pub handler: String,
+    pub missing: Vec<Capability>,
+}
+
 /// Whether a handler reports a confidence score with its output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -654,6 +661,10 @@ pub struct HandlerMetadata {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature_flag: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<Value>,
     #[serde(default)]
     pub args: ArgSchema,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -669,6 +680,8 @@ pub struct HandlerMetadata {
     pub capabilities: Vec<Capability>,
     #[serde(default = "default_deterministic")]
     pub deterministic: bool,
+    #[serde(default = "default_deterministic")]
+    pub replay_safe: bool,
 }
 
 impl HandlerMetadata {
@@ -677,6 +690,8 @@ impl HandlerMetadata {
         Self {
             name: name.into(),
             description: String::new(),
+            feature_flag: None,
+            examples: Vec::new(),
             args: ArgSchema::new(),
             input_schema: None,
             output_schema: None,
@@ -685,12 +700,25 @@ impl HandlerMetadata {
             side_effects: vec![SideEffect::None],
             capabilities: Vec::new(),
             deterministic: true,
+            replay_safe: true,
         }
     }
 
     /// Sets the handler description used for introspection.
     pub fn describe(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    /// Associates the handler with an optional Cargo feature.
+    pub fn feature_flag(mut self, feature_flag: impl Into<String>) -> Self {
+        self.feature_flag = Some(feature_flag.into());
+        self
+    }
+
+    /// Adds an example handler invocation.
+    pub fn example(mut self, example: Value) -> Self {
+        self.examples.push(example);
         self
     }
 
@@ -741,13 +769,60 @@ impl HandlerMetadata {
         self
     }
 
+    /// Verifies that every capability required by this handler is approved.
+    pub fn authorize_capabilities(
+        &self,
+        approved: &[Capability],
+    ) -> Result<(), CapabilityViolation> {
+        let missing: Vec<_> = self
+            .capabilities
+            .iter()
+            .copied()
+            .filter(|capability| !approved.contains(capability))
+            .collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(CapabilityViolation {
+                handler: self.name.clone(),
+                missing,
+            })
+        }
+    }
+
     /// Marks whether identical inputs are expected to produce identical results.
     pub fn deterministic(mut self, deterministic: bool) -> Self {
         self.deterministic = deterministic;
+        if !deterministic {
+            self.replay_safe = false;
+        }
+        self
+    }
+
+    /// Marks whether replaying the handler is safe.
+    pub fn replay_safe(mut self, replay_safe: bool) -> Self {
+        self.replay_safe = replay_safe;
         self
     }
 }
 
 fn default_deterministic() -> bool {
     true
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn handler_capabilities_require_explicit_approval() {
+        let handler = HandlerMetadata::new("shell").capabilities(vec![Capability::Shell]);
+
+        assert!(
+            handler
+                .authorize_capabilities(&[Capability::ReadFs])
+                .is_err()
+        );
+        assert!(handler.authorize_capabilities(&[Capability::Shell]).is_ok());
+    }
 }

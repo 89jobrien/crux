@@ -207,3 +207,19 @@ fn handler_contract_completeness() {
         ValueSchema::object(ObjectSchema::new().required("name", ValueSchema::String))
     );
 }
+
+#[test]
+fn handler_metadata_captures_discovery_and_replay_properties() {
+    let metadata = HandlerMetadata::new("container::run")
+        .feature_flag("docker")
+        .example(json!({"image": "alpine"}))
+        .replay_safe(false);
+
+    assert_eq!(metadata.feature_flag.as_deref(), Some("docker"));
+    assert_eq!(metadata.examples, vec![json!({"image": "alpine"})]);
+    assert!(!metadata.replay_safe);
+
+    let serialized = serde_json::to_string(&metadata).unwrap();
+    let round_trip: HandlerMetadata = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(round_trip, metadata);
+}

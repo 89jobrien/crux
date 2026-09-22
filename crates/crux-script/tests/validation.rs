@@ -151,3 +151,25 @@ steps:
         diagnostic.code == ValidationCode::DuplicateName && diagnostic.location == "steps[1]"
     }));
 }
+
+#[test]
+fn validation_reports_unreachable_repeat_body() {
+    let pipeline = crux_script::load(
+        r#"
+pipeline: unreachable
+steps:
+  - repeat: never
+    count: 0
+    steps:
+      - step: skipped
+        handler: json::pick
+"#,
+    )
+    .unwrap();
+
+    let report = validate_pipeline(&pipeline, &registry());
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == ValidationCode::UnreachableStep
+            && diagnostic.location == "steps[0].steps"
+    }));
+}
