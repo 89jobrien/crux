@@ -10,6 +10,9 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec { name: "crux-types" },
     CrateSpec { name: "crux-model" },
     CrateSpec {
+        name: "crux-schema",
+    },
+    CrateSpec {
         name: "crux-domain",
     },
     CrateSpec {

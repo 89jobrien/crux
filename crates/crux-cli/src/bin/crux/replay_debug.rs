@@ -13,6 +13,7 @@ pub fn cmd_replay_debug(path: &str, step: Option<usize>, compare: Option<&str>) 
         println!("step {index}: {}", step.name);
         println!("status: {:?}", step.status);
         println!("kind: {:?}", step.kind);
+        println!("origin: {:?}", step.origin);
         println!("input hash: {}", step.input_hash);
         println!("content hash: {:?}", step.content_hash);
         println!("output: {}", step.output.as_ref().unwrap_or(&Value::Null));
@@ -21,7 +22,10 @@ pub fn cmd_replay_debug(path: &str, step: Option<usize>, compare: Option<&str>) 
         }
     } else {
         for (index, step) in trace.steps.iter().enumerate() {
-            println!("{index:>3} {:?} {}", step.status, step.name);
+            println!(
+                "{index:>3} {:?} {:?} {}",
+                step.status, step.origin, step.name
+            );
         }
     }
 

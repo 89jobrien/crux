@@ -41,7 +41,7 @@ pub struct CitedReason {
 /// `serde_json::Value` output through the default type parameter.
 ///
 /// ```compile_fail
-/// use crux_types::step::{Step, StepKind, StepStatus};
+/// use crux_types::step::{Step, StepKind, StepOrigin, StepStatus};
 /// # use chrono::Utc;
 /// # use std::collections::HashMap;
 /// let _: Step<u32> = Step {
@@ -49,6 +49,7 @@ pub struct CitedReason {
 ///     name: "typed".into(),
 ///     kind: StepKind::Plain,
 ///     status: StepStatus::Ok,
+///     origin: StepOrigin::Live,
 ///     confidence: 1.0,
 ///     started_at: Utc::now(),
 ///     duration_ms: 0,
@@ -72,6 +73,9 @@ pub struct Step<T = serde_json::Value> {
     pub name: String,
     pub kind: StepKind,
     pub status: StepStatus,
+    /// Whether this result was produced by live execution or restored from replay.
+    #[serde(default)]
+    pub origin: StepOrigin,
     pub confidence: f32,
     pub started_at: DateTime<Utc>,
     pub duration_ms: u64,
@@ -160,6 +164,17 @@ pub enum StepStatus {
     Skipped,
 }
 
+/// Identifies how a recorded step result was obtained.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepOrigin {
+    /// The step executed during this run.
+    #[default]
+    Live,
+    /// The step output was restored from a prior trace.
+    Replayed,
+}
+
 impl<T> Step<T> {
     /// Reports whether the step completed successfully.
     pub fn is_ok(&self) -> bool {
@@ -196,6 +211,7 @@ impl<T> Step<T> {
             name: self.name,
             kind: self.kind,
             status: self.status,
+            origin: self.origin,
             confidence: self.confidence,
             started_at: self.started_at,
             duration_ms: self.duration_ms,
@@ -230,12 +246,66 @@ mod tests {
     }
 
     #[test]
+    fn step_serializes_live_origin() {
+        let step = Step::<u32> {
+            stable_id: None,
+            name: "live".into(),
+            kind: StepKind::Plain,
+            status: StepStatus::Ok,
+            origin: StepOrigin::Live,
+            confidence: 1.0,
+            started_at: Utc::now(),
+            duration_ms: 1,
+            input_hash: 0,
+            content_hash: None,
+            output: Some(42),
+            error: None,
+            cited_reason: None,
+            attempt: 1,
+            events: vec![],
+            event_subscribers: Default::default(),
+            metadata: HashMap::new(),
+            findings: vec![],
+        };
+
+        let json = serde_json::to_value(step).unwrap();
+        assert_eq!(json["origin"], "live");
+    }
+
+    #[test]
+    fn step_origin_round_trips_and_legacy_steps_default_to_live() {
+        let mut replayed = serde_json::json!({
+            "name": "cached",
+            "kind": "plain",
+            "status": "ok",
+            "origin": "replayed",
+            "confidence": 1.0,
+            "started_at": Utc::now(),
+            "duration_ms": 0,
+            "input_hash": 0,
+            "content_hash": null,
+            "output": 42,
+            "error": null,
+            "attempt": 0
+        });
+
+        let step: Step = serde_json::from_value(replayed.clone()).unwrap();
+        assert_eq!(step.origin, StepOrigin::Replayed);
+        assert_eq!(serde_json::to_value(&step).unwrap()["origin"], "replayed");
+
+        replayed.as_object_mut().unwrap().remove("origin");
+        let legacy: Step = serde_json::from_value(replayed).unwrap();
+        assert_eq!(legacy.origin, StepOrigin::Live);
+    }
+
+    #[test]
     fn typed_step_output_round_trips_without_json_erasure() {
         let step = Step::<u32> {
             stable_id: None,
             name: "count".into(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: Utc::now(),
             duration_ms: 1,

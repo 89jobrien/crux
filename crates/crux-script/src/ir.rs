@@ -514,6 +514,7 @@ pub struct TypedPipeline {
     pub(crate) budget: Option<BudgetDef>,
     pub(crate) display: Option<PipelineDisplayDef>,
     confidence_dependent: bool,
+    pub(crate) definition_fingerprint: u64,
 }
 
 impl TypedPipeline {
@@ -526,6 +527,8 @@ impl TypedPipeline {
             .values()
             .any(|binding| binding.value.reads_handler_confidence())
             || steps.iter().any(TypedStep::reads_handler_confidence);
+        let definition_fingerprint =
+            crux_runtime::recorder::hash_content(&format!("{definition:#?}"));
         Self {
             name: definition.pipeline.clone(),
             input_schema: definition.input_schema.clone(),
@@ -534,6 +537,7 @@ impl TypedPipeline {
             budget: definition.budget.clone(),
             display: definition.display.clone(),
             confidence_dependent,
+            definition_fingerprint,
         }
     }
 
@@ -565,8 +569,15 @@ impl TypedPipeline {
             .all(|step| matches!(step.kind, TypedStepKind::Handler(_)))
     }
 
-    pub(crate) fn is_confidence_dependent(&self) -> bool {
-        self.confidence_dependent
+    pub(crate) fn prefix_is_confidence_dependent(&self, length: usize) -> bool {
+        if length == self.steps.len() {
+            self.confidence_dependent
+        } else {
+            self.steps
+                .iter()
+                .take(length)
+                .any(TypedStep::reads_handler_confidence)
+        }
     }
 
     /// Return the inferred schema for one top-level step argument.

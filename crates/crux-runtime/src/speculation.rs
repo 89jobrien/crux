@@ -14,7 +14,7 @@ use crate::context::InvocationMeter;
 use crate::ctx::CruxCtx;
 use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
-use crate::types::step::{Step, StepKind, StepStatus};
+use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
 use crux_domain::plan_result::PlanResult;
 
 /// A named speculation arm.
@@ -175,6 +175,7 @@ where
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status: StepStatus::Err,
+                    origin: StepOrigin::Live,
                     confidence: 0.0,
                     started_at: Utc::now(),
                     duration_ms: 0,
@@ -207,6 +208,7 @@ where
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Ok,
+                            origin: StepOrigin::Live,
                             confidence: best_score,
                             started_at: Utc::now(),
                             duration_ms: 0,
@@ -230,6 +232,7 @@ where
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Err,
+                            origin: StepOrigin::Live,
                             confidence: best_score,
                             started_at: Utc::now(),
                             duration_ms: 0,
@@ -257,6 +260,7 @@ where
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status,
+                    origin: StepOrigin::Live,
                     confidence: 0.0,
                     started_at: Utc::now(),
                     duration_ms: 0,
@@ -337,6 +341,7 @@ where
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Ok,
+                        origin: StepOrigin::Live,
                         confidence: 1.0,
                         started_at: Utc::now(),
                         duration_ms: 0,
@@ -359,6 +364,7 @@ where
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Rejected,
+                        origin: StepOrigin::Live,
                         confidence: 0.0,
                         started_at: Utc::now(),
                         duration_ms: 0,

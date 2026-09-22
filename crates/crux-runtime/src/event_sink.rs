@@ -24,6 +24,7 @@ mod tests {
 
         assert_eq!(row["step"], "compile");
         assert_eq!(row["status"], "ok");
+        assert_eq!(row["origin"], "live");
         assert_eq!(row["metadata"]["handler"], "shell::run");
         assert!(row["started_at"].is_string());
         assert!(row["duration_ms"].is_number());

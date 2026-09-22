@@ -18,13 +18,28 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (1 file)
+  title: Uncommitted changes (2 files)
   description: |-
     Working tree has uncommitted changes:
     docs/designs/2026-09-22-execution-envelope-v1-design.md
+    docs/designs/2026-09-22-governed-http-e2e-design.md
   files:
   - docs/designs/2026-09-22-execution-envelope-v1-design.md
+  - docs/designs/2026-09-22-governed-http-e2e-design.md
 log:
+- date: '20260922.175938'
+  summary: done=57 running=2 pending=18 blocked=0
+  commits:
+  - 8ac1412897310fb38044c0070d732fff5a36914e
+  - 09dd1bad671dc84d8486f5c737e8fcb204a1071f
+  - d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc
+  - fd64bb494cc773a8dbf4bfcf55c8929823727cb6
+  - 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e
+  - 2004a307345fd5b968c820ebca3ceeb01967251b
+  - c21c012f45d016aadef05ea79cc767f65a5e87df
+  - e01e8bef023564241f933f8bdaf68dfdbd3418e2
+  - 3957c8e3e75e88723aae9661eab1f597d3b40798
+  - 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b
 - date: '20260922.144159'
   summary: done=43 running=2 pending=18 blocked=0
   commits:

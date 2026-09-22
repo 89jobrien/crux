@@ -43,6 +43,7 @@ pub struct RunConfig<'a> {
     pub replay_path: Option<&'a str>,
     pub replay_mode_str: &'a str,
     pub save_trace_path: Option<&'a str>,
+    pub through_step: Option<&'a str>,
     pub strict: bool,
 }
 
@@ -260,6 +261,10 @@ fn select_target_name<'a>(cfg: &'a RunConfig<'_>) -> Option<&'a str> {
 /// dispatch over the parsed `contents` and config.
 fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>) {
     if crux_script::is_cruxfile(contents) {
+        if cfg.through_step.is_some() {
+            eprintln!("error: --through is not supported for Cruxfile targets");
+            std::process::exit(2);
+        }
         let target_name = select_target_name(cfg).map(String::from);
         if cfg.dry_run {
             cmd_dry_run_cruxfile(contents, pipeline_path, target_name.as_deref());
@@ -279,6 +284,10 @@ fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>
 
 /// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
 pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
+    if cfg.dry_run && cfg.through_step.is_some() {
+        eprintln!("error: --through cannot be combined with --dry-run");
+        std::process::exit(2);
+    }
     let Some(pipeline_path) = resolve_pipeline_path(cfg.pipeline_arg) else {
         if cfg.check {
             eprintln!("error: --check does not support stdin ('-') pipelines");
@@ -590,10 +599,21 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     });
 
     let start = Instant::now();
-    let crux = if let Some(ref prev) = previous {
-        rt.block_on(runner.run_compiled_with_replay(&compiled, input, prev, replay_mode))
-    } else {
-        rt.block_on(runner.run_compiled(&compiled, input))
+    let crux = match (previous.as_ref(), cfg.through_step) {
+        (Some(previous), Some(through)) => rt.block_on(runner.run_compiled_through_with_replay(
+            &compiled,
+            input,
+            previous,
+            replay_mode,
+            through,
+        )),
+        (Some(previous), None) => {
+            rt.block_on(runner.run_compiled_with_replay(&compiled, input, previous, replay_mode))
+        }
+        (None, Some(through)) => {
+            rt.block_on(runner.run_compiled_through(&compiled, input, through))
+        }
+        (None, None) => rt.block_on(runner.run_compiled(&compiled, input)),
     };
     let elapsed = start.elapsed();
 
@@ -716,6 +736,7 @@ mod tests {
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: chrono::Utc::now(),
             duration_ms,
@@ -760,6 +781,7 @@ mod tests {
             replay_path: None,
             replay_mode_str: "strict",
             save_trace_path: None,
+            through_step: None,
             strict: false,
         }
     }

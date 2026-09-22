@@ -8,7 +8,7 @@ use chrono::Utc;
 
 use std::collections::HashMap;
 
-use crate::step::{Step, StepKind, StepStatus};
+use crate::step::{Step, StepKind, StepOrigin, StepStatus};
 
 /// Build a plain, successful `Step` with the given name, input hash, and output.
 pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> Step {
@@ -17,6 +17,7 @@ pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -
         name: name.into(),
         kind: StepKind::Plain,
         status: StepStatus::Ok,
+        origin: StepOrigin::Live,
         confidence: 1.0,
         started_at: Utc::now(),
         duration_ms: 0,

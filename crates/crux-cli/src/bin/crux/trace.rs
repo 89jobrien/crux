@@ -21,9 +21,10 @@ pub fn cmd_trace(
             && min_confidence.is_none_or(|minimum| step.confidence >= minimum)
     }) {
         println!(
-            "{index:>3} {:<10} {:<12} {:>6}ms {:>5.2} {}",
+            "{index:>3} {:<10} {:<12} {:<9} {:>6}ms {:>5.2} {}",
             format!("{:?}", step.status),
             format!("{:?}", step.kind),
+            format!("{:?}", step.origin),
             step.duration_ms,
             step.confidence,
             step.name

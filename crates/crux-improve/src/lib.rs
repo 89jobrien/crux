@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // Re-export trace types so downstream only needs `crux-improve`.
 pub use crux_schema::crux_value::Crux;
 pub use crux_types::id::CruxId;
-pub use crux_types::step::{Step, StepKind, StepStatus};
+pub use crux_types::step::{Step, StepKind, StepOrigin, StepStatus};
 
 const SUCCESS_WEIGHT: f32 = 0.60;
 const CONFIDENCE_WEIGHT: f32 = 0.40;
@@ -352,6 +352,7 @@ mod tests {
             name: name.into(),
             kind: StepKind::Plain,
             status,
+            origin: StepOrigin::Live,
             confidence,
             started_at: Utc::now(),
             duration_ms: 100,

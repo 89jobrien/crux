@@ -16,6 +16,7 @@ fn trace_command_filters_and_renders_timeline() {
     let timeline = String::from_utf8(output.stdout).unwrap();
     assert!(timeline.contains("Timeline"), "{timeline}");
     assert!(timeline.contains("gather_data::read_metrics"), "{timeline}");
+    assert!(timeline.contains("Live"), "{timeline}");
 }
 
 #[test]

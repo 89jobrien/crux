@@ -169,6 +169,9 @@ enum Cli {
         /// Override automatic trace path (Cruxfiles append .<target>.json)
         #[arg(long)]
         save_trace: Option<String>,
+        /// Execute through this named top-level step (inclusive)
+        #[arg(long, value_name = "STEP")]
+        through: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
     Plan {
@@ -244,6 +247,7 @@ fn main() {
             replay,
             replay_mode,
             save_trace,
+            through,
             strict,
         } => {
             if check
@@ -273,6 +277,7 @@ fn main() {
                 replay_path: replay.as_deref(),
                 replay_mode_str: &replay_mode,
                 save_trace_path: save_trace.as_deref(),
+                through_step: through.as_deref(),
                 strict,
             });
         }

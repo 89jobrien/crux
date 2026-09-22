@@ -108,6 +108,7 @@ impl<T: Serialize> Crux<T> {
                     "name": s.name,
                     "kind": s.kind,
                     "status": s.status,
+                    "origin": s.origin,
                     "duration_ms": s.duration_ms,
                     "confidence": s.confidence,
                 });
@@ -298,7 +299,8 @@ mod tests {
 
     #[test]
     fn to_trace_json_produces_presentation_format() {
-        let crux = sample_crux();
+        let mut crux = sample_crux();
+        crux.steps[0].origin = crux_types::step::StepOrigin::Replayed;
         let trace = crux.to_trace_json();
         assert_eq!(trace["agent"], "test");
         assert_eq!(trace["status"], "ok");
@@ -306,6 +308,7 @@ mod tests {
         let steps = trace["steps"].as_array().unwrap();
         assert_eq!(steps[0]["name"], "greet");
         assert_eq!(steps[0]["status"], "ok");
+        assert_eq!(steps[0]["origin"], "replayed");
         assert!(steps[0].get("input_hash").is_none(), "hashes omitted");
     }
 

@@ -85,7 +85,20 @@ impl Runner {
 
     /// Execute a pipeline whose handlers were resolved during compilation.
     pub async fn run_compiled(&self, pipeline: &TypedPipeline, input: Value) -> Crux<Value> {
-        self.run_compiled_core(pipeline, input, None, ReplayMode::Strict)
+        self.run_compiled_core(pipeline, input, None, ReplayMode::Strict, None)
+            .await
+    }
+
+    /// Execute a compiled pipeline through one named top-level step.
+    ///
+    /// The boundary step is included. Nested control-flow nodes remain atomic.
+    pub async fn run_compiled_through(
+        &self,
+        pipeline: &TypedPipeline,
+        input: Value,
+        through: &str,
+    ) -> Crux<Value> {
+        self.run_compiled_core(pipeline, input, None, ReplayMode::Strict, Some(through))
             .await
     }
 
@@ -100,14 +113,20 @@ impl Runner {
         previous: &Crux<Value>,
         mode: ReplayMode,
     ) -> Crux<Value> {
-        if pipeline.is_confidence_dependent() {
-            let ctx = CruxCtx::new(&pipeline.name);
-            return ctx.finalize(Err(CruxErr::step_failed(
-                &pipeline.name,
-                "confidence-dependent typed pipelines cannot be replayed",
-            )));
-        }
-        self.run_compiled_core(pipeline, input, Some(previous), mode)
+        self.run_compiled_core(pipeline, input, Some(previous), mode, None)
+            .await
+    }
+
+    /// Execute a compiled pipeline through one named top-level step using replayed values.
+    pub async fn run_compiled_through_with_replay(
+        &self,
+        pipeline: &TypedPipeline,
+        input: Value,
+        previous: &Crux<Value>,
+        mode: ReplayMode,
+        through: &str,
+    ) -> Crux<Value> {
+        self.run_compiled_core(pipeline, input, Some(previous), mode, Some(through))
             .await
     }
 
@@ -117,8 +136,31 @@ impl Runner {
         input: Value,
         previous: Option<&Crux<Value>>,
         mode: ReplayMode,
+        through: Option<&str>,
     ) -> Crux<Value> {
         let mut ctx = CruxCtx::new(&pipeline.name);
+        let steps = match through {
+            Some(boundary) => {
+                let Some(index) = pipeline.steps.iter().position(|step| step.name == boundary)
+                else {
+                    return ctx.finalize(Err(CruxErr::step_failed(
+                        &pipeline.name,
+                        format!("unknown top-level step boundary '{boundary}'"),
+                    )));
+                };
+                &pipeline.steps[..=index]
+            }
+            None => pipeline.steps.as_slice(),
+        };
+        let replay_version =
+            crux_runtime::recorder::hash_content(&(pipeline.definition_fingerprint, &input));
+        ctx.set_pipeline_version(format!("compiled-{replay_version:016x}"));
+        if previous.is_some() && pipeline.prefix_is_confidence_dependent(steps.len()) {
+            return ctx.finalize(Err(CruxErr::step_failed(
+                &pipeline.name,
+                "confidence-dependent typed pipelines cannot be replayed",
+            )));
+        }
         if let Some(schema) = &pipeline.input_schema
             && let Err(violation) = schema.validate(&input)
         {
@@ -154,7 +196,7 @@ impl Runner {
         }
 
         let result = self
-            .execute_typed_steps(&mut ctx, &pipeline.steps, input, &mut expr_ctx, &mut scopes)
+            .execute_typed_steps(&mut ctx, steps, input, &mut expr_ctx, &mut scopes)
             .await;
         ctx.finalize(result)
     }
@@ -2335,6 +2377,49 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    fn compiled_counted_pipeline() -> (
+        Runner,
+        TypedPipeline,
+        Arc<AtomicU32>,
+        Arc<AtomicU32>,
+        Arc<AtomicU32>,
+    ) {
+        let first_calls = Arc::new(AtomicU32::new(0));
+        let second_calls = Arc::new(AtomicU32::new(0));
+        let third_calls = Arc::new(AtomicU32::new(0));
+        let mut registry = HandlerRegistry::new();
+
+        for (name, calls) in [
+            ("test::first", Arc::clone(&first_calls)),
+            ("test::second", Arc::clone(&second_calls)),
+            ("test::third", Arc::clone(&third_calls)),
+        ] {
+            registry.handler_value(name, move |input| {
+                let calls = Arc::clone(&calls);
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(input)
+                }
+            });
+        }
+
+        let pipeline = crate::load(
+            "pipeline: bounded\nsteps:\n  - step: first\n    handler: test::first\n  - step: second\n    handler: test::second\n  - step: third\n    handler: test::third\n",
+        )
+        .unwrap();
+        let compiled =
+            crate::compile_pipeline(&pipeline, &registry, crate::CompileOptions::permissive())
+                .into_artifact()
+                .unwrap();
+        (
+            Runner::new(Arc::new(registry)),
+            compiled,
+            first_calls,
+            second_calls,
+            third_calls,
+        )
+    }
+
     struct DelayedMeter {
         duration: Option<std::time::Duration>,
     }
@@ -2863,6 +2948,243 @@ mod tests {
             1,
             "handler should not re-execute during replay"
         );
+    }
+
+    #[tokio::test]
+    async fn partial_replay_restores_completed_steps_and_reexecutes_failed_step() {
+        let fetch_calls = Arc::new(AtomicU32::new(0));
+        let evaluate_calls = Arc::new(AtomicU32::new(0));
+        let finalize_calls = Arc::new(AtomicU32::new(0));
+        let mut registry = HandlerRegistry::new();
+
+        let calls = Arc::clone(&fetch_calls);
+        registry.handler_value("test::fetch", move |_| {
+            let calls = Arc::clone(&calls);
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(serde_json::json!({"context": "ready"}))
+            }
+        });
+        let calls = Arc::clone(&evaluate_calls);
+        registry.handler_value("test::evaluate", move |input| {
+            let calls = Arc::clone(&calls);
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let calls = Arc::clone(&finalize_calls);
+        registry.handler_value("test::finalize", move |input| {
+            let calls = Arc::clone(&calls);
+            async move {
+                let attempt = calls.fetch_add(1, Ordering::SeqCst);
+                if attempt == 0 {
+                    Err(CruxErr::step_failed("finalize", "injected timeout"))
+                } else {
+                    Ok(input)
+                }
+            }
+        });
+
+        let pipeline = crate::load(
+            "pipeline: partial_replay\nsteps:\n  - step: fetch\n    handler: test::fetch\n  - step: evaluate\n    handler: test::evaluate\n  - step: finalize\n    handler: test::finalize\n",
+        )
+        .unwrap();
+        let runner = Runner::new(Arc::new(registry));
+        let failed = runner.run(&pipeline, Value::Null).await;
+        assert!(failed.value().is_err());
+
+        let resumed = runner
+            .run_with_replay(&pipeline, Value::Null, &failed, ReplayMode::Strict)
+            .await;
+
+        assert!(resumed.value().is_ok(), "{:?}", resumed.value());
+        assert_eq!(fetch_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(evaluate_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(finalize_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            resumed
+                .steps
+                .iter()
+                .map(|step| step.origin)
+                .collect::<Vec<_>>(),
+            vec![StepOrigin::Replayed, StepOrigin::Replayed, StepOrigin::Live,]
+        );
+        assert_eq!(resumed.steps[0].duration_ms, 0);
+        assert_eq!(resumed.steps[1].duration_ms, 0);
+    }
+
+    #[tokio::test]
+    async fn compiled_through_executes_named_prefix() {
+        let (runner, pipeline, first, second, third) = compiled_counted_pipeline();
+
+        let trace = runner
+            .run_compiled_through(&pipeline, serde_json::json!({"value": 1}), "second")
+            .await;
+
+        assert!(trace.value().is_ok(), "{:?}", trace.value());
+        assert_eq!(first.load(Ordering::SeqCst), 1);
+        assert_eq!(second.load(Ordering::SeqCst), 1);
+        assert_eq!(third.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            trace
+                .steps
+                .iter()
+                .map(|step| step.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second"]
+        );
+    }
+
+    #[tokio::test]
+    async fn compiled_through_replay_only_executes_new_step() {
+        let (runner, pipeline, first, second, third) = compiled_counted_pipeline();
+        let input = serde_json::json!({"value": 1});
+        let first_trace = runner
+            .run_compiled_through(&pipeline, input.clone(), "first")
+            .await;
+
+        let second_trace = runner
+            .run_compiled_through_with_replay(
+                &pipeline,
+                input,
+                &first_trace,
+                ReplayMode::Strict,
+                "second",
+            )
+            .await;
+
+        assert!(second_trace.value().is_ok(), "{:?}", second_trace.value());
+        assert_eq!(first.load(Ordering::SeqCst), 1);
+        assert_eq!(second.load(Ordering::SeqCst), 1);
+        assert_eq!(third.load(Ordering::SeqCst), 0);
+        assert_eq!(second_trace.steps[0].origin, StepOrigin::Replayed);
+        assert_eq!(second_trace.steps[1].origin, StepOrigin::Live);
+    }
+
+    #[tokio::test]
+    async fn compiled_through_rejects_unknown_boundary() {
+        let (runner, pipeline, first, second, third) = compiled_counted_pipeline();
+
+        let trace = runner
+            .run_compiled_through(&pipeline, Value::Null, "missing")
+            .await;
+
+        assert!(trace.value().is_err());
+        assert!(
+            trace
+                .value()
+                .as_ref()
+                .unwrap_err()
+                .to_string()
+                .contains("unknown top-level step boundary 'missing'")
+        );
+        assert_eq!(first.load(Ordering::SeqCst), 0);
+        assert_eq!(second.load(Ordering::SeqCst), 0);
+        assert_eq!(third.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn compiled_through_strict_replay_rejects_changed_input() {
+        let (runner, pipeline, first, second, third) = compiled_counted_pipeline();
+        let first_trace = runner
+            .run_compiled_through(&pipeline, serde_json::json!({"value": 1}), "first")
+            .await;
+
+        let changed = runner
+            .run_compiled_through_with_replay(
+                &pipeline,
+                serde_json::json!({"value": 2}),
+                &first_trace,
+                ReplayMode::Strict,
+                "second",
+            )
+            .await;
+
+        assert!(changed.value().is_err());
+        assert_eq!(first.load(Ordering::SeqCst), 1);
+        assert_eq!(second.load(Ordering::SeqCst), 0);
+        assert_eq!(third.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn compiled_through_strict_replay_rejects_changed_pipeline() {
+        let (runner, pipeline, first, _, _) = compiled_counted_pipeline();
+        let input = serde_json::json!({"value": 1});
+        let first_trace = runner
+            .run_compiled_through(&pipeline, input.clone(), "first")
+            .await;
+
+        let mut changed_definition = crate::load(
+            "pipeline: bounded\nsteps:\n  - step: first\n    handler: test::first\n    timeout_ms: 99\n  - step: second\n    handler: test::second\n  - step: third\n    handler: test::third\n",
+        )
+        .unwrap();
+        changed_definition.display = None;
+        let changed = crate::compile_pipeline(
+            &changed_definition,
+            runner.registry.as_ref(),
+            crate::CompileOptions::permissive(),
+        )
+        .into_artifact()
+        .unwrap();
+        let replayed = runner
+            .run_compiled_through_with_replay(
+                &changed,
+                input,
+                &first_trace,
+                ReplayMode::Strict,
+                "second",
+            )
+            .await;
+
+        assert!(replayed.value().is_err());
+        assert_eq!(first.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn compiled_through_allows_safe_prefix_before_confidence_dependency() {
+        let mut registry = HandlerRegistry::new();
+        registry.handler_value("test::first", |input| async move { Ok(input) });
+        registry.handler_free("test::score", |_input| async move {
+            Ok(crate::HandlerOutput::with_confidence(Value::Null, 0.9))
+        });
+        registry.handler_value("test::low", |input| async move { Ok(input) });
+        registry.handler_value("test::high", |input| async move { Ok(input) });
+        let definition = crate::load(
+            "pipeline: confidence_prefix\nsteps:\n  - step: first\n    handler: test::first\n  - step: score\n    handler: test::score\n  - route_on_confidence: route\n    value: \"{{ steps.score.confidence }}\"\n    routes:\n      - range: \"[0.0, 0.5)\"\n        label: low\n        handler: test::low\n      - range: \"[0.5, 1.0]\"\n        label: high\n        handler: test::high\n",
+        )
+        .unwrap();
+        let pipeline =
+            crate::compile_pipeline(&definition, &registry, crate::CompileOptions::permissive())
+                .into_artifact()
+                .unwrap();
+        let runner = Runner::new(Arc::new(registry));
+        let input = serde_json::json!({"value": 1});
+        let first_trace = runner
+            .run_compiled_through(&pipeline, input.clone(), "first")
+            .await;
+
+        let prefix = runner
+            .run_compiled_through_with_replay(
+                &pipeline,
+                input.clone(),
+                &first_trace,
+                ReplayMode::Strict,
+                "score",
+            )
+            .await;
+        assert!(prefix.value().is_ok(), "{:?}", prefix.value());
+
+        let full = runner
+            .run_compiled_through_with_replay(
+                &pipeline,
+                input,
+                &prefix,
+                ReplayMode::Strict,
+                "route",
+            )
+            .await;
+        assert!(full.value().is_err());
     }
 
     #[tokio::test]

@@ -408,7 +408,7 @@ impl CruxCtx {
         output: Option<serde_json::Value>,
         error: Option<String>,
     ) {
-        use crate::types::step::{StepKind, StepStatus};
+        use crate::types::step::{StepKind, StepOrigin, StepStatus};
 
         let status = if child_crux.value.is_ok() {
             StepStatus::Ok
@@ -421,6 +421,7 @@ impl CruxCtx {
             name: name.to_string(),
             kind: StepKind::Delegation,
             status,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: child_crux.started_at,
             duration_ms: child_crux.duration_ms().unwrap_or(0),
@@ -652,10 +653,10 @@ impl CruxCtx {
                 .replay
                 .check_by_name(&step_name, ordinal, input_hash, None)
             {
-                ReplayResult::Hit(cached) => {
+                ReplayResult::Hit(cached, confidence) => {
                     let value: T = deserialize_replay(&step_name, cached.clone())?;
                     self.recorder
-                        .record_replay(&step_name, input_hash, None, 1.0, cached);
+                        .record_replay(&step_name, input_hash, None, confidence, cached);
                     Some(value)
                 }
                 ReplayResult::Mismatch { expected, actual } => {
@@ -1025,11 +1026,16 @@ impl CruxCtx {
             .replay
             .check_by_name(name, ordinal, input_hash, content_hash)
         {
-            ReplayResult::Hit(cached) => {
+            ReplayResult::Hit(cached, cached_confidence) => {
                 trace_replay_hit!(name);
                 let value: T = deserialize_replay(name, cached.clone())?;
-                self.recorder
-                    .record_replay(name, input_hash, content_hash, confidence, cached);
+                self.recorder.record_replay(
+                    name,
+                    input_hash,
+                    content_hash,
+                    cached_confidence,
+                    cached,
+                );
                 return Ok(value);
             }
             ReplayResult::Mismatch { expected, actual } => {
@@ -1414,11 +1420,11 @@ impl Context for CruxCtx {
 
         // Replay check
         match self.replay.check_by_name(name, ordinal, input_hash, None) {
-            ReplayResult::Hit(cached) => {
+            ReplayResult::Hit(cached, confidence) => {
                 trace_replay_hit!(name);
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
-                    .record_replay(name, input_hash, None, 1.0, cached);
+                    .record_replay(name, input_hash, None, confidence, cached);
                 return Ok(value);
             }
             ReplayResult::Mismatch { expected, actual } => {
@@ -1473,7 +1479,7 @@ pub fn determine_final_phase(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::step::StepStatus;
+    use crate::types::step::{StepOrigin, StepStatus};
 
     #[tokio::test]
     async fn step_records_success() {
@@ -1483,6 +1489,7 @@ mod tests {
         assert_eq!(ctx.snapshot_steps().len(), 1);
         assert_eq!(ctx.snapshot_steps()[0].name, "greet");
         assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Ok);
+        assert_eq!(ctx.snapshot_steps()[0].origin, StepOrigin::Live);
     }
 
     #[tokio::test]
@@ -1798,6 +1805,26 @@ mod tests {
             .unwrap();
         assert_eq!(val, "cached_data");
         assert_eq!(ctx2.snapshot_steps()[0].attempt, 0);
+        assert_eq!(ctx2.snapshot_steps()[0].origin, StepOrigin::Replayed);
+    }
+
+    #[tokio::test]
+    async fn replay_preserves_cached_confidence() {
+        let mut first = CruxCtx::new("test");
+        first
+            .step_with_confidence("score", 0.42, || async { Ok("cached".to_string()) })
+            .await
+            .unwrap();
+        let snapshot = first.finalize(Ok(serde_json::Value::Null));
+
+        let mut replayed = CruxCtx::new("test");
+        replayed.replay_from(&snapshot);
+        replayed
+            .step_with_confidence("score", 1.0, || async { Ok("live".to_string()) })
+            .await
+            .unwrap();
+
+        assert_eq!(replayed.snapshot_steps()[0].confidence, 0.42);
     }
 
     #[tokio::test]

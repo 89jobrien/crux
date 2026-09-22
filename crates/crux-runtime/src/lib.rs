@@ -68,6 +68,6 @@ pub mod prelude {
     pub use crate::types::harness::{HarnessDiff, HarnessProfile, ResourceHints};
     pub use crate::types::id::{CruxId, TaskId};
     pub use crate::types::recovery::{Recovery, RecoveryChain};
-    pub use crate::types::step::{Step, StepKind, StepStatus};
+    pub use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
     pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 }

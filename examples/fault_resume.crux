@@ -1,0 +1,53 @@
+pipeline: fault_resume
+display:
+  title: Fault & Resume
+  output: always
+  steps:
+    fetch_context: Fetch context over HTTP
+    evaluate_output: Evaluate context over HTTP
+    finalize: Finalize result over HTTP
+
+steps:
+  - step: fetch_context
+    handler: http::request
+    args:
+      method: GET
+      url: "{{ input.base_url }}/context"
+      max_response_bytes: 16384
+      timeout_ms: 2000
+      network_policy:
+        allowed_hosts: [127.0.0.1]
+        allow_http: true
+        allow_private_networks: true
+
+  - step: evaluate_output
+    handler: http::request
+    args:
+      method: POST
+      url: "{{ input.base_url }}/evaluate"
+      headers:
+        content-type: application/json
+      body:
+        context_response: "{{ steps.fetch_context.output.body }}"
+      max_response_bytes: 16384
+      timeout_ms: 2000
+      network_policy:
+        allowed_hosts: [127.0.0.1]
+        allow_http: true
+        allow_private_networks: true
+
+  - step: finalize
+    handler: http::request
+    args:
+      method: POST
+      url: "{{ input.base_url }}/finalize"
+      headers:
+        content-type: application/json
+      body:
+        evaluation_response: "{{ steps.evaluate_output.output.body }}"
+      max_response_bytes: 16384
+      timeout_ms: "{{ input.finalize_timeout_ms }}"
+      network_policy:
+        allowed_hosts: [127.0.0.1]
+        allow_http: true
+        allow_private_networks: true

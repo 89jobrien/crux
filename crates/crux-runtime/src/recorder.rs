@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 
 use std::collections::HashMap;
 
-use crate::types::step::{Step, StepKind, StepStatus};
+use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
 
 /// Port for redacting sensitive data before it enters the trace.
 ///
@@ -93,6 +93,7 @@ impl StepRecorder {
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Live,
             confidence: rec.confidence,
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
@@ -120,6 +121,7 @@ impl StepRecorder {
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Err,
+            origin: StepOrigin::Live,
             confidence: rec.confidence,
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
@@ -143,6 +145,7 @@ impl StepRecorder {
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Skipped,
+            origin: StepOrigin::Live,
             confidence,
             started_at: Utc::now(),
             duration_ms: 0,
@@ -173,6 +176,7 @@ impl StepRecorder {
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Replayed,
             confidence,
             started_at: Utc::now(),
             duration_ms: 0,

@@ -30,12 +30,13 @@ struct ReplayEntry {
     input_hash: u64,
     content_hash: Option<u64>,
     output: Option<serde_json::Value>,
+    confidence: f32,
 }
 
 /// Result of checking the replay cache for a given step.
 pub enum ReplayResult {
     /// Cache hit — return the cached output without re-executing.
-    Hit(serde_json::Value),
+    Hit(serde_json::Value, f32),
     /// The step at this ordinal has a different hash — trace diverged.
     Mismatch { expected: u64, actual: u64 },
     /// No cached entry at this ordinal — execute normally.
@@ -92,6 +93,7 @@ impl ReplayCache {
                 input_hash: s.input_hash,
                 content_hash: s.content_hash,
                 output: s.output.clone(),
+                confidence: s.confidence,
             })
             .collect();
         self.enabled = true;
@@ -108,7 +110,7 @@ impl ReplayCache {
 
         match self.entries.get(ordinal as usize) {
             Some(entry) if entry.input_hash == input_hash => match &entry.output {
-                Some(output) => ReplayResult::Hit(output.clone()),
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                 None => ReplayResult::Miss,
             },
             Some(entry) => match self.mode {
@@ -158,7 +160,7 @@ impl ReplayCache {
                 };
             }
             return match &entry.output {
-                Some(output) => ReplayResult::Hit(output.clone()),
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                 None => ReplayResult::Miss,
             };
         }
@@ -167,7 +169,7 @@ impl ReplayCache {
         if let Some(entry) = self.entries.get(ordinal as usize) {
             if entry.name == name && entry.input_hash == input_hash {
                 return match &entry.output {
-                    Some(output) => ReplayResult::Hit(output.clone()),
+                    Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                     None => ReplayResult::Miss,
                 };
             }
@@ -206,7 +208,7 @@ impl ReplayCache {
                     continue;
                 }
                 return match &entry.output {
-                    Some(output) => ReplayResult::Hit(output.clone()),
+                    Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                     None => ReplayResult::Miss,
                 };
             }
@@ -253,7 +255,7 @@ impl ReplayCache {
                 };
             }
             return match &entry.output {
-                Some(output) => ReplayResult::Hit(output.clone()),
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                 None => ReplayResult::Miss,
             };
         }
@@ -286,7 +288,7 @@ impl ReplayCache {
 impl std::fmt::Debug for ReplayResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Hit(_) => write!(f, "ReplayResult::Hit(...)"),
+            Self::Hit(..) => write!(f, "ReplayResult::Hit(...)"),
             Self::Mismatch { expected, actual } => {
                 write!(f, "ReplayResult::Mismatch({expected} vs {actual})")
             }
@@ -331,7 +333,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check(0, 42) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("hello")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("hello")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -399,7 +401,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 10, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -420,7 +422,7 @@ mod tests {
         // Lenient mode scans forward by name and finds "parse" at index 2.
         // The hash differs (input_hash encodes ordinal), but lenient matches by name.
         match cache.check_by_name("parse", 1, 999, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("parsed")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("parsed")),
             other => panic!("expected Hit from forward scan, got {other:?}"),
         }
     }
@@ -455,7 +457,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_identity("pipeline.parse", "renamed parse", 0, 999, None) {
-            ReplayResult::Hit(value) => assert_eq!(value, serde_json::json!("parsed")),
+            ReplayResult::Hit(value, _) => assert_eq!(value, serde_json::json!("parsed")),
             other => panic!("expected stable-id replay hit, got {other:?}"),
         }
     }
@@ -553,7 +555,7 @@ mod tests {
         // Looking for "fetch" at ordinal 0 with content_hash 200 — should skip the
         // entry at index 1 (content_hash 100) and hit index 2 (content_hash 200).
         match cache.check_by_name("fetch", 0, 999, Some(200)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("new_input")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("new_input")),
             other => panic!("expected Hit with matching content_hash, got {other:?}"),
         }
     }
@@ -569,7 +571,7 @@ mod tests {
 
         // content_hash matches — should hit.
         match cache.check_by_name("fetch", 0, 999, Some(100)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -585,7 +587,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 999, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit (no content_hash filter), got {other:?}"),
         }
     }
@@ -601,7 +603,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 999, Some(100)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit (cached has no content_hash), got {other:?}"),
         }
     }
@@ -675,7 +677,7 @@ mod proptest_replay {
             )]);
             cache.seed_from(&snapshot);
             prop_assert!(cache.is_enabled());
-            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Hit(_)));
+            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Hit(..)));
         }
 
         /// Out-of-bounds ordinal always returns Miss.
@@ -767,7 +769,7 @@ mod proptest_replay {
 
             for (i, &hash) in hashes.iter().enumerate() {
                 prop_assert!(
-                    matches!(cache.check(i as u32, hash), ReplayResult::Hit(_)),
+                    matches!(cache.check(i as u32, hash), ReplayResult::Hit(..)),
                     "expected Hit at ordinal {i}"
                 );
             }
