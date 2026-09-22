@@ -10,6 +10,7 @@ use clap::{Parser, ValueEnum};
 
 mod check;
 mod handlers;
+mod init;
 mod output;
 mod plan;
 mod registry;
@@ -47,6 +48,12 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+    },
+    /// Scaffold a new Crux Rust project and sample pipeline
+    Init {
+        /// Destination directory
+        #[arg(default_value = ".")]
+        path: String,
     },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
@@ -146,6 +153,7 @@ fn main() {
         Cli::Handlers { format, plugins } => {
             handlers::cmd_handlers(format, plugins.as_deref());
         }
+        Cli::Init { path } => init::cmd_init(&path),
         Cli::Check {
             paths,
             strict,
