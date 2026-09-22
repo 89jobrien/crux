@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod doctor;
 mod handlers;
 mod init;
 mod output;
@@ -54,6 +55,12 @@ enum Cli {
         /// Destination directory
         #[arg(default_value = ".")]
         path: String,
+    },
+    /// Diagnose local capabilities and configuration without exposing secrets
+    Doctor {
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
     },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
@@ -154,6 +161,7 @@ fn main() {
             handlers::cmd_handlers(format, plugins.as_deref());
         }
         Cli::Init { path } => init::cmd_init(&path),
+        Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
         Cli::Check {
             paths,
             strict,
