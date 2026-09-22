@@ -307,6 +307,21 @@ impl CruxCtx {
         }
     }
 
+    /// Append steps produced by isolated child execution in caller-defined order.
+    ///
+    /// Replay identities are reassigned against this context's ordinal sequence so
+    /// independently recorded traces can be merged deterministically.
+    pub fn append_trace_steps(
+        &mut self,
+        steps: impl IntoIterator<Item = crate::types::step::Step>,
+    ) {
+        for mut step in steps {
+            let (_, input_hash) = self.recorder.next_ordinal(&step.name);
+            step.input_hash = input_hash;
+            self.recorder.push_raw(step);
+        }
+    }
+
     /// Checkpoint current trace to a TaskRegistry.
     ///
     /// Serializes the in-progress trace and stores it as the task's checkpoint.

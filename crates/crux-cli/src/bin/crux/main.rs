@@ -11,10 +11,17 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod doctor;
+mod handlers;
+mod init;
 mod output;
 mod plan;
 mod registry;
+mod replay_debug;
 mod run;
+mod schema;
+mod test_cmd;
+mod trace;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -39,6 +46,60 @@ enum Cli {
         #[arg(default_value = ".")]
         root: String,
     },
+    /// Generate documentation from registered handler metadata
+    Handlers {
+        /// Catalog serialization format
+        #[arg(long, value_enum, default_value_t = handlers::HandlerFormat::Markdown)]
+        format: handlers::HandlerFormat,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
+    },
+    /// Scaffold a new Crux Rust project and sample pipeline
+    Init {
+        /// Destination directory
+        #[arg(default_value = ".")]
+        path: String,
+    },
+    /// Diagnose local capabilities and configuration without exposing secrets
+    Doctor {
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
+    },
+    /// Run a JSON pipeline fixture with deterministic mocked handlers
+    Test {
+        /// Fixture JSON path
+        fixture: String,
+    },
+    /// Inspect serialized replay traces and explain drift
+    ReplayDebug {
+        /// Serialized Crux trace
+        trace: String,
+        /// Show one step in detail
+        #[arg(long)]
+        step: Option<usize>,
+        /// Compare against another trace
+        #[arg(long)]
+        compare: Option<String>,
+    },
+    /// Explore a serialized Crux execution trace
+    Trace {
+        /// Serialized Crux trace
+        trace: String,
+        /// Filter by step status
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by step kind
+        #[arg(long)]
+        kind: Option<String>,
+        /// Filter by minimum confidence
+        #[arg(long)]
+        min_confidence: Option<f32>,
+        /// Export the causal graph as Mermaid
+        #[arg(long)]
+        mermaid: bool,
+    },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
         /// Pipeline/Cruxfile paths to check
@@ -50,6 +111,18 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Emit diagnostics as JSON for editors and CI
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export the JSON Schema for .crux pipeline definitions
+    Schema {
+        /// Serialization format
+        #[arg(long, value_enum, default_value_t = schema::SchemaFormat::Json)]
+        format: schema::SchemaFormat,
+        /// Write the schema to a file for editor configuration
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -125,11 +198,37 @@ fn main() {
 
     match cli {
         Cli::List { root } => cmd_list(&root),
+        Cli::Handlers { format, plugins } => {
+            handlers::cmd_handlers(format, plugins.as_deref());
+        }
+        Cli::Init { path } => init::cmd_init(&path),
+        Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
+        Cli::Test { fixture } => test_cmd::cmd_test(&fixture),
+        Cli::ReplayDebug {
+            trace,
+            step,
+            compare,
+        } => replay_debug::cmd_replay_debug(&trace, step, compare.as_deref()),
+        Cli::Trace {
+            trace,
+            status,
+            kind,
+            min_confidence,
+            mermaid,
+        } => trace::cmd_trace(
+            &trace,
+            status.as_deref(),
+            kind.as_deref(),
+            min_confidence,
+            mermaid,
+        ),
         Cli::Check {
             paths,
             strict,
             plugins,
-        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict),
+            json,
+        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict, json),
+        Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
         Cli::Run {
             pipeline,
             target_or_input,
@@ -155,6 +254,7 @@ fn main() {
                     std::slice::from_ref(path),
                     plugins.as_deref(),
                     strict,
+                    false,
                 );
                 return;
             }

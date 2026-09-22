@@ -29,7 +29,7 @@ All four loop constructs (`poll`, `for_each`, `while`, `repeat`) support an opti
 inside their `steps:` block.
 
 **`for_each:` binding-name syntax note**: due to a confirmed parser limitation in
-`serde-saphyr` 0.0.23 (untagged enum struct-variants silently fail to deserialize once
+`serde-saphyr` 1.3.0 (untagged enum struct-variants silently fail to deserialize once
 they carry more than 3 non-`#[serde(default)]` fields), the per-item binding name is
 packed into the `for_each:` label instead of a separate `as:` field:
 

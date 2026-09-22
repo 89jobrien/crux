@@ -2,8 +2,6 @@
 //!
 //! Define agent pipelines declaratively in YAML files, register step handlers
 //! in Rust, and execute without recompilation.
-// TODO(#99): pipeline validation pass — catch bad refs, missing handlers, type
-//   mismatches, and unreachable steps before execution starts (static analysis)
 pub mod compiler;
 pub mod expr;
 pub mod handler_output;
@@ -26,8 +24,92 @@ pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
 
 /// Load a pipeline definition from a file path.
 pub fn load_file(path: impl AsRef<std::path::Path>) -> Result<PipelineDef, LoadError> {
-    let contents = std::fs::read_to_string(path)?;
+    let mut stack = Vec::new();
+    let value = load_composed_value(path.as_ref(), &mut stack)?;
+    let contents = serde_yaml::to_string(&value)?;
     Ok(serde_saphyr::from_str(&contents)?)
+}
+
+fn load_composed_value(
+    path: &std::path::Path,
+    stack: &mut Vec<std::path::PathBuf>,
+) -> Result<serde_yaml::Value, LoadError> {
+    let canonical = path.canonicalize()?;
+    if let Some(start) = stack.iter().position(|ancestor| ancestor == &canonical) {
+        let mut cycle = stack[start..].to_vec();
+        cycle.push(canonical);
+        return Err(LoadError::IncludeCycle(
+            cycle
+                .iter()
+                .map(|entry| entry.display().to_string())
+                .collect::<Vec<_>>()
+                .join(" -> "),
+        ));
+    }
+    stack.push(canonical.clone());
+    let contents = std::fs::read_to_string(&canonical)?;
+    let mut value: serde_yaml::Value = serde_yaml::from_str(&contents)?;
+    let base = canonical
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    expand_includes(&mut value, base, stack)?;
+    stack.pop();
+    Ok(value)
+}
+
+fn expand_includes(
+    value: &mut serde_yaml::Value,
+    base: &std::path::Path,
+    stack: &mut Vec<std::path::PathBuf>,
+) -> Result<(), LoadError> {
+    match value {
+        serde_yaml::Value::Mapping(mapping) => {
+            if let Some(serde_yaml::Value::Sequence(steps)) =
+                mapping.get_mut(serde_yaml::Value::String("steps".to_string()))
+            {
+                let mut expanded = Vec::new();
+                for mut step in std::mem::take(steps) {
+                    let include = step.as_mapping().and_then(|entry| {
+                        ["include", "import"].into_iter().find_map(|key| {
+                            entry
+                                .get(serde_yaml::Value::String(key.to_string()))
+                                .and_then(serde_yaml::Value::as_str)
+                        })
+                    });
+                    if let Some(include) = include {
+                        let child = load_composed_value(&base.join(include), stack)?;
+                        let child_steps = child
+                            .as_mapping()
+                            .and_then(|pipeline| {
+                                pipeline.get(serde_yaml::Value::String("steps".to_string()))
+                            })
+                            .and_then(serde_yaml::Value::as_sequence)
+                            .ok_or_else(|| LoadError::InvalidInclude(include.to_string()))?;
+                        expanded.extend(child_steps.iter().cloned());
+                    } else {
+                        expand_includes(&mut step, base, stack)?;
+                        expanded.push(step);
+                    }
+                }
+                *steps = expanded;
+            }
+            for nested in mapping.values_mut() {
+                expand_includes(nested, base, stack)?;
+            }
+        }
+        serde_yaml::Value::Sequence(values) => {
+            for nested in values {
+                expand_includes(nested, base, stack)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Generate the JSON Schema used to validate declarative pipeline files.
+pub fn pipeline_json_schema() -> schemars::Schema {
+    schemars::schema_for!(PipelineDef)
 }
 
 /// Detect whether a YAML string is a Cruxfile (multi-target) rather than a pipeline.
@@ -48,6 +130,12 @@ pub enum LoadError {
     Io(#[from] std::io::Error),
     #[error("YAML parse error: {0}")]
     Yaml(#[from] serde_saphyr::Error),
+    #[error("YAML composition error: {0}")]
+    CompositionYaml(#[from] serde_yaml::Error),
+    #[error("include cycle detected: {0}")]
+    IncludeCycle(String),
+    #[error("included pipeline '{0}' has no steps sequence")]
+    InvalidInclude(String),
 }
 
 pub use compiler::{Compilation, CompileMode, CompileOptions, compile_cruxfile, compile_pipeline};
