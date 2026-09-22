@@ -49,7 +49,9 @@ pub mod prelude {
     pub use crate::replay::ReplayMode;
     pub use crate::safety::{SafetyPolicy, SafetyViolation};
     pub use crate::trust::{TrustRegistry, TrustScore};
-    pub use crate::types::budget::{Budget, BudgetUsage, HandlerUsage, UsdAmount};
+    pub use crate::types::budget::{
+        Budget, BudgetLedger, BudgetLedgerEntry, BudgetUsage, HandlerUsage, UsdAmount,
+    };
     pub use crate::types::crux_value::Crux;
     pub use crate::types::error::CruxErr;
     pub use crate::types::evolution::EvolutionOutcome;
