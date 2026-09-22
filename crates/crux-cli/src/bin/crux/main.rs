@@ -19,6 +19,7 @@ mod replay_debug;
 mod run;
 mod schema;
 mod test_cmd;
+mod trace;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -79,6 +80,23 @@ enum Cli {
         /// Compare against another trace
         #[arg(long)]
         compare: Option<String>,
+    },
+    /// Explore a serialized Crux execution trace
+    Trace {
+        /// Serialized Crux trace
+        trace: String,
+        /// Filter by step status
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by step kind
+        #[arg(long)]
+        kind: Option<String>,
+        /// Filter by minimum confidence
+        #[arg(long)]
+        min_confidence: Option<f32>,
+        /// Export the causal graph as Mermaid
+        #[arg(long)]
+        mermaid: bool,
     },
     /// Compile-check one or more .crux pipelines or Cruxfiles
     Check {
@@ -189,6 +207,19 @@ fn main() {
             step,
             compare,
         } => replay_debug::cmd_replay_debug(&trace, step, compare.as_deref()),
+        Cli::Trace {
+            trace,
+            status,
+            kind,
+            min_confidence,
+            mermaid,
+        } => trace::cmd_trace(
+            &trace,
+            status.as_deref(),
+            kind.as_deref(),
+            min_confidence,
+            mermaid,
+        ),
         Cli::Check {
             paths,
             strict,
