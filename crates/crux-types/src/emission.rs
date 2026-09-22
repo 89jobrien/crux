@@ -216,6 +216,47 @@ impl EventSink for JsonlWriter {
     }
 }
 
+/// In-process counters rendered in the Prometheus text exposition format.
+#[derive(Default)]
+pub struct MetricsSink {
+    emissions: std::sync::atomic::AtomicU64,
+    completed: std::sync::atomic::AtomicU64,
+    failed: std::sync::atomic::AtomicU64,
+    duration_ms: std::sync::atomic::AtomicU64,
+}
+
+impl MetricsSink {
+    /// Render a scrape-ready snapshot of the current counters.
+    pub fn render_prometheus(&self) -> String {
+        use std::sync::atomic::Ordering;
+        format!(
+            "crux_emissions_total {}\ncrux_steps_completed_total {}\n\
+             crux_steps_failed_total {}\ncrux_step_duration_milliseconds_total {}\n",
+            self.emissions.load(Ordering::Relaxed),
+            self.completed.load(Ordering::Relaxed),
+            self.failed.load(Ordering::Relaxed),
+            self.duration_ms.load(Ordering::Relaxed),
+        )
+    }
+}
+
+impl EventSink for MetricsSink {
+    fn emit(&self, emission: Emission) {
+        use std::sync::atomic::Ordering;
+        self.emissions.fetch_add(1, Ordering::Relaxed);
+        match emission {
+            Emission::StepComplete { duration_ms, .. } => {
+                self.completed.fetch_add(1, Ordering::Relaxed);
+                self.duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
+            }
+            Emission::StepError { .. } => {
+                self.failed.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // VectorFileSink — JSONL with Vector-friendly envelope (timestamp + source)
 // ---------------------------------------------------------------------------
@@ -500,6 +541,26 @@ mod tests {
     fn jsonl_writer_does_not_panic_on_bad_path() {
         let writer = JsonlWriter::new("/nonexistent/dir/trace.jsonl");
         writer.emit(Emission::StepStart { name: "x".into() });
+    }
+
+    #[test]
+    fn metrics_sink_exports_prometheus_counters() {
+        let sink = MetricsSink::default();
+        sink.emit(Emission::StepStart { name: "a".into() });
+        sink.emit(Emission::StepComplete {
+            name: "a".into(),
+            duration_ms: 12,
+        });
+        sink.emit(Emission::StepError {
+            name: "b".into(),
+            error: "boom".into(),
+        });
+
+        let metrics = sink.render_prometheus();
+        assert!(metrics.contains("crux_emissions_total 3"));
+        assert!(metrics.contains("crux_steps_completed_total 1"));
+        assert!(metrics.contains("crux_steps_failed_total 1"));
+        assert!(metrics.contains("crux_step_duration_milliseconds_total 12"));
     }
 
     // -- VectorFileSink --

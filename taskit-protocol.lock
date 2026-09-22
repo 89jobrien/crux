@@ -40,7 +40,7 @@
     {
       "name": "crux-types-emission",
       "path": "crates/crux-types/src/emission.rs",
-      "hash": "28e469fcb6a7601b59c01630c6ff79f124019c5f405abd579704ed03bd898860"
+      "hash": "2db5fda847f731ecafe9377807297d2f57ed748e1d83919704d1db26385028f7"
     },
     {
       "name": "crux-script-step_runner",
