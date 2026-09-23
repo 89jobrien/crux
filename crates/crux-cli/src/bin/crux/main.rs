@@ -17,6 +17,7 @@ mod init;
 mod output;
 mod plan;
 mod registry;
+mod regress;
 mod replay_debug;
 mod run;
 mod schema;
@@ -40,6 +41,11 @@ enum OutputType {
 #[derive(Parser)]
 #[command(name = "crux", about = "crux pipeline runner and planner")]
 enum Cli {
+    /// Manage golden traces and run offline regression evaluation
+    Regress {
+        #[command(subcommand)]
+        command: regress::RegressCommand,
+    },
     /// List discovered .crux pipeline files under a directory
     List {
         /// Root directory to scan (default: current directory)
@@ -203,6 +209,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
+        Cli::Regress { command } => regress::cmd_regress(command),
         Cli::List { root } => cmd_list(&root),
         Cli::Handlers { format, plugins } => {
             handlers::cmd_handlers(format, plugins.as_deref());
