@@ -1,11 +1,11 @@
 //! Registration and manifest tests for CLI planning handlers.
 
-/// Tests for `crux plan` CLI wiring (#17).
-///
-/// Tests verify that:
-/// - `llm::plan` handler is registered by `register_all` with the `baml` feature
-/// - `llm::stream` appears in the handler manifest used for planning
-/// - Plan errors without API key produce a useful error message
+//! Tests for `crux plan` CLI wiring (#17).
+//!
+//! Tests verify that:
+//! - `llm::plan` handler is registered by `register_all` with the `baml` feature
+//! - `llm::stream` appears in the handler manifest used for planning
+//! - Plan errors without API key produce a useful error message
 
 #[cfg(feature = "baml")]
 #[test]
