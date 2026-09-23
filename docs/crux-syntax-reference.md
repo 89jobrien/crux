@@ -268,8 +268,9 @@ and USD are recorded after completion, making those dimensions soft caps. Under
 a USD budget, unreported cost fails closed even when the handler fails; explicit
 free usage reports zero. The compatibility `consume(amount)` method applies the
 scalar to every configured counter for historical source compatibility; it does
-not update typed `BudgetUsage`. Pipeline `delegate` nodes remain an exception: their
-nested budget is ignored and delegated work is not charged to pipeline usage.
+not update typed `BudgetUsage`. Pipeline `delegate` nodes enforce their nested
+budget in an isolated child context, preserve the child trace, and charge the
+delegation plus measured child usage to the parent pipeline budget.
 
 ## `TaskRegistry`
 

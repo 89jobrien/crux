@@ -12,7 +12,7 @@ Native support status for crux-script pipeline step types and handlers.
 | Speculate (race)   | `speculate:` + `mode: first_ok`    | Supported                                                       |
 | Speculate (pick)   | `speculate:` + `mode: pick_best`   | Supported -- uses `score` field if present, else deterministic fallback by output length (#68) |
 | Confidence routing | `route_on_confidence:` + `routes:` | Supported -- handlers must use `HandlerOutput::with_confidence` |
-| Delegation         | `delegate:`                        | Partial -- parses but no agents pre-registered                  |
+| Delegation         | `delegate:`                        | Supported for registered agents; scoped budget and child trace preserved |
 | Post-step assertions | `step:` + `expect:`               | Supported -- `exit_code`, `stdout_contains`, `stderr_contains`  |
 | Tolerated failure  | `step:`/arm + `allow_failure: true`| Supported -- failing step/arm output becomes an error-describing value instead of aborting |
 | Per-step timeout   | `step:` + `timeout_ms:`            | Supported -- wraps the handler in `tokio::time::timeout`         |
@@ -43,9 +43,10 @@ packed into the `for_each:` label instead of a separate `as:` field:
         value: "{{ iter.n }}"
 ```
 
-Budget fields parsed: `tokens`, `calls`, `duration_ms`, `cost_cents`. Loop iterations
-tick the pipeline budget automatically since each iteration's nested steps (and the
-per-iteration trace marker) go through the normal `ctx.step()` path.
+Budget fields parsed: `steps`, `tokens`, `usd`, `calls`, `duration_ms`, and
+`cost_cents`. Loop iterations tick the pipeline budget automatically. Delegates
+reserve one parent step, enforce their node-local budget in a child context, and
+charge measured child usage back to the parent.
 
 ### Handler Registration
 

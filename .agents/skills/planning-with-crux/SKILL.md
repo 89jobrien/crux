@@ -63,9 +63,10 @@ invocation does not start. Equality with a limit succeeds.
 
 USD budgets fail closed when a handler does not report cost. Register known-free
 handlers explicitly so they report zero rather than unknown cost. `delegate`
-nodes are the exception: their nested `budget` is currently ignored and delegated
-agent work is not metered against the pipeline budget. Use `timeout_ms` for an
-enforced per-step wall-clock timeout.
+nodes run in a child runtime context: their nested `budget` scopes the child run,
+the delegation consumes a parent pipeline step, and child duration/token/USD
+usage is charged back to the parent. Use `timeout_ms` for an enforced per-step
+wall-clock timeout.
 
 ## Checklist
 
