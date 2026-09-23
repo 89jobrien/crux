@@ -28,6 +28,9 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec {
         name: "crux-improve",
     },
+    CrateSpec {
+        name: "crux-regression",
+    },
     CrateSpec { name: "crux-baml" },
     CrateSpec {
         name: "crux-stdlib",

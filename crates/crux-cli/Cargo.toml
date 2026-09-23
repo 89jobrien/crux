@@ -20,11 +20,14 @@ chrono = { workspace = true }
 clap = { workspace = true }
 crux-agentic = { workspace = true }
 crux-baml = { workspace = true, optional = true }
+crux-improve = { workspace = true }
 crux-plugin = { workspace = true }
+crux-regression = { workspace = true }
 crux-runtime = { workspace = true }
 crux-schema = { workspace = true }
 crux-types = { workspace = true, features = ["miette"] }
 crux-script = { workspace = true }
+dirs = { workspace = true }
 miette = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
