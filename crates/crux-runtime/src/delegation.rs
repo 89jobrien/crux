@@ -53,7 +53,6 @@ impl CruxCtx {
         T: Send + serde::Serialize + serde::de::DeserializeOwned,
         F: for<'a> FnOnce(&'a mut CruxCtx) -> DelegatedFuture<'a, T> + Send,
     {
-        trace_delegate!(name, agent_name);
         match self.plan_action(name) {
             PlanResult::Deny { reason } => {
                 return Err(CruxErr::Denied {
