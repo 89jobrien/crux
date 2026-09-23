@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "execution_identity": {
+    "execution_id": "exec_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "session_id": null,
+    "parent_execution_ids": [],
+    "actor": {
+      "kind": "agent",
+      "id": "looprs"
+    }
+  },
+  "intent_digest": {
+    "algorithm": "sha256",
+    "value": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "authority": {
+    "kind": "service",
+    "id": "rulery"
+  },
+  "policy": {
+    "name": "workspace-policy",
+    "version": "1.0.0",
+    "digest": {
+      "algorithm": "sha256",
+      "value": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  },
+  "decision": {
+    "decision": "allow",
+    "grant": {
+      "filesystem": [],
+      "network": "denied",
+      "environment_names": [],
+      "secrets": [],
+      "process": {
+        "privileged": false
+      },
+      "resources": {
+        "wall_time_ms": null,
+        "memory_bytes": null,
+        "cpu_weight": null,
+        "process_count": null,
+        "output_bytes": null
+      }
+    }
+  },
+  "reasons": [
+    {
+      "code": "policy.allow",
+      "message": "request satisfies policy"
+    }
+  ],
+  "algorithm": "ed25519",
+  "key_id": "rulery-key-1",
+  "audience": "minibox://native-test",
+  "issued_at": "2026-09-22T00:00:00.000000000Z",
+  "expires_at": "2026-09-22T00:05:00.000000000Z",
+  "nonce": "nonce-authorization-1"
+}

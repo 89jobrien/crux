@@ -17,6 +17,7 @@ categories = ["development-tools", "asynchronous"]
 
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
@@ -43,6 +44,8 @@ futures = "0.3"
 
 # File patterns
 glob = "0.3"
+hex = "0.4"
+jcs-admit = "0.1.0"
 
 # Diagnostics
 miette = { version = "7", features = ["fancy"] }
@@ -63,6 +66,7 @@ serde = { version = "1", features = ["derive"] }
 serde-saphyr = "0.0.23"
 serde_json = "1"
 serde_yaml = "0.9"
+sha2 = "0.10"
 
 # Shared vocabulary
 slashcrux = "0.1.1"

@@ -3,7 +3,7 @@ name = "crux-types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-rust-version.workspace = true
+rust-version = "1.85"
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -19,10 +19,18 @@ vector-file = []
 miette = ["dep:miette"]
 
 [dependencies]
+base64.workspace = true
 chrono = { workspace = true, features = ["serde"] }
+hex.workspace = true
+jcs-admit.workspace = true
 miette = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2.workspace = true
+thiserror.workspace = true
 ulid = { workspace = true, features = ["serde"] }
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true

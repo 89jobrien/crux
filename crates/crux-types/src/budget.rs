@@ -512,18 +512,20 @@ impl BudgetTracker {
                         actual_micros: u64::MAX,
                         source: None,
                     });
-                } else if let Some(counter) = self
-                    .counters
-                    .iter()
-                    .find(|counter| counter.kind == BudgetKind::Usd)
-                    && counter.used > counter.limit
-                    && violation.is_none()
-                {
-                    violation = Some(CruxErr::UsdBudgetExceeded {
-                        limit_micros: counter.limit,
-                        actual_micros: counter.used,
-                        source: None,
-                    });
+                } else if violation.is_none() {
+                    if let Some(counter) = self
+                        .counters
+                        .iter()
+                        .find(|counter| counter.kind == BudgetKind::Usd)
+                    {
+                        if counter.used > counter.limit {
+                            violation = Some(CruxErr::UsdBudgetExceeded {
+                                limit_micros: counter.limit,
+                                actual_micros: counter.used,
+                                source: None,
+                            });
+                        }
+                    }
                 }
             }
         }
