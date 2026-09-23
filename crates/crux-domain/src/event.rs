@@ -5,6 +5,8 @@
 //! consumed by observers without touching the trace directly.
 use serde::{Deserialize, Serialize};
 
+use crux_types::emission::Emission;
+
 /// A typed event emitted during step execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -32,6 +34,41 @@ pub enum StepEvent {
 }
 
 impl StepEvent {
+    /// Converts this compatibility event into the canonical runtime emission.
+    pub fn into_emission(self) -> Emission {
+        match self {
+            Self::Started { step_name } => Emission::StepStart { name: step_name },
+            Self::Chunk { step_name, payload } => Emission::StepChunk {
+                name: step_name,
+                payload,
+            },
+            Self::Completed {
+                step_name,
+                duration_ms,
+            } => Emission::StepComplete {
+                name: step_name,
+                duration_ms,
+            },
+            Self::Failed { step_name, error } => Emission::StepError {
+                name: step_name,
+                error,
+            },
+            Self::Skipped { step_name, reason } => Emission::StepSkipped {
+                name: step_name,
+                reason,
+            },
+            Self::Denied { step_name, reason } => Emission::StepDenied {
+                name: step_name,
+                reason,
+            },
+            Self::Custom { tag, payload } => Emission::Decision {
+                source: "step_event".into(),
+                key: tag,
+                value: payload,
+            },
+        }
+    }
+
     /// Return the associated step name for lifecycle events.
     pub fn step_name(&self) -> Option<&str> {
         match self {

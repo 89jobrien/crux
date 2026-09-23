@@ -2,11 +2,11 @@
 crate: crux-runtime
 total: 3
 by_status:
-  open: 3
-  done: 0
+  open: 2
+  done: 1
 items:
   - id: 78
-    status: open
+    status: done
     priority: medium
     area: events
     title: "EDDOS-style event aggregation"
@@ -27,10 +27,10 @@ items:
 
 ## TODO: crux-runtime
 
-- [ ] **#78** EDDOS-style event aggregation — unify heterogeneous step
+- [x] **#78** EDDOS-style event aggregation — unify heterogeneous step
   types into a typed event stream (MPSC -> enrichment -> batching ->
   broadcast) for analytics, replay filtering, and multi-agent
-  coordination
+  coordination. Completed by #120's ordered `RuntimeEvent` stream.
 - [ ] **#80** Token-shape step priority — infer priority from naming
   convention
 - [ ] **#72** Planner-based action dispatch — refactor

@@ -175,6 +175,9 @@ enum Cli {
         /// Override automatic trace path (Cruxfiles append .<target>.json)
         #[arg(long)]
         save_trace: Option<String>,
+        /// Write ordered runtime events as JSONL (Cruxfiles append .<target>.jsonl)
+        #[arg(long, value_name = "PATH")]
+        events_jsonl: Option<String>,
         /// Execute through this named top-level step (inclusive)
         #[arg(long, value_name = "STEP")]
         through: Option<String>,
@@ -254,6 +257,7 @@ fn main() {
             replay,
             replay_mode,
             save_trace,
+            events_jsonl,
             through,
             strict,
         } => {
@@ -284,6 +288,7 @@ fn main() {
                 replay_path: replay.as_deref(),
                 replay_mode_str: &replay_mode,
                 save_trace_path: save_trace.as_deref(),
+                events_jsonl_path: events_jsonl.as_deref(),
                 through_step: through.as_deref(),
                 strict,
             });
@@ -348,6 +353,18 @@ mod tests {
     fn run_accepts_json_output_mode() {
         let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json"]);
         assert!(matches!(cli, Ok(Cli::Run { json: true, .. })));
+    }
+
+    #[test]
+    fn run_accepts_events_jsonl_path() {
+        let cli = Cli::try_parse_from([
+            "crux",
+            "run",
+            "pipeline.crux",
+            "--events-jsonl",
+            "events.jsonl",
+        ]);
+        assert!(cli.is_ok());
     }
 
     #[test]

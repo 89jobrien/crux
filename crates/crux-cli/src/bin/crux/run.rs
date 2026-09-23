@@ -43,6 +43,7 @@ pub struct RunConfig<'a> {
     pub replay_path: Option<&'a str>,
     pub replay_mode_str: &'a str,
     pub save_trace_path: Option<&'a str>,
+    pub events_jsonl_path: Option<&'a str>,
     pub through_step: Option<&'a str>,
     pub strict: bool,
 }
@@ -112,6 +113,11 @@ fn automatic_trace_path(
 fn persist_trace(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
     std::fs::write(path, json)
+}
+
+fn persist_events_jsonl(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
+    let jsonl = trace_to_jsonl(trace).map_err(std::io::Error::other)?;
+    std::fs::write(path, jsonl)
 }
 
 fn persist_automatic_trace(
@@ -397,6 +403,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let quiet = cfg.quiet;
     let verbose = cfg.verbose;
     let save_trace_path = cfg.save_trace_path;
+    let events_jsonl_path = cfg.events_jsonl_path;
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
         eprintln!("error: failed to parse {path}: {e}");
         std::process::exit(1);
@@ -506,6 +513,20 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
                 trace_persistence_failed = true;
             }
         }
+        if let Some(events_prefix) = events_jsonl_path {
+            let path = PathBuf::from(format!("{events_prefix}.{target_name}.jsonl"));
+            match persist_events_jsonl(&crux, &path) {
+                Ok(()) => {
+                    if !quiet {
+                        eprintln!("[crux] events saved to {}", path.display());
+                    }
+                }
+                Err(error) => {
+                    eprintln!("[crux] failed to save events: {error}");
+                    trace_persistence_failed = true;
+                }
+            }
+        }
     }
 
     let elapsed = start.elapsed();
@@ -556,6 +577,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let replay_path = cfg.replay_path;
     let replay_mode_str = cfg.replay_mode_str;
     let save_trace_path = cfg.save_trace_path;
+    let events_jsonl_path = cfg.events_jsonl_path;
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")
@@ -653,6 +675,21 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
             Some(error.to_string())
         }
     };
+    let event_persistence_error = events_jsonl_path.and_then(|path| {
+        let path = PathBuf::from(path);
+        match persist_events_jsonl(&crux, &path) {
+            Ok(()) => {
+                if !cfg.quiet && !cfg.json {
+                    eprintln!("[crux] events saved to {}", path.display());
+                }
+                None
+            }
+            Err(error) => {
+                eprintln!("[crux] failed to save events: {error}");
+                Some(error.to_string())
+            }
+        }
+    });
 
     match output_mode(cfg) {
         OutputMode::Verbose => {
@@ -705,7 +742,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         false
     };
 
-    if execution_failed || trace_persistence_error.is_some() {
+    if execution_failed || trace_persistence_error.is_some() || event_persistence_error.is_some() {
         std::process::exit(1);
     }
 }
@@ -781,6 +818,7 @@ mod tests {
             replay_path: None,
             replay_mode_str: "strict",
             save_trace_path: None,
+            events_jsonl_path: None,
             through_step: None,
             strict: false,
         }
@@ -901,6 +939,25 @@ mod tests {
         // No trace envelope framing should leak into compact JSON output.
         assert!(!out.contains("Pipeline:"));
         assert!(!out.contains("Trace:"));
+    }
+
+    #[test]
+    fn events_jsonl_writes_ordered_runtime_events() {
+        let mut trace = ok_crux(json!({"answer": 42}));
+        trace.steps.push(ok_step("compile", 4));
+        let directory = tempfile::tempdir().expect("temporary directory should be created");
+        let path = directory.path().join("events.jsonl");
+
+        persist_events_jsonl(&trace, &path).expect("event JSONL should be persisted");
+
+        let contents = std::fs::read_to_string(path).expect("event JSONL should be readable");
+        let event: RuntimeEvent =
+            serde_json::from_str(contents.trim()).expect("event row should deserialize");
+        assert_eq!(event.sequence, 0);
+        assert!(matches!(
+            event.emission,
+            Emission::StepRecorded { ref name, .. } if name == "compile"
+        ));
     }
 
     #[test]
