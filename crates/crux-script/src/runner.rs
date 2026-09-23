@@ -1562,10 +1562,7 @@ impl Runner {
             .map(|(value, _)| value)
     }
 
-    /// Execute a `delegate:` node — looks up a registered agent and runs it via `ctx.step()`.
-    // TODO(automation-5): Register CLI agents and preserve child traces while enforcing
-    // DelegateNode budgets instead of recording delegation as an ordinary parent step.
-    // TODO(feature-idea-13): Use runtime delegation so YAML preserves child traces and budgets.
+    /// Execute a `delegate:` node through the runtime's scoped delegation boundary.
     async fn execute_delegate_step(
         &self,
         ctx: &mut CruxCtx,
@@ -1574,19 +1571,19 @@ impl Runner {
         expr_ctx: &mut ExprContext,
     ) -> Result<Value, CruxErr> {
         let step_name = node.name.as_deref().unwrap_or(&node.delegate);
-        let agent_runner = self
-            .registry
-            .get_agent(&node.delegate)
-            .ok_or_else(|| {
-                CruxErr::step_failed(step_name, format!("agent not found: {}", node.delegate))
-            })?
-            .clone();
+        let agent = self.registry.agent_binding(&node.delegate).ok_or_else(|| {
+            CruxErr::step_failed(step_name, format!("agent not found: {}", node.delegate))
+        })?;
 
         let input = current_input.clone();
-        let result = agent_runner(input).await;
-
-        // Record the delegation step in parent.
-        let output = ctx.step(step_name, || async { result }).await?;
+        let budget = node.budget.as_ref().map(budget_from_def).transpose()?;
+        let agent_name = node.delegate.clone();
+        let executor = Arc::clone(&agent.contextual_runner);
+        let output = ctx
+            .delegate_registered(step_name, &agent_name, budget, move |child_ctx| {
+                executor(child_ctx, input)
+            })
+            .await?;
 
         expr_ctx.steps.insert(
             step_name.to_string(),

@@ -120,7 +120,7 @@ fn cruxfile_never_registers_stub_for_nested_delegate() {
     let (_home, output) = run_cruxfile(CRUXFILE, false);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("invalid_control_flow"), "{stderr}");
+    assert!(stderr.contains("unknown_agent"), "{stderr}");
     assert!(!stderr.contains("using stub"), "{stderr}");
 }
 
@@ -129,7 +129,7 @@ fn strict_cruxfile_rejects_nested_unregistered_delegate() {
     let (_home, output) = run_cruxfile(CRUXFILE, true);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("invalid_control_flow"), "{stderr}");
+    assert!(stderr.contains("unknown_agent"), "{stderr}");
     assert!(!stderr.contains("using stub"), "{stderr}");
 }
 

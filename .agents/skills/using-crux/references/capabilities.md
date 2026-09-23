@@ -11,7 +11,7 @@ optional `crux-baml`.
 | Join | `join_all`, `arms` | Concurrent; output preserves arm order |
 | Speculate | `speculate`, `mode`, `arms` | Sequential; `first_ok` short-circuits, `pick_best` runs all |
 | Route | `route_on_confidence`, `value`, `routes` | One branch; ranges exactly cover `[0,1]` |
-| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; node-local budget is parsed but ignored |
+| Delegate | `delegate`, optional `name`, `budget` | Needs `agent_fn`; runs in a budgeted child context and preserves its trace |
 | Poll | `poll`, `steps`, `until`, optional limits | Do-while |
 | For each | `for_each`, `items`, `steps` | Sequential; parallel settings are ignored |
 | While | `while`, `condition`, `steps` | Pre-condition loop |
@@ -49,10 +49,10 @@ usage, so post-execution dimensions are soft caps.
 
 USD budgets fail closed: absent cost is `UnreportedCost`, while an
 explicitly free handler reports `Some(UsdAmount::ZERO)`. This applies on both
-successful and failed handler outcomes. The current exception is a `delegate`
-node: its nested budget is parsed but ignored, and delegated agent work is not
-charged to the pipeline tracker. Use `timeout_ms` for an enforced per-step
-wall-clock timeout.
+successful and failed handler outcomes. A `delegate` reserves one parent step,
+enforces its nested budget in an isolated child context, and charges measured
+child duration/token/USD usage back to the parent tracker. Use `timeout_ms` for
+an enforced per-step wall-clock timeout.
 
 Default registration includes stdlib, analysis, CI, container, harness, review,
 rx, SQLite, task, triage, and raw LLM handlers. `docker` selects Bollard instead

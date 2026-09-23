@@ -339,7 +339,16 @@ pub fn compile_pipeline(
                 &mut diagnostics,
                 &mut unresolved,
             ),
-            StepDef::Delegate(_) => None,
+            StepDef::Delegate(node) => {
+                mark_delegate_boundary(
+                    node,
+                    &location,
+                    &context,
+                    &mut diagnostics,
+                    &mut unresolved,
+                );
+                None
+            }
         };
 
         if let Some(compiled) = compiled {
@@ -447,7 +456,7 @@ fn step_name(step: &StepDef) -> Option<&str> {
         StepDef::ForEach(node) => Some(node.label()),
         StepDef::While(node) => Some(&node.r#while),
         StepDef::Repeat(node) => Some(&node.repeat),
-        StepDef::Delegate(_) => None,
+        StepDef::Delegate(node) => Some(node.name.as_deref().unwrap_or(&node.delegate)),
     }
 }
 
@@ -1181,7 +1190,10 @@ fn compile_nested_steps(
                 diagnostics,
                 unresolved,
             ),
-            StepDef::Delegate(_) => None,
+            StepDef::Delegate(node) => {
+                mark_delegate_boundary(node, &step_location, &context, diagnostics, unresolved);
+                None
+            }
         }?;
         current_schema = typed.output_schema.clone();
         bindings.insert(
@@ -1674,6 +1686,43 @@ fn resolve_runner(
         }
     }
     Some(runner.clone())
+}
+
+fn mark_delegate_boundary(
+    node: &crate::schema::DelegateNode,
+    location: &str,
+    context: &StepCompileContext<'_>,
+    diagnostics: &mut Vec<ValidationDiagnostic>,
+    unresolved: &mut bool,
+) {
+    let Some(metadata) = context.registry.agent_metadata(&node.delegate) else {
+        diagnostics.push(diagnostic_for_mode(
+            context.options,
+            ValidationCode::UnknownAgent,
+            location,
+            format!("agent '{}' is not registered", node.delegate),
+        ));
+        *unresolved = true;
+        return;
+    };
+    if !metadata.has_complete_contract() {
+        diagnostics.push(diagnostic_for_mode(
+            context.options,
+            ValidationCode::MissingContract,
+            location,
+            format!("agent '{}' has no complete contract", node.delegate),
+        ));
+    }
+    diagnostics.push(diagnostic_for_mode(
+        context.options,
+        ValidationCode::DynamicBoundary,
+        location,
+        format!(
+            "delegate '{}' executes through the runtime boundary",
+            node.delegate
+        ),
+    ));
+    *unresolved = true;
 }
 
 fn compile_args(

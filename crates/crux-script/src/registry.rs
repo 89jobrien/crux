@@ -31,10 +31,17 @@ pub type BoxAgentRunner = Arc<
     dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>> + Send + Sync,
 >;
 
+type BoxContextualAgentRunner = Arc<
+    dyn for<'a> Fn(&'a mut CruxCtx, Value) -> crux_runtime::delegation::DelegatedFuture<'a, Value>
+        + Send
+        + Sync,
+>;
+
 #[derive(Clone)]
 pub(crate) struct RegisteredAgent {
     pub(crate) metadata: AgentMetadata,
     pub(crate) runner: BoxAgentRunner,
+    pub(crate) contextual_runner: BoxContextualAgentRunner,
 }
 
 struct ClosureStepRunner {
@@ -166,6 +173,7 @@ impl HandlerRegistry {
         &mut self,
         metadata: AgentMetadata,
         runner: BoxAgentRunner,
+        contextual_runner: BoxContextualAgentRunner,
     ) -> Result<(), RegistryError> {
         let name = metadata.name.clone();
         if self.agents.contains_key(&name) {
@@ -183,14 +191,31 @@ impl HandlerRegistry {
                     source,
                 })?;
         }
-        self.agents
-            .insert(name, RegisteredAgent { metadata, runner });
+        self.agents.insert(
+            name,
+            RegisteredAgent {
+                metadata,
+                runner,
+                contextual_runner,
+            },
+        );
         Ok(())
     }
 
-    fn register_legacy_agent(&mut self, metadata: AgentMetadata, runner: BoxAgentRunner) {
-        self.agents
-            .insert(metadata.name.clone(), RegisteredAgent { metadata, runner });
+    fn register_legacy_agent(
+        &mut self,
+        metadata: AgentMetadata,
+        runner: BoxAgentRunner,
+        contextual_runner: BoxContextualAgentRunner,
+    ) {
+        self.agents.insert(
+            metadata.name.clone(),
+            RegisteredAgent {
+                metadata,
+                runner,
+                contextual_runner,
+            },
+        );
     }
 
     /// Register handler metadata for validation and introspection.
@@ -394,7 +419,9 @@ impl HandlerRegistry {
                 A::run(&mut ctx, input).await
             }) as Pin<Box<dyn Future<Output = Result<Value, CruxErr>> + Send>>
         });
-        self.register_legacy_agent(AgentMetadata::new(name_str), runner);
+        let contextual_runner: BoxContextualAgentRunner =
+            Arc::new(|ctx, input| Box::pin(A::run(ctx, input)));
+        self.register_legacy_agent(AgentMetadata::new(name_str), runner, contextual_runner);
     }
 
     /// Register a typed crux agent and reject duplicate names.
@@ -410,7 +437,9 @@ impl HandlerRegistry {
                 A::run(&mut ctx, input).await
             })
         });
-        self.register_agent(metadata, runner)
+        let contextual_runner: BoxContextualAgentRunner =
+            Arc::new(|ctx, input| Box::pin(A::run(ctx, input)));
+        self.register_agent(metadata, runner, contextual_runner)
     }
 
     /// Register a named agent using a plain async closure.
@@ -424,8 +453,12 @@ impl HandlerRegistry {
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
         let name = name.into();
-        let runner: BoxAgentRunner = Arc::new(move |v| Box::pin(f(v)));
-        self.register_legacy_agent(AgentMetadata::new(name), runner);
+        let f = Arc::new(f);
+        let direct = Arc::clone(&f);
+        let runner: BoxAgentRunner = Arc::new(move |value| Box::pin(direct(value)));
+        let contextual_runner: BoxContextualAgentRunner =
+            Arc::new(move |_ctx, value| Box::pin(f(value)));
+        self.register_legacy_agent(AgentMetadata::new(name), runner, contextual_runner);
     }
 
     /// Register a typed async agent closure and reject duplicate names.
@@ -438,8 +471,12 @@ impl HandlerRegistry {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, CruxErr>> + Send + 'static,
     {
-        let runner: BoxAgentRunner = Arc::new(move |value| Box::pin(f(value)));
-        self.register_agent(metadata, runner)
+        let f = Arc::new(f);
+        let direct = Arc::clone(&f);
+        let runner: BoxAgentRunner = Arc::new(move |value| Box::pin(direct(value)));
+        let contextual_runner: BoxContextualAgentRunner =
+            Arc::new(move |_ctx, value| Box::pin(f(value)));
+        self.register_agent(metadata, runner, contextual_runner)
     }
 
     /// Look up a handler by name.
