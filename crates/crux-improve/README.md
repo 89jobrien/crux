@@ -29,6 +29,13 @@ if comparison.verdict == Verdict::Improved {
   patches; `Strategy::apply` increments the version.
 - `Improvement` and `ImprovementKind`: evidence-backed proposal records.
 - `Comparison` and `Verdict`: old/new metrics and classified delta.
+- `EvalHarness` and `EvalReport`: validated quality, latency, and golden-answer gates. Latency
+  uses `LatencyRatio::Unbounded` instead of non-finite JSON numbers when a zero-duration baseline
+  is compared with a nonzero candidate.
+- `diff_traces`: strict equality or compatible ordered-subsequence comparison with explicit
+  replay provenance and confidence policies.
+- `RegressionPolicy` and `evaluate_regression`: combine metric thresholds, structural drift,
+  expected output, and trace-path-aware step invariants into one serializable report.
 - `StrategyPolicy`, `DefaultStrategyPolicy`, `StrategyViolation`: validation and approval port.
 - Re-exports: `Crux<T>`, `CruxId`, `Step`, `StepKind`, and `StepStatus`.
 
