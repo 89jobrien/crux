@@ -54,3 +54,32 @@ jobs:
 
       - name: cargo deny
         run: cargo deny check
+
+  handler-crates:
+    name: Handler crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: jdx/mise-action@v2
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Generate BAML client
+        working-directory: crates/crux-baml
+        run: mise exec -- baml-cli generate
+
+      - name: Rust clippy with BAML integration
+        run: cargo clippy -p crux-agentic -p crux-baml --features crux-agentic/baml --all-targets -- -D warnings
+
+      - name: Rust tests with BAML integration
+        run: cargo nextest run -p crux-agentic -p crux-baml --features crux-agentic/baml -E 'not (package(crux-agentic) & (binary(llm_extract) | binary(planner)))'
