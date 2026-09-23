@@ -16,6 +16,7 @@ use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
 use crux_domain::plan_result::PlanResult;
+use crux_types::emission::Emission;
 
 /// A named speculation arm.
 pub struct SpecArm<T> {
@@ -127,7 +128,10 @@ where
         F: Fn(&T) -> f32,
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
-        trace_speculate!(&self.name, self.arms.len());
+        self.ctx.emit(Emission::SpeculateStart {
+            name: self.name.clone(),
+            arm_count: self.arms.len(),
+        });
         if let Some(result) = self.planned_result()? {
             return Ok(result);
         }
@@ -315,7 +319,10 @@ where
     where
         R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
     {
-        trace_speculate!(&self.name, self.arms.len());
+        self.ctx.emit(Emission::SpeculateStart {
+            name: self.name.clone(),
+            arm_count: self.arms.len(),
+        });
         if let Some(result) = self.planned_result()? {
             return Ok(result);
         }

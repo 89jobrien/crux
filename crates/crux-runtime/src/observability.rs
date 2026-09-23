@@ -1,42 +1,31 @@
 //! Trace export adapters for post-hoc analysis and tracing subscribers.
 
-use serde::Serialize;
+use crux_types::emission::{Emission, RuntimeEvent};
 
 use crate::types::crux_value::Crux;
-
-#[derive(Serialize)]
-struct StepSpan<'a> {
-    trace_id: String,
-    agent: &'a str,
-    step: &'a str,
-    stable_id: Option<&'a str>,
-    kind: crate::types::step::StepKind,
-    status: crate::types::step::StepStatus,
-    origin: crate::types::step::StepOrigin,
-    confidence: f32,
-    started_at: chrono::DateTime<chrono::Utc>,
-    duration_ms: u64,
-    metadata: &'a std::collections::HashMap<String, serde_json::Value>,
-}
 
 /// Serialize every trace step as one structured JSONL span record.
 pub fn trace_to_jsonl<T>(trace: &Crux<T>) -> Result<String, serde_json::Error> {
     let mut output = String::new();
-    for step in &trace.steps {
-        let span = StepSpan {
-            trace_id: trace.id.to_string(),
-            agent: &trace.agent,
-            step: &step.name,
-            stable_id: step.stable_id.as_deref(),
-            kind: step.kind,
-            status: step.status,
-            origin: step.origin,
-            confidence: step.confidence,
-            started_at: step.started_at,
-            duration_ms: step.duration_ms,
-            metadata: &step.metadata,
+    for (sequence, step) in trace.steps.iter().enumerate() {
+        let event = RuntimeEvent {
+            sequence: sequence as u64,
+            emitted_at: step.started_at,
+            trace_id: Some(trace.id.clone()),
+            agent: Some(trace.agent.clone()),
+            emission: Emission::StepRecorded {
+                name: step.name.clone(),
+                stable_id: step.stable_id.clone(),
+                step_kind: step.kind,
+                status: step.status,
+                origin: step.origin,
+                confidence: step.confidence,
+                started_at: step.started_at,
+                duration_ms: step.duration_ms,
+                metadata: step.metadata.clone(),
+            },
         };
-        output.push_str(&serde_json::to_string(&span)?);
+        output.push_str(&serde_json::to_string(&event)?);
         output.push('\n');
     }
     Ok(output)

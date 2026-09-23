@@ -2,9 +2,6 @@
 //!
 //! Core runtime providing `CruxCtx`, `Agent` trait, `TaskRegistry`,
 //! replay, hooks, delegation, speculation, and governance primitives.
-#[macro_use]
-mod trace;
-
 pub mod agent;
 pub mod approval;
 pub mod audit;
@@ -33,6 +30,7 @@ mod kani_proofs;
 pub mod prelude {
     pub use crux_domain::action::{Action, StepIntent};
     pub use crux_domain::phase::{ExecutionPhase, InvalidPhaseTransition, PhaseTransition};
+    pub use crux_domain::pipeline::{EventPipeline, EventReceiver, EventSendError, EventSender};
     pub use crux_domain::plan_result::PlanResult;
     pub use crux_domain::planner::{DenyAllPlanner, PassthroughPlanner, Planner, SimulatePlanner};
 
@@ -45,6 +43,8 @@ pub mod prelude {
         RecoverablePipeStage,
     };
     pub use crate::event_log::{EventLog, EventLogError, LoggedEvent};
+    #[cfg(feature = "tracing")]
+    pub use crate::event_sink::TracingEventSink;
     pub use crate::governance::{
         GovernancePolicy, PolicyAction, PolicyDecision, PolicyDslError, compose_policies,
     };
@@ -69,5 +69,9 @@ pub mod prelude {
     pub use crate::types::id::{CruxId, TaskId};
     pub use crate::types::recovery::{Recovery, RecoveryChain};
     pub use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
+    pub use crux_types::emission::{
+        Emission, EventSink, JsonlWriter, MetricsSink, MultiSink, NullSink, RuntimeEvent,
+        RuntimeEventFilter,
+    };
     pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 }

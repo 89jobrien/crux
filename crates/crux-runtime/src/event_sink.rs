@@ -1,11 +1,48 @@
-//! EventSink — port for emitting step events from CruxCtx.
+//! Event sink adapters for ordered runtime events.
+
+#[cfg(feature = "tracing")]
+use crux_types::emission::{EventSink, RuntimeEvent};
+
+/// Forwards ordered runtime events to the `tracing` ecosystem.
+#[cfg(feature = "tracing")]
+pub struct TracingEventSink;
+
+#[cfg(feature = "tracing")]
+impl EventSink for TracingEventSink {
+    fn emit(&self, event: RuntimeEvent) {
+        tracing::info!(
+            sequence = event.sequence,
+            trace_id = ?event.trace_id,
+            agent = ?event.agent,
+            emission = ?event.emission,
+            "runtime.event"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::context::Context as _;
     use crate::ctx::CruxCtx;
     use crate::types::error::CruxErr;
-    use crux_domain::event::StepEvent;
     use crux_domain::pipeline::EventPipeline;
+    use crux_types::emission::{Emission, RuntimeEvent, RuntimeEventFilter};
+
+    #[cfg(feature = "tracing")]
+    #[test]
+    fn tracing_event_sink_accepts_ordered_events() {
+        use crux_types::emission::EventSink as _;
+
+        super::TracingEventSink.emit(RuntimeEvent {
+            sequence: 0,
+            emitted_at: chrono::Utc::now(),
+            trace_id: None,
+            agent: None,
+            emission: Emission::StepStart { name: "x".into() },
+        });
+    }
 
     #[test]
     fn trace_jsonl_exports_step_span_fields_and_metadata() {
@@ -20,14 +57,21 @@ mod tests {
             .insert("handler".into(), serde_json::json!("shell::run"));
 
         let jsonl = crate::observability::trace_to_jsonl(&trace).unwrap();
-        let row: serde_json::Value = serde_json::from_str(jsonl.trim()).unwrap();
+        let row: RuntimeEvent = serde_json::from_str(jsonl.trim()).unwrap();
 
-        assert_eq!(row["step"], "compile");
-        assert_eq!(row["status"], "ok");
-        assert_eq!(row["origin"], "live");
-        assert_eq!(row["metadata"]["handler"], "shell::run");
-        assert!(row["started_at"].is_string());
-        assert!(row["duration_ms"].is_number());
+        assert_eq!(row.sequence, 0);
+        assert_eq!(row.trace_id.as_ref(), Some(&trace.id));
+        assert_eq!(row.agent.as_deref(), Some("agent"));
+        assert!(matches!(
+            row.emission,
+            Emission::StepRecorded {
+                ref name,
+                status: crate::types::step::StepStatus::Ok,
+                origin: crate::types::step::StepOrigin::Live,
+                ref metadata,
+                ..
+            } if name == "compile" && metadata["handler"] == "shell::run"
+        ));
     }
 
     #[test]
@@ -36,21 +80,40 @@ mod tests {
             "crux-events-{}.jsonl",
             crate::types::id::CruxId::new()
         ));
-        let log = crate::event_log::EventLog::open(&path);
-        log.append(&StepEvent::Started {
-            step_name: "a".into(),
-        })
-        .unwrap();
-        log.append(&StepEvent::Completed {
-            step_name: "a".into(),
-            duration_ms: 1,
-        })
-        .unwrap();
+        let log = Arc::new(crate::event_log::EventLog::open(&path));
+        let pipeline = EventPipeline::with_sinks(64, vec![log.clone()]);
+        let mut receiver = pipeline.subscribe();
+        let sender = pipeline.sender();
+        sender.emit(None, None, Emission::ReplayHit { name: "a".into() });
+        sender.emit(
+            None,
+            None,
+            Emission::StepComplete {
+                name: "a".into(),
+                duration_ms: 1,
+            },
+        );
+        receiver.try_recv().unwrap();
+        receiver.try_recv().unwrap();
 
         let replayed = log.replay().unwrap();
         assert_eq!(replayed[0].sequence, 0);
         assert_eq!(replayed[1].sequence, 1);
-        assert!(matches!(replayed[1].event, StepEvent::Completed { .. }));
+        assert!(matches!(
+            replayed[1].emission,
+            Emission::StepComplete { .. }
+        ));
+        let replay_only = log
+            .replay_filtered(&RuntimeEventFilter {
+                replay_only: true,
+                step_name: None,
+            })
+            .unwrap();
+        assert_eq!(replay_only.len(), 1);
+        assert!(matches!(
+            replay_only[0].emission,
+            Emission::ReplayHit { .. }
+        ));
         std::fs::remove_file(path).unwrap();
     }
 
@@ -66,11 +129,14 @@ mod tests {
             .await
             .unwrap();
 
+        let replay_miss = rx.recv().await.unwrap();
+        assert!(matches!(replay_miss.emission, Emission::ReplayMiss { .. }));
         let ev = rx.recv().await.unwrap();
         assert!(
-            matches!(ev, StepEvent::Started { ref step_name } if step_name == "my_step"),
+            matches!(ev.emission, Emission::StepStart { ref name } if name == "my_step"),
             "expected Started, got: {ev:?}"
         );
+        assert_eq!(ev.sequence, 1);
     }
 
     #[tokio::test]
@@ -85,11 +151,12 @@ mod tests {
             .await
             .unwrap();
 
-        // Drain Started
+        // Drain ReplayMiss and Started
+        let _ = rx.recv().await.unwrap();
         let _ = rx.recv().await.unwrap();
         let ev = rx.recv().await.unwrap();
         assert!(
-            matches!(ev, StepEvent::Completed { ref step_name, .. } if step_name == "done_step"),
+            matches!(ev.emission, Emission::StepComplete { ref name, .. } if name == "done_step"),
             "expected Completed, got: {ev:?}"
         );
     }
@@ -108,11 +175,12 @@ mod tests {
             })
             .await;
 
-        // Drain Started
+        // Drain ReplayMiss and Started
+        let _ = rx.recv().await.unwrap();
         let _ = rx.recv().await.unwrap();
         let ev = rx.recv().await.unwrap();
         assert!(
-            matches!(ev, StepEvent::Failed { ref step_name, .. } if step_name == "bad_step"),
+            matches!(ev.emission, Emission::StepError { ref name, .. } if name == "bad_step"),
             "expected Failed, got: {ev:?}"
         );
     }
@@ -129,8 +197,36 @@ mod tests {
 
         let ev = rx.recv().await.unwrap();
         assert!(
-            matches!(ev, StepEvent::Chunk { ref step_name, .. } if step_name == "my_step"),
+            matches!(ev.emission, Emission::StepChunk { ref name, .. } if name == "my_step"),
             "expected Chunk, got: {ev:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn replay_diagnostics_share_the_ordered_runtime_stream() {
+        let mut original = CruxCtx::new("agent");
+        original
+            .step("cached", || async { Ok::<_, CruxErr>(42) })
+            .await
+            .unwrap();
+        let previous = original.finalize(Ok::<_, CruxErr>(serde_json::json!(42)));
+
+        let pipeline = EventPipeline::new(64);
+        let mut receiver = pipeline.subscribe();
+        let mut replay = CruxCtx::new("agent");
+        replay.set_event_sender(pipeline.sender());
+        replay.replay_from(&previous);
+        let value = replay
+            .step("cached", || async { Ok::<_, CruxErr>(0) })
+            .await
+            .unwrap();
+
+        assert_eq!(value, 42);
+        let event = receiver.recv().await.unwrap();
+        assert_eq!(event.sequence, 0);
+        assert!(matches!(
+            event.emission,
+            Emission::ReplayHit { ref name } if name == "cached"
+        ));
     }
 }

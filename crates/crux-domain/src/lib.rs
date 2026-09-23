@@ -130,10 +130,65 @@ mod tests {
 
 #[cfg(all(test, feature = "tokio-pipeline"))]
 mod pipeline_tests {
+    use std::sync::{Arc, Mutex};
+
     use crate::event::StepEvent;
     use crate::pipeline::EventPipeline;
+    use crux_types::emission::{EventSink, RuntimeEvent};
 
     const TEST_CHANNEL_CAPACITY: usize = 64;
+
+    #[derive(Default)]
+    struct RecordingSink(Mutex<Vec<RuntimeEvent>>);
+
+    impl EventSink for RecordingSink {
+        fn emit(&self, event: RuntimeEvent) {
+            self.0
+                .lock()
+                .expect("recording sink mutex should not be poisoned")
+                .push(event);
+        }
+    }
+
+    #[tokio::test]
+    async fn pipeline_orders_sinks_and_subscribers_identically() {
+        let sink = Arc::new(RecordingSink::default());
+        let pipeline = EventPipeline::with_sinks(TEST_CHANNEL_CAPACITY, vec![sink.clone()]);
+        let mut first = pipeline.subscribe();
+        let mut second = pipeline.subscribe();
+        let sender = pipeline.sender();
+
+        sender
+            .send(StepEvent::Started {
+                step_name: "compile".into(),
+            })
+            .expect("subscribers should receive started event");
+        sender
+            .send(StepEvent::Completed {
+                step_name: "compile".into(),
+                duration_ms: 4,
+            })
+            .expect("subscribers should receive completed event");
+
+        let first_events = [
+            first.recv().await.expect("first subscriber event 0"),
+            first.recv().await.expect("first subscriber event 1"),
+        ];
+        let second_events = [
+            second.recv().await.expect("second subscriber event 0"),
+            second.recv().await.expect("second subscriber event 1"),
+        ];
+        let sink_events = sink
+            .0
+            .lock()
+            .expect("recording sink mutex should not be poisoned")
+            .clone();
+
+        assert_eq!(first_events[0].sequence, 0);
+        assert_eq!(first_events[1].sequence, 1);
+        assert_eq!(first_events.as_slice(), second_events.as_slice());
+        assert_eq!(first_events.as_slice(), sink_events.as_slice());
+    }
 
     #[tokio::test]
     async fn pipeline_delivers_event_to_subscriber() {
@@ -148,7 +203,10 @@ mod pipeline_tests {
             .ok();
 
         let received = rx.recv().await.unwrap();
-        assert!(matches!(received, StepEvent::Started { .. }));
+        assert!(matches!(
+            received.emission,
+            crux_types::emission::Emission::StepStart { .. }
+        ));
     }
 
     #[tokio::test]
@@ -176,12 +234,12 @@ mod pipeline_tests {
             .ok();
 
         assert!(matches!(
-            rx1.recv().await.unwrap(),
-            StepEvent::Completed { .. }
+            rx1.recv().await.unwrap().emission,
+            crux_types::emission::Emission::StepComplete { .. }
         ));
         assert!(matches!(
-            rx2.recv().await.unwrap(),
-            StepEvent::Completed { .. }
+            rx2.recv().await.unwrap().emission,
+            crux_types::emission::Emission::StepComplete { .. }
         ));
     }
 }

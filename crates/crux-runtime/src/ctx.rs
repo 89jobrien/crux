@@ -134,10 +134,10 @@ use std::future::Future;
 
 use chrono::Utc;
 
-use crux_domain::event::StepEvent;
-use crux_domain::pipeline::EventSender;
+use crux_domain::pipeline::{EventPipeline, EventSender};
 use crux_domain::plan_result::PlanResult;
 use crux_domain::planner::{PassthroughPlanner, Planner};
+use crux_types::emission::Emission;
 
 use crate::context::{BudgetedInvocation, Context, InvocationMeter};
 use crate::hooks::HookRegistry;
@@ -163,7 +163,7 @@ pub struct CruxCtx {
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
     planner: std::sync::Arc<dyn Planner>,
-    event_sender: Option<EventSender>,
+    event_sender: EventSender,
     state: std::sync::Arc<std::sync::RwLock<crux_types::step::StepState>>,
 }
 
@@ -182,7 +182,7 @@ impl CruxCtx {
             started_at: Utc::now(),
             max_retries: DEFAULT_MAX_RETRIES,
             planner: std::sync::Arc::new(PassthroughPlanner),
-            event_sender: None,
+            event_sender: default_event_sender(),
             state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
@@ -248,27 +248,28 @@ impl CruxCtx {
         self.planner.next_action(name, priority)
     }
 
-    /// Attach an event sender so this context emits `StepEvent`s on every step.
-    // TODO(feature-idea-14): Unify runtime emissions and expose an ordered CLI JSONL stream.
-    // TODO(automation-13): Unify EventPipeline and crux-types EventSink emissions, then attach
-    // the unified sink in CLI runs so agent events and traces share one ordered stream.
+    /// Attach an event sender so this context emits ordered runtime events on every step.
     pub fn set_event_sender(&mut self, sender: EventSender) {
-        self.event_sender = Some(sender);
+        self.event_sender = sender;
     }
 
-    /// Emit a step event to the attached sender, if any.
-    fn emit(&self, event: StepEvent) {
-        if let Some(ref tx) = self.event_sender {
-            let _ = tx.send(event);
-        }
+    /// Clone the current event sender for child context propagation.
+    pub(crate) fn event_sender(&self) -> EventSender {
+        self.event_sender.clone()
+    }
+
+    /// Emit a canonical event to the attached ordered sender, if any.
+    pub(crate) fn emit(&self, emission: Emission) {
+        self.event_sender
+            .emit(Some(self.id.clone()), Some(&self.agent_name), emission);
     }
 
     /// Emit an intermediate event for a named step.
     ///
-    /// Broadcasts via the EventPipeline (if attached) as a `StepEvent::Chunk`.
+    /// Broadcasts via the EventPipeline (if attached) as a step chunk emission.
     pub fn emit_step_event(&self, step_name: &str, payload: serde_json::Value) {
-        self.emit(StepEvent::Chunk {
-            step_name: step_name.to_string(),
+        self.emit(Emission::StepChunk {
+            name: step_name.to_string(),
             payload,
         });
     }
@@ -507,7 +508,11 @@ impl CruxCtx {
         // Find and run the matching route
         for (range, label, fut) in routes {
             if range.contains(confidence) {
-                trace_route!(name, confidence, label);
+                self.emit(Emission::RouteMatched {
+                    name: name.to_string(),
+                    confidence,
+                    label: label.to_string(),
+                });
                 let step_name = format!("{name}::{label}");
                 let val = self.step_budgeted(&step_name, move || fut).await?;
                 // If the handler output is a JSON object with a "confidence" field
@@ -589,7 +594,10 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
-        trace_pipe!(name, stages.len());
+        self.emit(Emission::PipeStart {
+            name: name.to_string(),
+            stage_count: stages.len(),
+        });
         let mut current = input;
         for (stage_name, stage, policy) in stages {
             let step_name = format!("{name}::{stage_name}");
@@ -633,7 +641,10 @@ impl CruxCtx {
     {
         use chrono::Utc;
 
-        trace_join_all!(name, arms.len());
+        self.emit(Emission::JoinAllStart {
+            name: name.to_string(),
+            arm_count: arms.len(),
+        });
 
         // Phase 1: allocate ordinals and check replay cache for each arm before
         // dispatching any future. This mirrors step()/pipe() ordinal-first semantics.
@@ -865,8 +876,8 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.emit(StepEvent::Started {
-            step_name: name.to_string(),
+        self.emit(Emission::StepStart {
+            name: name.to_string(),
         });
         let step_start = Utc::now();
         let result = f().await;
@@ -885,7 +896,10 @@ impl CruxCtx {
         match result {
             Ok(val) => {
                 if let Some(recovery) = self.hooks.check_confidence(confidence).await {
-                    trace_hook!("on_low_confidence", name);
+                    self.emit(Emission::HookDispatched {
+                        hook: "on_low_confidence".into(),
+                        step: name.to_string(),
+                    });
                     self.recorder
                         .record_ok(&rec, serde_json::to_value(&val).ok());
                     return self
@@ -894,21 +908,24 @@ impl CruxCtx {
                 }
                 self.recorder
                     .record_ok(&rec, serde_json::to_value(&val).ok());
-                self.emit(StepEvent::Completed {
-                    step_name: name.to_string(),
+                self.emit(Emission::StepComplete {
+                    name: name.to_string(),
                     duration_ms,
                 });
                 Ok(val)
             }
             Err(e) => {
                 self.recorder.record_err(&rec, &e.to_string());
-                self.emit(StepEvent::Failed {
-                    step_name: name.to_string(),
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
                     error: e.to_string(),
                 });
 
                 if let Some(recovery) = self.hooks.check_failure(e.clone()).await {
-                    trace_hook!("on_step_failure", name);
+                    self.emit(Emission::HookDispatched {
+                        hook: "on_step_failure".into(),
+                        step: name.to_string(),
+                    });
                     return self
                         .apply_recovery(name, input_hash, confidence, recovery)
                         .await;
@@ -918,6 +935,17 @@ impl CruxCtx {
             }
         }
     }
+}
+
+fn default_event_sender() -> EventSender {
+    #[cfg(feature = "tracing")]
+    let pipeline = EventPipeline::with_sinks(
+        1,
+        vec![std::sync::Arc::new(crate::event_sink::TracingEventSink)],
+    );
+    #[cfg(not(feature = "tracing"))]
+    let pipeline = EventPipeline::new(1);
+    pipeline.sender()
 }
 
 // Stream drain helpers (pure, no `self`)
@@ -992,8 +1020,6 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        trace_step!(name, confidence);
-
         // Planner check — before replay cache and closure execution.
         match self.plan_action(name) {
             PlanResult::Deny { reason } => {
@@ -1027,7 +1053,9 @@ impl CruxCtx {
             .check_by_name(name, ordinal, input_hash, content_hash)
         {
             ReplayResult::Hit(cached, cached_confidence) => {
-                trace_replay_hit!(name);
+                self.emit(Emission::ReplayHit {
+                    name: name.to_string(),
+                });
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder.record_replay(
                     name,
@@ -1046,7 +1074,9 @@ impl CruxCtx {
                 });
             }
             ReplayResult::Miss => {
-                trace_replay_miss!(name);
+                self.emit(Emission::ReplayMiss {
+                    name: name.to_string(),
+                });
             }
         }
 
@@ -1141,6 +1171,10 @@ impl CruxCtx {
                 if let Some(step) = self.recorder.steps_mut().last_mut() {
                     step.events = events;
                 }
+                self.emit(Emission::StepComplete {
+                    name: name.to_string(),
+                    duration_ms,
+                });
                 Ok(value)
             }
             StreamDrain::Err {
@@ -1153,6 +1187,10 @@ impl CruxCtx {
                 if let Some(step) = self.recorder.steps_mut().last_mut() {
                     step.events = events;
                 }
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
+                    error: error.to_string(),
+                });
                 Err(error)
             }
             StreamDrain::Empty {
@@ -1160,6 +1198,10 @@ impl CruxCtx {
             } => {
                 let rec = make_rec(empty_dur);
                 self.recorder.record_err(&rec, "stream yielded no items");
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
+                    error: "stream yielded no items".into(),
+                });
                 Err(CruxErr::step_failed(name, "stream yielded no items"))
             }
         }
@@ -1415,13 +1457,14 @@ impl Context for CruxCtx {
         S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        trace_step!(name, 1.0_f32);
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check
         match self.replay.check_by_name(name, ordinal, input_hash, None) {
             ReplayResult::Hit(cached, confidence) => {
-                trace_replay_hit!(name);
+                self.emit(Emission::ReplayHit {
+                    name: name.to_string(),
+                });
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
                     .record_replay(name, input_hash, None, confidence, cached);
@@ -1435,10 +1478,15 @@ impl Context for CruxCtx {
                 });
             }
             ReplayResult::Miss => {
-                trace_replay_miss!(name);
+                self.emit(Emission::ReplayMiss {
+                    name: name.to_string(),
+                });
             }
         }
 
+        self.emit(Emission::StepStart {
+            name: name.to_string(),
+        });
         let step_start = Utc::now();
         let drain = drain_stream(f(), step_start).await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();

@@ -1,8 +1,7 @@
 //! Emission — the unified event type for observability and agent messaging.
 //!
-//! `Emission` is the single type that flows through every `EventSink`.
-//! It unifies step lifecycle, combinator lifecycle, runtime internals,
-//! and agent-to-agent messaging into one enum.
+//! `RuntimeEvent` is the single ordered record that flows through every
+//! `EventSink`; `Emission` is its typed payload.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -10,8 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::id::CruxId;
 
-/// The single event type that flows through every EventSink.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The typed payload carried by every ordered runtime event.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Emission {
     // -- Step lifecycle (broadcast) --
@@ -37,6 +36,18 @@ pub enum Emission {
     StepChunk {
         name: String,
         payload: serde_json::Value,
+    },
+    /// A completed trace record exported after execution.
+    StepRecorded {
+        name: String,
+        stable_id: Option<String>,
+        step_kind: crate::step::StepKind,
+        status: crate::step::StepStatus,
+        origin: crate::step::StepOrigin,
+        confidence: f32,
+        started_at: chrono::DateTime<chrono::Utc>,
+        duration_ms: u64,
+        metadata: HashMap<String, serde_json::Value>,
     },
 
     // -- Combinator lifecycle (broadcast) --
@@ -117,6 +128,40 @@ pub enum Emission {
 }
 
 impl Emission {
+    /// Returns the associated step or operation name, when present.
+    pub fn step_name(&self) -> Option<&str> {
+        match self {
+            Self::StepStart { name }
+            | Self::StepComplete { name, .. }
+            | Self::StepError { name, .. }
+            | Self::StepSkipped { name, .. }
+            | Self::StepDenied { name, .. }
+            | Self::StepChunk { name, .. }
+            | Self::StepRecorded { name, .. }
+            | Self::DelegateStart { name, .. }
+            | Self::DelegateComplete { name, .. }
+            | Self::PipeStart { name, .. }
+            | Self::PipeComplete { name, .. }
+            | Self::JoinAllStart { name, .. }
+            | Self::JoinAllComplete { name, .. }
+            | Self::SpeculateStart { name, .. }
+            | Self::SpeculateComplete { name, .. }
+            | Self::RouteMatched { name, .. }
+            | Self::ReplayHit { name }
+            | Self::ReplayMiss { name } => Some(name),
+            Self::HookDispatched { step, .. } => Some(step),
+            Self::Decision { .. }
+            | Self::Message { .. }
+            | Self::Request { .. }
+            | Self::Reply { .. } => None,
+        }
+    }
+
+    /// Returns true for replay hit and miss diagnostics.
+    pub fn is_replay(&self) -> bool {
+        matches!(self, Self::ReplayHit { .. } | Self::ReplayMiss { .. })
+    }
+
     /// True if this emission targets a specific agent.
     pub fn is_addressed(&self) -> bool {
         matches!(
@@ -146,18 +191,56 @@ impl Emission {
     }
 }
 
+/// One typed event in the globally ordered runtime stream.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuntimeEvent {
+    /// Monotonic sequence assigned by the event pipeline.
+    pub sequence: u64,
+    /// Time at which the event entered the ordered stream.
+    pub emitted_at: chrono::DateTime<chrono::Utc>,
+    /// Trace associated with the event, if emitted during a trace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<CruxId>,
+    /// Agent associated with the event, if known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    /// Typed event payload, flattened to retain the existing `kind` JSON tag.
+    #[serde(flatten)]
+    pub emission: Emission,
+}
+
+/// Filter applied to ordered runtime events during replay and analysis.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuntimeEventFilter {
+    /// Include only replay hit and miss diagnostics.
+    pub replay_only: bool,
+    /// Include only events associated with this step or operation name.
+    pub step_name: Option<String>,
+}
+
+impl RuntimeEvent {
+    /// Returns true when this event satisfies every configured filter.
+    pub fn matches(&self, filter: &RuntimeEventFilter) -> bool {
+        (!filter.replay_only || self.emission.is_replay())
+            && filter
+                .step_name
+                .as_deref()
+                .is_none_or(|name| self.emission.step_name() == Some(name))
+    }
+}
+
 // EventSink trait + adapters
 
 /// Write-only broadcast port. Implementations must be non-fatal —
 /// a failed write must never abort the calling workflow.
 pub trait EventSink: Send + Sync {
     /// Broadcasts an event without propagating sink failures to the workflow.
-    fn emit(&self, emission: Emission);
+    fn emit(&self, event: RuntimeEvent);
 }
 
 impl<T: EventSink> EventSink for Arc<T> {
-    fn emit(&self, emission: Emission) {
-        (**self).emit(emission);
+    fn emit(&self, event: RuntimeEvent) {
+        (**self).emit(event);
     }
 }
 
@@ -165,7 +248,7 @@ impl<T: EventSink> EventSink for Arc<T> {
 pub struct NullSink;
 
 impl EventSink for NullSink {
-    fn emit(&self, _emission: Emission) {}
+    fn emit(&self, _event: RuntimeEvent) {}
 }
 
 /// Fan-out to multiple sinks.
@@ -181,14 +264,14 @@ impl MultiSink {
 }
 
 impl EventSink for MultiSink {
-    fn emit(&self, emission: Emission) {
+    fn emit(&self, event: RuntimeEvent) {
         for sink in &self.sinks {
-            sink.emit(emission.clone());
+            sink.emit(event.clone());
         }
     }
 }
 
-/// Appends Emission as JSON lines to a file. Non-fatal on I/O error.
+/// Appends ordered runtime events as JSON lines. Non-fatal on I/O error.
 pub struct JsonlWriter {
     path: std::path::PathBuf,
 }
@@ -201,7 +284,7 @@ impl JsonlWriter {
 }
 
 impl EventSink for JsonlWriter {
-    fn emit(&self, emission: Emission) {
+    fn emit(&self, event: RuntimeEvent) {
         use std::io::Write;
         let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
@@ -210,7 +293,7 @@ impl EventSink for JsonlWriter {
         else {
             return;
         };
-        let Ok(json) = serde_json::to_string(&emission) else {
+        let Ok(json) = serde_json::to_string(&event) else {
             return;
         };
         let _ = writeln!(file, "{json}");
@@ -242,10 +325,10 @@ impl MetricsSink {
 }
 
 impl EventSink for MetricsSink {
-    fn emit(&self, emission: Emission) {
+    fn emit(&self, event: RuntimeEvent) {
         use std::sync::atomic::Ordering;
         self.emissions.fetch_add(1, Ordering::Relaxed);
-        match emission {
+        match event.emission {
             Emission::StepComplete { duration_ms, .. } => {
                 self.completed.fetch_add(1, Ordering::Relaxed);
                 self.duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
@@ -262,7 +345,7 @@ impl EventSink for MetricsSink {
 // VectorFileSink — JSONL with Vector-friendly envelope (timestamp + source)
 // ---------------------------------------------------------------------------
 
-/// Writes Emission as JSONL with a Vector-friendly envelope.
+/// Writes ordered runtime events as JSONL with a Vector-friendly envelope.
 /// Each line contains `{ "timestamp": ..., "source": "crux", "event": { ... } }`.
 /// Configure Vector's `file` source to tail this path.
 #[cfg(feature = "vector-file")]
@@ -281,8 +364,8 @@ impl VectorFileSink {
         }
     }
 
-    fn envelope(&self, emission: &Emission) -> Option<String> {
-        let event = serde_json::to_value(emission).ok()?;
+    fn envelope(&self, runtime_event: &RuntimeEvent) -> Option<String> {
+        let event = serde_json::to_value(runtime_event).ok()?;
         let wrapper = serde_json::json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "source": self.source_label,
@@ -294,9 +377,9 @@ impl VectorFileSink {
 
 #[cfg(feature = "vector-file")]
 impl EventSink for VectorFileSink {
-    fn emit(&self, emission: Emission) {
+    fn emit(&self, event: RuntimeEvent) {
         use std::io::Write;
-        let Some(line) = self.envelope(&emission) else {
+        let Some(line) = self.envelope(&event) else {
             return;
         };
         let Ok(mut file) = std::fs::OpenOptions::new()
@@ -312,7 +395,7 @@ impl EventSink for VectorFileSink {
 
 // VectorHttpSink — POST JSON to Vector's HTTP source
 
-/// Sends Emission as JSON to Vector's `http` source endpoint.
+/// Sends ordered runtime events as JSON to Vector's `http` source endpoint.
 /// Non-blocking: spawns a tokio task per emit. Failures are silently dropped
 /// (EventSink contract: never abort the calling workflow).
 #[cfg(feature = "vector-http")]
@@ -333,8 +416,8 @@ impl VectorHttpSink {
         }
     }
 
-    fn envelope(&self, emission: &Emission) -> Option<serde_json::Value> {
-        let event = serde_json::to_value(emission).ok()?;
+    fn envelope(&self, runtime_event: &RuntimeEvent) -> Option<serde_json::Value> {
+        let event = serde_json::to_value(runtime_event).ok()?;
         Some(serde_json::json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "source": self.source_label,
@@ -345,8 +428,8 @@ impl VectorHttpSink {
 
 #[cfg(feature = "vector-http")]
 impl EventSink for VectorHttpSink {
-    fn emit(&self, emission: Emission) {
-        let Some(body) = self.envelope(&emission) else {
+    fn emit(&self, event: RuntimeEvent) {
+        let Some(body) = self.envelope(&event) else {
             return;
         };
         let client = self.client.clone();
@@ -381,6 +464,7 @@ pub trait MessageRouter: EventSink {
 pub struct InMemoryRouter {
     sink: Box<dyn EventSink>,
     mailboxes: Mutex<HashMap<String, VecDeque<Emission>>>,
+    next_sequence: Mutex<u64>,
 }
 
 impl InMemoryRouter {
@@ -389,19 +473,32 @@ impl InMemoryRouter {
         Self {
             sink,
             mailboxes: Mutex::new(HashMap::new()),
+            next_sequence: Mutex::new(0),
         }
     }
 }
 
 impl EventSink for InMemoryRouter {
-    fn emit(&self, emission: Emission) {
-        self.sink.emit(emission);
+    fn emit(&self, event: RuntimeEvent) {
+        self.sink.emit(event);
     }
 }
 
 impl MessageRouter for InMemoryRouter {
     fn send(&self, emission: Emission) {
-        self.sink.emit(emission.clone());
+        let mut next_sequence = self
+            .next_sequence
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.sink.emit(RuntimeEvent {
+            sequence: *next_sequence,
+            emitted_at: chrono::Utc::now(),
+            trace_id: None,
+            agent: None,
+            emission: emission.clone(),
+        });
+        *next_sequence = next_sequence.saturating_add(1);
+        drop(next_sequence);
         if let Some(recipient) = emission.recipient() {
             let recipient = recipient.to_string();
             let mut mailboxes = self.mailboxes.lock().unwrap();
@@ -441,6 +538,63 @@ impl MessageRouter for InMemoryRouter {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn ordered(sequence: u64, emission: Emission) -> RuntimeEvent {
+        RuntimeEvent {
+            sequence,
+            emitted_at: chrono::Utc::now(),
+            trace_id: None,
+            agent: None,
+            emission,
+        }
+    }
+
+    #[test]
+    fn runtime_event_serializes_ordered_flattened_payload() {
+        let trace_id = CruxId::new();
+        let event = RuntimeEvent {
+            sequence: 7,
+            emitted_at: chrono::Utc::now(),
+            trace_id: Some(trace_id.clone()),
+            agent: Some("builder".into()),
+            emission: Emission::StepStart {
+                name: "compile".into(),
+            },
+        };
+
+        let value = serde_json::to_value(&event).expect("runtime event should serialize");
+        assert_eq!(value["sequence"], 7);
+        assert_eq!(value["trace_id"], trace_id.as_str());
+        assert_eq!(value["agent"], "builder");
+        assert_eq!(value["kind"], "step_start");
+        assert_eq!(value["name"], "compile");
+
+        let decoded: RuntimeEvent =
+            serde_json::from_value(value).expect("runtime event should deserialize");
+        assert_eq!(decoded, event);
+    }
+
+    #[test]
+    fn runtime_event_filter_selects_replay_and_step_name() {
+        let event = RuntimeEvent {
+            sequence: 3,
+            emitted_at: chrono::Utc::now(),
+            trace_id: None,
+            agent: None,
+            emission: Emission::ReplayHit {
+                name: "fetch".into(),
+            },
+        };
+
+        assert!(event.matches(&RuntimeEventFilter {
+            replay_only: true,
+            step_name: Some("fetch".into()),
+        }));
+        assert!(!event.matches(&RuntimeEventFilter {
+            replay_only: true,
+            step_name: Some("compile".into()),
+        }));
+    }
 
     // -- Emission serde --
 
@@ -484,14 +638,14 @@ mod tests {
     #[test]
     fn null_sink_does_not_panic() {
         let sink = NullSink;
-        sink.emit(Emission::StepStart { name: "x".into() });
+        sink.emit(ordered(0, Emission::StepStart { name: "x".into() }));
     }
 
     #[test]
     fn multi_sink_fans_out() {
         struct Counter(Mutex<usize>);
         impl EventSink for Counter {
-            fn emit(&self, _emission: Emission) {
+            fn emit(&self, _event: RuntimeEvent) {
                 *self.0.lock().unwrap() += 1;
             }
         }
@@ -499,7 +653,7 @@ mod tests {
         let c1 = Arc::new(Counter(Mutex::new(0)));
         let c2 = Arc::new(Counter(Mutex::new(0)));
         let multi = MultiSink::new(vec![c1.clone(), c2.clone()]);
-        multi.emit(Emission::StepStart { name: "x".into() });
+        multi.emit(ordered(0, Emission::StepStart { name: "x".into() }));
         assert_eq!(*c1.0.lock().unwrap(), 1);
         assert_eq!(*c2.0.lock().unwrap(), 1);
     }
@@ -511,11 +665,14 @@ mod tests {
         let path = dir.join("trace.jsonl");
 
         let writer = JsonlWriter::new(&path);
-        writer.emit(Emission::StepStart { name: "s1".into() });
-        writer.emit(Emission::StepComplete {
-            name: "s1".into(),
-            duration_ms: 42,
-        });
+        writer.emit(ordered(0, Emission::StepStart { name: "s1".into() }));
+        writer.emit(ordered(
+            1,
+            Emission::StepComplete {
+                name: "s1".into(),
+                duration_ms: 42,
+            },
+        ));
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = contents.lines().collect();
@@ -525,8 +682,9 @@ mod tests {
             let _: serde_json::Value = serde_json::from_str(line).unwrap();
         }
 
-        let first: Emission = serde_json::from_str(lines[0]).unwrap();
-        assert!(matches!(first, Emission::StepStart { ref name } if name == "s1"));
+        let first: RuntimeEvent = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(first.sequence, 0);
+        assert!(matches!(first.emission, Emission::StepStart { ref name } if name == "s1"));
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -534,21 +692,27 @@ mod tests {
     #[test]
     fn jsonl_writer_does_not_panic_on_bad_path() {
         let writer = JsonlWriter::new("/nonexistent/dir/trace.jsonl");
-        writer.emit(Emission::StepStart { name: "x".into() });
+        writer.emit(ordered(0, Emission::StepStart { name: "x".into() }));
     }
 
     #[test]
     fn metrics_sink_exports_prometheus_counters() {
         let sink = MetricsSink::default();
-        sink.emit(Emission::StepStart { name: "a".into() });
-        sink.emit(Emission::StepComplete {
-            name: "a".into(),
-            duration_ms: 12,
-        });
-        sink.emit(Emission::StepError {
-            name: "b".into(),
-            error: "boom".into(),
-        });
+        sink.emit(ordered(0, Emission::StepStart { name: "a".into() }));
+        sink.emit(ordered(
+            1,
+            Emission::StepComplete {
+                name: "a".into(),
+                duration_ms: 12,
+            },
+        ));
+        sink.emit(ordered(
+            2,
+            Emission::StepError {
+                name: "b".into(),
+                error: "boom".into(),
+            },
+        ));
 
         let metrics = sink.render_prometheus();
         assert!(metrics.contains("crux_emissions_total 3"));
@@ -567,7 +731,7 @@ mod tests {
         let path = dir.join("vector.jsonl");
 
         let sink = VectorFileSink::new(&path, "crux-test");
-        sink.emit(Emission::StepStart { name: "s1".into() });
+        sink.emit(ordered(0, Emission::StepStart { name: "s1".into() }));
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = contents.lines().collect();
@@ -586,17 +750,20 @@ mod tests {
     #[test]
     fn vector_file_sink_does_not_panic_on_bad_path() {
         let sink = VectorFileSink::new("/nonexistent/dir/vector.jsonl", "crux");
-        sink.emit(Emission::StepStart { name: "x".into() });
+        sink.emit(ordered(0, Emission::StepStart { name: "x".into() }));
     }
 
     #[cfg(feature = "vector-http")]
     #[test]
     fn vector_http_sink_constructs_envelope() {
         let sink = VectorHttpSink::new("http://localhost:9999", "crux-test");
-        let envelope = sink.envelope(&Emission::StepComplete {
-            name: "s1".into(),
-            duration_ms: 42,
-        });
+        let envelope = sink.envelope(&ordered(
+            0,
+            Emission::StepComplete {
+                name: "s1".into(),
+                duration_ms: 42,
+            },
+        ));
         assert!(envelope.is_some());
         let val = envelope.unwrap();
         assert_eq!(val["source"], "crux-test");
@@ -669,10 +836,10 @@ mod tests {
 
     #[test]
     fn in_memory_router_emits_to_sink() {
-        struct RecordingSink(Mutex<Vec<Emission>>);
+        struct RecordingSink(Mutex<Vec<RuntimeEvent>>);
         impl EventSink for RecordingSink {
-            fn emit(&self, emission: Emission) {
-                self.0.lock().unwrap().push(emission);
+            fn emit(&self, event: RuntimeEvent) {
+                self.0.lock().unwrap().push(event);
             }
         }
 

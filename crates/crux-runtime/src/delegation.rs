@@ -14,6 +14,7 @@ use crate::ctx::CruxCtx;
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
 use crux_domain::plan_result::PlanResult;
+use crux_types::emission::Emission;
 
 type BoxRecoveryFut = Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>;
 impl CruxCtx {
@@ -89,7 +90,10 @@ where
 
     /// Execute the delegation.
     pub async fn run(self) -> Result<A::Output, CruxErr> {
-        trace_delegate!(&self.name, A::name());
+        self.ctx.emit(Emission::DelegateStart {
+            name: self.name.clone(),
+            agent: A::name().to_string(),
+        });
         match self.ctx.plan_action(&self.name) {
             PlanResult::Deny { reason } => {
                 return Err(CruxErr::Denied {
@@ -109,6 +113,7 @@ where
         // Create child context, inheriting the parent's planner
         let mut child_ctx = CruxCtx::new(A::name());
         child_ctx.set_planner_arc(self.ctx.planner_arc());
+        child_ctx.set_event_sender(self.ctx.event_sender());
         if let Some(budget) = self.budget {
             child_ctx.set_budget_direct(budget);
         }
