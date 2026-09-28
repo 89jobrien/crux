@@ -110,6 +110,13 @@ pub struct ProtocolError {
 }
 
 /// A handler declared by a plugin.
+// TODO(feature-idea-17): Add an optional `output_schema` so a plugin can
+// declare its result type. Today the declaration carries no schema, and
+// `register_plugins` registers every handler without metadata, so plugin
+// outputs are typed `Dynamic`. Anything consuming them statically — a
+// `for_each` over a plugin step's output — cannot be checked and compiles
+// with "for_each items must be an array, but its schema is dynamic".
+// This is the protocol half; `register_plugins` is the registration half.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandlerDecl {
     /// Namespaced handler name, e.g. "github::create_issue".

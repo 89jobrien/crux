@@ -32,6 +32,12 @@ pub async fn register_plugins(
     for name in handler_names {
         let host = host.clone();
         let handler_name = name.clone();
+        // TODO(feature-idea-17): Register through `handler_value_with_metadata`
+        // with the handler's declared output schema. `handler_value` builds
+        // `HandlerMetadata::new(name)`, which carries no `output_schema`, so
+        // every plugin step is typed `Dynamic` and a downstream `for_each` over
+        // a plugin output loses its array check. Needs `HandlerDecl::output_schema`
+        // in the plugin protocol first, then a `ValueSchema` on the wire.
         registry.handler_value(name, move |input: serde_json::Value| {
             let host = host.clone();
             let name = handler_name.clone();
