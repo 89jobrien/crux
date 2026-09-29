@@ -36,7 +36,7 @@ otherwise they emit a shell-capture fallback. Output is stable for the same inpu
 
 | Feature | Default | Effect |
 | --- | --- | --- |
-| `baml` | no | Enables `LlmPlanner` through `crux-agentic` with its `baml` feature. |
+`LlmPlanner` is always available; there is no feature flag to enable it.
 
 ## Implementation status
 
@@ -50,7 +50,7 @@ or pressure and timeout increases for slow runs; it does not apply diffs.
 
 ```console
 cargo nextest run -p crux-planner
-cargo nextest run -p crux-planner --features baml
+cargo nextest run -p crux-planner
 cargo clippy -p crux-planner --all-targets --all-features -- -D warnings
 ```
 

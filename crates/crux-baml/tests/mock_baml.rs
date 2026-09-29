@@ -262,5 +262,68 @@ pub fn default_responses() -> HashMap<&'static str, String> {
         .to_string(),
     );
 
+    // `llm::invoke` / `llm::stream` with a caller-supplied `schema`. Keyed on an
+    // injected field name, which only reaches the prompt when the TypeBuilder
+    // was applied — so this cannot collide with the free-text entry below.
+    // BAML renders an injected enum as a literal union (`risk_level: "low" or
+    // "high"`), so key on the bare name.
+    m.insert(
+        "risk_level:",
+        json!({
+            "content": "Found one blocking issue in the auth path.",
+            "confidence": 0.75,
+            "risk_level": "high",
+            "blockers": ["Missing rate limit on /login"],
+            "score": 0.2
+        })
+        .to_string(),
+    );
+
+    // `llm::invoke` / `llm::stream` free text. Keyed on the prompt, because the
+    // `content: string` schema fragment is also a prefix of the schema'd case.
+    m.insert(
+        "free-text-completion-prompt",
+        json!({ "content": "Paris is the capital of France.", "confidence": 0.9 }).to_string(),
+    );
+
+    // `llm::analyze` — keyed on a field that appears only in AnalyzeOutput's
+    // schema. The Analyze prompt mentions "recommendation" but never in the
+    // `recommendation: string` form the schema uses.
+    m.insert(
+        "recommendation: string",
+        json!({
+            "summary": "Two advisories, one high severity.",
+            "findings": [
+                {
+                    "title": "openssl 0.9.1 is vulnerable",
+                    "detail": "Transitive dependency carries RUSTSEC-2024-0001.",
+                    "severity": "BLOCKING",
+                    "evidence": "severity: high"
+                },
+                {
+                    "title": "paste 0.1.0 is unmaintained",
+                    "detail": "Dev-dependency only, so it does not ship.",
+                    "severity": "INFO",
+                    "evidence": null
+                }
+            ],
+            "recommendation": "Bump openssl to 0.9.8.",
+            "confidence": 0.86
+        })
+        .to_string(),
+    );
+
+    // `llm::confidence` — keyed on a field only ScoreConfidence's schema has.
+    m.insert(
+        "factors: string[]",
+        json!({
+            "score": 0.91,
+            "level": "HIGH",
+            "reasoning": "Empty porcelain output is direct and complete.",
+            "factors": ["evidence is unambiguous", "no contradicting signal"]
+        })
+        .to_string(),
+    );
+
     m
 }

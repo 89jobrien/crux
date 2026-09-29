@@ -159,13 +159,92 @@ Doob backlog processing and prioritization.
 | `triage::deduplicate_intent` | Cluster semantically similar titles via edit distance  |
 | `triage::group_by_repo`      | Partition todos into per-repo buckets                  |
 
-## Handlers (behind `--features baml`)
+## LLM handlers (all BAML-routed)
 
-| Kind             | What it does                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `llm::extract`   | BAML structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
-| `llm::decompose` | BAML spec decomposition into task list                                               |
-| `llm::plan`      | BAML pipeline generation from natural language goal                                  |
+Every handler that makes a model call is routed through BAML, so provider
+selection, retries, and output parsing live in one place. There is no feature
+flag — `crux-baml` is a required dependency of `crux-agentic`, `crux-cli`, and
+the `crux` facade.
+
+| Kind                    | What it does                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `llm::invoke`           | Completion. `{content, confidence, attempts, client, schema_valid}` plus any `schema` fields. Reports confidence. |
+| `llm::stream`           | Same as `llm::invoke` plus `streaming:true` and `chunks`.                                            |
+| `llm::invoke_with_fallback` | Same as `llm::invoke`, pinned to BAML's `Auto` fallback client. Legacy `tiers` arg is accepted and ignored. |
+| `llm::extract`          | Structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
+| `llm::analyze`          | `subject` + `evidence` (+ optional `focus`) in; summary and severity-tagged findings out. Reports confidence. |
+| `llm::confidence`       | `claim` + `evidence` (+ optional `criteria`) in; `0.0`–`1.0` support score out, which becomes the step confidence. |
+| `llm::decompose`        | BAML spec decomposition into task list                                                              |
+| `llm::plan`             | BAML pipeline generation from natural language goal                                                 |
+
+### Every LLM call reports a confidence score
+
+All six handlers emit a step confidence, so any of them can feed
+`route_on_confidence` directly — see `examples/invoke_confidence.crux`.
+
+The number is not invented. Two inputs:
+
+| Input | Source | Weight |
+| --- | --- | --- |
+| Self-report | Every BAML completion type declares a `confidence: float`; the prompt asks the model how well the answer is supported | primary |
+| Retry penalty | BAML's `FunctionLog::calls()` returns "all calls made (including retries)" | `0.8^(attempts-1)` |
+
+```text
+confidence = self_report * RETRY_DECAY ^ (attempts - 1)
+```
+
+A first-try success passes the self-report through untouched; needing a second
+attempt to get parseable output discounts it to 0.8. Both values appear in the
+payload (`confidence`, `attempts`) so a trace shows why a step scored what it did.
+
+**Calibration caveat:** the self-report half is only loosely calibrated — a
+confident-sounding answer is not necessarily a correct one. The retry term is the
+objective half. For a decision that needs real calibration, put the claim through
+`llm::confidence`, which scores support against explicit evidence and criteria
+rather than asking the model to grade itself.
+
+### Caller-supplied output schema
+
+`llm::invoke`, `llm::stream`, and `llm::invoke_with_fallback` accept an optional
+`schema` arg. BAML injects those fields into the completion's output type
+(`Completion` is marked `@@dynamic`), so the model is constrained to that exact
+shape and the result is validated rather than prose you have to parse yourself.
+Omit `schema` for free text.
+
+```yaml
+- step: review
+  handler: llm::invoke
+  args:
+    prompt: "Review this diff:\n\n{{ steps.diff.output.stdout }}"
+    schema:
+      type: object
+      properties:
+        verdict: { type: string, enum: [approve, comment, block] }
+        blockers: { type: array, items: { type: string } }
+        score: { type: number }
+```
+
+Injected fields are merged alongside `content` in the handler output, so
+templates read `{{ steps.review.output.verdict }}`. A bare `{field: {schema}}`
+map is accepted as shorthand for a full JSON Schema; values must be schemas, not
+samples, because a bare `"high"` is ambiguous between a type and an enum.
+Supported mappings are in `crates/crux-baml/src/schema_bridge.rs`; anything
+outside that subset is rejected with a message naming the offending field.
+
+### Backends
+
+The default BAML client (`Local`) tries a local Ollama first
+(`http://localhost:11434/v1`, model `llama3.2`) and falls back to the hosted
+providers, so `ollama serve` is enough to run any LLM handler with no API key.
+Set `client:` in a pipeline to pin a specific BAML client; see
+`crates/crux-baml/baml_src/clients.baml` for the client list and the
+`OLLAMA_BASE_URL` / `OLLAMA_MODEL` overrides.
+
+> Two BAML 0.221 constraints shape `clients.baml`: a fallback client nested
+> inside another fallback strategy produces an empty chain ("No events in the
+> chain"), and a client referencing an unset `env.*` aborts the whole chain
+> rather than being skipped. The `Local` chain is therefore flat and contains
+> only always-resolvable members.
 
 ## Known Gaps
 

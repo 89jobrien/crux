@@ -30,7 +30,7 @@ pipelines, this is where it goes.
 ### BAML Handlers
 
 BAML-backed handlers (structured LLM output) live in `crux-baml`, not
-here. This crate re-exports them when the `baml` feature is enabled.
+here, and `register_all` installs them unconditionally.
 
 ### Adapters
 

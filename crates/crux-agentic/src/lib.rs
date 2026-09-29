@@ -65,13 +65,10 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     sqlite::register(registry);
     task::register(registry);
     triage::register(registry);
-    llm::register(registry);
-    llm::register_stream(registry);
-    llm::register_fallback(registry);
-
-    // BAML handlers
-    #[cfg(feature = "baml")]
+    // LLM handlers. `crux-baml` owns every `llm::*` handler that makes a model
+    // call — `llm::invoke`, `llm::invoke_with_fallback`, `llm::stream`, and the
+    // structured ones — so provider selection, retries, and output parsing all
+    // live behind BAML. The `LlmProvider` port in `provider` stays public for
+    // direct Rust callers.
     crux_baml::register_all_with_plugins(registry, plugin_handlers);
-    #[cfg(not(feature = "baml"))]
-    let _ = plugin_handlers;
 }

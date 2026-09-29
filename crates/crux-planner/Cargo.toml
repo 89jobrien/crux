@@ -11,11 +11,8 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
-[features]
-baml = ["dep:crux-agentic"]
-
 [dependencies]
-crux-agentic = { workspace = true, features = ["baml"], optional = true } #unified
+crux-baml = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-types = { workspace = true }
 serde = { workspace = true }

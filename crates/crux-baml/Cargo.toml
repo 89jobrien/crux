@@ -1,6 +1,6 @@
 [package]
 name = "crux-baml"
-description = "BAML-powered LLM handlers for crux-script pipelines (extract, decompose, plan)"
+description = "BAML-powered LLM handlers for crux-script pipelines (analyze, confidence, complete, extract, decompose, plan)"
 version.workspace = true
 edition.workspace = true
 readme = "../../README.md"
@@ -18,6 +18,5 @@ crux-runtime = { workspace = true } #unified
 crux-script = { workspace = true } #unified
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-
-[dev-dependencies]
+thiserror = { workspace = true }
 tokio = { workspace = true }

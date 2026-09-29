@@ -199,7 +199,7 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
-        /// Planner backend: "rule" (default, no API key needed) or "llm" (requires --features baml)
+        /// Planner backend: "rule" (default, no API key needed) or "llm" (prefers a local Ollama)
         #[arg(long, default_value = "rule")]
         planner: String,
     },

@@ -31,9 +31,9 @@ generated pipeline to stdout unless `--output` is supplied.
 
 ## Plan options
 
-`--planner rule` is local and default. `--planner llm` requires the `baml` feature and provider
-configuration. Output types are `yaml`, `json`, `pretty`, `dry-run`, and `handoff`; constraints are
-passed only to the LLM planner.
+`--planner rule` is local and default. `--planner llm` goes through BAML, which prefers a local
+Ollama and needs no API key when one is reachable. Output types are `yaml`, `json`, `pretty`,
+`dry-run`, and `handoff`; constraints are passed only to the LLM planner.
 
 ```console
 crux run examples/showcase.crux --check
@@ -56,7 +56,7 @@ targets gain a target suffix.
 
 ```console
 cargo nextest run -p crux-cli
-cargo nextest run -p crux-cli --features baml
+cargo nextest run -p crux-cli
 cargo clippy -p crux-cli --all-targets --all-features -- -D warnings
 ./target/debug/crux --help
 ./target/debug/crux run --help

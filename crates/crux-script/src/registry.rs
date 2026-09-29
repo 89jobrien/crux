@@ -372,6 +372,25 @@ impl HandlerRegistry {
         self.register_closure(HandlerMetadata::new(name), handler);
     }
 
+    /// Register a confidence-bearing handler together with its [`HandlerMetadata`].
+    ///
+    /// Combines [`handler`](Self::handler) and [`register_metadata`](Self::register_metadata)
+    /// in one call. Prefer this over calling both in sequence: `register_metadata`
+    /// writes to the metadata map, and `handler` then overwrites it with a bare
+    /// [`HandlerMetadata::new`], silently discarding the declared contract. The
+    /// metadata name is used as the handler name — the two must match.
+    pub fn handler_with_metadata<F, Fut>(&mut self, meta: HandlerMetadata, f: F)
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<HandlerOutput, CruxErr>> + Send + 'static,
+    {
+        let handler: BoxHandler = Arc::new(move |v| {
+            let fut = f(v);
+            Box::pin(async move { HandlerExecution::unreported(fut.await) })
+        });
+        self.register_closure(meta, handler);
+    }
+
     /// Register an explicitly free plain-value handler.
     ///
     /// Values have absent confidence and failures retain explicit zero USD.

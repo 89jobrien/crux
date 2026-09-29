@@ -34,13 +34,17 @@ pub fn cmd_doctor(plugins: Option<&str>) {
         },
         plugin_path
     );
-    println!(
-        "{}  BAML capability: {}",
-        if cfg!(feature = "baml") { "ok" } else { "--" },
-        if cfg!(feature = "baml") {
-            "enabled"
-        } else {
-            "disabled"
-        }
-    );
+    // BAML is a mandatory dependency, so every LLM call is BAML-routed. Report
+    // which backend will actually serve it.
+    let ollama = std::net::TcpStream::connect("127.0.0.1:11434").is_ok();
+    let openai = std::env::var("OPENAI_API_KEY").is_ok_and(|v| !v.is_empty());
+    let anthropic = std::env::var("ANTHROPIC_API_KEY").is_ok_and(|v| !v.is_empty());
+    let (backend, detail) = match (ollama, openai, anthropic) {
+        (true, _, _) => ("ok", "ollama (local)"),
+        (false, true, true) => ("ok", "openai + anthropic"),
+        (false, true, false) => ("ok", "openai"),
+        (false, false, true) => ("ok", "anthropic"),
+        (false, false, false) => ("--", "no backend reachable"),
+    };
+    println!("{backend}  LLM backend: {detail}");
 }

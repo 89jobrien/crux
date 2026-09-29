@@ -37,9 +37,9 @@ other rows use `handler_value` and emit no confidence.
 
 | Handler | Shape | Output and caveat |
 | --- | --- | --- |
-| `llm::invoke` | input `prompt`; optional args `provider`, `model`, `system`, `max_tokens`, `api_key`, `base_url` | `{content,provider,...metadata}`; network or credentials may be needed |
-| `llm::stream` | same | `{content,provider,streaming:false,...}`; buffered stub |
-| `llm::invoke_with_fallback` | input `prompt`, optional input `tiers`; same optional args | invoke output; sequential vendor fallback |
+| `llm::invoke` | args `prompt`; optional `system`, `max_tokens`, `schema`, `client` | `{content,confidence,attempts,client,schema_valid}` plus any `schema` fields; BAML-routed; emits confidence |
+| `llm::stream` | same | invoke output plus `streaming:true` and `chunks`; BAML-routed |
+| `llm::invoke_with_fallback` | same (legacy `tiers` accepted, ignored) | invoke output; pins BAML's `Auto` fallback client |
 | `container::run` | optional args `image`, `cmd`, `memory_mb`, `cpu_millicores`, `timeout_seconds` | `{container_id,state}`; mock unless `docker` |
 | `container::wait` | args `container_id`; optional `timeout_seconds` | `{state}` |
 | `harness::evolve` | args `base_profile` | `{proposed_profile,diff}`; fixed +256 MiB, not planner execution |
@@ -129,15 +129,53 @@ Task handlers require args `db` (redb path):
 | `task::list` | optional `status`, `priority`, `label` | task array |
 | `task::ready` | none | ready-task array |
 
-## BAML feature only
+## BAML-routed handlers
 
-`llm::extract` requires top-level `function` and object `input`, with optional
-`client`. Functions: `ExtractEntities`, `Summarize`, `Classify`,
-`DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`,
-`SuggestRelated`, and `ClassifyCIFailure`. Function-specific outputs follow the
-BAML schema; classification and health functions emit confidence.
+Every `llm::*` handler below is BAML-routed and always registered — there is no
+feature flag. They prefer a local Ollama and need no API key when one is
+reachable, falling back to hosted providers otherwise. All of them read their
+fields from the step's `args` object (top-level keys are also accepted) and
+ignore whatever the previous step produced, so they ignore `input_schema`.
 
-`llm::decompose` requires top-level `text` and returns `{tasks}`. `llm::plan`
-requires args `goal`, optional `constraints`, and returns `{pipeline_name,yaml}`.
-These require CLI feature `baml` and may require provider credentials; do not use
-them for uncredentialed checks.
+| Handler | Additional args | Output |
+| --- | --- | --- |
+| `llm::analyze` | `subject`, `evidence`; optional `focus`, `client` | `{summary, findings[{title, detail, severity, evidence}], recommendation, confidence}` — emits confidence |
+| `llm::confidence` | `claim`, `evidence`; optional `criteria[]`, `client` | `{score, level, reasoning, factors[]}` — score becomes the step confidence |
+| `llm::extract` | top-level `function`, object `input`; optional `client` | Function-specific; functions are `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure` |
+| `llm::decompose` | top-level `text` | `{tasks}` |
+| `llm::plan` | `goal`; optional `constraints` | `{pipeline_name, yaml}` |
+
+Every one of these emits a step confidence, so any of them can feed
+`route_on_confidence` directly. The score is
+`self_report * 0.8^(attempts - 1)`: the model's own `confidence` field, discounted
+by how many attempts BAML needed to reach a parseable answer. `attempts` is in the
+payload so a trace shows why. The self-report is only loosely calibrated, so prefer
+`llm::confidence` when the decision needs real calibration. See
+`examples/invoke_confidence.crux` and `examples/analyze_review.crux`.
+
+## Caller-supplied output schema (`llm::invoke`)
+
+`llm::invoke`, `llm::stream`, and `llm::invoke_with_fallback` take an optional
+`schema` arg. BAML injects those fields into the completion's output type, so the
+model is constrained to that exact shape and the result is validated rather than
+prose. Omit `schema` for free text.
+
+```yaml
+- step: review
+  handler: llm::invoke
+  args:
+    prompt: "Review this diff:\n\n{{ steps.diff.output.stdout }}"
+    schema:
+      type: object
+      properties:
+        verdict: { type: string, enum: [approve, comment, block] }
+        blockers: { type: array, items: { type: string } }
+        score: { type: number }
+```
+
+A bare `{field: {schema}}` map is accepted as shorthand for a full JSON Schema.
+Values must be schemas, not samples — a bare `"high"` is ambiguous between a type
+and an enum. Supported: `string`, `number`, `integer`, `boolean`, `null`, `array`,
+object, string `enum`/`const`, `anyOf`/`oneOf`, and local `$defs` `$ref`.
+Anything else is rejected with a message naming the offending field. See
+`examples/structured_review.crux`.

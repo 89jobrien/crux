@@ -12,14 +12,11 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
-[features]
-baml = ["crux-agentic/baml", "dep:crux-baml"]
-
 [dependencies]
 chrono = { workspace = true }
 clap = { workspace = true }
 crux-agentic = { workspace = true }
-crux-baml = { workspace = true, optional = true }
+crux-baml = { workspace = true } #unified
 crux-improve = { workspace = true }
 crux-plugin = { workspace = true }
 crux-regression = { workspace = true }

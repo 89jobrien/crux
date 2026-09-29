@@ -63,6 +63,8 @@ fn handler_manifest() -> Vec<String> {
         "ctrl::assert -- assert condition on input".into(),
         "llm::invoke -- raw LLM completion".into(),
         "llm::extract -- BAML structured extraction".into(),
+        "llm::analyze -- summarize evidence into severity-tagged findings, reports confidence".into(),
+        "llm::confidence -- score how strongly evidence supports a claim, reports the score as confidence".into(),
         "llm::decompose -- decompose spec into tasks".into(),
         "llm::stream -- incremental streaming LLM completion".into(),
     ]

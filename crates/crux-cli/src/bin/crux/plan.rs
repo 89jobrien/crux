@@ -1,10 +1,8 @@
-//! Rule-based and optional LLM-backed pipeline generation commands.
+//! Rule-based and LLM-backed pipeline generation commands.
 
-#[cfg(feature = "baml")]
 use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
 use crux_script::{PipelineOutputFormat, format_pipeline_output};
 
-#[cfg(feature = "baml")]
 use crate::registry::resolve_plugins_path;
 
 /// Canonical `PlanRule` / `RulePlanner` definitions live in `crux-types`.
@@ -74,7 +72,6 @@ fn cmd_plan_rule(goal: &str, output: Option<&str>, output_type: &super::OutputTy
     write_output_or_exit(output, &formatted);
 }
 
-#[cfg(feature = "baml")]
 fn cmd_plan_llm(
     goal: &str,
     output: Option<&str>,
@@ -82,20 +79,19 @@ fn cmd_plan_llm(
     output_type: &super::OutputType,
     plugins_path: Option<&str>,
 ) {
+    // BAML's `Local` client prefers a local Ollama, so a missing provider key is
+    // not fatal — warn only when nothing at all is configured.
     let has_openai = std::env::var("OPENAI_API_KEY")
         .map(|v| !v.is_empty())
         .unwrap_or(false);
     let has_anthropic = std::env::var("ANTHROPIC_API_KEY")
         .map(|v| !v.is_empty())
         .unwrap_or(false);
-    if !has_openai && !has_anthropic {
+    let ollama_reachable = std::net::TcpStream::connect("127.0.0.1:11434").is_ok();
+    if !has_openai && !has_anthropic && !ollama_reachable {
         eprintln!(
-            "[crux] warning: `plan` requires an LLM API key but neither \
-             OPENAI_API_KEY nor ANTHROPIC_API_KEY is set"
-        );
-        eprintln!(
-            "[crux] hint: copy .env.example to .env and configure, \
-             or use `dotenvx run -- crux plan ...`"
+            "[crux] warning: no LLM backend detected. Set OPENAI_API_KEY or \
+             ANTHROPIC_API_KEY, or start a local `ollama serve`."
         );
     }
 
@@ -119,21 +115,6 @@ fn cmd_plan_llm(
     let formatted = format_output_or_exit(&yaml, goal, output_type);
 
     write_output_or_exit(output, &formatted);
-}
-
-#[cfg(not(feature = "baml"))]
-fn cmd_plan_llm(
-    _goal: &str,
-    _output: Option<&str>,
-    _constraints: Option<&str>,
-    _output_type: &super::OutputType,
-    _plugins_path: Option<&str>,
-) {
-    eprintln!(
-        "crux plan --planner llm requires --features baml. \
-         Run: cargo build --features baml"
-    );
-    std::process::exit(1);
 }
 
 fn format_output_or_exit(yaml: &str, goal: &str, output_type: &super::OutputType) -> String {

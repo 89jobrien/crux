@@ -39,8 +39,9 @@ before executing the result with `--strict`.
 
 `run --check` parses and validates without executing handlers. There is no
 standalone `crux check` CLI variant. `run -` reads a pipeline or Cruxfile from
-stdin. The default rule planner needs no API key; `plan --planner llm` requires
-the `baml` feature and provider credentials.
+stdin. The default rule planner needs no API key; `plan --planner llm` goes
+through BAML, which prefers a local Ollama and needs no credentials when one is
+reachable.
 
 Some checked-in pipelines use relative paths internally, so direct execution
 must use repository-root cwd even when the pipeline path itself is absolute.

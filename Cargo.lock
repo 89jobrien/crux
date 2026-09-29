@@ -520,6 +520,7 @@ dependencies = [
  "crux-script",
  "serde_json",
  "serde_yaml",
+ "thiserror",
  "tokio",
 ]
 
@@ -596,7 +597,7 @@ dependencies = [
 name = "crux-planner"
 version = "0.4.0"
 dependencies = [
- "crux-agentic",
+ "crux-baml",
  "crux-runtime",
  "crux-types",
  "indoc",

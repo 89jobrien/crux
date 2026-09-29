@@ -55,6 +55,9 @@ child duration/token/USD usage back to the parent tracker. Use `timeout_ms` for
 an enforced per-step wall-clock timeout.
 
 Default registration includes stdlib, analysis, CI, container, harness, review,
-rx, SQLite, task, triage, and raw LLM handlers. `docker` selects Bollard instead
-of the mock container client. CLI feature `baml` adds `llm::extract`,
-`llm::decompose`, and `llm::plan`. See the handler catalog for exact shapes.
+rx, SQLite, task, and triage. `docker` selects Bollard instead of the mock
+container client. Every `llm::*` handler is BAML-routed and always registered:
+`llm::invoke`, `llm::invoke_with_fallback`, `llm::stream`, `llm::extract`,
+`llm::analyze`, `llm::confidence`, `llm::decompose`, and `llm::plan`. They prefer
+a local Ollama and need no API key when one is reachable. See the handler
+catalog for exact shapes.
