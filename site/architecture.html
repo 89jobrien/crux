@@ -36,59 +36,12 @@
         <p class="section-intro">Nothing in an inner layer knows about an outer one. <code>crux-types</code> has no workspace dependencies at all, and <code>crux-regression</code> is deliberately forbidden from reaching back into the runtime, the script interpreter, the handler stack, or the CLI.</p>
 
         <figure class="diagram">
-          <svg viewBox="0 0 880 620" role="img" aria-labelledby="arch-title arch-desc" xmlns="http://www.w3.org/2000/svg">
-            <title id="arch-title">Crux workspace layers, dependencies pointing inward</title>
-            <desc id="arch-desc">Seven stacked layers. The outermost is the interface layer holding the crux facade, crux-cli, and xtask. Beneath it sit orchestration crates crux-agentic, crux-planner, crux-improve, and crux-regression. Beneath those, the handler layer holds crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script interprets pipeline files. Then crux-runtime provides the core execution. Then crux-schema and crux-domain hold pure types. At the centre, the leaf layer holds crux-types, crux-model, and the crux-derive proc macro. An arrow on the right points downward and is labelled dependencies point inward.</desc>
-
-            <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#f5a623"/>
-              </marker>
-            </defs>
-
-            <g font-family="'JetBrains Mono', monospace" font-size="12">
-
-              <rect x="20" y="16" width="700" height="72" rx="8" fill="#171a22" stroke="#33363f"/>
-              <text x="36" y="40" fill="#8a8a85" font-size="10" letter-spacing="1.6">INTERFACE</text>
-              <text x="36" y="66" fill="#e8e6e1">crux (facade) &#183; crux-cli &#183; xtask</text>
-              <text x="36" y="82" fill="#8a8a85" font-size="10">what consumers touch</text>
-
-              <rect x="20" y="100" width="700" height="72" rx="8" fill="#141821" stroke="#2b2f3a"/>
-              <text x="36" y="124" fill="#8a8a85" font-size="10" letter-spacing="1.6">ORCHESTRATION</text>
-              <text x="36" y="150" fill="#e8e6e1">crux-agentic &#183; crux-planner &#183; crux-improve &#183; crux-regression</text>
-
-              <rect x="20" y="184" width="700" height="72" rx="8" fill="#111520" stroke="#272b35"/>
-              <text x="36" y="208" fill="#8a8a85" font-size="10" letter-spacing="1.6">HANDLERS</text>
-              <text x="36" y="234" fill="#e8e6e1">crux-stdlib &#183; crux-baml &#183; crux-plugin &#183; crux-task</text>
-              <text x="36" y="250" fill="#8a8a85" font-size="10">deterministic &#183; LLM &#183; subprocess &#183; tasks</text>
-
-              <rect x="20" y="268" width="700" height="72" rx="8" fill="#0f131d" stroke="#242833"/>
-              <text x="36" y="292" fill="#8a8a85" font-size="10" letter-spacing="1.6">INTERPRETATION</text>
-              <text x="36" y="318" fill="#e8e6e1">crux-script</text>
-              <text x="36" y="334" fill="#8a8a85" font-size="10">turns a .crux definition into executable steps</text>
-
-              <rect x="20" y="352" width="700" height="72" rx="8" fill="#0d111a" stroke="#212531"/>
-              <text x="36" y="376" fill="#8a8a85" font-size="10" letter-spacing="1.6">CORE RUNTIME</text>
-              <text x="36" y="402" fill="#e8e6e1">crux-runtime</text>
-              <text x="36" y="418" fill="#8a8a85" font-size="10">CruxCtx &#183; Agent &#183; replay &#183; hooks &#183; registry &#183; governance &#183; trust &#183; safety</text>
-
-              <rect x="20" y="436" width="700" height="72" rx="8" fill="#0b0e16" stroke="#1e222d"/>
-              <text x="36" y="460" fill="#8a8a85" font-size="10" letter-spacing="1.6">SCHEMA AND DOMAIN</text>
-              <text x="36" y="486" fill="#e8e6e1">crux-schema &#183; crux-domain</text>
-              <text x="36" y="502" fill="#8a8a85" font-size="10">pure types, no I/O</text>
-
-              <rect x="20" y="520" width="700" height="72" rx="8" fill="#0b0d11" stroke="#f5a623" stroke-opacity="0.45"/>
-              <text x="36" y="544" fill="#f5a623" font-size="10" letter-spacing="1.6">WIRE &#8212; LEAF</text>
-              <text x="36" y="570" fill="#e8e6e1">crux-types &#183; crux-model &#183; crux-derive</text>
-              <text x="700" y="570" fill="#5ec269" font-size="10" text-anchor="end">no workspace deps</text>
-            </g>
-
-            <g>
-              <line x1="790" y1="560" x2="790" y2="52" stroke="#f5a623" stroke-width="2" marker-end="url(#arrow)"/>
-              <text x="812" y="300" fill="#f5a623" font-family="'JetBrains Mono', monospace" font-size="11" letter-spacing="1.4" transform="rotate(-90 812 300)" text-anchor="middle">dependencies point inward</text>
-            </g>
-          </svg>
-          <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types.</figcaption>
+          (<picture>
+            <source srcset="diagrams/architecture.print.svg" media="print">
+            <img src="diagrams/architecture.svg" width="880" height="620" loading="lazy" decoding="async"
+               alt="The crux workspace as seven stacked layers, dependencies pointing inward. At the top, the interface layer: the crux facade, crux-cli, and xtask. Below it orchestration: crux-agentic, crux-planner, crux-improve, and crux-regression. Then handlers: crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script, which interprets pipeline files. Then crux-runtime, the core execution. Then crux-schema and crux-domain, pure types with no I/O. At the centre, the leaf layer: crux-types, crux-model, and the crux-derive proc macro, which has no workspace dependencies.">
+          </picture>
+          <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types. The source is <a href="diagrams/architecture.mmd"><code>diagrams/architecture.mmd</code></a>, rendered at build time, with a light variant for print. Edit the .mmd, not the SVG.</figcaption>
         </figure>
       </section>
 

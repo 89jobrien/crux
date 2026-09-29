@@ -1,6 +1,6 @@
 # Crux
 
-> **Website** &mdash; <https://89jobrien.github.io/crux/> &middot; source for the site is in [`assets/`](assets/)
+> **Website** &mdash; <https://89jobrien.github.io/crux/> &middot; source for the site is in [`site/`](site/)
 > (landing, architecture, CLI reference, crate inventory, status, and FAQ)
 
 Crux turns agentic execution into a typed Rust value.

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - "assets/**"
+      - "site/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Publish assets/ to GitHub Pages
+    name: Publish site/ to GitHub Pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -33,7 +33,7 @@ jobs:
       - name: Check internal links and font files resolve
         run: |
           set -euo pipefail
-          cd assets
+          cd site
           broken=0
           for f in *.html; do
             grep -oE '(href|src)="[^"#][^"]*"' "$f" \
@@ -46,8 +46,7 @@ jobs:
               fi
             done < /tmp/refs.txt
           done
-          # every self-hosted face referenced by the stylesheet must exist,
-          # be non-empty, and be a real woff2
+          # every self-hosted face must exist, be non-empty, and be a real woff2
           grep -oE 'url\("fonts/[^"]+"\)' style.css \
             | sed -E 's/url\("//; s/"\)//' > /tmp/fonts.txt
           while read -r font; do
@@ -65,7 +64,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: assets
+          path: site
 
       - id: deployment
         uses: actions/deploy-pages@v4

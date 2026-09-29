@@ -23,13 +23,13 @@ rather than one variable file.
 ```bash
 # re-fetch, from the repo root
 base=https://cdn.jsdelivr.net/npm
-curl -sLo assets/fonts/space-mono-latin-400-normal.woff2 \
+curl -sLo site/fonts/space-mono-latin-400-normal.woff2 \
   "$base/@fontsource/space-mono@latest/files/space-mono-latin-400-normal.woff2"
-curl -sLo assets/fonts/space-mono-latin-700-normal.woff2 \
+curl -sLo site/fonts/space-mono-latin-700-normal.woff2 \
   "$base/@fontsource/space-mono@latest/files/space-mono-latin-700-normal.woff2"
-curl -sLo assets/fonts/ibm-plex-sans-latin-wght-normal.woff2 \
+curl -sLo site/fonts/ibm-plex-sans-latin-wght-normal.woff2 \
   "$base/@fontsource-variable/ibm-plex-sans@latest/files/ibm-plex-sans-latin-wght-normal.woff2"
-curl -sLo assets/fonts/jetbrains-mono-latin-wght-normal.woff2 \
+curl -sLo site/fonts/jetbrains-mono-latin-wght-normal.woff2 \
   "$base/@fontsource-variable/jetbrains-mono@latest/files/jetbrains-mono-latin-wght-normal.woff2"
 ```
 

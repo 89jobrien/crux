@@ -1,16 +1,16 @@
 /* ============================================================
-   crux — static site stylesheet
+   crux -- static site stylesheet
    https://github.com/89jobrien/crux
 
-   Assembled from a shared skeleton. Three parts are repo-specific:
-     - the design tokens below
-     - the signature section at the end
-   Everything between them is the shared component layer and must
-   stay byte-identical across repos. Edit the tokens and the
-   signature; do not fork the middle.
+   Assembled by the repo-reference-site skill. Three parts:
+
+     1. design tokens (below)
+     2. the SHARED COMPONENT LAYER, identical in every repo
+     3. the signature section, at the end
+
+   Edit (1) and (3) directly. To change (2), edit it in this skill and re-run
+   scripts/assemble-css.sh for each repo; never hand-fork the middle.
    ============================================================ */
-
-
 
 /* ============================================================
    crux — design tokens
@@ -147,6 +147,26 @@
   --grain-blend: normal;
 }
 
+/* >>> SHARED-LAYER:BEGIN
+   SHARED COMPONENT LAYER
+   ------------------------------------------------------------------------
+   This block is byte-identical in every repo that uses the reference-site
+   pattern. It is the only part of a repo's site stylesheet that is not
+   repo-specific.
+
+   A repo's stylesheet is exactly three parts:
+
+       1. design tokens       (:root, @font-face)  -- repo-specific
+       2. SHARED COMPONENT LAYER (this block)    -- identical everywhere
+       3. signature section   (at the end)        -- repo-specific
+
+   Edit (1) and (3) freely. Change this block only by changing it in every
+   repo at once -- scripts/assemble-css.sh does that and fails on drift.
+   The site directory is site/ by default, overridable with SITE_DIR.
+
+   Adding a class here means every repo gains it. That is the point: it keeps
+   the sites one system instead of N forks.
+   ---------------------------------------------------------------------- */
 
 /* ============================================================
    SHARED COMPONENT LAYER
@@ -1173,6 +1193,7 @@ figcaption {
   }
 }
 
+/* <<< SHARED-LAYER:END */
 
 /* ============================================================
    crux — signature: the trace rail
@@ -1370,15 +1391,12 @@ figcaption {
   }
 }
 
-
-
 /* ============================================================
    End of repo-specific sections.
 
-   Self-hosted faces in ./fonts/ are the latin subsets pulled from
-   Fontsource, each under the SIL Open Font License 1.1. See
-   fonts/README.md for the file list and upstream sources. No CDN
-   request is made at render time.
+   Self-hosted faces in ./fonts/ are latin subsets pulled from Fontsource
+   (SIL Open Font License 1.1). See fonts/README.md for the file list and
+   upstream sources. No CDN request is made at render time.
 
    repo: crux
    ============================================================ */
