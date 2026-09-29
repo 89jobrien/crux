@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Questions about the crux agentic DSL: how the trace differs from tracing, how replay works, how budgets are enforced, and what to trust when the docs disagree.">
+    <title>crux &mdash; FAQ</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="cli.html">CLI</a>
+      <a href="crates.html">Crates</a>
+      <a href="status.html">Status</a>
+      <a href="faq.html" aria-current="page">FAQ</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head">
+        <span class="eyebrow">Questions</span>
+        <h1>The ones that actually come up</h1>
+        <p class="lead">Answered from source, manifests, and captured runs. Where the repository disagrees with itself, the disagreement is part of the answer.</p>
+      </header>
+
+      <div class="faq">
+
+        <details class="faq-item">
+          <summary>How is this different from <code>tracing</code> or OpenTelemetry?</summary>
+          <div class="faq-body">
+            <p>A span in those systems is a timing primitive: it happened, and here is how long it took. <code>crux::</code> treats a step as an epistemic primitive: it happened, and here is how sure we are the output is correct. The difference is that a step carries a confidence reading, and the whole trace is the return value rather than something exported to a collector.</p>
+            <p>The project's own summary of the distinction: <em><code>tracing</code> tells you what happened; <code>crux::</code> tells you what happened <em>and</em> lets you re-run it from a snapshot.</em></p>
+            <p>The practical consequences are two. You cannot forget to attach the trace, because returning <code>Crux&lt;T&gt;</code> returns the trace with it. And replaying a function means re-running it seeded by a snapshot of that same value.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>What exactly comes back from a run?</summary>
+          <div class="faq-body">
+            <p>From the source of <code>crux-schema</code>:</p>
+<pre><span class="cmt">pub struct Crux&lt;T&gt; {</span>
+  pub id: CruxId,
+  pub agent: String,
+  pub pipeline_version: Option&lt;String&gt;,
+  pub value: Result&lt;T, CruxErr&gt;,
+  pub steps: Vec&lt;Step&gt;,
+  pub children: Vec&lt;Crux&lt;Value&gt;&gt;,
+  pub started_at: DateTime&lt;Utc&gt;,
+  pub finished_at: Option&lt;DateTime&lt;Utc&gt;&gt;,
+<span class="cmt">}</span></pre>
+            <p>Delegations nest as a tree of child values. There are accessors for the inner result, the causal chain, the delegations, the rejected branches, the duration, and the pass and fail counts, plus <code>to_snapshot()</code> for the replay seed.</p>
+            <p>Note that <code>pipeline_version</code> is in the type but is missing from the published syntax reference.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>YAML pipeline or Rust macro &mdash; which should I use?</summary>
+          <div class="faq-body">
+            <p>Both, and they produce the same <code>Crux&lt;T&gt;</code>. Use a <code>.crux</code> file when the workflow is declarative and the sequence is the point. Use <code>#[crux::agent]</code> when you need typed logic, delegation, and confidence-based routing that YAML would only approximate.</p>
+            <p>A <code>.crux</code> file has four parts: <code>pipeline:</code> as a name, an optional <code>budget:</code>, an optional <code>display:</code> block for human-facing titles and visibility, and an ordered <code>steps:</code> list. A Cruxfile is the multi-target variant, keyed on <code>targets:</code> instead.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>How does replay decide a step still matches?</summary>
+          <div class="faq-body">
+            <p>By name plus an ordinal hash. In <strong>strict</strong> mode a mismatch fails. In <strong>lenient</strong> mode the matcher does a forward name scan, so an ordinal shift is the designed recovery path rather than a fallback.</p>
+            <p>The finer detail: lenient matching rejects a candidate on differing content hashes only when both sides have one. Exhausting the candidates yields a live miss, not an error.</p>
+            <p>Every step records a <code>StepOrigin</code> of <code>Live</code> or <code>Replayed</code>, and the CLI prints it as <code>[LIVE]</code> or <code>[CACHED / REPLAYED]</code> beside each row.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>What are the four budget dimensions?</summary>
+          <div class="faq-body">
+            <p>Handler attempts, model tokens, wall-clock milliseconds, and dollars. They are measured independently, and delegated budgets are enforced in the child context rather than only at the top.</p>
+            <p>One real gotcha: <code>BudgetDef</code> is an untagged enum, so a compound limit such as <code>{ calls: 40, duration_ms: 900000 }</code> matches a single variant and the other constraint is dropped without an error. This is a tracked P0. Until it is fixed, express each limit as its own entry.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>Do I need an API key to run a pipeline?</summary>
+          <div class="faq-body">
+            <p>Not for anything that does not call an LLM handler. <code>--dry-run</code> and <code>--check</code> resolve handlers without executing them and write no trace. The showcase fixtures run against deterministic handlers with no key at all.</p>
+            <p>The default <code>rule</code> planner also needs no key and makes no network call. LLM handlers need one, and CI never exercises them: the <code>llm_extract</code> and <code>planner</code> test binaries are excluded from the nextest run.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>Why does checking my own example produce a dozen warnings?</summary>
+          <div class="faq-body">
+            <p>Because the contract system is stricter than 1.0. A <code>missing_contract</code> warning means a handler's input schema or confidence capability is not fully declared. Subprocess plugins can currently only declare their output shape, so plugin steps are always incomplete under <code>--strict</code>.</p>
+            <p><code>examples/showcase.crux</code> produces twelve of them, and that is expected rather than a broken example.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>The docs and the code disagree. Which do I trust?</summary>
+          <div class="faq-body">
+            <p>The code. Three specific cases where it matters:</p>
+            <ul>
+              <li><code>CONFORMANCE.md</code> specifies a <code>StepKind</code> and <code>StepStatus</code> that were never built. Read the enums in <code>crux-types/src/step.rs</code> instead.</li>
+              <li><code>CHANGELOG.md</code> stops at 0.1.0 from April while the workspace is 0.4.0. It is not a release history.</li>
+              <li><code>docs/src/</code> is an orphaned tree of three-line stubs. The live book is <code>docs/</code>, following <code>docs/SUMMARY.md</code>.</li>
+            </ul>
+            <p>The <a href="status.html">status page</a> lists the full set of known drift.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>Why is the published CLI missing most of its own subcommands?</summary>
+          <div class="faq-body">
+            <p>The released binary predates <code>develop</code>. It exposes <code>run</code>, <code>check</code>, <code>list</code>, and <code>plan</code>. The other seven &mdash; <code>regress</code>, <code>trace</code>, <code>replay-debug</code>, <code>handlers</code>, <code>schema</code>, <code>doctor</code>, <code>init</code>, <code>test</code> &mdash; are in the source and not in the install.</p>
+            <p>There is also no <code>--version</code> flag at all. <code>crux --version</code> errors with <code>unexpected argument</code>.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>How do I install it? The name on crates.io looks taken.</summary>
+          <div class="faq-body">
+            <p>Install from git with an explicit tag rather than from crates.io:</p>
+<pre>cargo install --git https://github.com/89jobrien/crux \
+  --tag v0.4.2 crux-cli</pre>
+            <p>The workspace is at 0.4.0 with tags through v0.4.2. The unrelated <code>crux</code> crate on crates.io belongs to a different publisher.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>Is <code>for_each: parallel</code> actually parallel?</summary>
+          <div class="faq-body">
+            <p>No. The key is accepted, but iterations still execute sequentially. <code>CruxCtx</code> is a single mutable trace recorder, so concurrent nested <code>ctx.step()</code> calls are not sound without a change to <code>crux-runtime</code>.</p>
+            <p>An older gap-analysis document claims bounded concurrency with <code>max_concurrency: 8</code>. The capabilities reference supersedes it, and the older claim should be ignored.</p>
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary>What is the minimum supported Rust version?</summary>
+          <div class="faq-body">
+            <p>1.89.0, from the <code>rust-version</code> field in the workspace manifest. Some agent guides still say 1.88; that is a tracked documentation TODO and the manifest is authoritative.</p>
+          </div>
+        </details>
+
+      </div>
+
+      <p style="margin-top: 2.5rem"><a href="index.html">Back to the overview</a> &middot; <a href="architecture.html">Architecture</a></p>
+    </main>
+
+    <footer class="site-foot">
+      <a href="https://github.com/89jobrien/crux">Source on GitHub</a> &middot; MIT &middot; built by <a href="https://github.com/89jobrien">Joseph O'Brien</a>
+    </footer>
+  </body>
+</html>

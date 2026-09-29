@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Crux turns agentic execution into a typed Rust value: every run returns Crux&lt;T&gt;, a result or error fused with the steps, child runs, identity, and timing that produced it.">
+    <title>crux &mdash; inspectable, serializable, replayable agent execution</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" class="brand" aria-current="page"><span class="mark">cr</span>ux</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="cli.html">CLI</a>
+      <a href="crates.html">Crates</a>
+      <a href="status.html">Status</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+
+    <main id="main">
+      <header class="hero">
+        <div class="hero-grid">
+          <div>
+            <span class="eyebrow reveal reveal-1">Rust 2024 &middot; MSRV 1.89 &middot; MIT</span>
+            <h1 class="reveal reveal-2"><span class="mark">crux</span></h1>
+            <p class="tagline reveal reveal-3">Crux turns agentic execution into a typed Rust value. Every run returns <code>Crux&lt;T&gt;</code> &mdash; a result or error together with the steps, child runs, identity, and timing that produced it.</p>
+            <div class="actions reveal reveal-4">
+              <a class="button button-primary" href="architecture.html">Read the architecture</a>
+              <a class="button" href="status.html">What actually works</a>
+            </div>
+          </div>
+
+          <div class="terminal reveal reveal-3" aria-label="A real crux run against the showcase pipeline">
+            <div class="terminal-bar"><span class="label">crux run --dry-run</span></div>
+<pre><span class="prompt">$</span> crux run examples/showcase.crux \
+      examples/input_showcase.json --dry-run
+<span class="ok">Pipeline: showcase (7 steps)</span>
+
+   1. ctrl::assert
+   2. ctrl::log
+   3. ctrl::noop
+   4. shell::capture
+   <span class="cmt">--dry-run resolves handlers without
+     executing them, and writes no trace</span></pre>
+          </div>
+        </div>
+      </header>
+
+      <div class="stat-strip" aria-label="Workspace snapshot">
+        <div class="stat"><div class="n">18</div><div class="d">workspace members</div></div>
+        <div class="stat"><div class="n">0.4.0</div><div class="d">workspace version</div></div>
+        <div class="stat"><div class="n">64</div><div class="d">documented handlers</div></div>
+        <div class="stat"><div class="n">11</div><div class="d">CLI subcommands</div></div>
+      </div>
+
+      <section class="home-section">
+        <span class="eyebrow">The return value</span>
+        <h2>Observability travels with the result</h2>
+        <p class="section-intro">A <code>tracing</code> span tells you something happened and how long it took. Crux returns a value that carries the steps, the delegations, and the timing <em>inside</em> the type the caller already has to handle.</p>
+        <div class="card">
+          <p><code>Crux&lt;T&gt; = Result&lt;T, CruxErr&gt; + steps + child runs + run metadata</code></p>
+          <p>Written in the project's own words:</p>
+          <blockquote>
+            <p>This is the most significant departure from <code>tracing</code> / OpenTelemetry. Those libraries treat a span as a timing primitive &mdash; <em>it happened, here is how long it took</em>. <code>crux::</code> treats a step as an <em>epistemic</em> primitive: <em>it happened, here is how sure we are the output is correct.</em></p>
+            <p class="meta"><code>docs/walkthrough/02-core-types.md</code></p>
+          </blockquote>
+          <p>Two consequences follow. You cannot forget the trace, because returning <code>Crux&lt;T&gt;</code> returns the trace with it. And replay is trivial, because the trace <em>is</em> the return value &mdash; a snapshot of it seeds the next run.</p>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">A real trace</span>
+        <h2>Steps laid out by duration, tagged by origin</h2>
+        <p class="section-intro">Every step records a <code>StepOrigin</code>: <code>Live</code> or <code>Replayed</code>. The CLI already prints that as <code>[LIVE]</code> and <code>[CACHED / REPLAYED]</code> beside every row; this is the same reading, drawn to scale.</p>
+
+        <div class="trace">
+          <div class="trace-head">
+            <span class="trace-title">Pipeline: hello &mdash; 2/2 checks passed</span>
+            <span class="trace-verdict">PASS 42ms</span>
+          </div>
+
+          <div class="trace-key">
+            <span><span class="swatch"></span>Live step</span>
+            <span><span class="swatch replayed"></span>Replayed from snapshot</span>
+          </div>
+
+          <div class="trace-rail" role="img" aria-label="Time rail. A live greeting step occupies 12 milliseconds, a replayed delegation occupies 18 milliseconds, then a live timestamp step occupies 8 milliseconds, then a replayed branch step occupies 4 milliseconds. Total 42 milliseconds.">
+            <span class="trace-seg" style="left: 0%; width: 28.6%"></span>
+            <span class="trace-seg" data-origin="replayed" style="left: 28.6%; width: 42.8%"></span>
+            <span class="trace-seg" style="left: 71.4%; width: 19.1%"></span>
+            <span class="trace-seg" data-origin="replayed" data-status="rejected" style="left: 90.5%; width: 9.5%"></span>
+          </div>
+
+          <table class="trace-steps">
+            <caption class="meta" style="padding: 0 0 0.4rem">Durations and the pass line are the documented output of the <code>hello.crux</code> walkthrough. The delegation and rejected-branch steps are illustrative: they exercise the real <code>StepKind</code> and <code>StepOrigin</code> variants, which are <code>Plain | Delegation | Branch | Speculation</code> and <code>Live | Replayed</code>.</caption>
+            <thead>
+              <tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">Kind</th><th scope="col">Origin</th><th scope="col" class="num">Dur</th><th scope="col">Confidence</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">1</td><td>greeting</td><td>plain</td>
+                <td class="origin live">LIVE</td><td class="num">12ms</td>
+                <td><span class="confidence">1.00<span class="bar"><span style="width: 100%"></span></span></span></td>
+              </tr>
+              <tr>
+                <td class="num">2</td><td>delegate &rarr; summarise</td><td>delegation</td>
+                <td class="origin">CACHED / REPLAYED</td><td class="num">18ms</td>
+                <td><span class="confidence">0.86<span class="bar"><span style="width: 86%"></span></span></span></td>
+              </tr>
+              <tr>
+                <td class="num">3</td><td>timestamp</td><td>plain</td>
+                <td class="origin live">LIVE</td><td class="num">8ms</td>
+                <td><span class="confidence">1.00<span class="bar"><span style="width: 100%"></span></span></span></td>
+              </tr>
+              <tr>
+                <td class="num">4</td><td>alt framing &rarr; rejected</td><td>branch</td>
+                <td class="origin">CACHED / REPLAYED</td><td class="num">4ms</td>
+                <td><span class="confidence">0.31<span class="bar"><span style="width: 31%"></span></span></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">Two surfaces</span>
+        <h2>YAML pipelines and typed Rust agents, one trace</h2>
+        <p class="section-intro">Write declarative <code>.crux</code> files for workflows, or <code>#[crux::agent]</code> when you need typed logic, delegation, and confidence routing. Both produce the same <code>Crux&lt;T&gt;</code>.</p>
+        <div class="grid-2">
+          <article class="feature-card">
+            <span class="pill pill-active">Pipeline</span>
+            <h3><code>.crux</code> files</h3>
+            <p>Four parts: <code>pipeline:</code>, an optional <code>budget:</code> measured independently as steps, tokens, wall-clock milliseconds, and dollars, an optional <code>display:</code>, and an ordered <code>steps:</code> list. 28 example pipelines ship in the repo.</p>
+          </article>
+          <article class="feature-card">
+            <span class="pill pill-active">Rust API</span>
+            <h3><code>#[crux::agent]</code></h3>
+            <p>Implement <code>Agent::run(ctx, input) -&gt; Result&lt;Crux&lt;Self::Output&gt;, CruxErr&gt;</code> and get the same typed trace back. Combinators cover pipe, join, speculate, route-on-confidence, and delegate.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">Where it stands</span>
+        <h2>A tested core, a pre-1.0 CLI, and honest gaps</h2>
+        <p class="section-intro">Crux is a mature library with a young command line. The distinction matters, so the status page says exactly which is which rather than averaging them into one number.</p>
+        <div class="card-grid">
+          <article class="feature-card">
+            <span class="pill pill-shipped">Shipped</span>
+            <h3>Pipeline execution</h3>
+            <p>64 documented handlers, all four loop primitives, typed budgets, strict and lenient replay, a task registry with compare-and-swap, and a subprocess plugin host. 1,135 <code>#[test]</code> attributes across the workspace.</p>
+          </article>
+          <article class="feature-card">
+            <span class="pill pill-wip">Partial</span>
+            <h3><code>for_each: parallel</code></h3>
+            <p>Accepted, but still executes iterations sequentially. <code>CruxCtx</code> is a single mutable trace recorder, so concurrent nested <code>ctx.step()</code> calls are not sound without a runtime change.</p>
+          </article>
+          <article class="feature-card">
+            <span class="pill pill-notwired">Not wired</span>
+            <h3>Advanced CLI subcommands</h3>
+            <p><code>regress</code>, <code>handlers</code>, <code>doctor</code>, <code>init</code>, <code>trace</code>, and <code>schema</code> exist in source and are absent from the published install, which predates them.</p>
+          </article>
+        </div>
+        <p style="margin-top: 1.4rem"><a href="status.html">Read the full status page</a> &middot; <a href="faq.html">Common questions</a></p>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <a href="https://github.com/89jobrien/crux">Source on GitHub</a> &middot; MIT &middot; built by <a href="https://github.com/89jobrien">Joseph O'Brien</a>
+    </footer>
+  </body>
+</html>
