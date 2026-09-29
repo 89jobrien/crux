@@ -39,7 +39,7 @@ enum OutputType {
 }
 
 #[derive(Parser)]
-#[command(name = "crux", about = "crux pipeline runner and planner")]
+#[command(name = "crux", version, about = "crux pipeline runner and planner")]
 enum Cli {
     /// Manage golden traces and run offline regression evaluation
     Regress {
