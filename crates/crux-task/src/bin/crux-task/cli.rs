@@ -3,7 +3,11 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "crux-task", about = "Project task management for crux")]
+#[command(
+    name = "crux-task",
+    version,
+    about = "Project task management for crux"
+)]
 pub struct Cli {
     /// Output in JSON format
     #[arg(long, global = true)]
