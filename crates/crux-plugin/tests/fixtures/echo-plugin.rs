@@ -4,6 +4,11 @@
 use std::io::{self, BufRead, Write};
 
 fn main() {
+    let handler_name = std::env::var("ECHO_HANDLER").unwrap_or_else(|_| "echo::reflect".to_owned());
+    let delay = std::env::var("ECHO_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(std::time::Duration::from_millis);
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -27,13 +32,16 @@ fn main() {
                 "data": {
                     "handlers": [
                         {
-                            "name": "echo::reflect",
+                            "name": handler_name,
                             "description": "Returns input unchanged"
                         }
                     ]
                 }
             }),
             "Invoke" => {
+                if let Some(delay) = delay {
+                    std::thread::sleep(delay);
+                }
                 let input = req
                     .get("params")
                     .and_then(|p| p.get("input"))

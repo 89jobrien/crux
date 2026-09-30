@@ -32,7 +32,7 @@ Subprocess plugin host using JSON-RPC over stdio.
 
 ## Lifecycle
 
-```
+```text
 1. discovery::scan_manifests()  — find plugin manifests
 2. host::launch()               — spawn plugin process
 3. bridge::register()           — bridge handlers into registry
@@ -42,7 +42,7 @@ Subprocess plugin host using JSON-RPC over stdio.
 
 ## Protocol
 
-```
+```text
 Host -> Plugin: { "method": "execute", "params": { step_def } }
 Plugin -> Host: { "result": { output } }
 ```

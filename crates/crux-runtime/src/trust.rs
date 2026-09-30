@@ -1,3 +1,5 @@
+//! Per-agent trust scoring, temporal decay, and candidate selection.
+
 use std::collections::HashMap;
 
 const DEFAULT_TRUST_SCORE: f64 = 0.5;
@@ -66,6 +68,7 @@ pub struct TrustRegistry {
 }
 
 impl TrustRegistry {
+    /// Creates an empty registry that assigns default trust on first mutation.
     pub fn new() -> Self {
         Self {
             scores: HashMap::new(),

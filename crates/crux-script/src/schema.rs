@@ -1,10 +1,15 @@
+//! Deserializable definitions for pipelines, Cruxfiles, and control-flow nodes.
+
 use crux_types::budget::UsdAmount;
 /// YAML schema types for pipeline definitions.
 use indexmap::IndexMap;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
+use crate::metadata::ValueSchema;
+
 /// Human-facing presentation metadata for CLI pipeline output.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
 pub struct PipelineDisplayDef {
     /// Optional title used instead of the stable pipeline identifier.
     #[serde(default)]
@@ -18,7 +23,7 @@ pub struct PipelineDisplayDef {
 }
 
 /// Successful final-value visibility in summary and verbose renderers.
-#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DisplayOutput {
     /// Show semantic JSON and useful successful shell stdout without its envelope.
@@ -30,9 +35,13 @@ pub enum DisplayOutput {
     Never,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct PipelineDef {
     pub pipeline: String,
+    /// Optional static schema for the pipeline's external input value.
+    #[serde(default)]
+    #[schemars(with = "Option<serde_json::Value>")]
+    pub input_schema: Option<ValueSchema>,
     #[serde(default)]
     pub budget: Option<BudgetDef>,
     /// Pipeline-level variable bindings (#85), resolved once before any step runs.
@@ -48,7 +57,7 @@ pub struct PipelineDef {
 
 /// An arm or stage in a join_all or pipe — either a bare handler name string,
 /// or a full step object with `step`, optional `handler`, and optional `args`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum ArmDef {
     /// Bare string: the name is both the step label and the handler name.
@@ -102,17 +111,18 @@ impl ArmDef {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BudgetDef {
     pub tokens: Option<u64>,
     pub steps: Option<u64>,
+    #[schemars(with = "Option<f64>")]
     pub usd: Option<UsdAmount>,
     pub calls: Option<u64>,
     pub duration_ms: Option<u64>,
     pub cost_cents: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum StepDef {
     Step(StepNode),
@@ -133,7 +143,7 @@ pub enum StepDef {
 /// iteration is a traced sub-step named `<while>[<index>]`, and `break_if:`
 /// (evaluated after each iteration) can stop the loop early. `{{ iter.index }}`
 /// is available inside `steps:`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct WhileNode {
     pub r#while: String,
     pub steps: Vec<StepDef>,
@@ -147,7 +157,7 @@ pub struct WhileNode {
 /// each iteration is a traced sub-step named `<repeat>[<index>]`, and
 /// `break_if:` can stop the loop early. `{{ iter.index }}` is available inside
 /// `steps:`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct RepeatNode {
     pub repeat: String,
     pub steps: Vec<StepDef>,
@@ -161,23 +171,15 @@ pub struct RepeatNode {
 /// (`max_concurrency`, default [`DEFAULT_MAX_CONCURRENCY`]). `break_if:` is
 /// evaluated after each iteration; `{{ iter.<as> }}` and `{{ iter.index }}` are
 /// available inside `steps:`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct ForEachNode {
     /// The step's trace label, optionally suffixed with `" as <binding>"` to name
     /// the per-iteration item binding (e.g. `doubles as n`). Defaults to `item`
     /// when no `as` suffix is given.
     ///
-    /// NOTE: this packs the binding name into `for_each` instead of a separate
-    /// `as:` field due to a confirmed parser limitation in `serde-saphyr` 0.0.23:
-    /// untagged enum struct-variants silently fail to deserialize once they carry
-    /// more than 3 non-`#[serde(default)]` fields (verified via an extensive
-    /// bisection — see PR discussion for #84). `for_each` + `items` + `steps` is
-    /// exactly 3 required fields, the proven-safe ceiling; adding a 4th required
-    /// `as` field pushes it over and breaks parsing for every pipeline using this
-    /// node, not just ones that set a custom binding. Use [`Self::label`] and
-    /// [`Self::binding`] to read the parsed pieces.
-    // TODO(automation-8): Remove the encoded `" as "` workaround after upgrading or replacing
-    // serde-saphyr with a parser that supports the intended untagged node shape.
+    /// This packs the binding name into `for_each` because serde-saphyr 1.3.0
+    /// still rejects this untagged variant when a dedicated `as:` field is present.
+    /// See the isolated regression test in `tests/serde_saphyr_regression.rs`.
     pub for_each: String,
     /// Template expression evaluated once (against the outer scope) to produce
     /// the array to iterate over.
@@ -223,7 +225,7 @@ pub const DEFAULT_MAX_CONCURRENCY: usize = 4;
 /// repeats until `until:` evaluates truthy or `max_attempts` is reached, waiting
 /// `interval_ms` between iterations. Each iteration is recorded as its own traced
 /// sub-step named `<poll>[<index>]` (0-based).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct PollNode {
     pub poll: String,
     pub steps: Vec<StepDef>,
@@ -234,7 +236,7 @@ pub struct PollNode {
     pub interval_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct StepNode {
     pub step: String,
     #[serde(default)]
@@ -270,7 +272,7 @@ pub struct StepNode {
 }
 
 /// A fallback handler invocation run when a step's handler (and retries) fail (#88).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct OnErrorDef {
     pub handler: String,
     #[serde(default)]
@@ -278,7 +280,7 @@ pub struct OnErrorDef {
 }
 
 /// Retry-with-backoff policy for a single step (#79).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct RetryDef {
     /// Number of additional attempts after the initial one.
     pub count: u32,
@@ -292,7 +294,7 @@ pub struct RetryDef {
 /// Expects the output to be a JSON object with `exit_code` (number), `stdout`
 /// (string), and/or `stderr` (string) fields — the convention used by shell-style
 /// handlers. Fields not present in the `expect:` block are not checked.
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
 pub struct ExpectDef {
     #[serde(default)]
     pub exit_code: Option<i64>,
@@ -302,7 +304,7 @@ pub struct ExpectDef {
     pub stderr_contains: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct DelegateNode {
     pub delegate: String,
     #[serde(default)]
@@ -311,26 +313,26 @@ pub struct DelegateNode {
     pub budget: Option<BudgetDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct PipeNode {
     pub pipe: String,
     pub stages: Vec<ArmDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct JoinAllNode {
     pub join_all: String,
     pub arms: Vec<ArmDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct RouteNode {
     pub route_on_confidence: String,
     pub value: String,
     pub routes: Vec<RouteBranch>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct RouteBranch {
     pub range: String,
     pub label: String,
@@ -339,7 +341,7 @@ pub struct RouteBranch {
     pub args: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct SpeculateNode {
     pub speculate: String,
     #[serde(default = "default_speculate_mode")]
@@ -347,7 +349,7 @@ pub struct SpeculateNode {
     pub arms: Vec<ArmDef>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SpeculateMode {
     #[default]
@@ -358,10 +360,6 @@ pub enum SpeculateMode {
 fn default_speculate_mode() -> SpeculateMode {
     SpeculateMode::PickBest
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -423,10 +421,9 @@ steps:
 }
 
 // ---------------------------------------------------------------------------
-// Cruxfile (multi-target) schema
-// ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Deserialize)]
+// Cruxfile (multi-target) schema
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct CruxfileDef {
     pub project: String,
     pub default: String,
@@ -435,7 +432,7 @@ pub struct CruxfileDef {
     pub targets: IndexMap<String, TargetDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct TargetDef {
     #[serde(default)]
     pub depends: Vec<String>,

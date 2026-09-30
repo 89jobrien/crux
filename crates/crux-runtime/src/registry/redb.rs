@@ -1,3 +1,5 @@
+//! Embedded redb adapter for persistent task bytes and atomic updates.
+
 /// Adapter: redb registry backend — pure-Rust embedded key-value store.
 ///
 /// Single table: tasks(&str => &[u8]).

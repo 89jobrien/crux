@@ -23,8 +23,8 @@ test_areas:
     coverage: "Code review handlers"
 commands:
   default: "cargo nextest run -p crux-agentic"
-  baml: "cargo nextest run -p crux-agentic --features baml"
-  with_keys: "just sops-run crux dev cargo nextest run --features baml -p crux-agentic"
+  baml: "cargo nextest run -p crux-baml"
+  with_keys: "just sops-run crux dev cargo nextest run -p crux-baml"
 ---
 
 # Testing: crux-agentic
@@ -38,7 +38,7 @@ the workspace.
 
 ```bash
 cargo nextest run -p crux-agentic                  # unit tests only
-cargo nextest run -p crux-agentic --features baml   # include BAML tests
+cargo nextest run -p crux-baml   # BAML-backed handler tests
 ```
 
 ## BAML / LLM Tests
@@ -46,5 +46,5 @@ cargo nextest run -p crux-agentic --features baml   # include BAML tests
 Tests that call live LLM APIs require API keys:
 
 ```bash
-just sops-run crux dev cargo nextest run --features baml -p crux-agentic
+just sops-run crux dev cargo nextest run -p crux-baml
 ```

@@ -1,3 +1,5 @@
+//! End-to-end execution tests for pipeline steps and combinators.
+
 use crux_runtime::prelude::CruxErr;
 /// Integration tests for YAML-driven pipeline execution.
 use crux_script::{HandlerOutput, HandlerRegistry, Runner, load};
@@ -364,6 +366,87 @@ steps:
     let runner = Runner::new(test_registry());
     let crux = runner.run(&pipeline, json!({"name": "crux"})).await;
     assert_eq!(crux.value().unwrap(), &json!("hello crux!"));
+}
+
+#[tokio::test]
+async fn pipe_args_expand_expressions() {
+    let yaml = r#"
+pipeline: pipe_args
+steps:
+  - pipe: transform
+    stages:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "pipe" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("pipe"));
+}
+
+#[tokio::test]
+async fn join_args_expand_expressions() {
+    let yaml = r#"
+pipeline: join_args
+steps:
+  - join_all: joined
+    arms:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "join" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!(["join"]));
+}
+
+#[tokio::test]
+async fn route_args_expand_expressions() {
+    let yaml = r#"
+pipeline: route_args
+steps:
+  - step: analyze
+    handler: analyzer
+  - route_on_confidence: routed
+    value: "{{ steps.analyze.confidence }}"
+    routes:
+      - range: "[0.0, 1.0]"
+        label: selected
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "route" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("route"));
+}
+
+#[tokio::test]
+async fn speculate_args_expand_expressions() {
+    let yaml = r#"
+pipeline: speculate_args
+steps:
+  - speculate: candidates
+    mode: first_ok
+    arms:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "speculate" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("speculate"));
 }
 
 #[tokio::test]

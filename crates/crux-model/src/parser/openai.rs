@@ -1,5 +1,8 @@
+//! Normalization of OpenAI GPT and reasoning-model names.
+
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
+/// Normalizes GPT and `oN` provider IDs, preserving unknown names via fallback parsing.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     // gpt-{gen}[-{variant}...]
     if let Some(rest) = raw.strip_prefix("gpt-") {

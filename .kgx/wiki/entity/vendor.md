@@ -2,5 +2,7 @@
 title: Vendor
 tags: [type, model]
 ---
-# Vendor
+
+## Vendor
+
 **Crate:** [[crux-model]] | Enum: OpenAi, Anthropic, Google, Meta, Mistral, Cohere, Ollama, Local.

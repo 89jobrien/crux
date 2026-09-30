@@ -11,16 +11,18 @@ pub mod discover;
 pub mod error;
 pub mod handlers;
 pub mod harness;
+pub mod http;
 pub mod llm;
 pub mod llm_step;
 pub mod provider;
-// TODO(automation-12): Add a typed generic HTTP handler with explicit method, URL, headers,
-// response limits, timeout, and network policy instead of routing research fetches through shell.
 pub mod review;
 pub mod rx;
 pub mod sqlite;
 pub mod task;
 pub mod triage;
+
+/// Backwards-compatible re-export of shell handlers now owned by `crux-stdlib`.
+pub use crux_stdlib::shell;
 
 pub use llm_step::LlmStep;
 pub use provider::{LlmProvider, LlmRequest, LlmResponse};
@@ -57,18 +59,16 @@ pub fn register_all_with_plugins(registry: &mut HandlerRegistry, plugin_handlers
     ci::register(registry);
     container::register(registry);
     harness::register(registry);
+    http::register(registry);
     review::register(registry);
     rx::register(registry);
     sqlite::register(registry);
     task::register(registry);
     triage::register(registry);
-    llm::register(registry);
-    llm::register_stream(registry);
-    llm::register_fallback(registry);
-
-    // BAML handlers
-    #[cfg(feature = "baml")]
+    // LLM handlers. `crux-baml` owns every `llm::*` handler that makes a model
+    // call — `llm::invoke`, `llm::invoke_with_fallback`, `llm::stream`, and the
+    // structured ones — so provider selection, retries, and output parsing all
+    // live behind BAML. The `LlmProvider` port in `provider` stays public for
+    // direct Rust callers.
     crux_baml::register_all_with_plugins(registry, plugin_handlers);
-    #[cfg(not(feature = "baml"))]
-    let _ = plugin_handlers;
 }

@@ -23,7 +23,7 @@ handlers.
 
 ## Structure
 
-```
+```text
 crux-baml
  +-- baml_client/    (generated, gitignored)
  +-- extract.rs      — llm::extract handler

@@ -1,3 +1,5 @@
+//! Runtime tests for conditional and fixed-count loop nodes.
+
 /// Integration tests for `while:` and `repeat:` loop primitives (#89).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

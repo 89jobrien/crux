@@ -40,6 +40,7 @@ fn parse_status(s: &str) -> Result<ProjectTaskStatus, AgenticError> {
     }
 }
 
+/// Registers persistent task creation, update, query, and dependency handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value("task::create", |input: Value| async move {
         let mgr = open_manager(&input)?;

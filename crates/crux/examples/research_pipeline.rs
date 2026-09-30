@@ -1,3 +1,5 @@
+//! End-to-end research workflow combining fan-out, pipes, speculation, delegation, and routing.
+
 /// Research pipeline: a full end-to-end crux agent.
 ///
 /// Demonstrates all five combinators working together in a realistic scenario:
@@ -39,8 +41,6 @@ struct SearchResult {
     text: String,
     score: f32,
 }
-
-// -- Pipeline -----------------------------------------------------------------
 
 async fn run_pipeline(query: &str) -> Crux<String> {
     let mut ctx = CruxCtx::new("research_pipeline");
@@ -172,8 +172,6 @@ async fn pipeline(ctx: &mut CruxCtx, query: String) -> Result<String, CruxErr> {
 
     Ok(action)
 }
-
-// -- Main ---------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() {

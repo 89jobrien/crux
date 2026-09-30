@@ -1,3 +1,5 @@
+//! Consistency tests between handler constants and registry names.
+
 #[test]
 fn sqlite_constants_defined() {
     use crux_agentic::handlers::{

@@ -13,13 +13,12 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-baml = ["dep:crux-baml"]
 docker = ["dep:bollard", "dep:futures"]
 
 [dependencies]
 bollard = { version = "0.20", optional = true }
 chrono = { workspace = true }
-crux-baml = { workspace = true, optional = true } #unified
+crux-baml = { workspace = true } #unified
 crux-model = { workspace = true } #unified
 crux-plugin = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
@@ -38,6 +37,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+baml = "0.221.0"
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

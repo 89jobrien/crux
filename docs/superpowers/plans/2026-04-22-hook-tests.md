@@ -47,7 +47,6 @@ random inputs and exercises the filename classifier and git-ref parser independe
 - Create: `scripts/tests/stubs/markdownlint-cli2`
 - Create: `scripts/tests/stubs/tflint`
 - Create: `scripts/tests/stubs/check-jsonschema`
-
 - [ ] **Step 1: Create `scripts/tests/helpers.bash`**
 
 ```bash

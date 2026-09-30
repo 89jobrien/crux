@@ -1,9 +1,16 @@
-use std::io::Read as _;
+//! Pipeline loading, compilation, execution, replay, and trace persistence.
+
+use std::io::{Read as _, Write as _};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
 use crux_runtime::prelude::*;
-use crux_script::{HandlerRegistry, TargetResolver, schema::PipelineDef};
+use crux_script::{
+    Compilation, CompileOptions, DiagnosticSeverity, TargetResolver, TypedCruxfile,
+    ValidationDiagnostic, collect_agent_names, compile_cruxfile, compile_pipeline,
+    schema::PipelineDef,
+};
 use serde_json::{Value, json};
 
 use crate::output::{render_summary, render_trace};
@@ -36,6 +43,8 @@ pub struct RunConfig<'a> {
     pub replay_path: Option<&'a str>,
     pub replay_mode_str: &'a str,
     pub save_trace_path: Option<&'a str>,
+    pub events_jsonl_path: Option<&'a str>,
+    pub through_step: Option<&'a str>,
     pub strict: bool,
 }
 
@@ -61,6 +70,89 @@ fn output_mode(config: &RunConfig<'_>) -> OutputMode {
     }
 }
 
+fn trace_name_component(value: &str) -> String {
+    let mut component = String::with_capacity(value.len());
+    let mut replacing = false;
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+            component.push(character);
+            replacing = false;
+        } else if !replacing {
+            component.push('-');
+            replacing = true;
+        }
+    }
+
+    let component = component.trim_matches('-');
+    if component.is_empty() {
+        "pipeline".to_string()
+    } else {
+        component.to_string()
+    }
+}
+
+fn automatic_trace_path(
+    home: &Path,
+    trace: &Crux<Value>,
+    pipeline_name: &str,
+    target_name: Option<&str>,
+) -> PathBuf {
+    let timestamp = trace.started_at.format("%Y%m%dT%H%M%S%.3fZ");
+    let pipeline_name = trace_name_component(pipeline_name);
+    let target_name = target_name
+        .map(trace_name_component)
+        .map(|target| format!("-{target}"))
+        .unwrap_or_default();
+    let trace_id = trace_name_component(trace.id.as_str());
+    let filename = format!("{timestamp}-{pipeline_name}{target_name}-{trace_id}.json");
+
+    home.join(".crux").join("traces").join(filename)
+}
+
+fn persist_trace(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
+    let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
+    std::fs::write(path, json)
+}
+
+fn persist_events_jsonl(trace: &Crux<Value>, path: &Path) -> std::io::Result<()> {
+    let jsonl = trace_to_jsonl(trace).map_err(std::io::Error::other)?;
+    std::fs::write(path, jsonl)
+}
+
+fn persist_automatic_trace(
+    trace: &Crux<Value>,
+    home: &Path,
+    pipeline_name: &str,
+    target_name: Option<&str>,
+) -> std::io::Result<PathBuf> {
+    let path = automatic_trace_path(home, trace, pipeline_name, target_name);
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("automatic trace path has no parent directory"))?;
+    std::fs::create_dir_all(parent)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+    }
+
+    let json = serde_json::to_string_pretty(trace).map_err(std::io::Error::other)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+
+        options.mode(0o600);
+    }
+    let mut file = options.open(&path)?;
+    file.write_all(json.as_bytes())?;
+    file.sync_all()?;
+    Ok(path)
+}
+
 fn render_human_error(error: &CruxErr) {
     eprintln!("{:?}", miette::Report::new(error.clone()));
 }
@@ -76,6 +168,70 @@ fn render_json_error(error: &CruxErr) {
             eprintln!("{fallback}");
         }
     }
+}
+
+fn compile_options(strict: bool) -> CompileOptions {
+    if strict {
+        CompileOptions::strict()
+    } else {
+        CompileOptions::permissive()
+    }
+}
+
+fn render_compilation_diagnostic(path: &str, diagnostic: &ValidationDiagnostic) {
+    eprintln!(
+        "{}[{}]: {path} [{}]: {}",
+        diagnostic.severity, diagnostic.code, diagnostic.location, diagnostic.message
+    );
+}
+
+fn require_executable<T>(path: &str, compilation: Compilation<T>) -> T {
+    for diagnostic in compilation.diagnostics() {
+        if diagnostic.code != crux_script::ValidationCode::MissingContract {
+            render_compilation_diagnostic(path, diagnostic);
+        }
+    }
+
+    let (artifact, diagnostics) = compilation.into_parts();
+    if let Some(artifact) = artifact {
+        return artifact;
+    }
+
+    if !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+    {
+        eprintln!("error: {path}: pipeline is not executable");
+    }
+    std::process::exit(1);
+}
+
+fn selected_target_order<'a>(
+    cruxfile: &'a TypedCruxfile,
+    target: &str,
+) -> Result<Vec<&'a str>, String> {
+    if !cruxfile.contains_target(target) {
+        return Err(format!("unknown target: {target}"));
+    }
+
+    let mut selected = std::collections::HashSet::new();
+    let mut pending = vec![target];
+    while let Some(name) = pending.pop() {
+        if !selected.insert(name.to_string()) {
+            continue;
+        }
+        let dependencies = cruxfile
+            .target_dependencies(name)
+            .ok_or_else(|| format!("compiled target is missing: {name}"))?;
+        pending.extend(dependencies.iter().map(String::as_str));
+    }
+
+    Ok(cruxfile
+        .target_order()
+        .iter()
+        .filter(|name| selected.contains(name.as_str()))
+        .map(String::as_str)
+        .collect())
 }
 
 /// Resolve the pipeline path from the config, or discover `Cruxfile` in cwd.
@@ -111,6 +267,10 @@ fn select_target_name<'a>(cfg: &'a RunConfig<'_>) -> Option<&'a str> {
 /// dispatch over the parsed `contents` and config.
 fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>) {
     if crux_script::is_cruxfile(contents) {
+        if cfg.through_step.is_some() {
+            eprintln!("error: --through is not supported for Cruxfile targets");
+            std::process::exit(2);
+        }
         let target_name = select_target_name(cfg).map(String::from);
         if cfg.dry_run {
             cmd_dry_run_cruxfile(contents, pipeline_path, target_name.as_deref());
@@ -130,12 +290,23 @@ fn dispatch_on_contents(contents: &str, pipeline_path: &str, cfg: &RunConfig<'_>
 
 /// Dispatch between Cruxfile (multi-target) and regular pipeline execution.
 pub fn cmd_run_dispatch(cfg: &RunConfig<'_>) {
+    if cfg.dry_run && cfg.through_step.is_some() {
+        eprintln!("error: --through cannot be combined with --dry-run");
+        std::process::exit(2);
+    }
     let Some(pipeline_path) = resolve_pipeline_path(cfg.pipeline_arg) else {
         if cfg.check {
             eprintln!("error: --check does not support stdin ('-') pipelines");
             std::process::exit(1);
         }
-        // stdin path — always a regular pipeline
+        if cfg.dry_run {
+            let mut contents = String::new();
+            std::io::stdin()
+                .read_to_string(&mut contents)
+                .expect("failed to read stdin");
+            cmd_dry_run_pipeline(&contents, "stdin");
+            return;
+        }
         cmd_run("-", cfg.target_or_input.or(cfg.input_flag), cfg);
         return;
     };
@@ -189,12 +360,14 @@ fn cmd_dry_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>) {
         } else {
             let tmp = PipelineDef {
                 pipeline: name.to_string(),
+                input_schema: None,
                 budget: None,
                 vars: None,
                 display: None,
                 steps: target_def.steps.clone(),
             };
-            let handlers = collect_handler_names(&tmp);
+            let mut handlers = collect_handler_names(&tmp);
+            handlers.extend(collect_agent_names(&tmp));
             println!(
                 "  {:>2}. {name} ({} steps: {}){budget_info}",
                 i + 1,
@@ -212,7 +385,8 @@ fn cmd_dry_run_pipeline(contents: &str, path: &str) {
         std::process::exit(1);
     });
 
-    let handlers = collect_handler_names(&pipeline);
+    let mut handlers = collect_handler_names(&pipeline);
+    handlers.extend(collect_agent_names(&pipeline));
     println!(
         "Pipeline: {} ({} steps)\n",
         pipeline.pipeline,
@@ -229,7 +403,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
     let quiet = cfg.quiet;
     let verbose = cfg.verbose;
     let save_trace_path = cfg.save_trace_path;
-    let strict = cfg.strict;
+    let events_jsonl_path = cfg.events_jsonl_path;
     let cruxfile = crux_script::load_cruxfile(contents).unwrap_or_else(|e| {
         eprintln!("error: failed to parse {path}: {e}");
         std::process::exit(1);
@@ -240,92 +414,55 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         std::process::exit(2);
     }
 
-    let target = target_name.unwrap_or(&cruxfile.default);
+    let target = target_name.unwrap_or(&cruxfile.default).to_string();
 
-    let resolver = TargetResolver::new(&cruxfile).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
-        std::process::exit(1);
-    });
-
-    let order = resolver.execution_order(target).unwrap_or_else(|e| {
-        eprintln!("error: {e}");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let registry = rt
+        .block_on(build_registry(plugins_path))
+        .unwrap_or_else(|error| {
+            eprintln!("error: failed to build registry: {error}");
+            std::process::exit(1);
+        });
+    let compiled = require_executable(
+        path,
+        compile_cruxfile(&cruxfile, &registry, compile_options(cfg.strict)),
+    );
+    let order = selected_target_order(&compiled, &target).unwrap_or_else(|error| {
+        eprintln!("error: {error}");
         std::process::exit(1);
     });
 
     if verbose {
         eprintln!(
             "[crux] Cruxfile: project={}, target={target}, plan: {}",
-            cruxfile.project,
+            compiled.project(),
             order.join(" -> ")
         );
     }
 
-    // Build registry once using an empty pipeline (all handlers registered).
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let empty_pipeline = PipelineDef {
-        pipeline: String::new(),
-        budget: None,
-        vars: None,
-        display: None,
-        steps: vec![],
-    };
-    let registry = rt.block_on(build_registry(&empty_pipeline, plugins_path, false));
-
-    // Also register any handlers referenced in all targets.
-    let mut full_reg = registry;
-    let mut unregistered: Vec<String> = Vec::new();
-    for (_, tgt) in &cruxfile.targets {
-        let tmp_pipeline = PipelineDef {
-            pipeline: String::new(),
-            budget: None,
-            vars: None,
-            display: None,
-            steps: tgt.steps.clone(),
-        };
-        for name in collect_handler_names(&tmp_pipeline) {
-            if full_reg.get_handler(&name).is_none() {
-                if strict {
-                    if !unregistered.contains(&name) {
-                        unregistered.push(name);
-                    }
-                } else {
-                    // TODO(automation-7): Make production automation profiles strict by
-                    // default so unregistered handlers can never degrade into successful stubs.
-                    register_stub_handler(&mut full_reg, name);
-                }
-            }
-        }
-    }
-
-    if !unregistered.is_empty() {
-        eprintln!(
-            "[crux] error: --strict mode: unregistered handlers: {}",
-            unregistered.join(", ")
-        );
-        std::process::exit(1);
-    }
-
-    let runner = crux_script::Runner::new(Arc::new(full_reg));
+    let runner = crux_script::Runner::new(Arc::new(registry));
     let mut failed = false;
+    let mut trace_persistence_failed = false;
     let mut skipped: Vec<&str> = Vec::new();
 
     let start = Instant::now();
 
     for &target_name in &order {
-        if failed {
+        if failed || trace_persistence_failed {
             skipped.push(target_name);
             continue;
         }
 
-        let target_def = &cruxfile.targets[target_name];
-        let budget = target_def.budget.as_ref().or(cruxfile.budget.as_ref());
+        let target_pipeline = compiled
+            .target(target_name)
+            .expect("selected compiled target must exist");
 
         if verbose {
             eprintln!("[crux] running target: {target_name}");
         }
 
         let target_start = Instant::now();
-        let crux = rt.block_on(runner.run_target(target_def, target_name, budget));
+        let crux = rt.block_on(runner.run_compiled(target_pipeline, Value::Null));
         let target_elapsed = target_start.elapsed();
         let is_ok = crux.value().is_ok();
         if !quiet {
@@ -351,13 +488,43 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
             failed = true;
         }
 
-        if let Some(trace_dir) = save_trace_path {
-            let trace_file = format!("{trace_dir}.{target_name}.json");
-            let trace_json =
-                serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-            std::fs::write(&trace_file, trace_json).expect("failed to write trace file");
-            if !quiet {
-                eprintln!("[crux] trace saved to {trace_file}");
+        let trace_path = if let Some(trace_prefix) = save_trace_path {
+            let path = PathBuf::from(format!("{trace_prefix}.{target_name}.json"));
+            persist_trace(&crux, &path).map(|()| path)
+        } else {
+            let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "HOME is not set; cannot save automatic trace",
+                )
+            });
+            home.and_then(|home| {
+                persist_automatic_trace(&crux, &home, compiled.project(), Some(target_name))
+            })
+        };
+        match trace_path {
+            Ok(path) => {
+                if !quiet {
+                    eprintln!("[crux] trace saved to {}", path.display());
+                }
+            }
+            Err(error) => {
+                eprintln!("[crux] failed to save trace: {error}");
+                trace_persistence_failed = true;
+            }
+        }
+        if let Some(events_prefix) = events_jsonl_path {
+            let path = PathBuf::from(format!("{events_prefix}.{target_name}.jsonl"));
+            match persist_events_jsonl(&crux, &path) {
+                Ok(()) => {
+                    if !quiet {
+                        eprintln!("[crux] events saved to {}", path.display());
+                    }
+                }
+                Err(error) => {
+                    eprintln!("[crux] failed to save events: {error}");
+                    trace_persistence_failed = true;
+                }
             }
         }
     }
@@ -378,14 +545,21 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         } else {
             format!("{}ms", elapsed.as_millis())
         };
-        let status = if failed {
-            format!("{ok_count}/{total} targets OK, {failed_count} failed, {skipped_count} skipped")
+        let status = if failed || trace_persistence_failed {
+            let trace_status = if trace_persistence_failed {
+                ", trace persistence failed"
+            } else {
+                ""
+            };
+            format!(
+                "{ok_count}/{total} targets OK, {failed_count} failed, {skipped_count} skipped{trace_status}"
+            )
         } else {
             format!("{ok_count}/{total} targets OK")
         };
         eprintln!(
             "Cruxfile: {} [{target}] {status} ({elapsed_str})",
-            cruxfile.project
+            compiled.project()
         );
     }
 
@@ -393,7 +567,7 @@ fn cmd_run_cruxfile(contents: &str, path: &str, target_name: Option<&str>, cfg: 
         eprintln!("[crux] total: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
     }
 
-    if failed {
+    if failed || trace_persistence_failed {
         std::process::exit(1);
     }
 }
@@ -403,7 +577,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     let replay_path = cfg.replay_path;
     let replay_mode_str = cfg.replay_mode_str;
     let save_trace_path = cfg.save_trace_path;
-    let strict = cfg.strict;
+    let events_jsonl_path = cfg.events_jsonl_path;
     let input: Value = if let Some(path) = input_path {
         let contents = std::fs::read_to_string(path).expect("failed to read input file");
         serde_json::from_str(&contents).expect("invalid JSON input")
@@ -429,7 +603,16 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     };
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let registry = rt.block_on(build_registry(&pipeline, plugins_path, strict));
+    let registry = rt
+        .block_on(build_registry(plugins_path))
+        .unwrap_or_else(|error| {
+            eprintln!("error: failed to build registry: {error}");
+            std::process::exit(1);
+        });
+    let compiled = require_executable(
+        pipeline_path,
+        compile_pipeline(&pipeline, &registry, compile_options(cfg.strict)),
+    );
     let runner = crux_script::Runner::new(Arc::new(registry));
 
     let previous: Option<Crux<Value>> = replay_path.map(|path| {
@@ -438,22 +621,75 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     });
 
     let start = Instant::now();
-    let crux = if let Some(ref prev) = previous {
-        rt.block_on(runner.run_with_replay(&pipeline, input, prev, replay_mode))
-    } else {
-        rt.block_on(runner.run(&pipeline, input))
+    let crux = match (previous.as_ref(), cfg.through_step) {
+        (Some(previous), Some(through)) => rt.block_on(runner.run_compiled_through_with_replay(
+            &compiled,
+            input,
+            previous,
+            replay_mode,
+            through,
+        )),
+        (Some(previous), None) => {
+            rt.block_on(runner.run_compiled_with_replay(&compiled, input, previous, replay_mode))
+        }
+        (None, Some(through)) => {
+            rt.block_on(runner.run_compiled_through(&compiled, input, through))
+        }
+        (None, None) => rt.block_on(runner.run_compiled(&compiled, input)),
     };
     let elapsed = start.elapsed();
 
     // TODO(automation-11): Persist run state, checkpoints, trace paths, artifacts, and final
     // status under one run ID instead of leaving trace files detached from TaskRegistry.
-    if let Some(path) = save_trace_path {
-        let trace_json = serde_json::to_string_pretty(&crux).expect("failed to serialize trace");
-        std::fs::write(path, trace_json).expect("failed to write trace file");
-        if !cfg.quiet {
-            eprintln!("[crux] trace saved to {path}");
+    let trace_path = if let Some(path) = save_trace_path {
+        let path = PathBuf::from(path);
+        persist_trace(&crux, &path).map(|()| path)
+    } else {
+        let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "HOME is not set; cannot save automatic trace",
+            )
+        });
+        let pipeline_name = if pipeline_path == "-" {
+            "stdin"
+        } else {
+            Path::new(pipeline_path)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or("pipeline")
+        };
+        home.and_then(|home| persist_automatic_trace(&crux, &home, pipeline_name, None))
+    };
+    let trace_persistence_error = match trace_path {
+        Ok(path) => {
+            if !cfg.quiet && !cfg.json {
+                eprintln!("[crux] trace saved to {}", path.display());
+            }
+            None
         }
-    }
+        Err(error) => {
+            if !cfg.json {
+                eprintln!("[crux] failed to save trace: {error}");
+            }
+            Some(error.to_string())
+        }
+    };
+    let event_persistence_error = events_jsonl_path.and_then(|path| {
+        let path = PathBuf::from(path);
+        match persist_events_jsonl(&crux, &path) {
+            Ok(()) => {
+                if !cfg.quiet && !cfg.json {
+                    eprintln!("[crux] events saved to {}", path.display());
+                }
+                None
+            }
+            Err(error) => {
+                eprintln!("[crux] failed to save events: {error}");
+                Some(error.to_string())
+            }
+        }
+    });
 
     match output_mode(cfg) {
         OutputMode::Verbose => {
@@ -462,9 +698,24 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
                 render_trace(&crux, elapsed, pipeline.display.as_ref())
             );
         }
-        OutputMode::Json => match crux.value() {
-            Ok(_) => println!("{}", render_default_output(&crux).unwrap_or_default()),
-            Err(error) => render_json_error(error),
+        OutputMode::Json => match (crux.value(), trace_persistence_error.as_deref()) {
+            (Ok(_), None) => println!("{}", render_default_output(&crux).unwrap_or_default()),
+            (Ok(_), Some(trace_error)) => eprintln!(
+                "{}",
+                json!({
+                    "kind": "trace_persistence_error",
+                    "message": trace_error,
+                })
+            ),
+            (Err(error), None) => render_json_error(error),
+            (Err(error), Some(trace_error)) => eprintln!(
+                "{}",
+                json!({
+                    "kind": "run_and_trace_persistence_error",
+                    "run_error": error,
+                    "trace_error": trace_error,
+                })
+            ),
         },
         OutputMode::Summary => {
             print!(
@@ -479,30 +730,21 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         }
     }
 
-    if let Err(error) = crux.value() {
+    let execution_failed = if let Err(error) = crux.value() {
         if !matches!(
             output_mode(cfg),
             OutputMode::Json | OutputMode::Summary | OutputMode::Quiet
         ) {
             render_human_error(error);
         }
+        true
+    } else {
+        false
+    };
+
+    if execution_failed || trace_persistence_error.is_some() || event_persistence_error.is_some() {
         std::process::exit(1);
     }
-}
-
-fn register_stub_handler(reg: &mut HandlerRegistry, name: String) {
-    let n = name.clone();
-    reg.handler_value(name, move |_input: Value| {
-        let handler_name = n.clone();
-        async move {
-            eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-            Ok(json!({
-                "_stub": handler_name,
-                "confidence": 0.5,
-                "score": 0.5,
-            }))
-        }
-    });
 }
 
 #[cfg(test)]
@@ -516,6 +758,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "test-agent".to_string(),
+            pipeline_version: None,
             value: Ok(v),
             steps: vec![],
             children: vec![],
@@ -526,9 +769,11 @@ mod tests {
 
     fn ok_step(name: &str, duration_ms: u64) -> Step {
         Step {
+            stable_id: None,
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: chrono::Utc::now(),
             duration_ms,
@@ -536,8 +781,10 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         }
@@ -571,6 +818,8 @@ mod tests {
             replay_path: None,
             replay_mode_str: "strict",
             save_trace_path: None,
+            events_jsonl_path: None,
+            through_step: None,
             strict: false,
         }
     }
@@ -594,6 +843,56 @@ mod tests {
         cfg.verbose = false;
         cfg.quiet = true;
         assert_eq!(output_mode(&cfg), OutputMode::Quiet);
+    }
+
+    #[test]
+    fn trace_path_uses_sanitized_components_and_unique_id() {
+        let mut trace = ok_crux(json!({"answer": 42}));
+        trace.started_at = chrono::DateTime::parse_from_rfc3339("2026-09-19T12:34:56.789Z")
+            .expect("timestamp must parse")
+            .with_timezone(&chrono::Utc);
+
+        let path = automatic_trace_path(
+            std::path::Path::new("/tmp/home"),
+            &trace,
+            "My pipeline",
+            Some("check/all"),
+        );
+        let expected = std::path::Path::new("/tmp/home")
+            .join(".crux")
+            .join("traces")
+            .join(format!(
+                "20260919T123456.789Z-My-pipeline-check-all-{}.json",
+                trace.id
+            ));
+
+        assert_eq!(path, expected);
+        assert_eq!(trace_name_component("///"), "pipeline");
+    }
+
+    #[test]
+    fn persist_trace_writes_replayable_json() {
+        let home = tempfile::tempdir().expect("temporary home must be created");
+        let trace = ok_crux(json!({"answer": 42}));
+        let explicit_path = home.path().join("explicit.json");
+
+        persist_trace(&trace, &explicit_path).expect("explicit trace must be persisted");
+        let contents = std::fs::read_to_string(&explicit_path).expect("trace must be readable");
+        let restored: Crux<Value> =
+            serde_json::from_str(&contents).expect("trace must be replayable JSON");
+        assert_eq!(restored.id, trace.id);
+        assert_eq!(
+            restored.value().expect("restored trace must be successful"),
+            trace.value().expect("original trace must be successful")
+        );
+
+        let automatic_path = persist_automatic_trace(&trace, home.path(), "pipeline", None)
+            .expect("automatic trace must be persisted");
+        assert_eq!(
+            automatic_path.parent(),
+            Some(home.path().join(".crux").join("traces").as_path())
+        );
+        assert!(automatic_path.is_file());
     }
 
     #[test]
@@ -640,6 +939,25 @@ mod tests {
         // No trace envelope framing should leak into compact JSON output.
         assert!(!out.contains("Pipeline:"));
         assert!(!out.contains("Trace:"));
+    }
+
+    #[test]
+    fn events_jsonl_writes_ordered_runtime_events() {
+        let mut trace = ok_crux(json!({"answer": 42}));
+        trace.steps.push(ok_step("compile", 4));
+        let directory = tempfile::tempdir().expect("temporary directory should be created");
+        let path = directory.path().join("events.jsonl");
+
+        persist_events_jsonl(&trace, &path).expect("event JSONL should be persisted");
+
+        let contents = std::fs::read_to_string(path).expect("event JSONL should be readable");
+        let event: RuntimeEvent =
+            serde_json::from_str(contents.trim()).expect("event row should deserialize");
+        assert_eq!(event.sequence, 0);
+        assert!(matches!(
+            event.emission,
+            Emission::StepRecorded { ref name, .. } if name == "compile"
+        ));
     }
 
     #[test]

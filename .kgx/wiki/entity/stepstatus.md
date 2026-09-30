@@ -2,7 +2,9 @@
 title: StepStatus
 tags: [type, core]
 ---
-# StepStatus
+
+## StepStatus
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/step.rs`
 
 Enum for [[Step]] outcome: Ok, Err, Rejected (speculation loser), Skipped.

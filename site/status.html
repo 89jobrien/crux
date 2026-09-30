@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="What actually works in crux today: shipped capabilities, known partial behaviour, commands missing from the published install, and documentation that has drifted from the code.">
+    <title>crux &mdash; status</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="cli.html">CLI</a>
+      <a href="crates.html">Crates</a>
+      <a href="status.html" aria-current="page">Status</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head">
+        <span class="eyebrow">Status</span>
+        <h1>A tested core and a pre-1.0 command line</h1>
+        <p class="lead">Averaging those into one maturity number would hide the only thing worth knowing, so this page keeps them apart. Everything below was read from source, manifests, CI config, or a live run.</p>
+        <div class="meta-row">
+          <span class="meta">workspace 0.4.0</span>
+          <span class="meta">1,135 test attributes</span>
+          <span class="meta">deny + machete in CI</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>Shipped and exercised</h2>
+        <p class="section-intro">These are not aspirations. Each has tests or a runnable artifact behind it.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Capability</th><th scope="col">Evidence</th></tr></thead>
+            <tbody>
+              <tr><td>YAML pipeline execution</td><td>43 pipelines discovered by <code>crux list</code>; <code>check</code> parses them; showcase fixtures run with no API key.</td></tr>
+              <tr><td>64 documented handlers</td><td><code>handler_constants.rs</code> and <code>register_all.rs</code> assert registration.</td></tr>
+              <tr><td>Combinators</td><td><code>pipe</code>, <code>join_all</code>, <code>speculate</code>, <code>route_on_confidence</code>, <code>delegate</code> &mdash; all marked supported in the capabilities reference.</td></tr>
+              <tr><td>All four loop primitives</td><td><code>poll</code>, <code>for_each</code>, <code>while</code>, <code>repeat</code>.</td></tr>
+              <tr><td>Step controls</td><td><code>expect:</code>, <code>allow_failure:</code>, <code>timeout_ms:</code>, <code>retry:</code>, <code>on_error:</code>, <code>vars:</code>.</td></tr>
+              <tr><td>Replay, strict and lenient</td><td>26 tests in <code>replay.rs</code>, plus a four-variant <code>just replay-demo</code> against a committed fixture.</td></tr>
+              <tr><td>Typed budgets</td><td>A <code>Budget</code> enum, tracker, and usage type. Delegated budgets are enforced in the child context.</td></tr>
+              <tr><td>Task registry with CAS</td><td>20 tests in <code>registry/task.rs</code>, plus in-memory and <code>redb</code> backends.</td></tr>
+              <tr><td>Subprocess plugin host</td><td>An <code>echo-plugin</code> test binary exercises the JSON protocol.</td></tr>
+              <tr><td>Property tests and proofs</td><td><code>proptest 1.11</code> in about eight crates; Kani proofs in <code>crux-types</code> behind <code>cfg(kani)</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Partial, and saying so in the code</h2>
+        <p class="section-intro">Each of these is documented as a limitation in the capabilities reference rather than left to be discovered.</p>
+
+        <article class="card">
+          <span class="pill pill-wip">Partial</span>
+          <h3><code>for_each: parallel</code> is accepted but sequential</h3>
+          <p>Iterations still run one after another. <code>CruxCtx</code> is a single mutable trace recorder, so concurrent nested <code>ctx.step()</code> calls are not sound without a <code>crux-runtime</code> change. An older gap-analysis document still claims this gives bounded concurrency with <code>max_concurrency: 8</code>; the capabilities reference supersedes it.</p>
+        </article>
+
+        <article class="card">
+          <span class="pill pill-notwired">Unusable</span>
+          <h3><code>analysis::replay_dry_run</code> invokes a command that does not exist</h3>
+          <p>It shells out to <code>crux replay</code>, which is not a subcommand. There is <code>replay-debug</code>, and <code>run --replay</code>.</p>
+        </article>
+
+        <article class="card">
+          <span class="pill pill-wip">Subset</span>
+          <h3><code>json::jq</code> is a subset, not jq</h3>
+          <p>No <code>reduce</code>, no <code>foreach</code>, no variable bindings, no construction literals, and no stream semantics.</p>
+        </article>
+
+        <article class="card">
+          <span class="pill pill-wip">Heuristic</span>
+          <h3>Two cost heuristics are hard-coded</h3>
+          <p><code>analysis::latency_profile</code> uses twice the median, and <code>tighten_budget</code> triggers above 80 percent spend. Neither is configurable.</p>
+        </article>
+
+        <article class="card">
+          <span class="pill pill-notwired">Unreachable</span>
+          <h3>Plugin steps can never satisfy <code>--strict</code></h3>
+          <p>Only the output shape can be declared. Strict compilation also needs an input schema and a confidence capability, which the plugin protocol does not carry yet. This is exactly why the project's own <code>showcase.crux</code> emits twelve <code>missing_contract</code> warnings.</p>
+        </article>
+      </section>
+
+      <section>
+        <h2>Missing from the published install</h2>
+        <p class="section-intro">Seven of the eleven subcommands exist in source but not in the released binary. Until they ship, treat the source as the specification and the install as behind it.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Command</th><th scope="col">In source</th><th scope="col">In install</th></tr></thead>
+            <tbody>
+              <tr><td><code>regress</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>handlers</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>init</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>doctor</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>test</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>replay-debug</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>trace</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+              <tr><td><code>schema</code></td><td><span class="status status-ok">yes</span></td><td><span class="status status-err">no</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The <code>--events-jsonl</code> and <code>--through</code> run flags and the ordered-runtime-events work are in the same position.</p>
+      </section>
+
+      <section>
+        <h2>Documentation that has drifted</h2>
+        <p class="section-intro">Worth knowing before you rely on any of these documents.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Document</th><th scope="col">Where it is wrong</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>CHANGELOG.md</code></td>
+                <td>Stops at 0.1.0 from April 2026. The workspace is 0.4.0 with tags through v0.4.2. It has only an <code>Unreleased</code> and a <code>0.1.0</code> section, so it is not a release history.</td>
+              </tr>
+              <tr>
+                <td><code>CONFORMANCE.md</code></td>
+                <td>Titled v0.3. Its <code>StepKind</code> MUST list is <code>action, delegation, speculation, checkpoint, pipe, join, route, gate</code> &mdash; the implemented enum is <code>Plain, Delegation, Branch, Speculation</code>. Its <code>StepStatus</code> MUST list is likewise not the built enum. It describes a design that was not built.</td>
+              </tr>
+              <tr>
+                <td>MSRV in agent guides</td>
+                <td><code>AGENTS.md</code> and <code>CLAUDE.md</code> say 1.88; the manifest pins <code>rust-version = "1.89.0"</code>. Tracked as a TODO to align the docs.</td>
+              </tr>
+              <tr>
+                <td><code>docs/crux-syntax-reference.md</code></td>
+                <td>Omits <code>StepOrigin</code> entirely, and the <code>metadata</code> and <code>findings</code> fields on <code>Step</code>. The source has both.</td>
+              </tr>
+              <tr>
+                <td><code>docs/src/</code></td>
+                <td>An orphaned near-empty parallel tree. <code>book.toml</code> points at <code>docs</code>, and the live table of contents is <code>docs/SUMMARY.md</code>. Every crate page under <code>docs/src/crates/</code> is a three-line stub.</td>
+              </tr>
+              <tr>
+                <td><code>docs/reports/crux-gap-analysis.md</code></td>
+                <td>Partly superseded. Its P1, P2, and P3 items are now marked supported in the capabilities reference. Only the compound-budget and <code>shell::capture</code> P0s remain open.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Two open P0 bugs</h2>
+        <div class="card">
+          <h3>Compound budgets silently drop a constraint</h3>
+          <p><code>BudgetDef</code> is an <code>#[serde(untagged)]</code> enum, so a compound limit like <code>{ calls: 40, duration_ms: 900000 }</code> matches only one variant and the second constraint is discarded without an error. Source of the finding: a comparison of <code>maestro_smoketest.crux</code> against the schema, the standard library, and the agentic handlers.</p>
+        </div>
+        <div class="card">
+          <h3><code>shell::capture</code> is in the wrong crate</h3>
+          <p>It lives in <code>crux-agentic</code> rather than <code>crux-stdlib</code>, so a pipeline that only needs to capture a shell command still pulls in the whole agentic stack. Open, and flagged P0 in the gap analysis.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>What CI does not cover</h2>
+        <ul>
+          <li><strong>LLM-backed tests never run.</strong> The BAML handler crates are regenerated and clippy-checked, but the <code>llm_extract</code> and <code>planner</code> test binaries are excluded from the nextest run.</li>
+          <li><strong>mdBook is not built in CI.</strong> A tracked TODO asks for it, alongside moving <code>lint-crux</code> into the remote workflow.</li>
+          <li><strong>No credential-free feature matrix.</strong> Another tracked TODO, for the agentic and optional-feature paths.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Design documents, dated</h2>
+        <p class="section-intro">Thirteen designs in <code>docs/designs/</code>, spanning 2026-06-30 to 2026-09-22. Most have shipped. Reading a design as a promise of a future feature is the one reliable way to be wrong about this project.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Date</th><th scope="col">Design</th><th scope="col">State</th></tr></thead>
+            <tbody>
+              <tr><td>2026-06-30</td><td>event bus</td><td><span class="pill pill-shipped">shipped</span> <code>event_sink.rs</code> has 8 tests</td></tr>
+              <tr><td>2026-07-01</td><td>crux task</td><td><span class="pill pill-shipped">shipped</span> the <code>crux-task</code> crate exists</td></tr>
+              <tr><td>2026-07-08</td><td>xtask publish</td><td><span class="pill pill-shipped">shipped</span></td></tr>
+              <tr><td>2026-09-04</td><td>pipeline display</td><td><span class="pill pill-shipped">shipped</span></td></tr>
+              <tr><td>2026-09-04</td><td>typed budget enforcement</td><td><span class="pill pill-shipped">shipped</span></td></tr>
+              <tr><td>2026-09-19</td><td>automatic CLI trace persistence</td><td><span class="pill pill-shipped">shipped</span> traces land in <code>$HOME/.crux/traces/</code></td></tr>
+              <tr><td>2026-09-19</td><td>typed pipeline IR</td><td><span class="pill pill-shipped">shipped</span> <code>TypedStep&lt;I,O&gt;</code></td></tr>
+              <tr><td>2026-09-19</td><td>README positioning</td><td><span class="pill pill-shipped">shipped</span></td></tr>
+              <tr><td>2026-09-22</td><td>ordered runtime events</td><td><span class="pill pill-wip">source only</span> <code>--events-jsonl</code> is not in the install</td></tr>
+              <tr><td>2026-09-22</td><td>trace regression subsystem</td><td><span class="pill pill-wip">source only</span> the crate and <code>regress</code> are not in the install</td></tr>
+              <tr><td>2026-09-22</td><td>fault-resume demo</td><td><span class="pill pill-shipped">shipped</span> demo present under <code>examples/</code></td></tr>
+              <tr><td>2026-09-22</td><td>interactive step runner</td><td><span class="status status-off">no artifact found</span></td></tr>
+              <tr><td>2026-09-22</td><td>fault-resume live UI</td><td><span class="status status-off">no artifact found</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <p><a href="faq.html">Common questions</a> &middot; <a href="cli.html">Back to the command line</a></p>
+    </main>
+
+    <footer class="site-foot">
+      <a href="https://github.com/89jobrien/crux">Source on GitHub</a> &middot; MIT &middot; built by <a href="https://github.com/89jobrien">Joseph O'Brien</a>
+    </footer>
+  </body>
+</html>

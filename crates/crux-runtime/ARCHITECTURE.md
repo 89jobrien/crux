@@ -53,7 +53,7 @@ isolated from infrastructure through trait boundaries.
 
 `CruxCtx` delegates to independently testable collaborators:
 
-```
+```text
 CruxCtx
  +-- HookRegistry     (hooks.rs)     — lifecycle hook dispatch
  +-- StepRecorder     (recorder.rs)  — appends steps to trace

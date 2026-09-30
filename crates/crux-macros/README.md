@@ -1,54 +1,57 @@
----
-crate: crux-macros
-type: proc-macro
-description: "Proc macros for the crux agentic DSL"
-version: "0.3.0"
-edition: "2024"
-dependencies: []
-macros:
-  - name: "crux::agent"
-    target: "async fn"
-    generates: "Agent trait impl + CruxCtx injection"
-  - name: "crux::harness"
-    target: struct
-    generates: "Default + serde + to_profile()"
-  - name: "crux::evolve"
-    target: "async fn"
-    generates: "Agent impl + is_evolution_agent()"
-modules:
-  - name: agent
-    purpose: "agent macro expansion"
-  - name: evolve
-    purpose: "evolve macro expansion"
-  - name: harness
-    purpose: "harness macro expansion"
-  - name: parse
-    purpose: "Shared attribute parsing utilities"
----
+# crux-derive
 
-# crux-macros
+Procedural macros for Crux's typed Rust surface. The package is named `crux-derive` and is normally
+consumed through the `crux` facade as `#[crux::agent]`, `#[crux::harness]`, and `#[crux::evolve]`.
 
-Proc macros for the crux agentic DSL.
+## Architecture role
 
-## Macros
+This proc-macro crate parses user syntax and emits code that targets stable `crux_runtime` paths. It
+cannot depend on runtime types directly across the proc-macro boundary. Generated behavior is tested
+from `crates/crux/tests/`, not by treating expansion internals as a public API.
+
+## Macros and generated API
 
 ### `#[crux::agent]`
 
-Transforms an async function into a traced, replayable agent. Injects a
-`CruxCtx` binding (`x`), wraps the return type into `Crux<T>`, and
-generates an `Agent` trait impl.
+Apply to an async function returning `Crux<T>`. The expansion injects a mutable `CruxCtx` binding
+named `x`, creates the public wrapper that finalizes the trace, and generates `<FunctionName>Agent`
+implementing `Agent`.
 
-Options:
-- `registry = "name"` — bind to a `TaskRegistry`
-- `checkpoint_every_step` — checkpoint after every `x.step()` call
-- `replay = "strict"|"lenient"` — replay mode (default: strict)
+```rust
+use crux::prelude::*;
+
+#[crux::agent(replay = "lenient")]
+async fn greet(name: String) -> Crux<String> {
+    x.step("format", || async move { Ok(format!("Hello, {name}")) }).await
+}
+```
+
+Supported options are `registry = "binding"`, `checkpoint_every_step`, and
+`replay = "strict" | "lenient"`. Unknown options and invalid replay modes are compile errors.
 
 ### `#[crux::harness]`
 
-Marks a struct as a harness profile configuration. Generates `Default`,
-`Serialize`/`Deserialize`, and a `to_profile()` method.
+Accepts a named-field struct and generates `Debug`, `Clone`, serde traits, `Default`, and
+`to_profile(id)`. The current expansion expects the fields `memory_mb`, `cpu_millicores`,
+`timeout_seconds`, and `network_access`, with defaults 512, 1000, 300, and `false`.
 
 ### `#[crux::evolve]`
 
-Same as `#[crux::agent]` but semantically marks the function as part of
-the harness evolution loop.
+Uses agent-style expansion and adds `is_evolution_agent() -> true` to the generated agent type.
+
+## Features and status
+
+There are no Cargo features. Expansion currently relies on the downstream crate having
+`crux_runtime` available; harness expansion also refers to `serde`. The generated API is source code
+at compile time and must not be hand-maintained elsewhere.
+
+## Development and testing
+
+```console
+cargo nextest run -p crux
+cargo clippy -p crux-derive --all-targets -- -D warnings
+cargo expand -p crux --test agent_macro
+```
+
+Integration coverage includes zero-, one-, and multi-argument agents, failures, steps, confidence,
+hooks, serialization, checkpointing, harness profiles, and evolution agents.

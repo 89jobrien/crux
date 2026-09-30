@@ -2,7 +2,9 @@
 title: TaskRegistry
 tags: [type, runtime, registry]
 ---
-# TaskRegistry
+
+## TaskRegistry
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/registry/task.rs`
 
 `TaskRegistry<B: RegistryBackend>` -- typed API for task lifecycle.

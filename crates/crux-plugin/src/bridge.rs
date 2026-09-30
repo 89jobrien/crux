@@ -5,12 +5,10 @@
 
 use std::sync::Arc;
 
-use crux_runtime::prelude::CruxErr;
-use crux_script::HandlerRegistry;
-use tokio::sync::Mutex;
-
 use crate::host::{PluginError, PluginHost};
 use crate::manifest::PluginEntry;
+use crux_runtime::prelude::CruxErr;
+use crux_script::HandlerRegistry;
 
 /// Load all plugins from the given entries and register their
 /// handlers into the registry.
@@ -29,18 +27,21 @@ pub async fn register_plugins(
         .map(|h| h.name.clone())
         .collect();
 
-    // TODO(automation-4): Remove the global host mutex so independent plugin processes can
-    // execute concurrently without serializing every handler invocation.
-    let host = Arc::new(Mutex::new(host));
+    let host = Arc::new(host);
 
     for name in handler_names {
         let host = host.clone();
         let handler_name = name.clone();
+        // TODO(feature-idea-17): Register through `handler_value_with_metadata`
+        // with the handler's declared output schema. `handler_value` builds
+        // `HandlerMetadata::new(name)`, which carries no `output_schema`, so
+        // every plugin step is typed `Dynamic` and a downstream `for_each` over
+        // a plugin output loses its array check. Needs `HandlerDecl::output_schema`
+        // in the plugin protocol first, then a `ValueSchema` on the wire.
         registry.handler_value(name, move |input: serde_json::Value| {
             let host = host.clone();
             let name = handler_name.clone();
             async move {
-                let mut host = host.lock().await;
                 host.invoke(&name, input)
                     .await
                     .map_err(|e| CruxErr::step_failed(&name, e.to_string()))

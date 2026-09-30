@@ -1,3 +1,5 @@
+//! Errors produced while parsing vendors and canonical model identifiers.
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

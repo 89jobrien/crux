@@ -25,7 +25,7 @@ items:
     location: "src/expr.rs::resolve_path:124"
 ---
 
-# TODO: crux-script
+## TODO: crux-script
 
 - [ ] **#82** Pipeline validation pass — catch bad refs, missing
   handlers, type mismatches, and unreachable steps before execution

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "crates/crux-agentic/src/analysis.rs",
+      "text": "TODO(feature-idea-9): Replace the missing external replay command with safe in-process analysis.",
+      "issue_number": 124
+    },
+    {
+      "file": "crates/crux-cli/src/bin/crux/run.rs",
+      "text": "TODO(automation-11): Persist run state, checkpoints, trace paths, artifacts, and final",
+      "issue_number": 125
+    },
+    {
+      "file": "crates/crux-improve/src/lib.rs",
+      "text": "TODO(feature-idea-16): Integrate persisted runs with proposals, approval, and replay comparison.",
+      "issue_number": 126
+    },
+    {
+      "file": "crates/crux-plugin/src/bridge.rs",
+      "text": "TODO(feature-idea-17): Register through `handler_value_with_metadata`",
+      "issue_number": 127
+    },
+    {
+      "file": "crates/crux-plugin/src/manifest.rs",
+      "text": "TODO(automation-15): Replace plaintext manifest secrets with inherited or explicitly",
+      "issue_number": 128
+    },
+    {
+      "file": "crates/crux-plugin/src/protocol.rs",
+      "text": "TODO(feature-idea-17): Add an optional `output_schema` so a plugin can",
+      "issue_number": 129
+    },
+    {
+      "file": "crates/crux-script/src/runner.rs",
+      "text": "TODO(automation-6): Require metered usage from cost-bearing shell, plugin, and LLM handlers",
+      "issue_number": 130
+    },
+    {
+      "file": "crates/crux-script/src/step_runner.rs",
+      "text": "TODO(feature-idea-11): Consolidate these runners with the production HandlerRegistry surface.",
+      "issue_number": 131
+    }
+  ]
+}

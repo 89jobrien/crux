@@ -1,8 +1,9 @@
+//! Boundary and missing-score tests for confidence-based routing.
+
 /// Extended confidence test coverage.
 ///
 /// Covers:
-///   1. `handler_value` (returns plain `Value`) used with `route_on_confidence` — confidence
-///      must default to 1.0, so the `[0.5, 1.0]` branch is taken.
+///   1. `handler_value` used with `route_on_confidence` fails because no score was reported.
 ///   2. `HandlerOutput::with_confidence` at boundary values 0.0 and 1.0.
 ///   3. Confidence of exactly 0.0 routes to `[0.0, 0.5)` branch.
 ///   4. Confidence of exactly 1.0 routes to `[0.5, 1.0]` branch.
@@ -10,9 +11,7 @@ use crux_script::{HandlerOutput, HandlerRegistry, Runner, load};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-// ---------------------------------------------------------------------------
 // Shared pipeline — same shape reused across all tests in this file.
-// ---------------------------------------------------------------------------
 
 const ROUTE_PIPELINE: &str = r#"
 pipeline: confidence_coverage
@@ -30,9 +29,7 @@ steps:
         handler: branch_high
 "#;
 
-// ---------------------------------------------------------------------------
 // Branch handlers (shared across tests).
-// ---------------------------------------------------------------------------
 
 async fn branch_low(_input: Value) -> Result<HandlerOutput, crux_runtime::prelude::CruxErr> {
     Ok(HandlerOutput::new(json!("branch:low")))
@@ -42,9 +39,7 @@ async fn branch_high(_input: Value) -> Result<HandlerOutput, crux_runtime::prelu
     Ok(HandlerOutput::new(json!("branch:high")))
 }
 
-// ---------------------------------------------------------------------------
 // Registry builder.
-// ---------------------------------------------------------------------------
 
 fn registry_with<F, Fut>(classify: F) -> Arc<HandlerRegistry>
 where
@@ -60,11 +55,9 @@ where
     Arc::new(reg)
 }
 
-// ---------------------------------------------------------------------------
 // 1. handler_value (plain Value) used with route_on_confidence — must fail with
 //    a NoConfidence error because handler_value stores None, and the pipeline
 //    cannot route on an absent score.
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn handler_value_with_route_on_confidence_returns_error() {
@@ -93,9 +86,7 @@ async fn handler_value_with_route_on_confidence_returns_error() {
     );
 }
 
-// ---------------------------------------------------------------------------
 // 2. Boundary: confidence exactly 0.0 → low branch [0.0, 0.5).
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn confidence_zero_routes_to_low_branch() {
@@ -113,9 +104,7 @@ async fn confidence_zero_routes_to_low_branch() {
     );
 }
 
-// ---------------------------------------------------------------------------
 // 3. Boundary: confidence exactly 1.0 → high branch [0.5, 1.0].
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn confidence_one_routes_to_high_branch() {
@@ -133,10 +122,8 @@ async fn confidence_one_routes_to_high_branch() {
     );
 }
 
-// ---------------------------------------------------------------------------
 // 4. HandlerOutput::with_confidence at an explicit mid-range value (0.5).
 //    0.5 is the boundary point; [0.5, 1.0] is inclusive, so → high branch.
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn confidence_at_boundary_point_routes_correctly() {

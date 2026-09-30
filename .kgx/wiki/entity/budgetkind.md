@@ -2,7 +2,9 @@
 title: BudgetKind
 tags: [type, core]
 ---
-# BudgetKind
+
+## BudgetKind
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/budget.rs`
 
 Discriminant enum for [[Budget]] variants: Tokens, Calls, Duration, CostCents, Combined.

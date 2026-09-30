@@ -1,3 +1,5 @@
+//! Strict and lenient matching of recorded step outputs for deterministic replay.
+
 /// ReplayCache — stores and matches cached step outputs from a prior trace.
 ///
 /// Single responsibility: replay matching. Given an ordinal, name, and input_hash,
@@ -13,8 +15,6 @@ use crate::types::error::CruxErr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReplayMode {
     /// Ordinal-based lookup. Hash must match exactly or Mismatch is returned.
-    // TODO(automation-10): Introduce immutable pipeline versions and stable step IDs so strict
-    // replay survives safe edits without relying on brittle name and ordinal identity.
     #[default]
     Strict,
     /// By-name lookup with ordinal hint. If the name at the expected ordinal
@@ -25,16 +25,18 @@ pub enum ReplayMode {
 
 #[derive(Debug, Clone)]
 struct ReplayEntry {
+    stable_id: Option<String>,
     name: String,
     input_hash: u64,
     content_hash: Option<u64>,
     output: Option<serde_json::Value>,
+    confidence: f32,
 }
 
 /// Result of checking the replay cache for a given step.
 pub enum ReplayResult {
     /// Cache hit — return the cached output without re-executing.
-    Hit(serde_json::Value),
+    Hit(serde_json::Value, f32),
     /// The step at this ordinal has a different hash — trace diverged.
     Mismatch { expected: u64, actual: u64 },
     /// No cached entry at this ordinal — execute normally.
@@ -46,9 +48,12 @@ pub struct ReplayCache {
     entries: Vec<ReplayEntry>,
     enabled: bool,
     mode: ReplayMode,
+    pipeline_version: Option<String>,
+    replay_pipeline_version: Option<String>,
 }
 
 impl ReplayCache {
+    /// Creates a disabled strict-mode cache with no recorded entries.
     pub fn new() -> Self {
         Self::default()
     }
@@ -66,20 +71,29 @@ impl ReplayCache {
         self.mode = mode;
     }
 
+    /// Returns the active replay matching mode.
     pub fn mode(&self) -> ReplayMode {
         self.mode
     }
 
+    /// Set the immutable version of the pipeline requesting replay.
+    pub fn set_pipeline_version(&mut self, version: impl Into<String>) {
+        self.pipeline_version = Some(version.into());
+    }
+
     /// Seed replay from a previous trace.
     pub fn seed_from(&mut self, previous: &Crux<serde_json::Value>) {
+        self.replay_pipeline_version = previous.pipeline_version.clone();
         self.entries = previous
             .steps
             .iter()
             .map(|s| ReplayEntry {
+                stable_id: s.stable_id.clone(),
                 name: s.name.clone(),
                 input_hash: s.input_hash,
                 content_hash: s.content_hash,
                 output: s.output.clone(),
+                confidence: s.confidence,
             })
             .collect();
         self.enabled = true;
@@ -90,10 +104,13 @@ impl ReplayCache {
         if !self.enabled {
             return ReplayResult::Miss;
         }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
+        }
 
         match self.entries.get(ordinal as usize) {
             Some(entry) if entry.input_hash == input_hash => match &entry.output {
-                Some(output) => ReplayResult::Hit(output.clone()),
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                 None => ReplayResult::Miss,
             },
             Some(entry) => match self.mode {
@@ -124,12 +141,35 @@ impl ReplayCache {
         if !self.enabled {
             return ReplayResult::Miss;
         }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
+        }
+
+        if self.mode == ReplayMode::Strict
+            && let Some(entry) = self
+                .entries
+                .iter()
+                .find(|entry| entry.stable_id.as_deref() == Some(name))
+        {
+            if let (Some(current), Some(cached)) = (content_hash, entry.content_hash)
+                && current != cached
+            {
+                return ReplayResult::Mismatch {
+                    expected: cached,
+                    actual: current,
+                };
+            }
+            return match &entry.output {
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
+                None => ReplayResult::Miss,
+            };
+        }
 
         // Try ordinal-based match first (works in both modes).
         if let Some(entry) = self.entries.get(ordinal as usize) {
             if entry.name == name && entry.input_hash == input_hash {
                 return match &entry.output {
-                    Some(output) => ReplayResult::Hit(output.clone()),
+                    Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                     None => ReplayResult::Miss,
                 };
             }
@@ -168,7 +208,7 @@ impl ReplayCache {
                     continue;
                 }
                 return match &entry.output {
-                    Some(output) => ReplayResult::Hit(output.clone()),
+                    Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
                     None => ReplayResult::Miss,
                 };
             }
@@ -177,15 +217,78 @@ impl ReplayCache {
         ReplayResult::Miss
     }
 
+    /// Check replay using a stable identity that is independent of trace position.
+    ///
+    /// Versioned traces record stable IDs for every step. Strict replay locates
+    /// such a step anywhere in the prior trace, allowing unrelated steps to be
+    /// inserted or reordered without invalidating compatible cached work. Legacy
+    /// traces without stable IDs retain ordinal-and-hash matching.
+    pub fn check_by_identity(
+        &self,
+        stable_id: &str,
+        name: &str,
+        ordinal: u32,
+        input_hash: u64,
+        content_hash: Option<u64>,
+    ) -> ReplayResult {
+        if !self.enabled {
+            return ReplayResult::Miss;
+        }
+        if let Some(mismatch) = self.version_mismatch() {
+            return mismatch;
+        }
+
+        if let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| entry.stable_id.as_deref() == Some(stable_id))
+        {
+            if let (Some(current), Some(cached)) = (content_hash, entry.content_hash)
+                && current != cached
+            {
+                return match self.mode {
+                    ReplayMode::Strict => ReplayResult::Mismatch {
+                        expected: cached,
+                        actual: current,
+                    },
+                    ReplayMode::Lenient => ReplayResult::Miss,
+                };
+            }
+            return match &entry.output {
+                Some(output) => ReplayResult::Hit(output.clone(), entry.confidence),
+                None => ReplayResult::Miss,
+            };
+        }
+
+        self.check_by_name(name, ordinal, input_hash, content_hash)
+    }
+
+    /// Reports whether the cache has been seeded from a previous trace.
     pub fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    fn version_mismatch(&self) -> Option<ReplayResult> {
+        if self.mode != ReplayMode::Strict {
+            return None;
+        }
+        let (Some(expected), Some(actual)) = (
+            self.replay_pipeline_version.as_ref(),
+            self.pipeline_version.as_ref(),
+        ) else {
+            return None;
+        };
+        (expected != actual).then(|| ReplayResult::Mismatch {
+            expected: crate::recorder::hash_content(expected),
+            actual: crate::recorder::hash_content(actual),
+        })
     }
 }
 
 impl std::fmt::Debug for ReplayResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Hit(_) => write!(f, "ReplayResult::Hit(...)"),
+            Self::Hit(..) => write!(f, "ReplayResult::Hit(...)"),
             Self::Mismatch { expected, actual } => {
                 write!(f, "ReplayResult::Mismatch({expected} vs {actual})")
             }
@@ -206,11 +309,12 @@ pub fn deserialize_replay<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok, step_with_content};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::{step_ok, step_with_content};
 
     fn make_snapshot(
         steps: Vec<crux_types::step::Step>,
-    ) -> crux_types::crux_value::Crux<serde_json::Value> {
+    ) -> crux_schema::crux_value::Crux<serde_json::Value> {
         crux_ok("test", serde_json::json!(null), steps)
     }
 
@@ -229,7 +333,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check(0, 42) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("hello")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("hello")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -297,7 +401,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 10, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -318,7 +422,7 @@ mod tests {
         // Lenient mode scans forward by name and finds "parse" at index 2.
         // The hash differs (input_hash encodes ordinal), but lenient matches by name.
         match cache.check_by_name("parse", 1, 999, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("parsed")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("parsed")),
             other => panic!("expected Hit from forward scan, got {other:?}"),
         }
     }
@@ -336,6 +440,58 @@ mod tests {
         // Name "parse" at ordinal 0 where "fetch" is cached — strict rejects.
         assert!(matches!(
             cache.check_by_name("parse", 0, 10, None),
+            ReplayResult::Mismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn strict_mode_matches_stable_id_after_step_insertion() {
+        let mut inserted = make_step("new_step", 10, Some(serde_json::json!("new")));
+        inserted.stable_id = Some("pipeline.new".into());
+        let mut parse = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        parse.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![inserted, parse]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let mut cache = ReplayCache::with_mode(ReplayMode::Strict);
+        cache.seed_from(&snapshot);
+
+        match cache.check_by_identity("pipeline.parse", "renamed parse", 0, 999, None) {
+            ReplayResult::Hit(value, _) => assert_eq!(value, serde_json::json!("parsed")),
+            other => panic!("expected stable-id replay hit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn trace_identity_contract_survives_serialization() {
+        let mut step = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        step.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![step]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded: Crux<serde_json::Value> = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded.pipeline_version.as_deref(), Some("orders-v1"));
+        assert_eq!(
+            decoded.steps[0].stable_id.as_deref(),
+            Some("pipeline.parse")
+        );
+    }
+
+    #[test]
+    fn strict_mode_rejects_incompatible_pipeline_version() {
+        let mut step = make_step("parse", 20, Some(serde_json::json!("parsed")));
+        step.stable_id = Some("pipeline.parse".into());
+        let mut snapshot = make_snapshot(vec![step]);
+        snapshot.pipeline_version = Some("orders-v1".into());
+
+        let mut cache = ReplayCache::with_mode(ReplayMode::Strict);
+        cache.set_pipeline_version("orders-v2");
+        cache.seed_from(&snapshot);
+
+        assert!(matches!(
+            cache.check_by_identity("pipeline.parse", "parse", 0, 20, None),
             ReplayResult::Mismatch { .. }
         ));
     }
@@ -399,7 +555,7 @@ mod tests {
         // Looking for "fetch" at ordinal 0 with content_hash 200 — should skip the
         // entry at index 1 (content_hash 100) and hit index 2 (content_hash 200).
         match cache.check_by_name("fetch", 0, 999, Some(200)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("new_input")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("new_input")),
             other => panic!("expected Hit with matching content_hash, got {other:?}"),
         }
     }
@@ -415,7 +571,7 @@ mod tests {
 
         // content_hash matches — should hit.
         match cache.check_by_name("fetch", 0, 999, Some(100)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit, got {other:?}"),
         }
     }
@@ -431,7 +587,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 999, None) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit (no content_hash filter), got {other:?}"),
         }
     }
@@ -447,7 +603,7 @@ mod tests {
         cache.seed_from(&snapshot);
 
         match cache.check_by_name("fetch", 0, 999, Some(100)) {
-            ReplayResult::Hit(val) => assert_eq!(val, serde_json::json!("data")),
+            ReplayResult::Hit(val, _) => assert_eq!(val, serde_json::json!("data")),
             other => panic!("expected Hit (cached has no content_hash), got {other:?}"),
         }
     }
@@ -476,7 +632,8 @@ mod tests {
 #[cfg(test)]
 mod proptest_replay {
     use super::*;
-    use crux_types::testing::{crux_ok, step_ok};
+    use crux_schema::testing::crux_ok;
+    use crux_types::testing::step_ok;
     use proptest::prelude::*;
 
     fn arb_step_name() -> impl Strategy<Value = String> {
@@ -520,7 +677,7 @@ mod proptest_replay {
             )]);
             cache.seed_from(&snapshot);
             prop_assert!(cache.is_enabled());
-            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Hit(_)));
+            prop_assert!(matches!(cache.check(0, hash), ReplayResult::Hit(..)));
         }
 
         /// Out-of-bounds ordinal always returns Miss.
@@ -612,7 +769,7 @@ mod proptest_replay {
 
             for (i, &hash) in hashes.iter().enumerate() {
                 prop_assert!(
-                    matches!(cache.check(i as u32, hash), ReplayResult::Hit(_)),
+                    matches!(cache.check(i as u32, hash), ReplayResult::Hit(..)),
                     "expected Hit at ordinal {i}"
                 );
             }

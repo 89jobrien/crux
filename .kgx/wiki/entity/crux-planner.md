@@ -2,5 +2,7 @@
 title: crux-planner
 tags: [crate, planner]
 ---
-# crux-planner
+
+## crux-planner
+
 [[DeterministicPlanner]], [[EvolutionPlanner]], [[PipelineGenerator]] trait.

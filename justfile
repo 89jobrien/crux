@@ -17,6 +17,8 @@ lint:
 test:
     cargo nextest run
 
+# TODO(feature-idea-5): Run mdBook builds and lint-crux in the remote CI workflow.
+# TODO(feature-idea-10): Add credential-free agentic/BAML and optional-feature CI matrix jobs.
 # Run full CI suite locally (mirrors GH Actions - DO NOT CHANGE IF YOU DO NOT HAVE A FINGERPRINT)
 ci: check build-locked fmt lint test deny lint-crux
 
@@ -28,14 +30,14 @@ build:
 build-locked:
     RUSTFLAGS="-D warnings" cargo build --locked --all-targets
 
-# Build with all features (baml, plugins)
+# Build with the optional docker feature
 build-full:
-    cargo build --all-targets -p crux-cli --features baml
+    cargo build --all-targets -p crux-cli --features docker
 
-# Build dev binary with all features and install to cargo bin
+# Build dev binary and install to cargo bin
 build-dev:
-    cargo build -p crux-cli --features baml
-    cargo install --path crates/crux-cli --features baml
+    cargo build -p crux-cli
+    cargo install --path crates/crux-cli
 
 # Run developer setup (auto-detects shell)
 setup:
@@ -64,14 +66,14 @@ fix:
 # Check BAML generator version matches baml crate version in Cargo.toml
 check-baml:
     #!/usr/bin/env nu
-    let gen_ver = (open crates/crux-agentic/baml_src/generators.baml
+    let gen_ver = (open crates/crux-baml/baml_src/generators.baml
         | lines
         | where { |l| $l =~ 'version' }
         | first
         | parse --regex '"([0-9]+\.[0-9]+\.[0-9]+)"'
         | get capture0
         | first)
-    let cargo_ver = (open --raw crates/crux-agentic/Cargo.toml
+    let cargo_ver = (open --raw crates/crux-baml/Cargo.toml
         | lines
         | where { |l| $l =~ 'version = "[0-9]' and ($l =~ '^baml') }
         | first
@@ -83,8 +85,8 @@ check-baml:
         print $"  generators.baml  → ($gen_ver)"
         print $"  Cargo.toml       → ($cargo_ver)"
         print ""
-        print $"(ansi yellow)Fix: update the baml dep in crates/crux-agentic/Cargo.toml to match:(ansi reset)"
-        print $"  baml = \{ version = \"($gen_ver)\", optional = true \}"
+        print $"(ansi yellow)Fix: update the baml dep in crates/crux-baml/Cargo.toml to match:(ansi reset)"
+        print $"  baml = \{ version = \"($gen_ver)\" \}"
         error make { msg: "baml version mismatch" }
     }
     let lib = $"($env.HOME)/Library/Caches/baml/libs/($gen_ver)/libbaml_cffi-aarch64-apple-darwin.dylib"
@@ -99,18 +101,21 @@ check-baml:
 # Lint all .crux pipeline files (parse + handler/arg validation)
 lint-crux:
     #!/usr/bin/env bash
+    set -euo pipefail
     files=$(find examples -name '*.crux' | sort)
     if [ -z "$files" ]; then
         echo "No .crux files found"
         exit 0
     fi
-    cargo run --quiet -p crux-cli --features baml --bin crux -- check $files
+    while IFS= read -r file; do
+        cargo run --quiet -p crux-cli --bin crux -- run "$file" --check
+    done <<< "$files"
 
 # Demo replay: fresh run vs cached replay with timing comparison
 replay-demo:
     #!/usr/bin/env bash
     set -euo pipefail
-    BIN="cargo run --quiet -p crux-agentic --bin crux --"
+    BIN="cargo run --quiet -p crux-cli --bin crux --"
     PIPE="examples/showcase.crux"
     INPUT="examples/input_showcase.json"
     TRACE="target/replay-demo-trace.json"

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Crux workspace architecture: 18 members in dependency layers from crux-types wire data up to the crux CLI, with the registry and safety ports that keep the graph acyclic.">
+    <title>crux &mdash; architecture</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="architecture.html" aria-current="page">Architecture</a>
+      <a href="cli.html">CLI</a>
+      <a href="crates.html">Crates</a>
+      <a href="status.html">Status</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head">
+        <span class="eyebrow">Architecture</span>
+        <h1>One dependency graph, acyclic, pointing inward</h1>
+        <p class="lead">The workspace resolves to 18 members from a single <code>members = ["crates/*", "xtask"]</code> glob. Edges below are read from each crate's manifest; the graph contains no cycles.</p>
+        <div class="meta-row">
+          <span class="meta">18 members</span>
+          <span class="meta">4 leaf crates</span>
+          <span class="meta">13 tracked protocol surfaces</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>Layers</h2>
+        <p class="section-intro">Nothing in an inner layer knows about an outer one. <code>crux-types</code> has no workspace dependencies at all, and <code>crux-regression</code> is deliberately forbidden from reaching back into the runtime, the script interpreter, the handler stack, or the CLI.</p>
+
+        <figure class="diagram">
+          (<picture>
+            <source srcset="diagrams/architecture.print.svg" media="print">
+            <img src="diagrams/architecture.svg" width="880" height="620" loading="lazy" decoding="async"
+               alt="The crux workspace as seven stacked layers, dependencies pointing inward. At the top, the interface layer: the crux facade, crux-cli, and xtask. Below it orchestration: crux-agentic, crux-planner, crux-improve, and crux-regression. Then handlers: crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script, which interprets pipeline files. Then crux-runtime, the core execution. Then crux-schema and crux-domain, pure types with no I/O. At the centre, the leaf layer: crux-types, crux-model, and the crux-derive proc macro, which has no workspace dependencies.">
+          </picture>
+          <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types. The source is <a href="diagrams/architecture.mmd"><code>diagrams/architecture.mmd</code></a>, rendered at build time, with a light variant for print. Edit the .mmd, not the SVG.</figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Ports and adapters</h2>
+        <p class="section-intro">Four traits carry the boundaries. The rest of the runtime is concrete.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Port traits and the adapters that satisfy them</caption>
+            <thead>
+              <tr><th scope="col">Port</th><th scope="col">Adapters</th><th scope="col">Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>RegistryBackend</code></td>
+                <td><code>InMemoryBackend</code> (default), <code>RedbBackend</code> (feature <code>redb</code>)</td>
+                <td>Persistence port for the task registry, with compare-and-swap on write.</td>
+              </tr>
+              <tr>
+                <td><code>SafetyPolicy</code></td>
+                <td>evolve strategies</td>
+                <td><code>validate(diff, base)</code> and <code>requires_approval(diff)</code> over harness evolution.</td>
+              </tr>
+              <tr>
+                <td><code>ApprovalGate</code></td>
+                <td>terminal approval adapter, in <code>crux-agentic</code></td>
+                <td>Requests human sign-off before an accepted change lands.</td>
+              </tr>
+              <tr>
+                <td><code>Context</code></td>
+                <td>mirrors <code>CruxCtx</code></td>
+                <td>Step, hook, budget, and streaming operations behind an abstraction, for injecting mocks. <code>Agent</code> is not generic over it &mdash; <code>Agent::run</code> takes <code>&amp;mut CruxCtx</code> directly.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <p><code>GovernancePolicy</code> is a serializable struct, not a trait. And the runtime has no <code>AutoApproveGate</code> type; only the terminal approval adapter exists, in <code>crux-agentic</code>. Older changelog and agent-guide entries still mention an <code>AutoApproveGate</code> that was never built.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>What is inside <code>CruxCtx</code></h2>
+        <p class="section-intro">The runtime context is the thing a step records into, and the reason concurrent nested steps are not sound today: it is one mutable recorder.</p>
+        <ol class="steps">
+          <li class="step"><div><h3>Step recording</h3><p>A step recorder that appends each <code>Step</code> as it completes, with stable id, kind, status, origin, timings, and input and content hashes.</p></div></li>
+          <li class="step"><div><h3>Replay cache</h3><p>The recorded snapshot store that <code>--replay</code> reads from, matched by name plus ordinal hash. Strict mode fails on mismatch; lenient mode does a forward name scan, so ordinal shifts are the designed recovery path rather than a fallback.</p></div></li>
+          <li class="step"><div><h3>Budget tracking</h3><p>A tracker enforcing the four independently measured limits &mdash; handler attempts, model tokens, wall-clock milliseconds, and dollars. Delegated budgets are enforced in the child context.</p></div></li>
+          <li class="step"><div><h3>Hooks, governance, trust, and child traces</h3><p>Hook dispatch around step boundaries, the governance policy check, trust scoring, and the tree of child <code>Crux</code> values produced by delegation.</p></div></li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Drift tracking</h2>
+        <p class="section-intro">Thirteen hash-tracked protocol surfaces are declared in <code>taskit.toml</code> and checked by <code>taskit check-protocol-drift</code> in CI, so an intentional change to a public trait has to be acknowledged rather than slipped in.</p>
+        <div class="card">
+          <p>Tracked surfaces include <code>crux-domain-planner</code>, <code>crux-runtime-recorder</code>, <code>crux-runtime-audit</code>, <code>crux-runtime-safety</code>, <code>crux-runtime-agent</code>, <code>crux-runtime-approval</code>, <code>crux-runtime-context</code>, <code>crux-types-emission</code>, <code>crux-script-step_runner</code>, <code>crux-agentic-provider</code>, <code>crux-plugin-discovery</code>, <code>crux-improve-lib</code>, and <code>crux-planner-generator</code>.</p>
+        </div>
+        <div class="note note-warn">
+          <p>The crate list in <code>taskit.toml</code> omits <code>crux-cli</code>, <code>crux-macros</code>, <code>crux-schema</code>, <code>crux-regression</code>, and <code>crux-task</code>, so affected-crate propagation for those members is behind the actual workspace.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Quality gates</h2>
+        <div class="table-wrap">
+          <table>
+            <caption>What CI runs, and what it deliberately skips</caption>
+            <thead>
+              <tr><th scope="col">Gate</th><th scope="col">Command</th><th scope="col">Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Format</td><td><code>cargo fmt --all -- --check</code></td><td>—</td></tr>
+              <tr><td>Clippy</td><td><code>--workspace --exclude crux-baml --exclude crux-agentic</code></td><td><code>RUSTFLAGS: -D warnings</code></td></tr>
+              <tr><td>Tests</td><td><code>cargo nextest run --workspace</code></td><td>Same two crates excluded</td></tr>
+              <tr><td>Unused deps</td><td><code>cargo machete</code></td><td>—</td></tr>
+              <tr><td>Advisories and licenses</td><td><code>cargo deny check</code></td><td>—</td></tr>
+              <tr><td>Handler crates</td><td>regenerate BAML, then clippy and nextest with <code>--features crux-agentic/baml</code></td><td>Excludes the <code>llm_extract</code> and <code>planner</code> test binaries, so LLM-backed tests never run in CI.</td></tr>
+              <tr><td>Pipeline lint</td><td><code>crux run "$file" --check</code> over <code>examples/**/*.crux</code></td><td>Local <code>just lint-crux</code> only. A tracked TODO asks for this in remote CI.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>just ci</code> runs the same set locally: check, build-locked, fmt, lint, test, deny, lint-crux.</p>
+      </section>
+
+      <p><a href="crates.html">See what each crate does</a> &middot; <a href="status.html">What works today</a></p>
+    </main>
+
+    <footer class="site-foot">
+      <a href="https://github.com/89jobrien/crux">Source on GitHub</a> &middot; MIT &middot; built by <a href="https://github.com/89jobrien">Joseph O'Brien</a>
+    </footer>
+  </body>
+</html>

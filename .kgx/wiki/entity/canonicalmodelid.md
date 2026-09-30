@@ -2,5 +2,7 @@
 title: CanonicalModelId
 tags: [type, model]
 ---
-# CanonicalModelId
+
+## CanonicalModelId
+
 **Crate:** [[crux-model]] | Format: vendor:family:generation:variant. Parsed from provider-specific strings.

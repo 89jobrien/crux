@@ -14,14 +14,18 @@ categories.workspace = true
 
 [dependencies]
 crux-runtime = { workspace = true } #unified
+crux-schema = { workspace = true }
 crux-types = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 miette = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 tokio = { workspace = true }

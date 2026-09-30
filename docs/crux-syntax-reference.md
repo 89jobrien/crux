@@ -38,14 +38,14 @@ x.delegate::<Agent>(name, input)
     .with_budget(Budget::tokens(4000))
     .on_low_confidence(0.7, handler)
     .on_step_failure(handler)
-    .on_budget_exceeded(handler)
+    .run()
     .await?;
 
 // Confidence branching (validates non-overlapping, gap-free [0.0, 1.0] coverage)
 x.route_on_confidence(name, score, vec![
-    (ConfidenceRange { lo: 0.90, hi: None }, "high", fut),
-    (ConfidenceRange { lo: 0.70, hi: Some(0.90) }, "mid", fut),
-    (ConfidenceRange { lo: 0.00, hi: Some(0.70) }, "low", fut),
+    (ConfidenceRange::inclusive(0.90, 1.00), "high", Box::pin(high_fut)),
+    (ConfidenceRange::exclusive(0.70, 0.90), "mid", Box::pin(mid_fut)),
+    (ConfidenceRange::exclusive(0.00, 0.70), "low", Box::pin(low_fut)),
 ]).await?;
 
 // Sequential pipeline (each stage gets previous output)
@@ -65,7 +65,6 @@ x.speculate(name, vec![
     ("cheap", Box::pin(async { Ok(result) })),
     ("fast",  Box::pin(async { Ok(result) })),
 ])
-    .with_budget(Budget::tokens(8000))
     .pick_best_by(|r| r.confidence)
     .await?;
     // or: .first_ok()
@@ -149,6 +148,8 @@ pub struct Step {
 pub enum StepKind { Plain, Delegation, Branch, Speculation }
 pub enum StepStatus { Ok, Err, Rejected, Skipped }
 ```
+
+<!-- TODO(docs): Add the current `metadata` and `findings` fields to this API sketch. -->
 
 ## `CruxErr`
 
@@ -267,8 +268,9 @@ and USD are recorded after completion, making those dimensions soft caps. Under
 a USD budget, unreported cost fails closed even when the handler fails; explicit
 free usage reports zero. The compatibility `consume(amount)` method applies the
 scalar to every configured counter for historical source compatibility; it does
-not update typed `BudgetUsage`. Pipeline `delegate` nodes remain an exception: their
-nested budget is ignored and delegated work is not charged to pipeline usage.
+not update typed `BudgetUsage`. Pipeline `delegate` nodes enforce their nested
+budget in an isolated child context, preserve the child trace, and charge the
+delegation plus measured child usage to the parent pipeline budget.
 
 ## `TaskRegistry`
 
@@ -316,7 +318,6 @@ crux = { version = "0.4", features = ["redb", "tracing", "script"] }
 | `redb`          | `RedbBackend` for persistent task registry.     |
 | `tracing`       | Instrument with tracing spans.                  |
 | `script`        | Re-exports `crux-script` for pipeline execution. |
-| `script`        | Re-export `crux-script` for pipeline execution. |
 
 ## Pipeline display metadata
 
@@ -343,6 +344,12 @@ crux run pipeline.crux --json   # compact machine result
 crux run pipeline.crux -q       # errors only
 ```
 
+Every executed run saves JSON beneath `$HOME/.crux/traces/`, including failed runs. Regular
+pipeline traces can be reused with `--replay trace.json`, and `--save-trace trace.json` overrides
+the automatic destination. Cruxfiles save one trace per executed target for inspection; `--replay`
+currently applies only to regular pipelines. `--check` and `--dry-run` do not write traces. Trace
+files may contain raw handler inputs and outputs and should be treated as sensitive data.
+
 ## Prelude
 
 ```rust
@@ -357,3 +364,5 @@ use crux::prelude::*;
 //            EvolutionOutcome, HarnessDiff, HarnessProfile, ResourceHints,
 //            ExecutionContext, Priority, StepState, Urgency (from slashcrux)
 ```
+
+<!-- TODO(docs): Add planner, audit, governance, trust, usage, and cited-finding exports. -->

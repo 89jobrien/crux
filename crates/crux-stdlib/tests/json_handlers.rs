@@ -1,3 +1,5 @@
+//! Integration tests for JSON projection, merge, path, filter, and map handlers.
+
 use crux_script::HandlerRegistry;
 use crux_stdlib::json as json_handlers;
 use serde_json::json;

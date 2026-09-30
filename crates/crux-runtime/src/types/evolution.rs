@@ -1,3 +1,5 @@
+//! Outcomes produced when evaluating a candidate harness profile.
+
 use serde::{Deserialize, Serialize};
 
 /// The result of an evolution cycle — did the candidate get promoted?

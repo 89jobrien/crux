@@ -138,7 +138,7 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 3. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-agentic -- triage  → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
     ```
@@ -172,7 +172,7 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 4. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-agentic -- ci  → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
     ```
@@ -194,7 +194,7 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 2. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-agentic -- review  → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
     ```
@@ -227,7 +227,7 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 3. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-agentic -- analysis  → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
     ```
@@ -245,7 +245,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 1. Create module directory `crates/crux-agentic/src/bin/crux/`:
 
-    ```
+    ```text
     crates/crux-agentic/src/bin/crux/main.rs   ← Cli enum + main()
     crates/crux-agentic/src/bin/crux/run.rs     ← cmd_run, cmd_run_cruxfile,
                                                     cmd_run_dispatch, cmd_dry_run_*
@@ -262,7 +262,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 3. Verify:
 
-    ```
+    ```text
     cargo build -p crux-agentic --bin crux  → builds
     cargo nextest run -p crux-agentic       → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
@@ -292,7 +292,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 5. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-runtime  → all green
     cargo nextest run -p crux          → integration tests green
     cargo clippy -p crux-runtime -- -D warnings  → zero warnings
@@ -324,7 +324,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 3. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-script  → all green
     cargo clippy -p crux-script -- -D warnings  → zero warnings
     ```
@@ -349,7 +349,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 4. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-stdlib -- json  → all green
     cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
     ```
@@ -367,12 +367,12 @@ new `crates/crux-agentic/src/bin/crux/` directory
 1. Extract the inner hunk-parsing loop body (lines ~163-240) into a
    private fn `fn process_diff_line(...)` that takes mutable state refs.
 
-2. Collapse the duplicated `+++ b/` and `+++ ` branches into one with
+2. Collapse the duplicated `+++ b/` and `+++` branches into one with
    an `strip_prefix("+++ b/").or_else(|| strip_prefix("+++ "))` chain.
 
 3. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-stdlib  → all green
     cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
     ```
@@ -406,7 +406,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 4. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-agentic  → all green
     cargo clippy -p crux-agentic -- -D warnings  → zero warnings
     ```
@@ -455,7 +455,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 5. Verify:
 
-    ```
+    ```text
     cargo nextest run -p crux-planner  → all green
     cargo nextest run -p crux-improve  → all green
     cargo clippy -p crux-planner -- -D warnings  → zero warnings
@@ -491,7 +491,7 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 6. Verify:
 
-    ```
+    ```text
     cargo build --all-targets  → builds
     cargo nextest run          → all green
     cargo clippy -- -D warnings  → zero warnings

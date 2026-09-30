@@ -1,3 +1,5 @@
+//! ULID-backed trace and task identifiers with stable prefixes.
+
 /// Unique identifiers for crux traces and tasks.
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,10 +9,12 @@ use ulid::Ulid;
 pub struct CruxId(String);
 
 impl CruxId {
+    /// Generates a `crux_`-prefixed ULID trace identifier.
     pub fn new() -> Self {
         Self(format!("crux_{}", Ulid::new()))
     }
 
+    /// Borrows the complete prefixed identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -32,10 +36,12 @@ impl fmt::Display for CruxId {
 pub struct TaskId(String);
 
 impl TaskId {
+    /// Generates a `task_`-prefixed ULID task identifier.
     pub fn new() -> Self {
         Self(format!("task_{}", Ulid::new()))
     }
 
+    /// Borrows the complete prefixed identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }

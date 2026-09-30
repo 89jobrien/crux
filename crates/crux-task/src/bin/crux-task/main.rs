@@ -1,3 +1,5 @@
+//! Backend selection and command dispatch for the `crux-task` CLI.
+
 mod cli;
 
 use clap::Parser;

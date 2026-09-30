@@ -22,7 +22,8 @@ failure-causing steps.
 non-transient. `failed_step()` returns the handler name for `UnreportedCost` and
 follows a related source for USD overage; limit-only errors have no step name.
 
-`Budget` uses struct variants and these constructors:
+`Budget` uses struct variants. `steps` and `usd` are the canonical count and
+cost APIs; `calls` and `cost_cents` remain compatibility APIs:
 
 ```rust
 use std::time::Duration;
@@ -69,7 +70,10 @@ tokens. It also has default low-confidence and failure hooks.
 
 Bring `Context` into scope (the facade prelude does this) for `step`,
 `step_keyed`, `step_with_confidence`, `step_retryable`, `try_step`,
-`step_stream`, hooks, and budget methods.
+`step_stream`, hooks, and budget methods. Typed accounting methods are
+`begin_budgeted_step`, `record_handler_usage`, and `record_budget_duration`;
+`set_budget`, `budget`, `remaining_budget`, and compatibility
+`consume_budget` are also available.
 
 `pipe` is sequential. `join_all` runs arms concurrently, waits for every live
 arm, and returns values in input order. `speculate` is sequential:

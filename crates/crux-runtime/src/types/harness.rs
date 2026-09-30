@@ -1,3 +1,5 @@
+//! Harness resource profiles and declarative profile differences.
+
 use serde::{Deserialize, Serialize};
 
 /// Resource limits for a container execution environment.

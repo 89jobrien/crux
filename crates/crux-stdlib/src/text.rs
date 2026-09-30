@@ -1,6 +1,9 @@
+//! Deterministic parsers for search, JSONL, frontmatter, diffs, and branches.
+
 use crux_script::{HandlerMetadata, HandlerRegistry, RiskLevel};
 use serde_json::{Value, json};
 
+/// Registers structured text-parsing handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("text::parse_vimgrep")
@@ -83,10 +86,9 @@ pub fn register(registry: &mut HandlerRegistry) {
     );
 }
 
-// ---------------------------------------------------------------------------
 // Pure parsing functions (public for fuzz targets)
-// ---------------------------------------------------------------------------
 
+/// Parses `file:line:column:text` records from vimgrep output.
 pub fn parse_vimgrep(input: &str) -> Vec<Value> {
     input
         .lines()
@@ -105,6 +107,7 @@ pub fn parse_vimgrep(input: &str) -> Vec<Value> {
         .collect()
 }
 
+/// Parses valid non-empty JSONL records, skipping malformed lines.
 pub fn parse_jsonl(input: &str) -> Vec<Value> {
     input
         .lines()
@@ -113,6 +116,7 @@ pub fn parse_jsonl(input: &str) -> Vec<Value> {
         .collect()
 }
 
+/// Splits leading YAML frontmatter from the remaining document body.
 pub fn parse_frontmatter(input: &str) -> (Value, String) {
     let trimmed = input.trim_start();
     if !trimmed.starts_with("---") {
@@ -198,6 +202,7 @@ fn flush_file(current_file: &mut Option<String>, hunks: &mut Vec<Value>, files: 
     }
 }
 
+/// Groups unified-diff content into files and hunks with source line offsets.
 pub fn parse_diff(input: &str) -> Vec<Value> {
     let mut files: Vec<Value> = Vec::new();
     let mut current_file: Option<String> = None;
@@ -268,6 +273,7 @@ fn parse_hunk_header(line: &str) -> (u64, u64) {
     (old_start, new_start)
 }
 
+/// Parses branch names and marks the line prefixed with `*` as current.
 pub fn parse_branch_list(input: &str) -> Vec<Value> {
     input
         .lines()

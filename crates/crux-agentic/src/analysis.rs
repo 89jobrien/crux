@@ -1,3 +1,5 @@
+//! Trace-analysis and pipeline-improvement handlers.
+
 use chrono::{DateTime, Utc};
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel};
@@ -19,6 +21,7 @@ const SUGGESTED_RETRY_COUNT: u64 = 3;
 /// Suggested initial backoff in milliseconds for retry suggestions.
 const SUGGESTED_BACKOFF_MS: u64 = 1000;
 
+/// Registers trace metrics, optimization suggestions, and replay checks.
 pub fn register(registry: &mut HandlerRegistry) {
     register_latency_profile(registry);
     register_token_spend(registry);
@@ -388,6 +391,7 @@ fn register_patch_schema_check(registry: &mut HandlerRegistry) {
     );
 }
 
+// TODO(feature-idea-9): Replace the missing external replay command with safe in-process analysis.
 fn register_replay_dry_run(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_REPLAY_DRY_RUN)

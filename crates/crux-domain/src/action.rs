@@ -23,6 +23,7 @@ pub enum Action {
 }
 
 impl Action {
+    /// Returns the requested step name or the finish sentinel.
     pub fn name(&self) -> &str {
         match self {
             Action::Execute(i) => &i.name,

@@ -1,3 +1,5 @@
+//! Human-readable summary and verbose trace rendering for pipeline runs.
+
 use crux_runtime::prelude::*;
 use crux_script::schema::{DisplayOutput, PipelineDisplayDef};
 use serde_json::Value;
@@ -20,6 +22,13 @@ fn format_duration(duration: std::time::Duration) -> String {
         format!("{:.2}s", duration.as_secs_f64())
     } else {
         format!("{}ms", duration.as_millis())
+    }
+}
+
+fn step_origin_label(origin: StepOrigin) -> &'static str {
+    match origin {
+        StepOrigin::Live => "LIVE",
+        StepOrigin::Replayed => "CACHED / REPLAYED",
     }
 }
 
@@ -90,7 +99,8 @@ pub fn render_summary(
         };
         let name = display_step_name(&step.name, display);
         let duration = format_duration(std::time::Duration::from_millis(step.duration_ms));
-        out.push_str(&format!("  {icon} {name:<42} {duration:>8}\n"));
+        let origin = step_origin_label(step.origin);
+        out.push_str(&format!("  {icon} [{origin}] {name:<42} {duration:>8}\n"));
     }
 
     let passed = crux
@@ -142,8 +152,9 @@ pub fn render_trace(
             StepKind::Speculation => " [speculate]",
         };
         let name = display_step_name(&step.name, display);
+        let origin = step_origin_label(step.origin);
         out.push_str(&format!(
-            "  {:>2}. [{:>4}] {}{} ({}ms)\n",
+            "  {:>2}. [{:>4}] [{origin}] {}{} ({}ms)\n",
             i + 1,
             status,
             name,
@@ -169,9 +180,11 @@ mod tests {
 
     fn step(name: &str, status: StepStatus, duration_ms: u64) -> Step {
         Step {
+            stable_id: None,
             name: name.to_string(),
             kind: StepKind::Plain,
             status,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: chrono::Utc::now(),
             duration_ms,
@@ -179,8 +192,10 @@ mod tests {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         }
@@ -190,6 +205,7 @@ mod tests {
         Crux {
             id: CruxId::new(),
             agent: "renderer".to_string(),
+            pipeline_version: None,
             value,
             steps,
             children: vec![],
@@ -290,6 +306,22 @@ mod tests {
     }
 
     #[test]
+    fn renderers_distinguish_live_and_replayed_steps() {
+        let live = step("fetch_context", StepStatus::Ok, 42);
+        let mut replayed = step("evaluate_output", StepStatus::Ok, 0);
+        replayed.origin = StepOrigin::Replayed;
+        let trace = crux(Ok(Value::Null), vec![live, replayed]);
+
+        let summary = render_summary(&trace, std::time::Duration::ZERO, None);
+        let verbose = render_trace(&trace, std::time::Duration::ZERO, None);
+
+        for rendered in [summary, verbose] {
+            assert!(rendered.contains("[LIVE]"), "{rendered}");
+            assert!(rendered.contains("[CACHED / REPLAYED]"), "{rendered}");
+        }
+    }
+
+    #[test]
     fn summary_renderer_covers_failure_rows_and_second_durations() {
         let rendered = render_summary(
             &crux(
@@ -305,9 +337,9 @@ mod tests {
         );
 
         assert!(rendered.contains("renderer  FAIL  2.50s"), "{rendered}");
-        assert!(rendered.contains("✗ failed"), "{rendered}");
-        assert!(rendered.contains("· rejected"), "{rendered}");
-        assert!(rendered.contains("- skipped"), "{rendered}");
+        assert!(rendered.contains("✗ [LIVE] failed"), "{rendered}");
+        assert!(rendered.contains("· [LIVE] rejected"), "{rendered}");
+        assert!(rendered.contains("- [LIVE] skipped"), "{rendered}");
         assert!(rendered.contains("1.25s"), "{rendered}");
         assert!(rendered.contains("2.00s"), "{rendered}");
         assert!(rendered.contains("0/3 checks passed"), "{rendered}");

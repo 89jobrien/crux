@@ -1,3 +1,5 @@
+//! Tests for plugin manifest path resolution and TOML parsing.
+
 /// Tests for plugin auto-discovery (#18).
 ///
 /// Verifies that:

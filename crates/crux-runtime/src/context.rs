@@ -1,3 +1,5 @@
+//! Runtime context and invocation-accounting ports used by agents and handlers.
+
 /// The Context trait — port for the agent runtime context.
 ///
 /// Dependency inversion: Agent::run depends on this trait, not on CruxCtx directly.

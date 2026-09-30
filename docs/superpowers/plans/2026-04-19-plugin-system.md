@@ -50,7 +50,6 @@ of `HandlerRegistry`.
 - Create: `crates/crux-plugin/src/lib.rs`
 - Create: `crates/crux-plugin/src/protocol.rs`
 - Test: `crates/crux-plugin/tests/protocol.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -262,7 +261,6 @@ git commit -m "feat(plugin): add crux-plugin crate with protocol types"
 - Create: `crates/crux-plugin/src/manifest.rs`
 - Modify: `crates/crux-plugin/src/lib.rs`
 - Test: `crates/crux-plugin/tests/manifest.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -419,7 +417,6 @@ git commit -m "feat(plugin): manifest parsing for plugins.toml"
 - Test: `crates/crux-plugin/tests/fixtures/echo-plugin.rs`
   (test binary)
 - Test: `crates/crux-plugin/tests/host.rs`
-
 - [ ] **Step 1: Create the echo-plugin test fixture binary**
 
 Add to `crates/crux-plugin/Cargo.toml`:
@@ -828,7 +825,6 @@ git commit -m "feat(plugin): plugin host with subprocess management"
 - Create: `crates/crux-plugin/src/bridge.rs`
 - Modify: `crates/crux-plugin/src/lib.rs`
 - Test: `crates/crux-plugin/tests/bridge.rs`
-
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -969,7 +965,6 @@ git commit -m "feat(plugin): bridge plugin handlers into HandlerRegistry"
 
 - Modify: `crates/crux-agentic/Cargo.toml` (add crux-plugin dep)
 - Modify: `crates/crux-agentic/src/bin/crux.rs`
-
 - [ ] **Step 1: Add crux-plugin dependency**
 
 Add to `crates/crux-agentic/Cargo.toml` under `[dependencies]`:

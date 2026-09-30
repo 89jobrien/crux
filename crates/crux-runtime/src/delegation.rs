@@ -1,3 +1,5 @@
+//! Fluent child-agent delegation with per-call budgets and recovery hooks.
+
 /// DelegationBuilder — fluent builder for delegating to a sub-agent.
 ///
 /// Created by `CruxCtx::delegate::<A>(name, input)`. Supports per-call-site
@@ -8,11 +10,19 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 
 use crate::agent::Agent;
+use crate::context::InvocationMeter;
 use crate::ctx::CruxCtx;
+use crate::types::budget::{Budget, HandlerUsage};
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
+use crux_domain::plan_result::PlanResult;
+use crux_types::emission::Emission;
 
 type BoxRecoveryFut = Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>;
+
+/// Type-erased future used by dynamically registered delegated agents.
+pub type DelegatedFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send + 'a>>;
+
 impl CruxCtx {
     /// Start building a delegation to agent `A`.
     pub fn delegate<'a, A: Agent>(
@@ -25,6 +35,97 @@ impl CruxCtx {
         A::Output: Send + serde::Serialize + serde::de::DeserializeOwned,
     {
         DelegationBuilder::new(self, name, input)
+    }
+
+    /// Run a dynamically registered agent through the runtime delegation boundary.
+    ///
+    /// The delegated body receives an isolated child context. Its scoped budget is
+    /// enforced independently, its measured usage is charged to the parent context,
+    /// and its finalized trace is retained as a child of the parent trace.
+    pub async fn delegate_registered<T, F>(
+        &mut self,
+        name: &str,
+        agent_name: &str,
+        budget: Option<Budget>,
+        run: F,
+    ) -> Result<T, CruxErr>
+    where
+        T: Send + serde::Serialize + serde::de::DeserializeOwned,
+        F: for<'a> FnOnce(&'a mut CruxCtx) -> DelegatedFuture<'a, T> + Send,
+    {
+        match self.plan_action(name) {
+            PlanResult::Deny { reason } => {
+                return Err(CruxErr::Denied {
+                    step: name.to_string(),
+                    reason,
+                });
+            }
+            PlanResult::Simulate { output } => {
+                return serde_json::from_value(output).map_err(|error| {
+                    CruxErr::step_failed(name, format!("planner simulation: {error}"))
+                });
+            }
+            PlanResult::Allow(_) => {}
+        }
+
+        self.reserve_invocations(1)?;
+        let input_hash = self.next_child_run_hash(name);
+        let mut child_ctx = CruxCtx::new(agent_name);
+        child_ctx.set_planner_arc(self.planner_arc());
+        if let Some(budget) = budget {
+            child_ctx.set_budget_direct(budget);
+        }
+
+        let child_result = match child_ctx.reserve_invocations(1) {
+            Ok(()) => {
+                let started = std::time::Instant::now();
+                let outcome = run(&mut child_ctx).await;
+                let duration = started.elapsed();
+                match child_ctx.record_invocation_usage(
+                    agent_name,
+                    HandlerUsage::unreported(),
+                    duration,
+                ) {
+                    Ok(()) => outcome,
+                    Err(accounting_error) => Err(accounting_error),
+                }
+            }
+            Err(error) => Err(error),
+        };
+
+        let child_usage = child_ctx.budget_usage();
+        let child_crux = child_ctx.finalize(child_result);
+        let output = child_crux
+            .value
+            .as_ref()
+            .ok()
+            .and_then(|value| serde_json::to_value(value).ok());
+        let error = child_crux.value.as_ref().err().map(ToString::to_string);
+        self.record_child_run_step(name, input_hash, &child_crux, output, error);
+
+        let parent_accounting = self.record_invocation_usage(
+            name,
+            HandlerUsage {
+                tokens: child_usage.tokens,
+                usd: child_usage.usd,
+            },
+            std::time::Duration::from_millis(child_usage.duration_ms),
+        );
+        if let Err(error) = parent_accounting {
+            if let Some(step) = self.recorder_mut().steps_mut().last_mut() {
+                step.status = crate::types::step::StepStatus::Err;
+                step.error = Some(error.to_string());
+            }
+            return Err(error);
+        }
+
+        match child_crux.value {
+            Ok(value) => Ok(value),
+            Err(error) => Err(CruxErr::Delegation {
+                to: agent_name.to_string(),
+                source: Box::new(error),
+            }),
+        }
     }
 }
 
@@ -86,12 +187,30 @@ where
 
     /// Execute the delegation.
     pub async fn run(self) -> Result<A::Output, CruxErr> {
-        trace_delegate!(&self.name, A::name());
+        self.ctx.emit(Emission::DelegateStart {
+            name: self.name.clone(),
+            agent: A::name().to_string(),
+        });
+        match self.ctx.plan_action(&self.name) {
+            PlanResult::Deny { reason } => {
+                return Err(CruxErr::Denied {
+                    step: self.name,
+                    reason,
+                });
+            }
+            PlanResult::Simulate { output } => {
+                return serde_json::from_value(output).map_err(|error| {
+                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
+                });
+            }
+            PlanResult::Allow(_) => {}
+        }
         let input_hash = self.ctx.next_child_run_hash(&self.name);
 
         // Create child context, inheriting the parent's planner
         let mut child_ctx = CruxCtx::new(A::name());
         child_ctx.set_planner_arc(self.ctx.planner_arc());
+        child_ctx.set_event_sender(self.ctx.event_sender());
         if let Some(budget) = self.budget {
             child_ctx.set_budget_direct(budget);
         }
@@ -179,6 +298,40 @@ mod tests {
         ) -> Result<Self::Output, CruxErr> {
             Err(CruxErr::step_failed("fail", "always fails"))
         }
+    }
+
+    struct PlannerBypassAgent;
+
+    impl crate::agent::Agent for PlannerBypassAgent {
+        type Input = ();
+        type Output = i32;
+
+        fn name() -> &'static str {
+            "planner_bypass"
+        }
+
+        async fn run(
+            _ctx: &mut crate::ctx::CruxCtx,
+            _input: Self::Input,
+        ) -> Result<Self::Output, CruxErr> {
+            Ok(7)
+        }
+    }
+
+    #[tokio::test]
+    async fn planner_denies_delegation_before_agent_body_runs() {
+        use crux_domain::planner::DenyAllPlanner;
+
+        let mut ctx = CruxCtx::new("parent");
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no delegation".into(),
+        });
+
+        let result = DelegationBuilder::<PlannerBypassAgent>::new(&mut ctx, "child", ())
+            .run()
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
     }
 
     #[tokio::test]

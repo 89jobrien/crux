@@ -1,10 +1,38 @@
+//! Built-in and plugin handler registry construction for CLI commands.
+
 use crux_plugin::bridge::register_plugins;
-use crux_plugin::discovery::{PluginDiscovery, TomlFileDiscovery};
-use crux_script::{
-    HandlerRegistry,
-    schema::{PipelineDef, StepDef},
-};
-use serde_json::{Value, json};
+use crux_plugin::discovery::{PluginDiscovery, PluginDiscoveryError, TomlFileDiscovery};
+use crux_plugin::host::PluginError;
+use crux_script::{HandlerRegistry, schema::PipelineDef};
+
+#[derive(Debug)]
+pub enum RegistryBuildError {
+    Discovery(PluginDiscoveryError),
+    Plugin(PluginError),
+}
+
+impl std::fmt::Display for RegistryBuildError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Discovery(error) => write!(formatter, "failed to discover plugins: {error}"),
+            Self::Plugin(error) => write!(formatter, "failed to register plugins: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for RegistryBuildError {}
+
+impl From<PluginDiscoveryError> for RegistryBuildError {
+    fn from(error: PluginDiscoveryError) -> Self {
+        Self::Discovery(error)
+    }
+}
+
+impl From<PluginError> for RegistryBuildError {
+    fn from(error: PluginError) -> Self {
+        Self::Plugin(error)
+    }
+}
 
 /// Resolve the plugins.toml path from an explicit flag or the default location.
 pub fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
@@ -15,13 +43,24 @@ pub fn resolve_plugins_path(plugins_path: Option<&str>) -> String {
 }
 
 /// Build a registry seeded with all crux-agentic built-in handlers.
+pub async fn build_base_registry(plugins_path: Option<&str>) -> HandlerRegistry {
+    match build_registry(plugins_path).await {
+        Ok(registry) => registry,
+        Err(error) => {
+            eprintln!("[crux] warning: {error}");
+            let mut registry = HandlerRegistry::new();
+            crux_agentic::register_all_with_plugins(&mut registry, Vec::new());
+            registry
+        }
+    }
+}
+
+/// Build the execution registry, propagating discovery and plugin errors.
 pub async fn build_registry(
-    pipeline: &PipelineDef,
     plugins_path: Option<&str>,
-    strict: bool,
-) -> HandlerRegistry {
+) -> Result<HandlerRegistry, RegistryBuildError> {
     let disc = TomlFileDiscovery::new(resolve_plugins_path(plugins_path));
-    let entries = disc.discover().unwrap_or_default();
+    let entries = disc.discover()?;
     let manifest = crux_plugin::manifest::PluginManifest { plugin: entries };
 
     let plugin_handler_descs: Vec<String> = manifest
@@ -33,94 +72,14 @@ pub async fn build_registry(
     let mut reg = HandlerRegistry::new();
     crux_agentic::register_all_with_plugins(&mut reg, plugin_handler_descs);
 
-    if !manifest.plugin.is_empty()
-        && let Err(e) = register_plugins(&mut reg, &manifest.plugin).await
-    {
-        eprintln!("[crux] warning: failed to load plugins: {e}");
+    if !manifest.plugin.is_empty() {
+        register_plugins(&mut reg, &manifest.plugin).await?;
     }
 
-    let mut unregistered: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for name in collect_handler_names(pipeline) {
-        if reg.get_handler(&name).is_none() {
-            if strict {
-                unregistered.insert(name);
-            } else {
-                let n = name.clone();
-                reg.handler_value(name, move |_input: Value| {
-                    let handler_name = n.clone();
-                    async move {
-                        eprintln!("[crux] warning: no builtin for '{handler_name}', using stub");
-                        Ok(json!({
-                            "_stub": handler_name,
-                            "confidence": 0.5,
-                            "score": 0.5,
-                        }))
-                    }
-                });
-            }
-        }
-    }
-
-    if !unregistered.is_empty() {
-        let mut sorted: Vec<String> = unregistered.into_iter().collect();
-        sorted.sort();
-        eprintln!(
-            "[crux] error: --strict mode: unregistered handlers: {}",
-            sorted.join(", ")
-        );
-        std::process::exit(1);
-    }
-
-    reg
+    Ok(reg)
 }
 
-/// Collect all handler/arm/stage names referenced in the pipeline.
-pub fn collect_handler_names(pipeline: &PipelineDef) -> Vec<String> {
-    let mut names = Vec::new();
-    collect_handler_names_into(&pipeline.steps, &mut names);
-    names.sort();
-    names.dedup();
-    names
-}
-
-fn collect_handler_names_into(steps: &[StepDef], names: &mut Vec<String>) {
-    for step in steps {
-        match step {
-            StepDef::Step(node) => {
-                names.push(node.handler.clone().unwrap_or_else(|| node.step.clone()));
-            }
-            StepDef::Delegate(node) => {
-                names.push(node.delegate.clone());
-            }
-            StepDef::Pipe(node) => {
-                names.extend(node.stages.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::JoinAll(node) => {
-                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::RouteOnConfidence(node) => {
-                for route in &node.routes {
-                    names.push(route.handler.clone());
-                }
-            }
-            StepDef::Speculate(node) => {
-                names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
-            }
-            StepDef::Poll(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::ForEach(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::While(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-            StepDef::Repeat(node) => {
-                collect_handler_names_into(&node.steps, names);
-            }
-        }
-    }
-}
+pub use crux_script::collect_handler_names;
 
 /// Warn if the pipeline uses LLM handlers but no API keys are set.
 pub fn warn_missing_env(pipeline: &PipelineDef) {

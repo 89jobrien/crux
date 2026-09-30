@@ -1,3 +1,5 @@
+//! Control-flow handlers for pass-through, logging, assertions, and failures.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::{ArgSchema, ArgType, HandlerMetadata, HandlerRegistry};
 use serde_json::Value;
@@ -62,6 +64,7 @@ fn to_plaintext_pretty(v: &Value) -> String {
     }
 }
 
+/// Registers deterministic control and diagnostic handlers.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("ctrl::noop").describe("Pass input through unchanged"),
