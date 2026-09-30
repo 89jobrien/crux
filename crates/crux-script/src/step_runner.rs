@@ -194,7 +194,11 @@ impl LegacyStepRunner for GitCommitRunner {
         let repo = config_str(&ctx.config, "repo")?;
         let message = config_str(&ctx.config, "message")?;
         run_git(repo, &["add", "-A"])?;
-        run_git(repo, &["commit", "-m", message])?;
+        // --no-verify: this step runs unattended inside a pipeline, so it must
+        // not execute the target repository's hooks. Hooks are arbitrary
+        // commands supplied by that repo; firing them here lets an unrelated
+        // repository act on the caller's environment.
+        run_git(repo, &["commit", "--no-verify", "-m", message])?;
         let commit = run_git(repo, &["rev-parse", "HEAD"])?;
         Ok(StepOutput {
             value: serde_json::json!({"committed": true, "commit": commit.trim()}),
