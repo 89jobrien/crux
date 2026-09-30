@@ -17,6 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # protoc must be present before mise installs baml-cli: the cargo
+      # backend compiles it from source and its build script needs protoc.
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -32,26 +37,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       # crux-baml owns the only generated BAML client and is a hard dependency
       # of crux-planner and crux-cli, so it cannot be excluded from the build
-      # graph. The generated tree is not rustfmt-clean, so fmt runs against a
-      # stub (handwritten code only) and the real client is generated after.
-      - name: Stub generated module for fmt
-        run: |
-          mkdir -p crates/crux-baml/src/baml_client
-          printf '\n' > crates/crux-baml/src/baml_client/mod.rs
-
+      # graph. The generated tree is not rustfmt-clean, but `pub mod
+      # baml_client` carries #[rustfmt::skip], so fmt checks handwritten code
+      # only and needs no stub to satisfy the module tree.
       - name: Rust fmt
         run: cargo fmt --all -- --check
 
       - name: Generate BAML client
-        run: |
-          rm -rf crates/crux-baml/src/baml_client
-          cd crates/crux-baml
-          mise exec -- baml-cli generate
+        working-directory: crates/crux-baml
+        run: mise exec -- baml-cli generate
 
       - name: Rust clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -71,6 +67,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # protoc must be present before mise installs baml-cli: the cargo
+      # backend compiles it from source and its build script needs protoc.
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -80,9 +81,6 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Generate BAML client
         working-directory: crates/crux-baml
