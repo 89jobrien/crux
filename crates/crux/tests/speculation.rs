@@ -1,3 +1,5 @@
+//! Integration tests for scored-best, first-success, failures, and macro usage.
+
 /// Integration tests for x.speculate() and SpeculationBuilder.
 use crux::prelude::*;
 

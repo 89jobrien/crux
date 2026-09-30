@@ -1,3 +1,5 @@
+//! Provider-neutral LLM request, response, and completion port types.
+
 use crux_runtime::prelude::CruxErr;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +37,7 @@ pub struct LlmResponse {
 ///
 /// Uses RPITIT (`impl Future`) so no `async_trait` macro is needed.
 pub trait LlmProvider: Send + Sync + 'static {
+    /// Produces a completion for the supplied provider-neutral request.
     fn complete(
         &self,
         req: LlmRequest,

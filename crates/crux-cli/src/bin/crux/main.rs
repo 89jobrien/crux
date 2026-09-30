@@ -1,6 +1,9 @@
+//! Argument parsing and command dispatch for the `crux` pipeline CLI.
+
 /// crux — pipeline runner and planner for crux-script.
 ///
 /// Subcommands:
+///   check Validate one or more YAML pipelines
 ///   run   Execute a YAML pipeline
 ///   plan  Generate a pipeline from a natural language goal
 use std::collections::BTreeMap;
@@ -8,10 +11,18 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod doctor;
+mod handlers;
+mod init;
 mod output;
 mod plan;
 mod registry;
+mod regress;
+mod replay_debug;
 mod run;
+mod schema;
+mod test_cmd;
+mod trace;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -28,13 +39,96 @@ enum OutputType {
 }
 
 #[derive(Parser)]
-#[command(name = "crux", about = "crux pipeline runner and planner")]
+#[command(name = "crux", version, about = "crux pipeline runner and planner")]
 enum Cli {
+    /// Manage golden traces and run offline regression evaluation
+    Regress {
+        #[command(subcommand)]
+        command: regress::RegressCommand,
+    },
     /// List discovered .crux pipeline files under a directory
     List {
         /// Root directory to scan (default: current directory)
         #[arg(default_value = ".")]
         root: String,
+    },
+    /// Generate documentation from registered handler metadata
+    Handlers {
+        /// Catalog serialization format
+        #[arg(long, value_enum, default_value_t = handlers::HandlerFormat::Markdown)]
+        format: handlers::HandlerFormat,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
+    },
+    /// Scaffold a new Crux Rust project and sample pipeline
+    Init {
+        /// Destination directory
+        #[arg(default_value = ".")]
+        path: String,
+    },
+    /// Diagnose local capabilities and configuration without exposing secrets
+    Doctor {
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
+    },
+    /// Run a JSON pipeline fixture with deterministic mocked handlers
+    Test {
+        /// Fixture JSON path
+        fixture: String,
+    },
+    /// Inspect serialized replay traces and explain drift
+    ReplayDebug {
+        /// Serialized Crux trace
+        trace: String,
+        /// Show one step in detail
+        #[arg(long)]
+        step: Option<usize>,
+        /// Compare against another trace
+        #[arg(long)]
+        compare: Option<String>,
+    },
+    /// Explore a serialized Crux execution trace
+    Trace {
+        /// Serialized Crux trace
+        trace: String,
+        /// Filter by step status
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by step kind
+        #[arg(long)]
+        kind: Option<String>,
+        /// Filter by minimum confidence
+        #[arg(long)]
+        min_confidence: Option<f32>,
+        /// Export the causal graph as Mermaid
+        #[arg(long)]
+        mermaid: bool,
+    },
+    /// Compile-check one or more .crux pipelines or Cruxfiles
+    Check {
+        /// Pipeline/Cruxfile paths to check
+        #[arg(required = true)]
+        paths: Vec<String>,
+        /// Require complete contracts and reject dynamic boundaries
+        #[arg(short = 'S', long)]
+        strict: bool,
+        /// Path to plugins.toml (default: ~/.crux/plugins.toml)
+        #[arg(long)]
+        plugins: Option<String>,
+        /// Emit diagnostics as JSON for editors and CI
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export the JSON Schema for .crux pipeline definitions
+    Schema {
+        /// Serialization format
+        #[arg(long, value_enum, default_value_t = schema::SchemaFormat::Json)]
+        format: schema::SchemaFormat,
+        /// Write the schema to a file for editor configuration
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -78,9 +172,15 @@ enum Cli {
         /// Error on unregistered handlers instead of injecting stubs
         #[arg(short = 'S', long)]
         strict: bool,
-        /// Save the execution trace to a JSON file (replayable)
+        /// Override automatic trace path (Cruxfiles append .<target>.json)
         #[arg(long)]
         save_trace: Option<String>,
+        /// Write ordered runtime events as JSONL (Cruxfiles append .<target>.jsonl)
+        #[arg(long, value_name = "PATH")]
+        events_jsonl: Option<String>,
+        /// Execute through this named top-level step (inclusive)
+        #[arg(long, value_name = "STEP")]
+        through: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
     Plan {
@@ -99,7 +199,7 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
-        /// Planner backend: "rule" (default, no API key needed) or "llm" (requires --features baml)
+        /// Planner backend: "rule" (default, no API key needed) or "llm" (prefers a local Ollama)
         #[arg(long, default_value = "rule")]
         planner: String,
     },
@@ -109,7 +209,39 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
+        Cli::Regress { command } => regress::cmd_regress(command),
         Cli::List { root } => cmd_list(&root),
+        Cli::Handlers { format, plugins } => {
+            handlers::cmd_handlers(format, plugins.as_deref());
+        }
+        Cli::Init { path } => init::cmd_init(&path),
+        Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
+        Cli::Test { fixture } => test_cmd::cmd_test(&fixture),
+        Cli::ReplayDebug {
+            trace,
+            step,
+            compare,
+        } => replay_debug::cmd_replay_debug(&trace, step, compare.as_deref()),
+        Cli::Trace {
+            trace,
+            status,
+            kind,
+            min_confidence,
+            mermaid,
+        } => trace::cmd_trace(
+            &trace,
+            status.as_deref(),
+            kind.as_deref(),
+            min_confidence,
+            mermaid,
+        ),
+        Cli::Check {
+            paths,
+            strict,
+            plugins,
+            json,
+        } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict, json),
+        Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
         Cli::Run {
             pipeline,
             target_or_input,
@@ -125,24 +257,42 @@ fn main() {
             replay,
             replay_mode,
             save_trace,
+            events_jsonl,
+            through,
             strict,
-        } => run::cmd_run_dispatch(&run::RunConfig {
-            pipeline_arg: pipeline.as_deref(),
-            target_or_input: target_or_input.as_deref(),
-            check,
-            target_flag: target.as_deref(),
-            input_flag: input.as_deref(),
-            plugins_path: plugins.as_deref(),
-            quiet,
-            summary,
-            json,
-            verbose,
-            dry_run,
-            replay_path: replay.as_deref(),
-            replay_mode_str: &replay_mode,
-            save_trace_path: save_trace.as_deref(),
-            strict,
-        }),
+        } => {
+            if check
+                && let Some(path) = pipeline.as_ref()
+                && path != "-"
+            {
+                check::cmd_check_with_options(
+                    std::slice::from_ref(path),
+                    plugins.as_deref(),
+                    strict,
+                    false,
+                );
+                return;
+            }
+            run::cmd_run_dispatch(&run::RunConfig {
+                pipeline_arg: pipeline.as_deref(),
+                target_or_input: target_or_input.as_deref(),
+                check,
+                target_flag: target.as_deref(),
+                input_flag: input.as_deref(),
+                plugins_path: plugins.as_deref(),
+                quiet,
+                summary,
+                json,
+                verbose,
+                dry_run,
+                replay_path: replay.as_deref(),
+                replay_mode_str: &replay_mode,
+                save_trace_path: save_trace.as_deref(),
+                events_jsonl_path: events_jsonl.as_deref(),
+                through_step: through.as_deref(),
+                strict,
+            });
+        }
         Cli::Plan {
             goal,
             output,
@@ -203,6 +353,18 @@ mod tests {
     fn run_accepts_json_output_mode() {
         let cli = Cli::try_parse_from(["crux", "run", "pipeline.crux", "--json"]);
         assert!(matches!(cli, Ok(Cli::Run { json: true, .. })));
+    }
+
+    #[test]
+    fn run_accepts_events_jsonl_path() {
+        let cli = Cli::try_parse_from([
+            "crux",
+            "run",
+            "pipeline.crux",
+            "--events-jsonl",
+            "events.jsonl",
+        ]);
+        assert!(cli.is_ok());
     }
 
     #[test]

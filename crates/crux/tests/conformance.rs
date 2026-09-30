@@ -1,3 +1,5 @@
+//! Shared public-port conformance suites exposed as integration test modules.
+
 /// Conformance test suite — port/adapter contract verification for crux.
 ///
 /// Each submodule targets one hexagonal boundary:

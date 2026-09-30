@@ -2,12 +2,15 @@
 title: Step
 tags: [type, core, trace]
 ---
-# Step
+
+## Step
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/step.rs`
 
 Single recorded execution unit in a [[Crux<T>]] trace.
 
-## Fields
+### Fields
+
 - `name`: String
 - `kind`: [[StepKind]] (Plain/Delegation/Branch/Speculation)
 - `status`: [[StepStatus]] (Ok/Err/Rejected/Skipped)
@@ -20,5 +23,6 @@ Single recorded execution unit in a [[Crux<T>]] trace.
 - `metadata`: HashMap<String, Value>
 - `findings`: Vec<[[CitedFinding]]>
 
-## Methods
+### Methods
+
 - `is_ok()`, `is_err()`

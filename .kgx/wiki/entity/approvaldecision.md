@@ -2,7 +2,9 @@
 title: ApprovalDecision
 tags: [type, runtime, approval]
 ---
-# ApprovalDecision
+
+## ApprovalDecision
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/approval.rs`
 
 Enum: Approved, Denied{reason: String}, Deferred{timeout_seconds: u64}.

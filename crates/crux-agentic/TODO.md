@@ -19,7 +19,7 @@ items:
     location: "src/adapters/terminal_approval.rs::new:15"
 ---
 
-# TODO: crux-agentic
+## TODO: crux-agentic
 
 - [ ] `src/llm.rs::parse_llm_input:63` — consider taking `&str` for
   `api_key` instead of cloning in the fallback handler

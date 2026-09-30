@@ -1,3 +1,5 @@
+//! Filesystem read, write, glob, and existence handlers.
+
 /// File-system handlers: read, write, glob, exists.
 use crux_runtime::prelude::CruxErr;
 use crux_script::{
@@ -7,6 +9,7 @@ use serde_json::{Value, json};
 
 use crate::error::require_str;
 
+/// Registers filesystem handlers with their argument and capability metadata.
 pub fn register(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new("fs::read")

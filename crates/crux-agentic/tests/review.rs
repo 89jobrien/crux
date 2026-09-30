@@ -1,3 +1,5 @@
+//! Integration tests for finding normalization, severity, and review scoring.
+
 use crux_script::HandlerRegistry;
 use serde_json::json;
 

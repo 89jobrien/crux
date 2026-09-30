@@ -1,7 +1,8 @@
 //! crux-planner — goal-to-pipeline generation for crux-script.
 //!
 //! Two paths:
-//! - Path A (LLM): `LlmPlanner` delegates to `crux-agentic::planner` (feature `baml`)
+//! - Path A (LLM): `LlmPlanner` delegates to `crux-baml::planner` (BAML-routed,
+//!   prefers a local Ollama, falls back to hosted providers)
 //! - Path B (deterministic): `DeterministicPlanner` — rule-based, zero-latency, zero-cost
 
 use serde::{Deserialize, Serialize};
@@ -9,17 +10,13 @@ use serde::{Deserialize, Serialize};
 pub mod deterministic;
 pub mod evolution;
 pub mod generator;
+pub mod llm;
 pub mod metrics;
 pub mod rule_planner;
 
-#[cfg(feature = "baml")]
-pub mod llm;
-
-#[cfg(feature = "baml")]
-pub use llm::LlmPlanner;
-
 pub use deterministic::DeterministicPlanner;
 pub use generator::{InMemoryGenerator, LlmPlannerGeneric, PipelineGenerator};
+pub use llm::LlmPlanner;
 
 /// Domain errors for the crux-planner crate.
 #[derive(Debug, thiserror::Error)]

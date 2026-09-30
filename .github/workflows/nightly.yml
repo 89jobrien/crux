@@ -9,6 +9,9 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
+permissions:
+  contents: read
+
 jobs:
   audit:
     name: cargo audit
@@ -60,7 +63,7 @@ jobs:
         run: |
           for crate in crux-agentic crux-baml; do
             mkdir -p "crates/$crate/src/baml_client"
-            printf '\n' > "crates/$crate/src/baml_client/mod.rs"
+            printf "\n" > "crates/$crate/src/baml_client/mod.rs"
           done
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -68,6 +71,26 @@ jobs:
         run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
       - name: cargo nextest run
         run: cargo nextest run --workspace --exclude crux-baml --exclude crux-agentic
+      - name: offline trace regression fixture
+        run: |
+          cargo build -p crux-cli --bin crux
+          STORE="$RUNNER_TEMP/crux-regressions"
+          BASELINE="examples/fixtures/regression/trace.json"
+          CANDIDATE="examples/fixtures/regression/candidate.json"
+          POLICY="examples/fixtures/regression/policy.json"
+          DIGEST="$(target/debug/crux regress ingest "$BASELINE" --store "$STORE")"
+          target/debug/crux regress promote nightly-showcase "$DIGEST" --store "$STORE"
+          target/debug/crux regress evaluate nightly-showcase "$CANDIDATE" \
+            --policy "$POLICY" \
+            --store "$STORE" \
+            --json > "$RUNNER_TEMP/crux-regression-report.json"
+      - name: upload trace regression report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crux-regression-report
+          path: ${{ runner.temp }}/crux-regression-report.json
+          if-no-files-found: warn
 
   nightly-release:
     name: nightly release

@@ -38,7 +38,7 @@ Pipeline execution engine with a layered design:
 
 ## Layers
 
-```
+```text
 .crux file (YAML)
   -> schema (parse)
   -> validator (static checks)

@@ -2,5 +2,7 @@
 title: PipelineGenerator
 tags: [trait, planner, port]
 ---
-# PipelineGenerator
+
+## PipelineGenerator
+
 **Crate:** [[crux-planner]] | Trait: generate(goal) → YAML string. [[DeterministicPlanner]] and LlmPlannerGeneric implement this.

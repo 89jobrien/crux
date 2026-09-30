@@ -1,3 +1,5 @@
+//! Parsing tests for minimal, environment-aware, and multi-plugin manifests.
+
 use crux_plugin::manifest::PluginManifest;
 
 #[test]

@@ -77,7 +77,7 @@ Routes must exactly cover `[0,1]`.
 
 ```rust
 let child = x.delegate::<WorkerAgent>("work", input)
-    .with_budget(Budget::calls(5))
+    .with_budget(Budget::steps(5))
     .run()
     .await?;
 ```

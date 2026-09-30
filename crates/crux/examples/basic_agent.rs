@@ -1,7 +1,7 @@
+//! Minimal manual agent showing recorded steps and trace inspection.
+
 /// A minimal crux agent that demonstrates step recording, delegation, and trace inspection.
 use crux::prelude::*;
-
-// -- Agents -------------------------------------------------------------------
 
 struct SummarizeAgent;
 
@@ -26,8 +26,6 @@ impl Agent for SummarizeAgent {
         .await
     }
 }
-
-// -- Main ---------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() {

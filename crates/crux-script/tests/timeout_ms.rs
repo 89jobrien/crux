@@ -1,3 +1,5 @@
+//! Runtime tests for per-step timeout enforcement.
+
 /// Integration tests for per-step `timeout_ms` (#81).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

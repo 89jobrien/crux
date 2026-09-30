@@ -1,3 +1,5 @@
+//! Gap-free confidence ranges dispatching to low, medium, and high actions.
+
 /// Route-on-confidence: dispatch to different handlers based on a confidence score.
 ///
 /// Shows:

@@ -1,3 +1,5 @@
+//! Conformance tests for harness limits, forbidden syscalls, and approval escalation.
+
 /// Conformance tests: SafetyPolicy port — contract verification via test-local adapter.
 ///
 /// Verifies that any implementor of SafetyPolicy satisfies the port contract
@@ -55,8 +57,6 @@ fn policy() -> BoundedPolicy {
         forbidden_syscalls: vec!["ptrace".into(), "kexec_load".into()],
     }
 }
-
-// ── validate() ──────────────────────────────────────────────────────────────
 
 #[test]
 fn conformance_safety_policy_validate_ok_within_limits() {

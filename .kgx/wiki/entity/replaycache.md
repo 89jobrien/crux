@@ -2,7 +2,9 @@
 title: ReplayCache
 tags: [type, runtime, replay]
 ---
-# ReplayCache
+
+## ReplayCache
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/replay.rs`
 
 Stores cached step outputs from prior [[Crux<T>]] trace. Matched by

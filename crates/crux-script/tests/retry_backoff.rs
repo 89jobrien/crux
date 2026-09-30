@@ -1,3 +1,5 @@
+//! Runtime tests for retries, exhaustion, and traced attempts.
+
 /// Integration tests for per-step `retry` with backoff (#79).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

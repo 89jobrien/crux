@@ -1,8 +1,11 @@
+//! Normalization of Anthropic Claude model names across naming schemes.
+
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
 const TIERS: &[&str] = &["opus", "sonnet", "haiku"];
 const MIN_PARTS_FOR_PATTERN: usize = 3;
 
+/// Normalizes a Claude provider ID, preserving unknown names through fallback parsing.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     let Some(rest) = raw.strip_prefix("claude-") else {
         return Ok(super::fallback::parse(Vendor::Anthropic, raw));

@@ -34,7 +34,6 @@ registry, etc.). See minibox spec:
 - Create: `crates/crux-types/Cargo.toml`
 - Create: `crates/crux-types/src/lib.rs`
 - Modify: `Cargo.toml` (workspace members)
-
 - [ ] **Step 1: Create crate directory**
 
 ```bash
@@ -100,7 +99,6 @@ git commit -m "feat: scaffold crux-types crate"
 - Move: `crates/crux-runtime/src/types/recovery.rs` → `crates/crux-types/src/recovery.rs`
 - Modify: `crates/crux-runtime/Cargo.toml` (add crux-types dep)
 - Modify: `crates/crux-runtime/src/types/mod.rs` (re-export from crux-types)
-
 - [ ] **Step 1: Copy files to crux-types**
 
 Copy each type module. During the move, strip any imports that
@@ -177,7 +175,6 @@ git commit -m "refactor: extract wire-format types into crux-types crate"
 
 - Modify: `crates/crux-agentic/Cargo.toml` (if it inlines types)
 - Modify: `crates/crux-model/Cargo.toml` (if it inlines types)
-
 - [ ] **Step 1: Audit which crates duplicate type definitions**
 
 Check `cruxai-core` and `crux-agentic` (published crates) for inlined

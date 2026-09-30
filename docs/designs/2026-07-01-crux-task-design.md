@@ -257,7 +257,7 @@ backend. Revisit if more consumers with subset needs emerge.
 
 Binary name: `crux-task`. Commands:
 
-```
+```text
 crux-task add <title> [-p P1] [-l label1,label2] [-d "desc"] [-s open]
 crux-task list [--status open] [--priority P0] [--label foo] [--ready]
 crux-task show <id>

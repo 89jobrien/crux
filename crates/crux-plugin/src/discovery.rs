@@ -9,6 +9,7 @@ use crate::manifest::{ManifestError, PluginEntry, load_manifest};
 ///
 /// Missing file → `Ok(empty)`. Parse failure → `Err`.
 pub trait PluginDiscovery {
+    /// Discovers configured plugin entries or returns an empty list when none exist.
     fn discover(&self) -> Result<Vec<PluginEntry>, PluginDiscoveryError>;
 }
 
@@ -21,6 +22,7 @@ pub struct TomlFileDiscovery {
 }
 
 impl TomlFileDiscovery {
+    /// Configures discovery from the supplied TOML manifest path.
     pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
         Self { path: path.into() }
     }

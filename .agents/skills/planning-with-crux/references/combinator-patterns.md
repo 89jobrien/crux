@@ -84,8 +84,9 @@ referenced step must emit confidence.
 ```
 
 Embedding code must call `HandlerRegistry::agent_fn` or
-`crux_agentic::register_agent`. Pipeline delegate budgets are parsed but ignored.
-This path records a plain step rather than a typed child `CruxCtx` trace.
+`crux_agentic::register_agent`. A delegate's optional `budget` is enforced in an
+isolated child `CruxCtx`; the finalized child trace is attached to the parent and
+its measured usage is charged to the parent pipeline budget.
 
 ## Step controls
 

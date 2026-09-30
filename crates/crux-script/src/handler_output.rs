@@ -1,3 +1,5 @@
+//! Handler values, confidence scores, outcomes, and invocation usage.
+
 use crux_types::budget::HandlerUsage;
 use crux_types::error::CruxErr;
 /// Output from a pipeline handler — value plus optional confidence score.
@@ -116,6 +118,7 @@ impl HandlerExecution {
 }
 
 impl HandlerOutput {
+    /// Wraps a handler value without claiming a confidence score.
     pub fn new(value: Value) -> Self {
         Self {
             value,

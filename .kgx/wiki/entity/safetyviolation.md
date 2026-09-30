@@ -2,7 +2,9 @@
 title: SafetyViolation
 tags: [type, runtime, safety]
 ---
-# SafetyViolation
+
+## SafetyViolation
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/safety.rs`
 
 Enum (Error trait): HardCapExceeded{resource, limit, proposed},

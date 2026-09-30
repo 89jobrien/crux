@@ -2,5 +2,7 @@
 title: HandlerMetadata
 tags: [type, script, registration]
 ---
-# HandlerMetadata
+
+## HandlerMetadata
+
 **Crate:** [[crux-script]] | Fields: name, description, risk level, capabilities, side effects, determinism.

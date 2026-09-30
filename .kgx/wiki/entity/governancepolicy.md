@@ -2,7 +2,9 @@
 title: GovernancePolicy
 tags: [type, runtime, governance]
 ---
-# GovernancePolicy
+
+## GovernancePolicy
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/governance.rs`
 
 Composable policy with allowed_tools, blocked_tools, blocked_patterns,

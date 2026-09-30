@@ -15,10 +15,10 @@ test_areas:
   - module: metrics
     coverage: "RunMetrics construction and thresholds"
   - module: llm
-    coverage: "LLM planner (requires baml feature + API keys)"
+    coverage: "LLM planner (BAML-routed; prefers a local Ollama)"
 commands:
   default: "cargo nextest run -p crux-planner"
-  baml: "cargo nextest run -p crux-planner --features baml"
+  llm: "cargo nextest run -p crux-planner -- llm_planner_generates"
 ---
 
 # Testing: crux-planner
@@ -32,5 +32,5 @@ subsystems.
 
 ```bash
 cargo nextest run -p crux-planner
-cargo nextest run -p crux-planner --features baml   # LLM planner tests
+cargo nextest run -p crux-planner -- llm_planner_generates   # LLM planner (ignored by default)
 ```

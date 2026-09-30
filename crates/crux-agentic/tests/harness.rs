@@ -1,3 +1,5 @@
+//! Integration tests for harness evolution and canary handlers.
+
 use crux_agentic::harness;
 use crux_script::HandlerRegistry;
 use serde_json::json;

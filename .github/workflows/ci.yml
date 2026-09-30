@@ -21,6 +21,8 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - uses: jdx/mise-action@v2
+
       - uses: taiki-e/install-action@nextest
 
       - name: Install required taskit tools
@@ -30,27 +32,64 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Stub generated modules for fmt
-        run: |
-          for crate in crux-agentic crux-baml; do
-            mkdir -p "crates/$crate/src/baml_client"
-            printf '\n' > "crates/$crate/src/baml_client/mod.rs"
-          done
-
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      # crux-baml owns the only generated BAML client and is a hard dependency
+      # of crux-planner and crux-cli, so it cannot be excluded from the build
+      # graph. The generated tree is not rustfmt-clean, so fmt runs against a
+      # stub (handwritten code only) and the real client is generated after.
+      - name: Stub generated module for fmt
+        run: |
+          mkdir -p crates/crux-baml/src/baml_client
+          printf '\n' > crates/crux-baml/src/baml_client/mod.rs
 
       - name: Rust fmt
         run: cargo fmt --all -- --check
 
+      - name: Generate BAML client
+        run: |
+          rm -rf crates/crux-baml/src/baml_client
+          cd crates/crux-baml
+          mise exec -- baml-cli generate
+
       - name: Rust clippy
-        run: cargo clippy --workspace --exclude crux-baml --exclude crux-agentic --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Rust tests
-        run: cargo nextest run --workspace --exclude crux-baml --exclude crux-agentic
+        run: cargo nextest run --workspace
 
       - name: cargo machete
         run: cargo machete
 
       - name: cargo deny
         run: cargo deny check
+
+  handler-crates:
+    name: Handler crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: jdx/mise-action@v2
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Generate BAML client
+        working-directory: crates/crux-baml
+        run: mise exec -- baml-cli generate
+
+      - name: Rust clippy with BAML integration
+        run: cargo clippy -p crux-agentic -p crux-baml --all-targets -- -D warnings
+
+      - name: Rust tests with BAML integration
+        run: cargo nextest run -p crux-agentic -p crux-baml -E 'not (package(crux-agentic) & (binary(llm_extract) | binary(planner)))'

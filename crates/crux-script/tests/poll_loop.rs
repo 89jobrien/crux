@@ -1,3 +1,5 @@
+//! Runtime tests for polling termination, limits, and trace entries.
+
 /// Integration tests for the `poll:` do-while loop (#83).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

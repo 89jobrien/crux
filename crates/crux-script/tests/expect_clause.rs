@@ -1,3 +1,5 @@
+//! Runtime tests for exit-code and output expectation clauses.
+
 /// Integration tests for the `expect:` declarative post-step assertion clause (#82).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

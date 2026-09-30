@@ -1,3 +1,5 @@
+//! Integration tests for container run and wait handlers.
+
 use crux_agentic::container;
 use crux_script::HandlerRegistry;
 use serde_json::json;

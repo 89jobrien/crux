@@ -1,3 +1,5 @@
+//! Runtime tests for pipeline variable resolution and binding lifetime.
+
 /// Integration tests for pipeline-level `vars:` bindings (#85).
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerRegistry, Runner, load};

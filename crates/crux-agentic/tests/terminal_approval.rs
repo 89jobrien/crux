@@ -1,3 +1,5 @@
+//! Threshold behavior tests for the non-interactive approval gate.
+
 use crux_agentic::adapters::terminal_approval::AutoApproveGate;
 use crux_runtime::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 

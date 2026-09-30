@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Every crate in the crux workspace, with the description field from its own manifest and what it actually owns.">
+    <title>crux &mdash; crates</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="cli.html">CLI</a>
+      <a href="crates.html" aria-current="page">Crates</a>
+      <a href="status.html">Status</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head">
+        <span class="eyebrow">Inventory</span>
+        <h1>Eighteen members, one glob</h1>
+        <p class="lead">The workspace declares <code>members = ["crates/*", "xtask"]</code>. Descriptions below are the <code>description</code> field from each crate's own manifest, not paraphrase.</p>
+        <div class="meta-row">
+          <span class="meta">0.4.0</span>
+          <span class="meta">MIT</span>
+          <span class="meta">edition 2024</span>
+          <span class="meta">MSRV 1.89.0</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>Wire and domain</h2>
+        <p class="section-intro">Leaf crates with no workspace dependencies. Everything else in the graph depends on these and never the reverse.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Leaf layer</caption>
+            <thead><tr><th scope="col">Crate</th><th scope="col">Description</th><th scope="col">Owns</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>crux-types</code></td>
+                <td>Serializable wire-format types for the crux agentic DSL</td>
+                <td>Budgets, emissions, errors, ids, planner types, recovery, steps, and tasks. Data only &mdash; no runtime, no async, no LLM.</td>
+              </tr>
+              <tr>
+                <td><code>crux-model</code></td>
+                <td>Canonical model ID types and provider-specific parsers for crux</td>
+                <td>Parsing OpenAI, Anthropic, and Ollama model strings into a canonical <code>ModelId</code>.</td>
+              </tr>
+              <tr>
+                <td><code>crux-derive</code></td>
+                <td>Proc macros for the crux agentic DSL</td>
+                <td><code>#[crux::agent]</code>, <code>#[crux::harness]</code>, <code>#[crux::evolve]</code>. The directory is <code>crux-macros</code>; the package is <code>crux-derive</code>.</td>
+              </tr>
+              <tr>
+                <td><code>crux-schema</code></td>
+                <td>Runtime-independent trace schema and combinators for Crux</td>
+                <td><code>Crux&lt;T&gt;</code> itself, plus trace combinators. Missing from the README crate table.</td>
+              </tr>
+              <tr>
+                <td><code>crux-domain</code></td>
+                <td>Pure domain types for the crux agentic DSL &mdash; no async, no LLM deps</td>
+                <td>Planning, action, and event vocabulary.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Runtime and interpretation</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Crate</th><th scope="col">Description</th><th scope="col">Owns</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>crux-runtime</code></td>
+                <td>Core types, traits, and runtime for the crux agentic DSL</td>
+                <td><code>CruxCtx</code>, the <code>Agent</code> trait, replay, hooks, governance, registry, trust, safety, and approval. The busiest crate by test count: 80 tests in <code>ctx.rs</code> alone, then replay 26, registry 20, speculation 14, governance 13, trust 12.</td>
+              </tr>
+              <tr>
+                <td><code>crux-script</code></td>
+                <td>YAML-driven pipeline scripting for the crux agentic DSL</td>
+                <td>The <code>.crux</code> schema, validation, expression evaluation, the step runner, and <code>HandlerRegistry</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Handlers and adapters</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Crate</th><th scope="col">Description</th><th scope="col">Owns</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>crux-stdlib</code></td>
+                <td>Standard library handlers for crux-script pipelines (fs, git, json, text, ctrl)</td>
+                <td>Deterministic handlers only. No LLM, no network.</td>
+              </tr>
+              <tr>
+                <td><code>crux-baml</code></td>
+                <td>BAML-powered LLM handlers for crux-script pipelines (analyze, confidence, complete, extract, decompose, plan)</td>
+                <td>Thin wrappers over the generated BAML client. The generated <code>baml_client/</code> is gitignored and stubbed in CI.</td>
+              </tr>
+              <tr>
+                <td><code>crux-plugin</code></td>
+                <td>Subprocess plugin host for crux pipelines</td>
+                <td>Newline-delimited JSON over stdin and stdout: <code>Declare</code>, <code>Invoke</code>, <code>Shutdown</code>.</td>
+              </tr>
+              <tr>
+                <td><code>crux-task</code></td>
+                <td>Project task management for crux</td>
+                <td>Ships a second binary, <code>crux-task</code>. Backends: <code>redb</code> by default, or <code>sqlite</code> behind a feature.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <p>The standard library does not hold <code>shell::capture</code>. It lives in <code>crux-agentic</code>, which forces the full agentic stack onto simple operations pipelines. The gap analysis flags this as a P0 and it is still open.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Orchestration</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Crate</th><th scope="col">Description</th><th scope="col">Owns</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>crux-agentic</code></td>
+                <td>Built-in step handlers for crux-script pipelines</td>
+                <td>LLM, container, analysis, CI, review, triage, and SQLite handlers. Optional <code>docker</code> feature via bollard. The widest internal dependency fan-in of the handler crates.</td>
+              </tr>
+              <tr>
+                <td><code>crux-planner</code></td>
+                <td>Goal-to-pipeline planner for crux-script</td>
+                <td>Two subsystems: pipeline planning across deterministic, rule, and LLM strategies, plus harness evolution.</td>
+              </tr>
+              <tr>
+                <td><code>crux-improve</code></td>
+                <td>Improvement protocol types for the crux agent runtime</td>
+                <td>Strategies, diffs, comparisons, and policies over trace types. A single-file crate.</td>
+              </tr>
+              <tr>
+                <td><code>crux-regression</code></td>
+                <td>Golden trace regression storage and evaluation for Crux</td>
+                <td>A content-addressed golden trace store with baseline promotion and offline evaluation. Its manifest forbids depending on the runtime, the script interpreter, the agentic stack, or the CLI.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Interfaces</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Crate</th><th scope="col">Description</th><th scope="col">Owns</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>crux</code></td>
+                <td>An agentic DSL for Rust &mdash; inspectable, serializable, replayable agent execution</td>
+                <td>The facade. Re-exports the domain, the derive macros, the runtime, and optionally the script crate. Also holds the 13 integration test files.</td>
+              </tr>
+              <tr>
+                <td><code>crux-cli</code></td>
+                <td>Command-line interface for crux pipelines</td>
+                <td>Builds the <code>crux</code> binary. Depends on nine internal crates &mdash; the widest fan-in in the workspace.</td>
+              </tr>
+              <tr>
+                <td><code>xtask</code></td>
+                <td><span class="status status-off">no description field</span></td>
+                <td><code>publish = false</code>. Depends only on <code>ureq</code> and <code>serde_json</code>. A publishing helper.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Naming traps</h2>
+        <p class="section-intro">Three things that trip up a first reading of the tree.</p>
+        <div class="card">
+          <ul>
+            <li>The <strong>directory</strong> is <code>crux-macros</code> and the <strong>package</strong> is <code>crux-derive</code>.</li>
+            <li>The facade package is <code>crux</code>, not <code>cruxx</code>. The older <code>cruxx-*</code> names survive in <code>docs/superpowers/</code>, which is historical.</li>
+            <li>The <code>crux</code> name on crates.io is owned by a different publisher. Install from git with an explicit tag, as shown on the <a href="cli.html">CLI page</a>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <p><a href="architecture.html">How the crates fit together</a> &middot; <a href="status.html">What works today</a></p>
+    </main>
+
+    <footer class="site-foot">
+      <a href="https://github.com/89jobrien/crux">Source on GitHub</a> &middot; MIT &middot; built by <a href="https://github.com/89jobrien">Joseph O'Brien</a>
+    </footer>
+  </body>
+</html>
