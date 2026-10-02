@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Crux workspace architecture: 18 members in dependency layers from crux-types wire data up to the crux CLI, with the registry and safety ports that keep the graph acyclic.">
     <title>crux &mdash; architecture</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../style.css">
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
     <nav class="nav" aria-label="Primary">
-      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
-      <a href="architecture.html" aria-current="page">Architecture</a>
-      <a href="cli.html">CLI</a>
-      <a href="crates.html">Crates</a>
-      <a href="status.html">Status</a>
-      <a href="faq.html">FAQ</a>
+      <a href="../" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="../architecture/" aria-current="page">Architecture</a>
+      <a href="../cli/">CLI</a>
+      <a href="../crates/">Crates</a>
+      <a href="../status/">Status</a>
+      <a href="../faq/">FAQ</a>
     </nav>
 
     <main id="main" class="page">
@@ -38,10 +38,10 @@
         <figure class="diagram">
           (<picture>
             <source srcset="diagrams/architecture.print.svg" media="print">
-            <img src="diagrams/architecture.svg" width="880" height="620" loading="lazy" decoding="async"
+            <img src="../diagrams/architecture.svg" width="880" height="620" loading="lazy" decoding="async"
                alt="The crux workspace as seven stacked layers, dependencies pointing inward. At the top, the interface layer: the crux facade, crux-cli, and xtask. Below it orchestration: crux-agentic, crux-planner, crux-improve, and crux-regression. Then handlers: crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script, which interprets pipeline files. Then crux-runtime, the core execution. Then crux-schema and crux-domain, pure types with no I/O. At the centre, the leaf layer: crux-types, crux-model, and the crux-derive proc macro, which has no workspace dependencies.">
           </picture>
-          <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types. The source is <a href="diagrams/architecture.mmd"><code>diagrams/architecture.mmd</code></a>, rendered at build time, with a light variant for print. Edit the .mmd, not the SVG.</figcaption>
+          <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types. The source is <a href="../diagrams/architecture.mmd"><code>diagrams/architecture.mmd</code></a>, rendered at build time, with a light variant for print. Edit the .mmd, not the SVG.</figcaption>
         </figure>
       </section>
 
@@ -127,7 +127,7 @@
         <p><code>just ci</code> runs the same set locally: check, build-locked, fmt, lint, test, deny, lint-crux.</p>
       </section>
 
-      <p><a href="crates.html">See what each crate does</a> &middot; <a href="status.html">What works today</a></p>
+      <p><a href="../crates/">See what each crate does</a> &middot; <a href="../status/">What works today</a></p>
     </main>
 
     <footer class="site-foot">
