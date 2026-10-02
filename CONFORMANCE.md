@@ -201,6 +201,43 @@ Lifecycle hooks intercept step execution at defined points.
 4. `register_decompose` MUST register an `llm::decompose` handler
    returning structured task breakdowns.
 
+## 11a. TypeSafe judgment handler requirements
+
+`crux-typesafe` provides `judge::score`, a calibrated judgment backed by the
+TypeSafe System One endpoint.
+
+1. `judge::score` MUST declare `ConfidenceCapability::Always`. This is what
+   permits a YAML pipeline to route on `{{ steps.<name>.confidence }}`; a YAML
+   pipeline cannot register a handler of its own, so with no registered handler
+   declaring `Always` no `.crux` file can route on confidence at all.
+2. The reported confidence MUST be the rubric position normalized onto
+   `0.0..=1.0` — `score / (levels - 1)` — multiplied by the retry discount
+   `RETRY_DECAY ^ (attempts - 1)`. Normalizing is what makes one threshold mean
+   the same thing regardless of how many levels a rubric declares.
+3. `RETRY_DECAY` MUST be `0.8`, matching `crux-baml`, so a score discounted here
+   and one discounted there are discounted identically.
+4. The handler payload MUST NOT define a `confidence` key. `crux-baml` reserves
+   that name for the step confidence so a payload cannot disagree with the routed
+   value; TypeSafe's own concentration metric is published as
+   `distribution_confidence` instead.
+5. TypeSafe's `confidence` field MUST NOT be used as the routing value. It
+   measures distribution concentration, not correctness, and substituting it
+   silently changes what a threshold means. It is reported descriptively only.
+6. A non-finite `score` MUST produce an error. It MUST NOT be coerced to `0.0`
+   (which reads as "maximally unsupported" and misroutes) nor propagated as
+   `NaN` (which `HandlerOutput::with_confidence` turns into `None`, which
+   `confidence_or_default` then reports as a neutral `0.5` with nothing on the
+   wire to explain it).
+7. A rubric of fewer than two levels MUST fail before any request is made.
+8. The judgment transport MUST be injectable: `register` MUST accept an
+   `Arc<dyn JudgmentClient>` so a test can supply `CannedJudgmentClient`, keeping
+   the suite runnable under §14.
+9. Only HTTP `429` and `529` MUST be treated as transient and retried. Every
+   other status, including `401` and `422`, MUST fail on the first attempt.
+10. `crux-runtime` MUST NOT depend on `reqwest` or on `crux-typesafe`. The
+    judgment port lives in `crux-typesafe`, with its HTTP adapter behind that
+    crate's `http` feature.
+
 ## 12. Model ID requirements
 
 `crux-model` provides canonical model identification.
@@ -239,6 +276,7 @@ Conformance is verified by 688 tests across 13 crates:
 | crux-stdlib   |    52 | Shell, fs, git, json, text handlers                       |
 | crux-planner  |    33 | Deterministic and LLM-based planning                      |
 | crux-baml     |    18 | Mock LLM extraction, decomposition, planning              |
+| crux-typesafe |    42 | Calibration, wire shapes, retry policy, YAML routing      |
 | crux-domain   |    13 | Domain model types                                        |
 | crux-plugin   |    16 | Plugin host, protocol, manifest, bridge                   |
 | crux-improve  |     8 | Self-improvement handlers                                 |

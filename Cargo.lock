@@ -737,6 +737,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "crux-typesafe"
+version = "0.4.0"
+dependencies = [
+ "crux-runtime",
+ "crux-script",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
