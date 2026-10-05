@@ -206,16 +206,32 @@ Lifecycle hooks intercept step execution at defined points.
 `crux-typesafe` provides `judge::score`, a calibrated judgment backed by the
 TypeSafe System One endpoint.
 
-1. `judge::score` MUST declare `ConfidenceCapability::Always`. This is what
-   permits a YAML pipeline to route on `{{ steps.<name>.confidence }}`; a YAML
-   pipeline cannot register a handler of its own, so with no registered handler
-   declaring `Always` no `.crux` file can route on confidence at all.
+1. `judge::score` MUST declare `ConfidenceCapability::Always`. That declaration
+   is what makes *this step's* confidence routable: `Always` is the only
+   capability the compiler accepts for `{{ steps.<name>.confidence }}` without
+   raising `dynamic_boundary`. It is **not** what first made confidence routing
+   possible from YAML — `crux-baml` already declares `Always` on five handlers
+   (`llm::invoke`, `llm::invoke_with_fallback`, `llm::stream`, `llm::analyze`, and
+   `llm::confidence`), so a pipeline routing on `llm::confidence` is valid
+   without this crate. What `judge::score` adds is a *calibrated* confidence to
+   route on — a rubric position rather than a model's self-report.
 2. The reported confidence MUST be the rubric position normalized onto
-   `0.0..=1.0` — `score / (levels - 1)` — multiplied by the retry discount
-   `RETRY_DECAY ^ (attempts - 1)`. Normalizing is what makes one threshold mean
-   the same thing regardless of how many levels a rubric declares.
+   `0.0..=1.0` and MUST be finite and within `0.0..=1.0`. Normalizing is what
+   makes one threshold mean the same thing regardless of how many levels a
+   rubric declares.
+   1. The level count MUST come from the request's `criteria` — the rubric the
+      caller declared, and therefore the axis the backend's `score` is expressed
+      against. The response `legend` is an echo of `criteria` and MUST NOT
+      redefine that axis.
+   2. The normalized position MUST be multiplied by the retry discount
+      `RETRY_DECAY ^ (attempts - 1)`, where `attempts` is the number of backend
+      calls the judgment actually required, counting the successful one. A
+      first-try success therefore reports `attempts: 1` and an undiscounted
+      `retry_multiplier: 1.0`; an `attempts` of zero MUST be treated as one.
 3. `RETRY_DECAY` MUST be `0.8`, matching `crux-baml`, so a score discounted here
-   and one discounted there are discounted identically.
+   and one discounted there are discounted identically. The payload MUST report
+   both `attempts` and the `retry_multiplier` actually applied, so a discounted
+   confidence is explainable from the step output alone.
 4. The handler payload MUST NOT define a `confidence` key. `crux-baml` reserves
    that name for the step confidence so a payload cannot disagree with the routed
    value; TypeSafe's own concentration metric is published as
@@ -232,11 +248,24 @@ TypeSafe System One endpoint.
 8. The judgment transport MUST be injectable: `register` MUST accept an
    `Arc<dyn JudgmentClient>` so a test can supply `CannedJudgmentClient`, keeping
    the suite runnable under §14.
-9. Only HTTP `429` and `529` MUST be treated as transient and retried. Every
-   other status, including `401` and `422`, MUST fail on the first attempt.
+9. HTTP `429` and every `5xx` status MUST be treated as transient and retried
+   with the backoff described by `RetryPolicy`. The TypeSafe documentation and
+   both official SDKs retry server-side failures, so failing a retryable `5xx` on
+   the first attempt turns a momentary backend blip into a pipeline error. `4xx`
+   client errors, including `401` and `422`, MUST fail on the first attempt — a
+   rejected key or a rejected rubric is not repaired by repeating the request.
 10. `crux-runtime` MUST NOT depend on `reqwest` or on `crux-typesafe`. The
     judgment port lives in `crux-typesafe`, with its HTTP adapter behind that
     crate's `http` feature.
+11. `crux-agentic::register_all` and `register_all_with_plugins` MUST register
+    `judge::score` if and only if a TypeSafe API key is present in the
+    environment, read from `TYPESAFE_API_KEY` — the same `<PROVIDER>_API_KEY`
+    convention as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. An unset or blank
+    key leaves the handler unregistered, so a workspace without TypeSafe
+    credentials keeps exactly the handler set it had before this crate existed,
+    and a pipeline naming `judge::score` without a key gets an
+    `unknown_handler` diagnostic rather than a runtime authentication failure.
+    When registered, the client MUST target `https://api.typesafe.ai/v1/systemone`.
 
 ## 12. Model ID requirements
 
@@ -249,8 +278,9 @@ TypeSafe System One endpoint.
 
 ## 13. Versioning
 
-- The crate version (`0.3.x`) tracks the workspace release. All
-  workspace crates MUST share the same version.
+- The crate version is the workspace version — `workspace.package.version` in the
+  root `Cargo.toml`, currently `0.4.0`. All workspace crates MUST share it, so a
+  crate's version is never stated independently here.
 - Adding optional fields to `Step`, `Budget`, or `HarnessProfile` is
   backwards compatible and gets a patch bump.
 - Adding new `StepKind` or `StepStatus` variants is backwards
@@ -263,24 +293,40 @@ TypeSafe System One endpoint.
 
 ## 14. Test matrix
 
-Conformance is verified by 688 tests across 13 crates:
+Conformance is verified by 1183 tests across the workspace's 19 members — the 18
+crates under `crates/` plus the `xtask` runner. Seventeen of the crates contain
+tests; `crux-macros` is a proc-macro crate with none, and is exercised through
+the `crux` facade's integration tests.
 
-| Crate         | Tests | Coverage area                                             |
-| ------------- | ----: | --------------------------------------------------------- |
-| crux-runtime  |   200 | Core runtime, context, replay, hooks, registry            |
-| crux (facade) |   100 | Conformance, macros, combinators, delegation, speculation |
-| crux-model    |    36 | Model ID parsing, serde round-trips                       |
-| crux-types    |    29 | Wire types, error classification, serde                   |
-| crux-script   |    59 | Pipeline parsing, validation, confidence, static args     |
-| crux-agentic  |   118 | Handlers, adapters, analysis, CI, plugins, triage         |
-| crux-stdlib   |    52 | Shell, fs, git, json, text handlers                       |
-| crux-planner  |    33 | Deterministic and LLM-based planning                      |
-| crux-baml     |    18 | Mock LLM extraction, decomposition, planning              |
-| crux-typesafe |    42 | Calibration, wire shapes, retry policy, YAML routing      |
-| crux-domain   |    13 | Domain model types                                        |
-| crux-plugin   |    16 | Plugin host, protocol, manifest, bridge                   |
-| crux-improve  |     8 | Self-improvement handlers                                 |
-| crux-macros   |     0 | (proc-macro; tested via crux facade integration tests)    |
+| Crate          | Tests | Coverage area                                                       |
+| -------------- | ----: | ------------------------------------------------------------------- |
+| crux-runtime   |   233 | Runtime context, delegation, speculation, replay, hooks, registry, trust, governance, safety, audit |
+| crux-script    |   210 | YAML parsing, compilation, validation, runner semantics (loops, expect, retry, timeout), confidence |
+| crux-agentic   |   117 | Handlers, adapters, analysis, CI, sqlite, review, triage, plugin discovery, CLI passthroughs |
+| crux (facade)  |   112 | Conformance suite, macros, combinators, delegation, speculation, checkpoints, research pipeline |
+| crux-cli       |    72 | `crux` binary: check, handlers, schema, trace, regress, doctor, init |
+| crux-baml      |    71 | Mock BAML server, extraction, completion, analyze, planner          |
+| crux-stdlib    |    62 | Shell, fs, git, json, text, ctrl handlers                            |
+| crux-types     |    55 | Wire types, error classification, ids, budgets, emission, serde     |
+| crux-model     |    44 | Model ID parsing, vendor registry, provider refs, serde round-trips |
+| crux-typesafe  |    42 | Calibration, wire shapes, retry policy, YAML routing                 |
+| crux-improve   |    31 | Self-improvement handlers                                           |
+| crux-task      |    26 | Task lifecycle, workflow, backend conformance                        |
+| crux-plugin    |    23 | Plugin host, protocol, manifest, bridge, discovery                   |
+| crux-planner   |    22 | Deterministic planning, evolution, generator, LLM planner snapshots  |
+| crux-regression|    21 | Regression store conformance, harness, artifacts                     |
+| crux-domain    |    16 | Domain model types, events, pipeline tests                           |
+| xtask          |    16 | Workspace task runner: publish, version                             |
+| crux-schema    |    10 | `CruxValue` JSON schema                                              |
+| crux-macros    |     0 | (proc-macro; tested via crux facade integration tests)              |
+
+Counts are `cargo nextest list` entries per crate — unit tests plus every
+integration-test binary. They are a snapshot of this revision, not a constant;
+re-derive rather than trusting a stale copy:
+
+```bash
+cargo nextest list --workspace | wc -l
+```
 
 All tests MUST pass without API keys or network access. Tests that
 previously required live LLM calls MUST use `MockBamlServer` with

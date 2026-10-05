@@ -496,6 +496,7 @@ dependencies = [
  "crux-stdlib",
  "crux-task",
  "crux-types",
+ "crux-typesafe",
  "futures",
  "hex",
  "ignore",
