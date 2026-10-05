@@ -117,8 +117,7 @@ fn typesafe_judgment_client() -> Option<Arc<dyn crux_typesafe::JudgmentClient>> 
     if key.is_empty() {
         return None;
     }
-    let endpoint = reqwest::Url::parse(TYPESAFE_ENDPOINT).ok()?;
-    let client = crux_typesafe::HttpJudgmentClient::new(endpoint, key).ok()?;
+    let client = crux_typesafe::HttpJudgmentClient::new(TYPESAFE_ENDPOINT, key).ok()?;
     Some(Arc::new(client))
 }
 
