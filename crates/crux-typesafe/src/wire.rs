@@ -6,6 +6,22 @@
 //!
 //! [`ScoreAnswer`], [`ChoiceAnswer`], and [`NoulAnswer`] all deserialize from the
 //! same `answers` map by matching their `type` tag.
+//!
+//! # Why some types are `#[non_exhaustive]` and others are not
+//!
+//! The attribute goes on the enums ([`Answer`], [`QuestionError`]) and on the two
+//! question structs that have a validating constructor ([`ScoreQuestion`],
+//! [`ChoiceQuestion`]) — for those two it is a safety win, because it forces
+//! [`ScoreQuestion::new`] and so forces the "at least two levels" check that a
+//! struct literal would otherwise bypass.
+//!
+//! It deliberately does **not** go on [`NoulQuestion`], [`SystemOneRequest`], or
+//! [`SystemOneResponse`]. None of the three has a constructor, so
+//! `#[non_exhaustive]` would not merely add a field — it would make the type
+//! impossible to build from another crate, with no alternative API to reach for.
+//! [`SystemOneResponse`] is the worse case: it is the type a downstream test
+//! double has to construct, so the attribute would remove the crate's ability to
+//! be tested at all. Add the attribute only alongside a constructor for each.
 
 use std::collections::BTreeMap;
 
@@ -19,6 +35,7 @@ pub const DEFAULT_MODEL: &str = "jev-latest";
 // -- request --
 
 /// A `score` question: rate the state against ordered, descriptive levels.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScoreQuestion {
     /// Always `"score"`.
@@ -55,6 +72,7 @@ impl ScoreQuestion {
 }
 
 /// A `choice` question: pick one option from a defined set.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChoiceQuestion {
     /// Always `"choice"`.
@@ -115,6 +133,10 @@ pub struct SystemOneRequest {
 }
 
 /// A malformed question, rejected before any request is made.
+///
+/// `#[non_exhaustive]` so a new validation failure can be added without breaking
+/// every downstream `match`.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum QuestionError {
     /// A Score question needs at least two levels.
@@ -155,6 +177,12 @@ pub struct Usage {
 /// The tag is the single source of truth for the variant: the inner structs do
 /// not repeat it, because serde consumes `type` for the tag before handing the
 /// remainder to the variant.
+///
+/// `#[non_exhaustive]` so a new answer kind can be added without breaking every
+/// downstream `match`. Callers outside this crate must already carry a wildcard
+/// arm. Note this restricts *matching*, not construction: the existing variants
+/// can still be built from another crate.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Answer {

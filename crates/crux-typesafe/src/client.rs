@@ -29,6 +29,11 @@ pub trait JudgmentClient: Send + Sync {
 }
 
 /// Failures reaching or reading the judgment backend.
+///
+/// `#[non_exhaustive]` so a future failure mode — a rate-limit header, a partial
+/// answer — can be added without breaking every downstream `match`. Callers
+/// outside this crate must already carry a wildcard arm.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     /// The request could not be built or sent.
@@ -59,11 +64,31 @@ pub enum ClientError {
 impl ClientError {
     /// Whether the failure is worth retrying.
     ///
-    /// `429` and `529` are the two statuses the TypeSafe docs name as transient;
-    /// everything else is a permanent failure that a retry cannot fix.
+    /// # What retries
+    ///
+    /// **Every `5xx`, plus `429`.** A server error is the backend failing rather
+    /// than the request: both official TypeSafe SDKs retry the whole `5xx` range
+    /// with exponential backoff, and `429` is the rate limit, which clears on its
+    /// own. Treating a `500` as permanent turned a transient blip into a hard
+    /// pipeline failure.
+    ///
+    /// # What does not retry
+    ///
+    /// **Every other `4xx`.** A `401` means the key is wrong and a `422` means the
+    /// question is malformed; sending the identical request again produces the
+    /// identical rejection, so retrying only burns the attempt budget and delays
+    /// the real error. `429` is the one `4xx` that clears, which is why it is
+    /// called out separately rather than swept in with the server errors.
+    ///
+    /// A [`Self::Decode`] or [`Self::MissingAnswer`] failure is never transient —
+    /// the bytes on the wire already arrived and re-reading them cannot change the
+    /// answer. A [`Self::Transport`] failure is, since a connection that failed to
+    /// establish is the most transient thing there is.
     pub fn is_transient(&self) -> bool {
         match self {
-            Self::Status { status, .. } => *status == 429 || *status == 529,
+            // `529` is a non-standard "site is overloaded" status; it lands in the
+            // 5xx range and is named explicitly in the TypeSafe error table.
+            Self::Status { status, .. } => *status == 429 || (500..600).contains(status),
             Self::Transport(_) => true,
             Self::Decode(_) | Self::MissingAnswer { .. } => false,
         }
@@ -136,11 +161,23 @@ impl HttpJudgmentClient {
 
     /// Build a client against `endpoint`, authenticating with `api_key`.
     ///
+    /// `endpoint` is taken as a `&str` and parsed here rather than as a
+    /// [`reqwest::Url`]. A public signature naming a transitive dependency's
+    /// type forces every downstream user to add `reqwest` to their own
+    /// `Cargo.toml` — and pin a matching version — purely to name the argument.
+    /// A string keeps this crate's HTTP client an implementation detail.
+    ///
     /// # Errors
     ///
-    /// Returns [`ClientError::Transport`] when the bounded client cannot be built
-    /// or the key is empty.
-    pub fn new(endpoint: reqwest::Url, api_key: impl Into<String>) -> Result<Self, ClientError> {
+    /// Returns [`ClientError::Transport`] when `endpoint` is not a valid URL,
+    /// when the bounded client cannot be built, or when `api_key` is empty or
+    /// only whitespace.
+    pub fn new(endpoint: &str, api_key: impl Into<String>) -> Result<Self, ClientError> {
+        let endpoint = reqwest::Url::parse(endpoint).map_err(|error| {
+            ClientError::Transport(format!(
+                "the judgment backend endpoint '{endpoint}' is not a valid URL: {error}"
+            ))
+        })?;
         let api_key = api_key.into();
         if api_key.trim().is_empty() {
             return Err(ClientError::Transport(
@@ -253,34 +290,43 @@ impl JudgmentClient for HttpJudgmentClient {
 
 /// A canned [`JudgmentClient`] for tests and dry runs.
 ///
-/// Returns queued responses in order, repeating the last one once exhausted, so a
-/// pipeline that retries sees stable answers rather than a panic.
+/// # Exhaustion
+///
+/// Queued responses are returned **in order, and the last one then repeats
+/// forever.** The queue never runs dry: once only the final entry is left, every
+/// further call returns it again.
+///
+/// That is deliberate. The client stands in for a backend that a pipeline may
+/// call more than once — a retry, a second route, a re-run of one step — and a
+/// drain-to-error rule would turn those extra calls into failures. Repeating the
+/// last answer is what lets a retrying pipeline get a stable judgment.
+///
+/// The consequence is that **there is no separate fallback response**: once
+/// anything is pushed, the last thing pushed is what every later call sees. Use
+/// [`Self::push`] once to say "always answer this".
 #[derive(Debug, Clone, Default)]
 pub struct CannedJudgmentClient {
     responses: std::sync::Arc<std::sync::Mutex<Vec<SystemOneResponse>>>,
-    default_response: Option<SystemOneResponse>,
 }
 
 impl CannedJudgmentClient {
-    /// An empty client that fails every call.
+    /// A client with nothing queued, which fails every call.
+    ///
+    /// Useful for registering a handler in a test that never invokes it.
     pub fn empty() -> Self {
         Self::default()
     }
 
-    /// Queue a response.
+    /// Queue a response, or replace the answer a client already repeats.
+    ///
+    /// Pushing onto an empty client makes that response the permanent answer; see
+    /// [`CannedJudgmentClient`]'s exhaustion rules.
     #[must_use]
     pub fn push(self, response: SystemOneResponse) -> Self {
         self.responses
             .lock()
             .expect("canned client mutex poisoned")
             .push(response);
-        self
-    }
-
-    /// Set the response returned once the queue is drained.
-    #[must_use]
-    pub fn or(mut self, response: SystemOneResponse) -> Self {
-        self.default_response = Some(response);
         self
     }
 }
@@ -292,15 +338,17 @@ impl JudgmentClient for CannedJudgmentClient {
     ) -> Pin<Box<dyn Future<Output = Result<SystemOneResponse, ClientError>> + Send + '_>> {
         Box::pin(async move {
             let mut queue = self.responses.lock().expect("canned client mutex poisoned");
-            if queue.is_empty() {
-                return self.default_response.clone().ok_or_else(|| {
-                    ClientError::Transport("canned client has no response".to_owned())
-                });
+            let Some(first) = queue.first() else {
+                return Err(ClientError::Transport(
+                    "canned client has no response".to_owned(),
+                ));
+            };
+            // Popping every entry but the last is what makes the last one repeat
+            // without a separate "exhausted" state to keep in sync.
+            if queue.len() > 1 {
+                return Ok(queue.remove(0));
             }
-            if queue.len() == 1 {
-                return Ok(queue[0].clone());
-            }
-            Ok(queue.remove(0))
+            Ok(first.clone())
         })
     }
 }
@@ -398,28 +446,104 @@ mod tests {
         assert!(take_answer(&response, "severity").is_ok());
     }
 
-    /// Only 429 and 529 are retryable, per the TypeSafe docs. A 401 must fail
-    /// immediately — retrying a bad key just burns the attempt budget.
+    /// A `5xx` is the backend failing, not us, and both official TypeSafe SDKs
+    /// retry every server error with exponential backoff. A `4xx` is *us*
+    /// failing: retrying a bad key or a malformed question cannot succeed, so it
+    /// must fail fast instead of burning the attempt budget.
     #[test]
-    fn only_the_documented_transient_statuses_retry() {
-        for status in [429_u16, 529] {
+    fn server_errors_retry_while_client_errors_fail_fast() {
+        for status in [500_u16, 502, 503, 504, 529] {
             assert!(
                 ClientError::Status {
                     status,
                     body: String::new()
                 }
                 .is_transient(),
-                "{status} must be transient"
+                "{status} is a server error and must be transient"
             );
         }
-        for status in [400_u16, 401, 403, 422, 500] {
+
+        // 429 is a 4xx yet is explicitly retryable: the rate limit will clear.
+        assert!(
+            ClientError::Status {
+                status: 429,
+                body: String::new()
+            }
+            .is_transient(),
+            "429 is the documented rate limit and must be transient"
+        );
+
+        for status in [400_u16, 401, 403, 404, 422] {
             assert!(
                 !ClientError::Status {
                     status,
                     body: String::new()
                 }
                 .is_transient(),
-                "{status} must not be transient"
+                "{status} is a client error; a retry cannot fix it"
+            );
+        }
+    }
+
+    /// The server-error range is half-open `[500, 600)`. An unassigned `6xx` is
+    /// not a server error, and treating it as one would retry a status that means
+    /// nothing rather than one that might clear.
+    #[test]
+    fn the_server_error_range_is_five_hundred_to_five_ninety_nine() {
+        for status in [199_u16, 300, 400, 499, 600, 700] {
+            assert!(
+                !ClientError::Status {
+                    status,
+                    body: String::new()
+                }
+                .is_transient(),
+                "{status} is outside the server-error range"
+            );
+        }
+        for status in [500_u16, 550, 599] {
+            assert!(
+                ClientError::Status {
+                    status,
+                    body: String::new()
+                }
+                .is_transient(),
+                "{status} is inside the server-error range"
+            );
+        }
+    }
+
+    /// The queue **repeats its last entry** rather than draining, and that is the
+    /// contract — there is no separate fallback.
+    ///
+    /// `or` used to be documented as "the response returned once the queue is
+    /// drained", which cannot happen: the repeat rule means the last pushed
+    /// response answers forever, so a fallback configured alongside any `push`
+    /// was unreachable. The repeat rule is the load-bearing one — a pipeline that
+    /// retries must get the same judgment back, not an error — so it was kept and
+    /// the unreachable `or` was removed rather than the rule that works.
+    #[test]
+    fn the_last_pushed_response_repeats_forever_and_there_is_no_fallback() {
+        let mut last = score_response();
+        if let Some(Answer::Score(answer)) = last.answers.get_mut("severity") {
+            answer.score = 2.0;
+        }
+        let client = CannedJudgmentClient::empty()
+            .push(score_response())
+            .push(last);
+
+        let request = single_question_request(json!("x"), "severity", json!({}));
+
+        // Four calls, two responses queued. Call 1 drains the first entry; every
+        // later call repeats the last one instead of running off the end.
+        for (call, expected) in [(1, 1.0), (2, 2.0), (3, 2.0), (4, 2.0)] {
+            let response = futures_lite_block_on(client.evaluate(request.clone()))
+                .unwrap_or_else(|error| panic!("call {call} must succeed, got {error}"));
+            assert!(
+                matches!(
+                    response.answers.get("severity"),
+                    Some(Answer::Score(answer)) if (answer.score - expected).abs() < 1e-9
+                ),
+                "call {call} must answer {expected}; a repeat, not a drain"
             );
         }
     }
