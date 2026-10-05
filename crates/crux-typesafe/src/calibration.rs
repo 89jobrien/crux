@@ -65,23 +65,37 @@ use crate::wire::ScoreAnswer;
 /// 1.0, 0.80, 0.64, 0.51 — a retry is meaningful evidence, not disqualifying.
 pub const RETRY_DECAY: f64 = 0.8;
 
-/// A TypeSafe `Score` answer plus the retry evidence needed to calibrate it.
+/// A TypeSafe `Score` answer plus the evidence needed to calibrate it.
+///
+/// `levels` is supplied by the caller from the **request's** `criteria`, not read
+/// back off the answer. The API echoes a `legend` describing the levels, but a
+/// response is not the authority on what was asked: if an echoed legend disagreed
+/// with `criteria`, the same judgment would normalize differently and route
+/// differently (finding #8).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScoreEvidence {
     /// The answer as returned by the judgment backend.
+    ///
+    /// `legend` is carried for context only; it does not affect calibration.
     pub answer: ScoreAnswer,
+    /// How many levels the rubric has, from the request's `criteria.len()`.
+    pub levels: usize,
     /// How many backend calls were needed, including retries.
     ///
     /// Zero is treated as one (no penalty), matching
     /// `crux_baml::confidence::CallEvidence::new`.
+    ///
+    /// No production path can currently observe a value above one; see the
+    /// `FIXME(typesafe-followup)` on `score::OBSERVED_ATTEMPTS` (finding #3).
     pub attempts: u32,
 }
 
 impl ScoreEvidence {
-    /// Pair an answer with its attempt count.
-    pub fn new(answer: ScoreAnswer, attempts: u32) -> Self {
+    /// Pair an answer with the rubric width the caller asked for.
+    pub fn new(answer: ScoreAnswer, levels: usize, attempts: u32) -> Self {
         Self {
             answer,
+            levels,
             attempts: attempts.max(1),
         }
     }
@@ -94,7 +108,8 @@ impl ScoreEvidence {
     /// The rubric position normalized onto `0.0..=1.0`.
     ///
     /// A top-level score on an N-level rubric is `(N-1)`, so dividing by the top
-    /// level number is what makes a 3-level and a 4-level rubric comparable.
+    /// level number is what makes a 3-level and a 4-level rubric comparable. `N`
+    /// comes from the request's `criteria`, never from the echoed `legend`.
     ///
     /// # Errors
     ///
@@ -129,12 +144,12 @@ impl ScoreEvidence {
 
     /// Highest level number in the rubric.
     ///
-    /// Derived from `legend`, which the API echoes back from `criteria`.
+    /// Derived from the request's `criteria`, which `levels` records.
     fn top_level(&self) -> Result<f64, CalibrationError> {
-        let top = self.answer.legend.len() as f64 - 1.0;
+        let top = self.levels as f64 - 1.0;
         if top < 1.0 {
             return Err(CalibrationError::TooFewLevels {
-                levels: self.answer.legend.len(),
+                levels: self.levels,
             });
         }
         Ok(top)
@@ -189,7 +204,11 @@ impl JudgmentPayload {
 /// separately is how they drift apart.
 pub fn calibrate_score(evidence: &ScoreEvidence) -> Result<(Value, f32), CalibrationError> {
     let normalized = evidence.normalized()?;
-    let confidence = (normalized * evidence.retry_multiplier()).clamp(0.0, 1.0) as f32;
+    // Delegated, not recomputed: this function's own doc comment promises the
+    // payload and the routing value describe the same arithmetic, and an inline
+    // copy of `normalized * retry_multiplier` is exactly how they would drift
+    // apart (finding #12).
+    let confidence = evidence.confidence()?;
 
     let payload = JudgmentPayload {
         score: evidence.answer.score,
@@ -223,16 +242,27 @@ mod tests {
         }
     }
 
+    /// The ordinary case: the echoed legend agrees with the requested width.
+    fn evidence(levels: usize, score: f64, attempts: u32) -> ScoreEvidence {
+        ScoreEvidence::new(answer(levels, score), levels, attempts)
+    }
+
+    /// Pair an arbitrary answer with a rubric width the caller chose independently
+    /// of the answer's legend width.
+    fn evidence_with(answer: ScoreAnswer, levels: usize, attempts: u32) -> ScoreEvidence {
+        ScoreEvidence::new(answer, levels, attempts)
+    }
+
     #[test]
     fn a_top_level_score_normalizes_to_one() {
-        let evidence = ScoreEvidence::new(answer(3, 2.0), 1);
+        let evidence = evidence(3, 2.0, 1);
         assert!((evidence.normalized().unwrap() - 1.0).abs() < 1e-9);
         assert!((evidence.confidence().unwrap() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn a_bottom_level_score_normalizes_to_zero() {
-        let evidence = ScoreEvidence::new(answer(3, 0.0), 1);
+        let evidence = evidence(3, 0.0, 1);
         assert_eq!(evidence.normalized().unwrap(), 0.0);
         assert_eq!(evidence.confidence().unwrap(), 0.0);
     }
@@ -241,23 +271,29 @@ mod tests {
     /// confidence regardless of how many levels the pipeline author wrote.
     #[test]
     fn rubrics_of_different_width_normalize_identically() {
-        let three = ScoreEvidence::new(answer(3, 1.0), 1); // midpoint of 0..2
-        let four = ScoreEvidence::new(answer(4, 1.5), 1); // midpoint of 0..3
+        let three = evidence(3, 1.0, 1); // midpoint of 0..2
+        let four = evidence(4, 1.5, 1); // midpoint of 0..3
         assert!((three.normalized().unwrap() - 0.5).abs() < 1e-9);
         assert!((four.normalized().unwrap() - 0.5).abs() < 1e-9);
     }
 
     #[test]
     fn a_fractional_position_is_preserved() {
-        let evidence = ScoreEvidence::new(answer(3, 1.43), 1);
+        let evidence = evidence(3, 1.43, 1);
         assert!((evidence.normalized().unwrap() - 0.715).abs() < 1e-9);
     }
 
+    /// Retry arithmetic, as a unit contract.
+    ///
+    /// Finding #3: no production path can supply `attempts > 1` yet, because the
+    /// judgment port does not surface a retry count. This pins the arithmetic that
+    /// *will* apply once it does; the production behaviour is pinned separately by
+    /// `score::tests::the_handler_reports_one_attempt_while_the_port_hides_retries`.
     #[test]
     fn retries_discount_the_score() {
-        let base = ScoreEvidence::new(answer(3, 2.0), 1).confidence().unwrap();
-        let once = ScoreEvidence::new(answer(3, 2.0), 2).confidence().unwrap();
-        let twice = ScoreEvidence::new(answer(3, 2.0), 3).confidence().unwrap();
+        let base = evidence(3, 2.0, 1).confidence().unwrap();
+        let once = evidence(3, 2.0, 2).confidence().unwrap();
+        let twice = evidence(3, 2.0, 3).confidence().unwrap();
         assert!(once < base);
         assert!(twice < once);
         assert!((once - 0.8).abs() < 1e-6, "got {once}");
@@ -268,22 +304,20 @@ mod tests {
     /// attempts it took, and a retry can never rescue it into confidence.
     #[test]
     fn retries_cannot_rescue_a_bottom_level_score() {
-        let evidence = ScoreEvidence::new(answer(3, 0.0), 5);
+        let evidence = evidence(3, 0.0, 5);
         assert_eq!(evidence.confidence().unwrap(), 0.0);
     }
 
     #[test]
     fn zero_attempts_is_treated_as_one() {
-        let evidence = ScoreEvidence::new(answer(3, 1.0), 0);
+        let evidence = evidence(3, 1.0, 0);
         assert_eq!(evidence.attempts, 1);
         assert!((evidence.confidence().unwrap() - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn a_single_level_rubric_cannot_be_normalized() {
-        let error = ScoreEvidence::new(answer(1, 0.0), 1)
-            .normalized()
-            .unwrap_err();
+        let error = evidence(1, 0.0, 1).normalized().unwrap_err();
         assert!(matches!(
             error,
             CalibrationError::TooFewLevels { levels: 1 }
@@ -294,7 +328,7 @@ mod tests {
     #[test]
     fn non_finite_scores_are_rejected_rather_than_scored() {
         for score in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let evidence = ScoreEvidence::new(answer(3, score), 1);
+            let evidence = evidence(3, score, 1);
             assert!(
                 matches!(
                     evidence.normalized(),
@@ -309,7 +343,7 @@ mod tests {
     /// well-formed answer.
     #[test]
     fn a_score_a_hair_above_the_top_level_is_clamped() {
-        let evidence = ScoreEvidence::new(answer(3, 2.000_000_1), 1);
+        let evidence = evidence(3, 2.000_000_1, 1);
         assert!((evidence.normalized().unwrap() - 1.0).abs() < 1e-9);
     }
 
@@ -319,9 +353,7 @@ mod tests {
             for raw in [0.0, 0.5, 1.0, 5.0, -5.0] {
                 for attempts in [1, 2, 3, 10] {
                     let score = raw * (levels as f64 - 1.0);
-                    let confidence = ScoreEvidence::new(answer(levels, score), attempts)
-                        .confidence()
-                        .unwrap();
+                    let confidence = evidence(levels, score, attempts).confidence().unwrap();
                     assert!(
                         confidence.is_finite() && (0.0..=1.0).contains(&confidence),
                         "levels={levels} score={score} attempts={attempts} produced {confidence}"
@@ -331,10 +363,64 @@ mod tests {
         }
     }
 
+    /// Finding #8: the normalization denominator comes from the request's
+    /// `criteria`, not the response's echoed `legend`.
+    ///
+    /// Before the fix this read `legend.len()`, so a backend that echoed a legend
+    /// disagreeing with the request silently rescaled the same judgment — from
+    /// 0.5 (3 requested levels) to 0.125 (9 echoed levels) — and a pipeline's
+    /// thresholds would stop meaning what the author wrote.
+    #[test]
+    fn a_mismatched_echoed_legend_cannot_change_the_result() {
+        // 3 requested levels, legend agrees: 1.0 of 0..=2 is the midpoint.
+        let honest = evidence(3, 1.0, 1);
+        // Identical judgment and identical request, but the backend echoed 9 levels.
+        let tampered = evidence_with(answer(9, 1.0), 3, 1);
+
+        assert!((honest.normalized().unwrap() - 0.5).abs() < 1e-9);
+        assert_eq!(
+            tampered.normalized().unwrap(),
+            honest.normalized().unwrap(),
+            "an echoed legend of a different width must not rescale the judgment"
+        );
+        assert_eq!(tampered.confidence().unwrap(), honest.confidence().unwrap());
+    }
+
+    /// A narrower echo is just as untrustworthy as a wider one.
+    #[test]
+    fn a_narrower_echoed_legend_cannot_change_the_result() {
+        let honest = evidence(3, 1.0, 1);
+        let tampered = evidence_with(answer(2, 1.0), 3, 1);
+
+        assert!((tampered.normalized().unwrap() - 0.5).abs() < 1e-9);
+        assert_eq!(tampered.normalized().unwrap(), honest.normalized().unwrap());
+    }
+
+    /// Finding #12: `calibrate_score` must not recompute the confidence. The
+    /// payload's `normalized` and the returned routing value have to be the same
+    /// arithmetic, so they are asserted equal for every attempt count — which is
+    /// what an inline copy of the formula would eventually stop satisfying.
+    #[test]
+    fn the_routed_confidence_is_exactly_the_evidence_confidence() {
+        for levels in 2..=6 {
+            for attempts in [1, 2, 3, 7] {
+                for score in [0.0, 1.0, (levels as f64 - 1.0) / 2.0] {
+                    let evidence = evidence(levels, score, attempts);
+                    let expected = evidence.confidence().unwrap();
+                    let (_, confidence) = calibrate_score(&evidence).unwrap();
+                    assert_eq!(
+                        confidence, expected,
+                        "levels={levels} score={score} attempts={attempts}"
+                    );
+                }
+            }
+        }
+    }
+
     /// The payload must not shadow the routing value.
     #[test]
     fn the_payload_never_carries_a_confidence_key() {
-        let (value, _) = calibrate_score(&ScoreEvidence::new(answer(3, 1.0), 1)).unwrap();
+        let (value, _) = calibrate_score(&evidence(3, 1.0, 1)).unwrap();
         let object = value.as_object().unwrap();
         assert!(
             !object.contains_key("confidence"),
@@ -349,7 +435,7 @@ mod tests {
     fn distribution_confidence_is_reported_verbatim() {
         let mut raw = answer(3, 1.0);
         raw.confidence = 0.35;
-        let (value, confidence) = calibrate_score(&ScoreEvidence::new(raw, 1)).unwrap();
+        let (value, confidence) = calibrate_score(&evidence_with(raw, 3, 1)).unwrap();
         assert_eq!(value["distribution_confidence"], serde_json::json!(0.35));
         // 1.0 of 2.0 normalized, unaffected by distribution concentration.
         assert!((confidence - 0.5).abs() < 1e-6);
@@ -365,8 +451,8 @@ mod tests {
         let mut spread = answer(3, 1.0);
         spread.confidence = 0.05;
 
-        let (_, a) = calibrate_score(&ScoreEvidence::new(concentrated, 1)).unwrap();
-        let (_, b) = calibrate_score(&ScoreEvidence::new(spread, 1)).unwrap();
+        let (_, a) = calibrate_score(&evidence_with(concentrated, 3, 1)).unwrap();
+        let (_, b) = calibrate_score(&evidence_with(spread, 3, 1)).unwrap();
         assert_eq!(a, b);
     }
 
@@ -379,7 +465,7 @@ mod tests {
             ("1".to_owned(), 0.6),
             ("2".to_owned(), 0.3),
         ]);
-        let (value, _) = calibrate_score(&ScoreEvidence::new(raw, 1)).unwrap();
+        let (value, _) = calibrate_score(&evidence_with(raw, 3, 1)).unwrap();
         assert_eq!(value["probabilities"]["1"], serde_json::json!(0.6));
         assert_eq!(value["attempts"], serde_json::json!(1));
     }
