@@ -38,6 +38,7 @@ crux-script = { path = "crates/crux-script", version = "0.4.0" }
 crux-stdlib = { path = "crates/crux-stdlib", version = "0.4.0" }
 crux-task = { path = "crates/crux-task", version = "0.4.0" }
 crux-types = { path = "crates/crux-types", version = "0.4.0" }
+crux-typesafe = { path = "crates/crux-typesafe", version = "0.4.0" }
 
 # Directories
 dirs = "6"

@@ -1,0 +1,32 @@
+[package]
+name = "crux-typesafe"
+description = "TypeSafe System One judgment handlers for crux-script pipelines (calibrated score, choice, and noul)"
+version.workspace = true
+edition.workspace = true
+readme = "../../README.md"
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+crux-runtime = { workspace = true } #unified
+crux-script = { workspace = true } #unified
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dependencies.reqwest]
+workspace = true
+optional = true
+
+[features]
+default = ["http"]
+http = ["dep:reqwest"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

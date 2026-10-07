@@ -496,6 +496,7 @@ dependencies = [
  "crux-stdlib",
  "crux-task",
  "crux-types",
+ "crux-typesafe",
  "futures",
  "hex",
  "ignore",
@@ -734,6 +735,19 @@ dependencies = [
  "serde_json",
  "tokio",
  "ulid",
+]
+
+[[package]]
+name = "crux-typesafe"
+version = "0.4.0"
+dependencies = [
+ "crux-runtime",
+ "crux-script",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

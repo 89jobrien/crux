@@ -24,6 +24,7 @@ crux-plugin = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-task = { workspace = true }
 crux-types = { workspace = true }
+crux-typesafe = { workspace = true }
 crux-script = { workspace = true } #unified
 crux-stdlib = { workspace = true } #unified
 futures = { workspace = true, optional = true }

@@ -33,6 +33,9 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     },
     CrateSpec { name: "crux-baml" },
     CrateSpec {
+        name: "crux-typesafe",
+    },
+    CrateSpec {
         name: "crux-stdlib",
     },
     CrateSpec {
