@@ -27,17 +27,25 @@ fn main() {
         let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("");
 
         let resp = match method {
-            "Declare" => serde_json::json!({
-                "status": "Declare",
-                "data": {
-                    "handlers": [
-                        {
-                            "name": handler_name,
-                            "description": "Returns input unchanged"
-                        }
-                    ]
+            "Declare" => {
+                // `ECHO_OUTPUT_SCHEMA` carries a raw JSON `ValueSchema`. Absent,
+                // the declaration omits the field so the host types the handler
+                // as `Dynamic` -- the shape of a plugin predating the field.
+                let output_schema = std::env::var("ECHO_OUTPUT_SCHEMA").ok();
+                let mut decl = serde_json::json!({
+                    "name": handler_name,
+                    "description": "Returns input unchanged"
+                });
+                if let Some(raw) = output_schema {
+                    let schema: serde_json::Value =
+                        serde_json::from_str(&raw).expect("ECHO_OUTPUT_SCHEMA must be JSON");
+                    decl["output_schema"] = schema;
                 }
-            }),
+                serde_json::json!({
+                    "status": "Declare",
+                    "data": { "handlers": [decl] }
+                })
+            }
             "Invoke" => {
                 if let Some(delay) = delay {
                     std::thread::sleep(delay);

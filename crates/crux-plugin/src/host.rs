@@ -199,4 +199,10 @@ pub enum PluginError {
     HandlerNotFound(String),
     #[error("handler '{handler}' failed: {error}")]
     HandlerFailed { handler: String, error: String },
+    #[error("handler '{handler}' declared an invalid output schema: {source}")]
+    InvalidSchema {
+        handler: String,
+        #[source]
+        source: crux_script::SchemaBuildError,
+    },
 }

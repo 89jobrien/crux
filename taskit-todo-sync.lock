@@ -17,19 +17,9 @@
       "issue_number": 126
     },
     {
-      "file": "crates/crux-plugin/src/bridge.rs",
-      "text": "TODO(feature-idea-17): Register through `handler_value_with_metadata`",
-      "issue_number": 127
-    },
-    {
       "file": "crates/crux-plugin/src/manifest.rs",
       "text": "TODO(automation-15): Replace plaintext manifest secrets with inherited or explicitly",
       "issue_number": 128
-    },
-    {
-      "file": "crates/crux-plugin/src/protocol.rs",
-      "text": "TODO(feature-idea-17): Add an optional `output_schema` so a plugin can",
-      "issue_number": 129
     },
     {
       "file": "crates/crux-script/src/runner.rs",

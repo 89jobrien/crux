@@ -223,3 +223,30 @@ fn handler_metadata_captures_discovery_and_replay_properties() {
     let round_trip: HandlerMetadata = serde_json::from_str(&serialized).unwrap();
     assert_eq!(round_trip, metadata);
 }
+
+/// A hand-written object schema should not have to spell out `properties`,
+/// `additional`, or a property's `required` flag. These defaults exist so that
+/// schemas authored by hand -- notably a plugin's `output_schema`, which arrives
+/// as JSON over a pipe -- stay expressible.
+#[test]
+fn object_schemas_default_omitted_properties_and_optionality() {
+    let empty: ValueSchema = serde_json::from_str(r#"{"type":"object","definition":{}}"#)
+        .expect("an object schema may omit properties and additional");
+    assert_eq!(empty, ValueSchema::object(ObjectSchema::new()));
+
+    let optional: ValueSchema = serde_json::from_str(
+        r#"{"type":"object","definition":{"properties":{"name":{"schema":{"type":"string"}}}}}"#,
+    )
+    .expect("a property may omit its required flag");
+    assert_eq!(
+        optional,
+        ValueSchema::object(ObjectSchema::new().optional("name", ValueSchema::String))
+    );
+
+    // Serialized output is unaffected, so a round trip and any consumer reading
+    // the canonical form are unchanged.
+    let serialized = serde_json::to_string(&optional).unwrap();
+    let round_trip: ValueSchema = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(round_trip, optional);
+    assert!(serialized.contains(r#""required":false"#), "{serialized}");
+}

@@ -177,7 +177,11 @@ impl fmt::Display for ValueSchema {
 /// Schema for a JSON object and its named properties.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectSchema {
+    /// Declared properties. An omitted `properties` means a closed empty object.
+    #[serde(default)]
     properties: BTreeMap<String, SchemaProperty>,
+    /// Schema for properties not named above.
+    #[serde(default)]
     additional: Option<Box<ValueSchema>>,
 }
 
@@ -308,9 +312,13 @@ impl ObjectSchema {
 }
 
 /// One named property in an object schema.
+///
+/// `required` defaults to `false` so a hand-written schema can mark a property
+/// as merely present without also spelling out its optionality.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProperty {
     schema: ValueSchema,
+    #[serde(default)]
     required: bool,
 }
 
