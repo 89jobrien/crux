@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="The crux command line: 11 subcommands for listing, checking, running, planning, and replaying .crux pipelines, with real captured output.">
     <title>crux &mdash; CLI</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../style.css">
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
     <nav class="nav" aria-label="Primary">
-      <a href="index.html" class="brand"><span class="mark">cr</span>ux</a>
-      <a href="architecture.html">Architecture</a>
-      <a href="cli.html" aria-current="page">CLI</a>
-      <a href="crates.html">Crates</a>
-      <a href="status.html">Status</a>
-      <a href="faq.html">FAQ</a>
+      <a href="../" class="brand"><span class="mark">cr</span>ux</a>
+      <a href="../architecture/">Architecture</a>
+      <a href="../cli/" aria-current="page">CLI</a>
+      <a href="../crates/">Crates</a>
+      <a href="../status/">Status</a>
+      <a href="../faq/">FAQ</a>
     </nav>
 
     <main id="main" class="page">
@@ -62,7 +62,7 @@
         <h2>List what is in the directory</h2>
         <p class="section-intro">The tree goes to stdout, the count to stderr. Directory grouping is alphabetical.</p>
         <div class="terminal">
-          <div class="terminal-bar"><span class="label">crux list .</span></div>
+          <div class="terminal-bar"></div>
 <pre><span class="prompt">$</span> crux list .
 ./examples/
   analyze_review.crux
@@ -99,7 +99,7 @@
         <h2>Check before you run</h2>
         <p class="section-intro"><code>check</code> resolves every handler and reports a <code>missing_contract</code> warning for any handler whose input schema or confidence capability is not fully declared. Diagnostics go to stderr, wrapped in ANSI.</p>
         <div class="terminal">
-          <div class="terminal-bar"><span class="label">crux check examples/showcase.crux</span></div>
+          <div class="terminal-bar"></div>
 <pre><span class="prompt">$</span> crux check examples/showcase.crux
 <span class="warn">warning[missing_contract]: examples/showcase.crux [steps[0].arms[0]]: handler 'shell::capture' has no complete contract</span>
 <span class="warn">warning[missing_contract]: examples/showcase.crux [steps[1]]: handler 'ctrl::log' has no complete contract</span>
@@ -175,7 +175,7 @@ Failure:
         <h2>Plan a pipeline from a goal</h2>
         <p class="section-intro">The default <code>rule</code> planner needs no API key and makes no network call. It emits a skeleton; handlers that are not built in must be registered through a plugin, or replaced, before running with <code>--strict</code>.</p>
         <div class="terminal">
-          <div class="terminal-bar"><span class="label">crux plan</span></div>
+          <div class="terminal-bar"></div>
 <pre><span class="prompt">$</span> crux plan --goal "summarize the latest release notes"
 pipeline: <span class="ok">"summarize-the-latest-release"</span>
 steps:
@@ -206,7 +206,7 @@ steps:
         <p>Kani proofs are gated behind <code>cfg(kani)</code> in <code>crux-types</code>, and property tests run in roughly eight crates.</p>
       </section>
 
-      <p><a href="crates.html">See what each crate does</a> &middot; <a href="status.html">What works today</a></p>
+      <p><a href="../crates/">See what each crate does</a> &middot; <a href="../status/">What works today</a></p>
     </main>
 
     <footer class="site-foot">
