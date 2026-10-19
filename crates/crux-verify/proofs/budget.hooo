@@ -1,0 +1,93 @@
+/*
+  budget.hooo — Formal proof of BudgetTracker.remaining() monotonicity
+
+  Model
+  -----
+  budget_state : abstract type for a BudgetTracker snapshot
+  remaining    : budget_state -> nat    (remaining capacity)
+  consume      : budget_state -> budget_state  (BudgetTracker::consume)
+  begin_step   : budget_state -> budget_state  (BudgetTracker::begin_step)
+  pord         : partial-order relation — pord'(X, Y) means remaining(X) <= remaining(Y)
+
+  All functions follow hooo convention: at least a `true` input so they
+  can be called as `f(x)` where `x : true`.
+
+  Trusted base
+  ------------
+  consume_mono and step_mono axiomatise the single-step invariant.
+  Justification: each operation increments counter.used (saturating),
+  so remaining() = counter.limit.saturating_sub(counter.used) can only
+  decrease.
+
+  Derived theorem
+  ---------------
+  two_consume_mono proves two consecutive consume() calls are
+  non-increasing by applying pord_trans.  This is the inductive case
+  that generalises to any finite sequence.
+*/
+
+sym budget_state;
+sym remaining;
+sym consume;
+sym begin_step;
+
+/* Partial order for remaining capacity */
+sym pord;
+
+/* Transitivity: pord'(a, b) & pord'(b, c) -> pord'(a, c) */
+fn pord_trans : pord'(a, b) & pord'(b, c) -> pord'(a, c) {
+    axiom pord_trans : pord'(a, b) & pord'(b, c) -> pord'(a, c);
+    x : pord'(a, b);
+    y : pord'(b, c);
+    let r = pord_trans(x, y) : pord'(a, c);
+    return r;
+}
+
+/*
+  Axiom: consume() does not increase remaining().
+  Trusted base: BudgetTracker::consume(n) saturating-adds n to counter.used,
+  so remaining = limit.saturating_sub(used) is non-increasing.
+*/
+fn consume_mono : true -> pord'(remaining'(consume'(s)), remaining'(s)) {
+    axiom consume_mono : true -> pord'(remaining'(consume'(s)), remaining'(s));
+    x : true;
+    let r = consume_mono(x) : pord'(remaining'(consume'(s)), remaining'(s));
+    return r;
+}
+
+/*
+  Axiom: begin_step() does not increase remaining().
+  Trusted base: BudgetTracker::begin_step() increments the Steps counter.
+*/
+fn step_mono : true -> pord'(remaining'(begin_step'(s)), remaining'(s)) {
+    axiom step_mono : true -> pord'(remaining'(begin_step'(s)), remaining'(s));
+    x : true;
+    let r = step_mono(x) : pord'(remaining'(begin_step'(s)), remaining'(s));
+    return r;
+}
+
+/*
+  Theorem: two consecutive consume() calls are non-increasing.
+
+  Proof:
+    h1: remaining(consume(consume(s))) <= remaining(consume(s))
+        by consume_mono instantiated at state = consume(s)
+    h2: remaining(consume(s)) <= remaining(s)
+        by consume_mono instantiated at state = s
+    Conclusion by pord_trans(h1, h2).
+*/
+fn two_consume_mono : true -> pord'(remaining'(consume'(consume'(s))), remaining'(s)) {
+    use pord_trans;
+    use consume_mono;
+
+    x : true;
+
+    /* consume_mono at state = consume(s): inner step is non-increasing */
+    let h1 = consume_mono(x) : pord'(remaining'(consume'(consume'(s))), remaining'(consume'(s)));
+    /* consume_mono at state = s: outer step is non-increasing */
+    let h2 = consume_mono(x) : pord'(remaining'(consume'(s)), remaining'(s));
+
+    /* Chain via transitivity */
+    let r = pord_trans(h1, h2) : pord'(remaining'(consume'(consume'(s))), remaining'(s));
+    return r;
+}
