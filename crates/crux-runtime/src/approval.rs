@@ -1,34 +1,11 @@
 //! Human or policy approval port for risk-gated changes.
+//!
+//! Wire types (`RiskLevel`, `ApprovalRequest`, `ApprovalDecision`) live in
+//! `crux_types::approval` and are re-exported here for backwards compatibility.
 
-use serde::{Deserialize, Serialize};
+pub use crux_types::approval::{ApprovalDecision, ApprovalRequest, RiskLevel};
+
 use std::future::Future;
-
-/// How risky a proposed change is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RiskLevel {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
-
-/// A request sent to the approval gate.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApprovalRequest {
-    pub summary: String,
-    pub diff_description: String,
-    pub risk_level: RiskLevel,
-}
-
-/// The gate's response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "decision")]
-pub enum ApprovalDecision {
-    Approved,
-    Denied { reason: String },
-    Deferred { timeout_seconds: u64 },
-}
 
 /// Port: gates escalation requests (human-in-the-loop or policy engine).
 pub trait ApprovalGate: Send + Sync {

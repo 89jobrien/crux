@@ -11,17 +11,7 @@
 use crate::types::crux_value::Crux;
 use crate::types::error::CruxErr;
 
-/// Controls how the replay cache matches steps from a prior trace.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ReplayMode {
-    /// Ordinal-based lookup. Hash must match exactly or Mismatch is returned.
-    #[default]
-    Strict,
-    /// By-name lookup with ordinal hint. If the name at the expected ordinal
-    /// doesn't match, scans forward for the next entry with the same name.
-    /// Hash mismatches return Miss (re-execute) instead of Mismatch (error).
-    Lenient,
-}
+pub use crux_types::replay::{ReplayMode, ReplayResult};
 
 #[derive(Debug, Clone)]
 struct ReplayEntry {
@@ -31,16 +21,6 @@ struct ReplayEntry {
     content_hash: Option<u64>,
     output: Option<serde_json::Value>,
     confidence: f32,
-}
-
-/// Result of checking the replay cache for a given step.
-pub enum ReplayResult {
-    /// Cache hit — return the cached output without re-executing.
-    Hit(serde_json::Value, f32),
-    /// The step at this ordinal has a different hash — trace diverged.
-    Mismatch { expected: u64, actual: u64 },
-    /// No cached entry at this ordinal — execute normally.
-    Miss,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -282,18 +262,6 @@ impl ReplayCache {
             expected: crate::recorder::hash_content(expected),
             actual: crate::recorder::hash_content(actual),
         })
-    }
-}
-
-impl std::fmt::Debug for ReplayResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Hit(..) => write!(f, "ReplayResult::Hit(...)"),
-            Self::Mismatch { expected, actual } => {
-                write!(f, "ReplayResult::Mismatch({expected} vs {actual})")
-            }
-            Self::Miss => write!(f, "ReplayResult::Miss"),
-        }
     }
 }
 
