@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod checkpoint;
 mod doctor;
 mod handlers;
 mod init;
@@ -21,6 +22,7 @@ mod plan;
 mod registry;
 mod regress;
 mod replay_debug;
+mod resume;
 mod run;
 mod schema;
 mod task;
@@ -69,6 +71,9 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Write output to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Scaffold a new Crux Rust project and sample pipeline
     Init {
@@ -202,6 +207,17 @@ enum Cli {
         /// Execute through this named top-level step (inclusive)
         #[arg(long, value_name = "STEP")]
         through: Option<String>,
+        /// Write a run-state checkpoint JSON to this path after execution
+        #[arg(long, value_name = "PATH")]
+        checkpoint: Option<String>,
+    },
+    /// Resume a paused or failed run from a checkpoint file
+    Resume {
+        /// Path to the checkpoint JSON written by a previous `crux run`
+        checkpoint: String,
+        /// Replay matching mode: "strict" (default) or "lenient"
+        #[arg(long, default_value = "strict")]
+        replay_mode: String,
     },
     /// Manage project tasks (create, list, update, get)
     Task {
@@ -240,8 +256,12 @@ fn main() {
     match cli {
         Cli::Regress { command } => regress::cmd_regress(command),
         Cli::List { root } => cmd_list(&root),
-        Cli::Handlers { format, plugins } => {
-            handlers::cmd_handlers(format, plugins.as_deref());
+        Cli::Handlers {
+            format,
+            plugins,
+            output,
+        } => {
+            handlers::cmd_handlers(format, plugins.as_deref(), output.as_deref());
         }
         Cli::Init { path } => init::cmd_init(&path),
         Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
@@ -294,6 +314,7 @@ fn main() {
             events_jsonl,
             through,
             strict,
+            checkpoint,
         } => {
             if check
                 && let Some(path) = pipeline.as_ref()
@@ -325,8 +346,13 @@ fn main() {
                 events_jsonl_path: events_jsonl.as_deref(),
                 through_step: through.as_deref(),
                 strict,
+                checkpoint_path: checkpoint.as_deref(),
             });
         }
+        Cli::Resume {
+            checkpoint,
+            replay_mode,
+        } => resume::cmd_resume(&checkpoint, &replay_mode),
         Cli::Task { command, db } => task::cmd_task(command, db.as_deref()),
         Cli::Plan {
             goal,
