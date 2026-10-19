@@ -1,494 +1,37 @@
 //! BAML-backed structured extraction and decomposition handlers.
+//!
+//! The `llm::extract` handler is built dynamically from the definitions in
+//! [`crate::definitions`] via [`crate::registry::BamlFunctionRegistry`].
+//! Adding a new BAML function requires only a new factory in `definitions.rs`
+//! — no match arm changes here.
 
 use crate::baml_client::async_client::B;
+use crate::definitions::all_definitions;
+use crate::registry::BamlFunctionRegistry;
 use baml::ClientRegistry;
 use crux_runtime::prelude::CruxErr;
-use crux_script::{HandlerOutput, HandlerRegistry};
+use crux_script::HandlerRegistry;
 use serde_json::{Value, json};
 
 /// Register the `llm::extract` handler with the default BAML client.
+///
+/// All generated BAML functions are registered automatically from
+/// [`all_definitions`].
 pub fn register_extract(registry: &mut HandlerRegistry) {
     register_extract_with(registry, None);
 }
 
 /// Register the `llm::extract` handler, optionally routing all calls through
 /// the given [`ClientRegistry`].
+///
+/// All generated BAML functions are registered automatically from
+/// [`all_definitions`].
 pub fn register_extract_with(
     registry: &mut HandlerRegistry,
     client_registry: Option<ClientRegistry>,
 ) {
-    registry.handler("llm::extract", move |input: Value| {
-        let client_registry = client_registry.clone();
-        async move {
-            let function = input
-                .get("function")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| CruxErr::step_failed("llm::extract", "missing 'function' field"))?
-                .to_string();
-
-            let input_map = input
-                .get("input")
-                .and_then(|v| v.as_object())
-                .ok_or_else(|| {
-                    CruxErr::step_failed("llm::extract", "missing or non-object 'input' field")
-                })?
-                .clone();
-
-            let client_override = input
-                .get("client")
-                .and_then(|v| v.as_str())
-                .map(str::to_string);
-
-            match function.as_str() {
-                "ExtractEntities" => {
-                    let text = input_map
-                        .get("text")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "ExtractEntities requires 'text' field",
-                            )
-                        })?
-                        .to_string();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.ExtractEntities.with_client_registry(reg).call(text).await
-                    } else if let Some(ref name) = client_override {
-                        B.ExtractEntities.with_client(name).call(text).await
-                    } else {
-                        B.ExtractEntities.call(text).await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    let entities: Vec<Value> = result
-                        .entities
-                        .iter()
-                        .map(|e| {
-                            json!({
-                                "name": e.name,
-                                "entity_type": e.entity_type,
-                                "description": e.description,
-                            })
-                        })
-                        .collect();
-                    Ok(HandlerOutput::new(json!({ "entities": entities })))
-                }
-                "Summarize" => {
-                    let text = input_map
-                        .get("text")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed("llm::extract", "Summarize requires 'text' field")
-                        })?
-                        .to_string();
-
-                    const DEFAULT_MAX_SENTENCES: i64 = 3;
-                    let max_sentences = input_map
-                        .get("max_sentences")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(DEFAULT_MAX_SENTENCES);
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.Summarize
-                            .with_client_registry(reg)
-                            .call(text, max_sentences)
-                            .await
-                    } else if let Some(ref name) = client_override {
-                        B.Summarize
-                            .with_client(name)
-                            .call(text, max_sentences)
-                            .await
-                    } else {
-                        B.Summarize.call(text, max_sentences).await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::new(json!({
-                        "summary": result.summary,
-                        "key_points": result.key_points,
-                        "word_count": result.word_count,
-                    })))
-                }
-                "Classify" => {
-                    let text = input_map
-                        .get("text")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed("llm::extract", "Classify requires 'text' field")
-                        })?
-                        .to_string();
-
-                    let labels: Vec<String> = input_map
-                        .get("labels")
-                        .and_then(|v| v.as_array())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed("llm::extract", "Classify requires 'labels' array")
-                        })?
-                        .iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.Classify
-                            .with_client_registry(reg)
-                            .call(text, &labels)
-                            .await
-                    } else if let Some(ref name) = client_override {
-                        B.Classify.with_client(name).call(text, &labels).await
-                    } else {
-                        B.Classify.call(text, &labels).await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::with_confidence(
-                        json!({
-                            "label": result.label,
-                            "confidence": result.confidence,
-                            "reasoning": result.reasoning,
-                        }),
-                        result.confidence as f32,
-                    ))
-                }
-                "DescribeProject" => {
-                    let name = input_map
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "DescribeProject requires 'name' field",
-                            )
-                        })?
-                        .to_string();
-                    let language = input_map
-                        .get("language")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let readme = input_map
-                        .get("readme")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let commits: Vec<String> = input_map
-                        .get("commits")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.DescribeProject
-                            .with_client_registry(reg)
-                            .call(name, language, readme, &commits)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.DescribeProject
-                            .with_client(name_override)
-                            .call(name, language, readme, &commits)
-                            .await
-                    } else {
-                        B.DescribeProject
-                            .call(name, language, readme, &commits)
-                            .await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::new(
-                        json!({ "description": result.description }),
-                    ))
-                }
-                "AssessHealth" => {
-                    let name = input_map
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "AssessHealth requires 'name' field",
-                            )
-                        })?
-                        .to_string();
-                    let pushed_at = input_map
-                        .get("pushed_at")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "AssessHealth requires 'pushed_at' field",
-                            )
-                        })?
-                        .to_string();
-                    let commit_dates: Vec<String> = input_map
-                        .get("commit_dates")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    let open_issues = input_map.get("open_issues").and_then(|v| v.as_i64());
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.AssessHealth
-                            .with_client_registry(reg)
-                            .call(name, pushed_at, &commit_dates, open_issues)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.AssessHealth
-                            .with_client(name_override)
-                            .call(name, pushed_at, &commit_dates, open_issues)
-                            .await
-                    } else {
-                        B.AssessHealth
-                            .call(name, pushed_at, &commit_dates, open_issues)
-                            .await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::with_confidence(
-                        json!({
-                            "status": result.status,
-                            "confidence": result.confidence,
-                            "reason": result.reason,
-                        }),
-                        result.confidence as f32,
-                    ))
-                }
-                "ClassifyProject" => {
-                    let name = input_map
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "ClassifyProject requires 'name' field",
-                            )
-                        })?
-                        .to_string();
-                    let description = input_map
-                        .get("description")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let language = input_map
-                        .get("language")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let topics: Vec<String> = input_map
-                        .get("topics")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    let commits: Vec<String> = input_map
-                        .get("commits")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.ClassifyProject
-                            .with_client_registry(reg)
-                            .call(name, description, language, &topics, &commits)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.ClassifyProject
-                            .with_client(name_override)
-                            .call(name, description, language, &topics, &commits)
-                            .await
-                    } else {
-                        B.ClassifyProject
-                            .call(name, description, language, &topics, &commits)
-                            .await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::with_confidence(
-                        json!({
-                            "category": result.category,
-                            "confidence": result.confidence,
-                        }),
-                        result.confidence as f32,
-                    ))
-                }
-                "GenerateChangelog" => {
-                    let name = input_map
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "GenerateChangelog requires 'name' field",
-                            )
-                        })?
-                        .to_string();
-                    let commits: Vec<String> = input_map
-                        .get("commits")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.GenerateChangelog
-                            .with_client_registry(reg)
-                            .call(name, &commits)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.GenerateChangelog
-                            .with_client(name_override)
-                            .call(name, &commits)
-                            .await
-                    } else {
-                        B.GenerateChangelog.call(name, &commits).await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::new(json!({
-                        "summary": result.summary,
-                        "highlights": result.highlights,
-                    })))
-                }
-                "SuggestRelated" => {
-                    let name = input_map
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "SuggestRelated requires 'name' field",
-                            )
-                        })?
-                        .to_string();
-                    let description = input_map
-                        .get("description")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let category = input_map
-                        .get("category")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string);
-                    let all_projects: Vec<String> = input_map
-                        .get("all_projects")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.SuggestRelated
-                            .with_client_registry(reg)
-                            .call(name, description, category, &all_projects)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.SuggestRelated
-                            .with_client(name_override)
-                            .call(name, description, category, &all_projects)
-                            .await
-                    } else {
-                        B.SuggestRelated
-                            .call(name, description, category, &all_projects)
-                            .await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::new(json!({ "related": result.related })))
-                }
-                "ClassifyCIFailure" => {
-                    let failure_output = input_map
-                        .get("failure_output")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            CruxErr::step_failed(
-                                "llm::extract",
-                                "ClassifyCIFailure requires 'failure_output' field",
-                            )
-                        })?
-                        .to_string();
-                    let known_patterns: Vec<String> = input_map
-                        .get("known_patterns")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-
-                    let result = if let Some(ref reg) = client_registry {
-                        B.ClassifyCIFailure
-                            .with_client_registry(reg)
-                            .call(failure_output, &known_patterns)
-                            .await
-                    } else if let Some(ref name_override) = client_override {
-                        B.ClassifyCIFailure
-                            .with_client(name_override)
-                            .call(failure_output, &known_patterns)
-                            .await
-                    } else {
-                        B.ClassifyCIFailure
-                            .call(failure_output, &known_patterns)
-                            .await
-                    }
-                    .map_err(|e| {
-                        CruxErr::step_failed("llm::extract", format!("BAML error: {e}"))
-                    })?;
-
-                    Ok(HandlerOutput::with_confidence(
-                        json!({
-                            "kind": result.kind,
-                            "fix_type": result.fix_type,
-                            "suggested_fix": result.suggested_fix,
-                            "confidence": result.confidence,
-                            "new_pattern": result.new_pattern,
-                        }),
-                        result.confidence as f32,
-                    ))
-                }
-                unknown => Err(CruxErr::step_failed(
-                    "llm::extract",
-                    format!(
-                        "unknown BAML function '{unknown}'; expected one of: \
-                         ExtractEntities, Summarize, Classify, DescribeProject, \
-                         AssessHealth, ClassifyProject, GenerateChangelog, SuggestRelated, \
-                         ClassifyCIFailure"
-                    ),
-                )),
-            }
-        }
-    });
+    let fn_registry = BamlFunctionRegistry::from_defs(all_definitions());
+    fn_registry.register_extract_handler(registry, client_registry);
 }
 
 /// Register the `llm::decompose` handler.
@@ -524,4 +67,65 @@ pub fn register_decompose(registry: &mut HandlerRegistry) {
 
         Ok(json!({ "tasks": tasks }))
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_extract_does_not_panic() {
+        let mut registry = HandlerRegistry::new();
+        register_extract(&mut registry);
+    }
+
+    #[test]
+    fn all_definitions_are_unique_and_non_empty() {
+        let defs = all_definitions();
+        assert!(!defs.is_empty(), "at least one definition must exist");
+        let mut names: Vec<_> = defs.iter().map(|d| d.name).collect();
+        let len_before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), len_before, "definition names must be unique");
+    }
+
+    #[test]
+    fn all_definitions_have_input_and_output_schemas() {
+        for def in all_definitions() {
+            assert!(
+                def.input_schema.is_object(),
+                "{}: input_schema must be a JSON object",
+                def.name
+            );
+            assert!(
+                def.output_schema.is_object(),
+                "{}: output_schema must be a JSON object",
+                def.name
+            );
+            assert!(
+                def.timeout_ms > 0,
+                "{}: timeout_ms must be positive",
+                def.name
+            );
+        }
+    }
+
+    #[test]
+    fn function_registry_lists_all_known_functions() {
+        let defs = all_definitions();
+        let expected_names = [
+            "AssessHealth",
+            "Classify",
+            "ClassifyCIFailure",
+            "ClassifyProject",
+            "DescribeProject",
+            "ExtractEntities",
+            "GenerateChangelog",
+            "Summarize",
+            "SuggestRelated",
+        ];
+        let reg = BamlFunctionRegistry::from_defs(defs);
+        let actual = reg.function_names();
+        assert_eq!(actual, expected_names);
+    }
 }

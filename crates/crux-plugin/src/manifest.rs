@@ -94,6 +94,9 @@ pub struct PluginEntry {
     /// Call [`PluginEntry::resolve_env`] to expand refs before spawning.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
+    /// Sandbox policy applied when this plugin's subprocess is spawned.
+    #[serde(default)]
+    pub sandbox: SandboxPolicy,
 }
 
 impl PluginEntry {
@@ -119,6 +122,79 @@ impl PluginEntry {
                 Ok((key.clone(), resolved))
             })
             .collect()
+    }
+}
+
+// ── Sandbox policy ───────────────────────────────────────────────────────────
+
+/// Declarative sandbox policy for a plugin subprocess.
+///
+/// `env_allow` is enforced directly by the host at spawn time: the child
+/// process environment is cleared (it does **not** inherit the host's full
+/// environment) and only variables declared in [`PluginEntry::env`] plus
+/// this allowlist are set. `fs_allow`, `network`, and `max_memory_mb` are
+/// declared here and serialized into the `CRUX_SANDBOX_POLICY` environment
+/// variable passed to the child for self-enforcement -- the host does not
+/// currently provide OS-level filesystem jailing, network namespacing, or
+/// resource-limit enforcement. That is tracked as follow-up work; treat
+/// those three fields as advisory until a platform-specific backend lands.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct SandboxPolicy {
+    /// Extra environment variable names to pass through from the host
+    /// process, beyond those declared in [`PluginEntry::env`].
+    #[serde(default)]
+    pub env_allow: Vec<String>,
+    /// Filesystem paths the plugin is permitted to access. Advisory --
+    /// forwarded to the plugin, not enforced by the OS.
+    #[serde(default)]
+    pub fs_allow: Vec<String>,
+    /// Whether the plugin is permitted outbound network access. Advisory.
+    #[serde(default)]
+    pub network: NetworkPolicy,
+    /// Advisory memory ceiling in megabytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_memory_mb: Option<u64>,
+}
+
+/// Network access policy declared for a plugin subprocess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkPolicy {
+    /// Plugin may make outbound network connections.
+    #[default]
+    Allow,
+    /// Plugin must not make outbound network connections.
+    Deny,
+}
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+/// Lifecycle state of a loaded plugin subprocess.
+///
+/// Transitions: `Startup` -> `Running` on successful declare; `Running` ->
+/// `Draining` when a reload begins; `Draining` -> `Running` once the reload
+/// completes; any state -> `Failed` on an unrecoverable process error, and
+/// `Failed` -> `Running` if a restart succeeds. `Shutdown` is terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginLifecycle {
+    /// Subprocess has been spawned but has not yet completed handshake/declare.
+    Startup,
+    /// Subprocess is declared and accepting invocations.
+    Running,
+    /// A reload is in progress: in-flight calls are allowed to finish, but
+    /// new calls are rejected until the new process is `Running`.
+    Draining,
+    /// The plugin has been shut down and will not be restarted.
+    Shutdown,
+    /// The subprocess died or became unresponsive and automatic restart
+    /// either has not yet been attempted or has been exhausted.
+    Failed,
+}
+
+impl PluginLifecycle {
+    /// Whether invocations may be routed to the plugin in this state.
+    pub fn accepts_invocations(self) -> bool {
+        matches!(self, PluginLifecycle::Running)
     }
 }
 
@@ -165,6 +241,7 @@ mod tests {
             name: "test-plugin".into(),
             path: "test-bin".into(),
             env,
+            sandbox: SandboxPolicy::default(),
         }
     }
 

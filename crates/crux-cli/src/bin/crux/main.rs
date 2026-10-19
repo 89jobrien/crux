@@ -23,6 +23,7 @@ mod regress;
 mod replay_debug;
 mod run;
 mod schema;
+mod task;
 mod test_cmd;
 mod trace;
 mod version;
@@ -202,6 +203,14 @@ enum Cli {
         #[arg(long, value_name = "STEP")]
         through: Option<String>,
     },
+    /// Manage project tasks (create, list, update, get)
+    Task {
+        #[command(subcommand)]
+        command: task::TaskCommand,
+        /// Database path (redb). Overrides CRUX_TASK_DB env var.
+        #[arg(long, global = false)]
+        db: Option<String>,
+    },
     /// Generate a pipeline from a natural language goal
     Plan {
         /// Natural language goal
@@ -318,6 +327,7 @@ fn main() {
                 strict,
             });
         }
+        Cli::Task { command, db } => task::cmd_task(command, db.as_deref()),
         Cli::Plan {
             goal,
             output,

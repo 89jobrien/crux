@@ -21,8 +21,10 @@ pub mod baml_client;
 pub mod analyze;
 pub mod complete;
 pub mod confidence;
+pub mod definitions;
 pub mod extract;
 pub mod planner;
+pub mod registry;
 pub mod schema_bridge;
 
 use crux_script::HandlerRegistry;

@@ -47,6 +47,22 @@ fn main() {
                 })
             }
             "Invoke" => {
+                if std::env::var("ECHO_CRASH_ON_INVOKE").is_ok() {
+                    // Simulate a process crash mid-call: exit without a
+                    // response so the host observes an I/O failure.
+                    std::process::exit(1);
+                }
+                if let Ok(marker) = std::env::var("ECHO_CRASH_ONCE_FILE") {
+                    // Crash exactly once across restarts of the same
+                    // marker file: the first process to see it missing
+                    // creates it and exits; any later process (e.g. one
+                    // spawned by the host's automatic restart) finds the
+                    // marker and behaves normally.
+                    if !std::path::Path::new(&marker).exists() {
+                        let _ = std::fs::write(&marker, b"crashed");
+                        std::process::exit(1);
+                    }
+                }
                 if let Some(delay) = delay {
                     std::thread::sleep(delay);
                 }

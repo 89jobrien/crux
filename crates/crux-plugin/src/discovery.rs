@@ -112,6 +112,7 @@ env = {{ AWS_REGION = "us-east-1" }}
             name: "test".into(),
             path: "test-bin".into(),
             env: Default::default(),
+            sandbox: Default::default(),
         };
         let disc = FixedDiscovery(vec![entry]);
         let entries = disc.discover().unwrap();

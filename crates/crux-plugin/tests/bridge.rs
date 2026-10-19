@@ -1,7 +1,7 @@
 //! Subprocess integration tests for bridging plugin handlers into a registry.
 
 use crux_plugin::bridge::register_plugins;
-use crux_plugin::manifest::{EnvValue, PluginEntry};
+use crux_plugin::manifest::{EnvValue, PluginEntry, SandboxPolicy};
 use crux_script::{
     CompileOptions, HandlerRegistry, Runner, ValidationCode, ValueSchema, compile_pipeline, load,
 };
@@ -14,6 +14,7 @@ fn echo_entry() -> PluginEntry {
         name: "echo".into(),
         path: bin.into(),
         env: HashMap::new(),
+        sandbox: SandboxPolicy::default(),
     }
 }
 
@@ -82,6 +83,7 @@ fn delayed_echo_entry(name: &str, handler: &str) -> PluginEntry {
     entry
         .env
         .insert("ECHO_DELAY_MS".into(), EnvValue::Literal("250".into()));
+    entry.sandbox = SandboxPolicy::default();
     entry
 }
 

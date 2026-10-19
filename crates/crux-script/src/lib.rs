@@ -15,6 +15,7 @@ pub mod schema;
 pub mod step_runner;
 pub mod validator;
 
+pub use schema::{CostTierDef, ModelRequirementsDef};
 use schema::{CruxfileDef, PipelineDef};
 use serde_json::Value as JsonValue;
 

@@ -3,7 +3,10 @@
 //! Re-exports core trace types from `crux-types` and defines the
 //! improvement vocabulary: strategies, diffs, comparisons, and policies.
 
-// TODO(feature-idea-16): Integrate persisted runs with proposals, approval, and replay comparison.
+/// Persisted lifecycle for improvement proposals.
+pub mod proposal;
+/// Persistence port and in-memory adapter for proposals.
+pub mod store;
 
 use std::collections::{HashMap, HashSet};
 
@@ -140,7 +143,7 @@ impl Strategy {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StrategyDiff {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tool_preferences: Vec<(String, i32)>,
@@ -150,14 +153,14 @@ pub struct StrategyDiff {
     pub prompt_patches: Vec<PromptPatch>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PromptPatch {
     pub agent: String,
     pub section: String,
     pub content: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Improvement {
     pub id: CruxId,
     pub kind: ImprovementKind,
@@ -1133,6 +1136,204 @@ fn record_subtree<T>(
 }
 
 // ---------------------------------------------------------------------------
+// Persisted runs and proposal lifecycle
+// ---------------------------------------------------------------------------
+
+/// A stored execution trace with identity metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedRun {
+    pub id: CruxId,
+    pub agent: String,
+    pub recorded_at: DateTime<Utc>,
+    /// Type-erased trace stored as `serde_json::Value` so it can be
+    /// persisted and retrieved without knowing the original output type.
+    pub trace: Crux<serde_json::Value>,
+}
+
+impl PersistedRun {
+    /// Creates a new persisted run from a typed trace, erasing the output
+    /// type to `serde_json::Value`.
+    pub fn from_trace<T: Serialize>(trace: &Crux<T>) -> Result<Self, serde_json::Error> {
+        let erased = erase_trace(trace)?;
+        Ok(Self {
+            id: CruxId::new(),
+            agent: trace.agent.clone(),
+            recorded_at: Utc::now(),
+            trace: erased,
+        })
+    }
+}
+
+/// Erases the output type of a `Crux<T>` to `Crux<serde_json::Value>`.
+///
+/// Only `value` requires conversion; `steps` and `children` are already
+/// type-erased to `serde_json::Value` in the `Crux` definition.
+fn erase_trace<T: Serialize>(
+    trace: &Crux<T>,
+) -> Result<Crux<serde_json::Value>, serde_json::Error> {
+    let value = match &trace.value {
+        Ok(v) => Ok(serde_json::to_value(v)?),
+        Err(e) => Err(e.clone()),
+    };
+    Ok(Crux {
+        id: trace.id.clone(),
+        agent: trace.agent.clone(),
+        pipeline_version: trace.pipeline_version.clone(),
+        value,
+        steps: trace.steps.clone(),
+        children: trace.children.clone(),
+        started_at: trace.started_at,
+        finished_at: trace.finished_at,
+    })
+}
+
+/// Lifecycle state of an improvement proposal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProposalStatus {
+    /// Created but no runs attached yet.
+    Pending,
+    /// Both baseline and candidate runs are attached; awaiting evaluation.
+    UnderReview,
+    /// Evaluation passed and the proposal has been accepted.
+    Approved,
+    /// Evaluation failed or the proposal was explicitly rejected.
+    Rejected,
+}
+
+/// An improvement proposal linked to persisted baseline and candidate runs.
+///
+/// Call [`Proposal::attach_baseline`] and [`Proposal::attach_candidate`] to
+/// supply the runs, then [`Proposal::evaluate`] to run comparison under a
+/// regression policy, then [`Proposal::decide`] to record the final verdict.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proposal {
+    pub id: CruxId,
+    pub improvement: Improvement,
+    pub status: ProposalStatus,
+    pub baseline_run: Option<PersistedRun>,
+    pub candidate_run: Option<PersistedRun>,
+    pub evaluation: Option<RegressionEvaluation>,
+    pub created_at: DateTime<Utc>,
+    pub decided_at: Option<DateTime<Utc>>,
+}
+
+/// Errors produced by the proposal lifecycle.
+#[derive(Debug, thiserror::Error)]
+pub enum ProposalError {
+    #[error("baseline run not attached")]
+    MissingBaseline,
+    #[error("candidate run not attached")]
+    MissingCandidate,
+    #[error("proposal is already decided (status: {0:?})")]
+    AlreadyDecided(ProposalStatus),
+    #[error("evaluation must be run before deciding")]
+    NotEvaluated,
+    #[error("evaluation configuration error: {0}")]
+    EvalConfig(#[from] EvalConfigError),
+}
+
+impl Proposal {
+    /// Creates a new proposal in the `Pending` state.
+    pub fn new(improvement: Improvement) -> Self {
+        Self {
+            id: CruxId::new(),
+            improvement,
+            status: ProposalStatus::Pending,
+            baseline_run: None,
+            candidate_run: None,
+            evaluation: None,
+            created_at: Utc::now(),
+            decided_at: None,
+        }
+    }
+
+    /// Attaches the baseline run. Transitions to `UnderReview` when both
+    /// baseline and candidate are present.
+    pub fn attach_baseline(&mut self, run: PersistedRun) {
+        self.baseline_run = Some(run);
+        self.refresh_status();
+    }
+
+    /// Attaches the candidate run. Transitions to `UnderReview` when both
+    /// baseline and candidate are present.
+    pub fn attach_candidate(&mut self, run: PersistedRun) {
+        self.candidate_run = Some(run);
+        self.refresh_status();
+    }
+
+    fn refresh_status(&mut self) {
+        if matches!(self.status, ProposalStatus::Pending)
+            && self.baseline_run.is_some()
+            && self.candidate_run.is_some()
+        {
+            self.status = ProposalStatus::UnderReview;
+        }
+    }
+
+    /// Runs [`evaluate_regression`] on the attached persisted runs under
+    /// `policy` and stores the result. Returns a reference to the evaluation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProposalError::MissingBaseline`] or
+    /// [`ProposalError::MissingCandidate`] when the respective run has not
+    /// been attached. Returns [`ProposalError::AlreadyDecided`] if the
+    /// proposal is already in a terminal state.
+    pub fn evaluate(
+        &mut self,
+        policy: &RegressionPolicy,
+    ) -> Result<&RegressionEvaluation, ProposalError> {
+        if matches!(
+            self.status,
+            ProposalStatus::Approved | ProposalStatus::Rejected
+        ) {
+            return Err(ProposalError::AlreadyDecided(self.status));
+        }
+        let baseline = self
+            .baseline_run
+            .as_ref()
+            .ok_or(ProposalError::MissingBaseline)?;
+        let candidate = self
+            .candidate_run
+            .as_ref()
+            .ok_or(ProposalError::MissingCandidate)?;
+        let result = evaluate_regression(&baseline.trace, &candidate.trace, policy)?;
+        self.evaluation = Some(result);
+        Ok(self.evaluation.as_ref().expect("just set"))
+    }
+
+    /// Accepts or rejects the proposal based on the stored evaluation result.
+    ///
+    /// Returns the new [`ProposalStatus`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProposalError::NotEvaluated`] when [`Proposal::evaluate`]
+    /// has not been called yet. Returns [`ProposalError::AlreadyDecided`]
+    /// when the proposal is already in a terminal state.
+    pub fn decide(&mut self) -> Result<ProposalStatus, ProposalError> {
+        if matches!(
+            self.status,
+            ProposalStatus::Approved | ProposalStatus::Rejected
+        ) {
+            return Err(ProposalError::AlreadyDecided(self.status));
+        }
+        let evaluation = self
+            .evaluation
+            .as_ref()
+            .ok_or(ProposalError::NotEvaluated)?;
+        self.status = if evaluation.passed {
+            ProposalStatus::Approved
+        } else {
+            ProposalStatus::Rejected
+        };
+        self.decided_at = Some(Utc::now());
+        Ok(self.status)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StrategyPolicy
 // ---------------------------------------------------------------------------
 
@@ -1778,5 +1979,200 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         let back: Strategy = serde_json::from_str(&json).unwrap();
         assert_eq!(back.tool_preferences["rg"], 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // Persisted run and proposal lifecycle tests
+    // -----------------------------------------------------------------------
+
+    fn improvement() -> Improvement {
+        Improvement {
+            id: CruxId::new(),
+            kind: ImprovementKind::ConfidenceThreshold,
+            target: "test-agent".into(),
+            diff: StrategyDiff::default(),
+            confidence: 0.9,
+            evidence: vec!["observed 10% improvement".into()],
+            proposed_at: Utc::now(),
+        }
+    }
+
+    fn permissive_policy() -> RegressionPolicy {
+        RegressionPolicy {
+            metrics: EvalThresholds {
+                min_score_delta: -1.0,
+                max_latency_ratio: 100.0,
+            },
+            structure: StructuralPolicy {
+                mode: TraceDiffMode::Compatible,
+                confidence_tolerance: 1.0,
+                compare_outputs: false,
+                candidate_trace: CandidateTracePolicy::LiveOnly,
+            },
+            expected_output: None,
+            invariants: vec![],
+        }
+    }
+
+    fn strict_regression_policy() -> RegressionPolicy {
+        RegressionPolicy {
+            metrics: EvalThresholds {
+                min_score_delta: 0.5,
+                max_latency_ratio: 1.0,
+            },
+            structure: StructuralPolicy {
+                mode: TraceDiffMode::Strict,
+                confidence_tolerance: 0.0,
+                compare_outputs: false,
+                candidate_trace: CandidateTracePolicy::LiveOnly,
+            },
+            expected_output: None,
+            invariants: vec![],
+        }
+    }
+
+    fn persisted_run(agent: &str) -> PersistedRun {
+        let trace = empty_trace();
+        PersistedRun {
+            id: CruxId::new(),
+            agent: agent.into(),
+            recorded_at: Utc::now(),
+            trace,
+        }
+    }
+
+    #[test]
+    fn proposal_starts_pending() {
+        let p = Proposal::new(improvement());
+        assert_eq!(p.status, ProposalStatus::Pending);
+        assert!(p.baseline_run.is_none());
+        assert!(p.candidate_run.is_none());
+        assert!(p.evaluation.is_none());
+        assert!(p.decided_at.is_none());
+    }
+
+    #[test]
+    fn proposal_transitions_to_under_review_when_both_runs_attached() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        assert_eq!(p.status, ProposalStatus::Pending);
+        p.attach_candidate(persisted_run("test-agent"));
+        assert_eq!(p.status, ProposalStatus::UnderReview);
+    }
+
+    #[test]
+    fn proposal_evaluate_requires_both_runs() {
+        let mut p = Proposal::new(improvement());
+        let policy = permissive_policy();
+
+        assert!(matches!(
+            p.evaluate(&policy),
+            Err(ProposalError::MissingBaseline)
+        ));
+
+        p.attach_baseline(persisted_run("test-agent"));
+        assert!(matches!(
+            p.evaluate(&policy),
+            Err(ProposalError::MissingCandidate)
+        ));
+    }
+
+    #[test]
+    fn proposal_decide_requires_evaluation() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        p.attach_candidate(persisted_run("test-agent"));
+
+        assert!(matches!(p.decide(), Err(ProposalError::NotEvaluated)));
+    }
+
+    #[test]
+    fn proposal_approved_when_evaluation_passes() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        p.attach_candidate(persisted_run("test-agent"));
+
+        let evaluation = p
+            .evaluate(&permissive_policy())
+            .expect("evaluation must succeed");
+        assert!(evaluation.passed);
+
+        let status = p.decide().expect("decide must succeed");
+        assert_eq!(status, ProposalStatus::Approved);
+        assert!(p.decided_at.is_some());
+    }
+
+    #[test]
+    fn proposal_rejected_when_evaluation_fails() {
+        let mut baseline_run = persisted_run("test-agent");
+        baseline_run.trace.steps = vec![step("a", StepStatus::Ok, 1.0)];
+
+        let mut candidate_run = persisted_run("test-agent");
+        candidate_run.trace.steps = vec![step("a", StepStatus::Err, 0.1)];
+
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(baseline_run);
+        p.attach_candidate(candidate_run);
+
+        p.evaluate(&strict_regression_policy())
+            .expect("evaluation must succeed");
+        let status = p.decide().expect("decide must succeed");
+        assert_eq!(status, ProposalStatus::Rejected);
+    }
+
+    #[test]
+    fn proposal_decide_is_idempotent_guard() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        p.attach_candidate(persisted_run("test-agent"));
+        p.evaluate(&permissive_policy())
+            .expect("evaluation must succeed");
+        p.decide().expect("first decide must succeed");
+
+        assert!(matches!(
+            p.decide(),
+            Err(ProposalError::AlreadyDecided(ProposalStatus::Approved))
+        ));
+    }
+
+    #[test]
+    fn proposal_evaluate_blocked_after_decision() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        p.attach_candidate(persisted_run("test-agent"));
+        p.evaluate(&permissive_policy())
+            .expect("evaluation must succeed");
+        p.decide().expect("decide must succeed");
+
+        assert!(matches!(
+            p.evaluate(&permissive_policy()),
+            Err(ProposalError::AlreadyDecided(_))
+        ));
+    }
+
+    #[test]
+    fn persisted_run_from_trace_erases_type() {
+        let mut trace = empty_trace();
+        trace.steps.push(step("a", StepStatus::Ok, 0.9));
+        let run = PersistedRun::from_trace(&trace).expect("erase must succeed");
+        assert_eq!(run.agent, "test");
+        assert_eq!(run.trace.steps.len(), 1);
+        assert_eq!(run.trace.steps[0].name, "a");
+    }
+
+    #[test]
+    fn proposal_serde_roundtrip() {
+        let mut p = Proposal::new(improvement());
+        p.attach_baseline(persisted_run("test-agent"));
+        p.attach_candidate(persisted_run("test-agent"));
+        p.evaluate(&permissive_policy())
+            .expect("evaluation must succeed");
+        p.decide().expect("decide must succeed");
+
+        let json = serde_json::to_string(&p).expect("serialize must succeed");
+        let back: Proposal = serde_json::from_str(&json).expect("deserialize must succeed");
+        assert_eq!(back.status, ProposalStatus::Approved);
+        assert!(back.evaluation.is_some());
+        assert!(back.decided_at.is_some());
     }
 }
