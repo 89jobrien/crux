@@ -5,8 +5,6 @@
 //!   prefers a local Ollama, falls back to hosted providers)
 //! - Path B (deterministic): `DeterministicPlanner` — rule-based, zero-latency, zero-cost
 
-use serde::{Deserialize, Serialize};
-
 pub mod deterministic;
 pub mod evolution;
 pub mod generator;
@@ -27,23 +25,8 @@ pub enum PlannerError {
     Generation(String),
 }
 
-/// A user-facing goal to be translated into a pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Goal {
-    pub description: String,
-    pub constraints: Vec<String>,
-}
-
-/// Parsed intent extracted from a goal — intermediate representation
-/// between natural language and a concrete pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Intent {
-    pub goal: String,
-    pub input_source: Option<String>,
-    pub output_destination: Option<String>,
-    pub constraints: serde_json::Value,
-    pub preferences: serde_json::Value,
-}
+// Re-export canonical types from crux-types for backward compatibility.
+pub use crux_types::metrics::{Goal, Intent, RunMetrics};
 
 pub use deterministic::PlannerConfig;
 pub use rule_planner::{PlanRule, RulePlanner};
