@@ -10,6 +10,7 @@ pub mod testing;
 pub mod budget;
 pub mod emission;
 pub mod error;
+pub mod execution;
 pub mod id;
 pub mod planner;
 pub mod recovery;
