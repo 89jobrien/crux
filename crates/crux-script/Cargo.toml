@@ -13,6 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+crux-model = { workspace = true }
 crux-runtime = { workspace = true } #unified
 crux-schema = { workspace = true }
 crux-types = { workspace = true }
