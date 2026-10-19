@@ -15,7 +15,6 @@ use crate::ctx::CruxCtx;
 use crate::types::budget::{Budget, HandlerUsage};
 use crate::types::error::CruxErr;
 use crate::types::recovery::Recovery;
-use crux_domain::plan_result::PlanResult;
 use crux_types::emission::Emission;
 
 type BoxRecoveryFut = Pin<Box<dyn Future<Output = Recovery<serde_json::Value>> + Send>>;
@@ -53,19 +52,8 @@ impl CruxCtx {
         T: Send + serde::Serialize + serde::de::DeserializeOwned,
         F: for<'a> FnOnce(&'a mut CruxCtx) -> DelegatedFuture<'a, T> + Send,
     {
-        match self.plan_action(name) {
-            PlanResult::Deny { reason } => {
-                return Err(CruxErr::Denied {
-                    step: name.to_string(),
-                    reason,
-                });
-            }
-            PlanResult::Simulate { output } => {
-                return serde_json::from_value(output).map_err(|error| {
-                    CruxErr::step_failed(name, format!("planner simulation: {error}"))
-                });
-            }
-            PlanResult::Allow(_) => {}
+        if let Some(simulated) = self.route_through_planner_gate::<T>(name)? {
+            return Ok(simulated);
         }
 
         self.reserve_invocations(1)?;
@@ -191,19 +179,11 @@ where
             name: self.name.clone(),
             agent: A::name().to_string(),
         });
-        match self.ctx.plan_action(&self.name) {
-            PlanResult::Deny { reason } => {
-                return Err(CruxErr::Denied {
-                    step: self.name,
-                    reason,
-                });
-            }
-            PlanResult::Simulate { output } => {
-                return serde_json::from_value(output).map_err(|error| {
-                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
-                });
-            }
-            PlanResult::Allow(_) => {}
+        if let Some(simulated) = self
+            .ctx
+            .route_through_planner_gate::<A::Output>(&self.name)?
+        {
+            return Ok(simulated);
         }
         let input_hash = self.ctx.next_child_run_hash(&self.name);
 

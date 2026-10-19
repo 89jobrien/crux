@@ -248,6 +248,35 @@ impl CruxCtx {
         self.planner.next_action(name, priority)
     }
 
+    /// Unified planner gate for all execution primitives (step, delegation, speculation).
+    ///
+    /// Consults the planner for `name` and resolves its verdict:
+    /// - `Allow` → `Ok(None)`, caller proceeds with live execution.
+    /// - `Simulate { output }` → `Ok(Some(value))` deserialized from the synthetic output,
+    ///   caller must short-circuit and skip live execution.
+    /// - `Deny { reason }` → `Err(CruxErr::Denied)`, caller must short-circuit.
+    ///
+    /// Centralizing this match keeps `step`, `delegate`, and `speculate` consistent and
+    /// ensures the planner is always consulted before replay cache lookup, budget checks,
+    /// or closure execution.
+    pub(crate) fn route_through_planner_gate<T>(&self, name: &str) -> Result<Option<T>, CruxErr>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        match self.plan_action(name) {
+            PlanResult::Deny { reason } => Err(CruxErr::Denied {
+                step: name.to_string(),
+                reason,
+            }),
+            PlanResult::Simulate { output } => {
+                serde_json::from_value(output).map(Some).map_err(|error| {
+                    CruxErr::step_failed(name, format!("planner simulation: {error}"))
+                })
+            }
+            PlanResult::Allow(_) => Ok(None),
+        }
+    }
+
     /// Attach an event sender so this context emits ordered runtime events on every step.
     pub fn set_event_sender(&mut self, sender: EventSender) {
         self.event_sender = sender;
@@ -1020,19 +1049,9 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        // Planner check — before replay cache and closure execution.
-        match self.plan_action(name) {
-            PlanResult::Deny { reason } => {
-                return Err(CruxErr::Denied {
-                    step: name.to_string(),
-                    reason,
-                });
-            }
-            PlanResult::Simulate { output } => {
-                return serde_json::from_value(output)
-                    .map_err(|e| CruxErr::step_failed(name, e.to_string()));
-            }
-            PlanResult::Allow(_) => {} // proceed normally
+        // Planner gate — before replay cache and closure execution.
+        if let Some(simulated) = self.route_through_planner_gate::<T>(name)? {
+            return Ok(simulated);
         }
 
         // Pre-step safety gate
