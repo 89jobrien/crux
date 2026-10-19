@@ -66,7 +66,8 @@ async fn main() {
         root,
         "tests/fixtures/replay.json",
         "{\n  \"agent\": \"hello\",\n  \"steps\": [],\n  \"value\": null\n}\n",
-    )
+    )?;
+    super::schema::scaffold_editor_config(root)
 }
 
 fn write(root: &Path, relative: &str, contents: &str) -> std::io::Result<()> {

@@ -383,7 +383,7 @@ fn register_patch_schema_check(registry: &mut HandlerRegistry) {
                 return Ok(json!({"valid": false, "errors": ["empty patch"]}));
             }
 
-            match serde_yaml::from_str::<Value>(patch) {
+            match serde_saphyr::from_str::<Value>(patch) {
                 Ok(_) => Ok(json!({"valid": true, "errors": []})),
                 Err(e) => Ok(json!({"valid": false, "errors": [e.to_string()]})),
             }

@@ -1,15 +1,18 @@
-# Handoff — crux (2026-09-22)
+# Handoff — crux (2026-10-18)
+
+**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
+EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
+
+## Items
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| t26 | P2 | open | Compile before CLI execution |
-| exec-envelope-7 | P2 | open | Run envelope contract quality gates |
-| uncommitted-work | P1 | open | Uncommitted changes (2 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (16 files) |
 
 ## Log
 
-- 20260922.175938: done=57 running=2 pending=18 blocked=0 [8ac1412, 09dd1ba, d6d75c4, fd64bb4, 5c92c46, 2004a30, c21c012, e01e8be, 3957c8e, 0e0da5a]
-- 20260922.144159: done=43 running=2 pending=18 blocked=0 [09dd1ba, d6d75c4, fd64bb4, 5c92c46, 2004a30, c21c012, e01e8be, 3957c8e, 0e0da5a, 59d48d0]
-- 20260920.012242: done=25 running=1 pending=30 blocked=0 [86aa628, b8c7fe8, dc41728, 81a7940, e6ced60, 798e65b, 82fd28a, de45a1c, 02e0a15, 8b03908]
-- 20260920.003720: done=24 running=1 pending=31 blocked=0 [b8c7fe8, dc41728, 81a7940, e6ced60, 798e65b, 82fd28a, de45a1c, 02e0a15, 8b03908, 6d45857]
-- 20260909.015838: done=7 running=0 pending=22 blocked=1 [d12599b, dc34c5f, 8797583, 8bed133, fa39f72, 5153af6, 7a49aab, 38ad396, e2bff9c, b325364]
+- 20261001.014104: done=71 running=0 pending=18 blocked=0 [cc85f699e4b1b40078455b553b064f7b71d23a6e, 6ee842a9bda85ce757f536a83259e68d080e6acb, 27f83647dfe389d33fc7d798f3fc2d6694f6f391, bfdb8949cb9255423010c881cc4a8a3adfb4d672, 2bd48cdb93ba154d8c5949e16cd0ab9fd7a8a8fa, fe563dc56b2c2b6b68a5b23111b7790c64dcd435, 6e3decce9aec9c544b697d63afa3cf31d9808b6c, 399533d70917bf133575da4e02ce1bc1421e7971, 016bb8793fd3f4512281e80acb60cdb7d26e3ae9, 63ac041467ee2e5210e1d1fcb901e24c237edc4f]
+- 20260929.185946: done=71 running=0 pending=18 blocked=0 [2bd48cdb93ba154d8c5949e16cd0ab9fd7a8a8fa, fe563dc56b2c2b6b68a5b23111b7790c64dcd435, 6e3decce9aec9c544b697d63afa3cf31d9808b6c, 399533d70917bf133575da4e02ce1bc1421e7971, 016bb8793fd3f4512281e80acb60cdb7d26e3ae9, 63ac041467ee2e5210e1d1fcb901e24c237edc4f, d547307c8fda1dee8601f30316197b62251e6dd7, 392308e45e47eebeaa7d58b0e8cced74a2e131bc, 4ccca3978d62d04d42df7a2db804eeed86cc78e3, 0403d13f154f9d74af4be9130700800eefc69c6b]
+- 20260922.175938: done=57 running=2 pending=18 blocked=0 [8ac1412897310fb38044c0070d732fff5a36914e, 09dd1bad671dc84d8486f5c737e8fcb204a1071f, d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc, fd64bb494cc773a8dbf4bfcf55c8929823727cb6, 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e, 2004a307345fd5b968c820ebca3ceeb01967251b, c21c012f45d016aadef05ea79cc767f65a5e87df, e01e8bef023564241f933f8bdaf68dfdbd3418e2, 3957c8e3e75e88723aae9661eab1f597d3b40798, 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b]
+- 20260922.144159: done=43 running=2 pending=18 blocked=0 [09dd1bad671dc84d8486f5c737e8fcb204a1071f, d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc, fd64bb494cc773a8dbf4bfcf55c8929823727cb6, 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e, 2004a307345fd5b968c820ebca3ceeb01967251b, c21c012f45d016aadef05ea79cc767f65a5e87df, e01e8bef023564241f933f8bdaf68dfdbd3418e2, 3957c8e3e75e88723aae9661eab1f597d3b40798, 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b, 59d48d08c00f6aae1b2ad97225eff50d545f2c80]
+- 20260920.012242: done=25 running=1 pending=30 blocked=0 [86aa6288c614a9762390fb56c02570bb7abb44e7, b8c7fe8eb985f1a1357594dd60f5c178a01192a3, dc41728cf8900f20ba88d0ffb55f954dd55de6a1, 81a7940043b7badd99fa274b5e9d4b84281f2eaa, e6ced60a34596c9024759a74fabc403a2041755f, 798e65bf80697d3c62a4cbbe3d4e11fccd22238e, 82fd28aaa275a0dc14550ac1997b7d9841f82cb6, de45a1c63e76eb3441dbb88226c040acd39aa5d2, 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e, 8b03908184af5e789cf87e7192c932f83f651d89]

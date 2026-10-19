@@ -3,9 +3,11 @@
 /// crux — pipeline runner and planner for crux-script.
 ///
 /// Subcommands:
-///   check Validate one or more YAML pipelines
-///   run   Execute a YAML pipeline
-///   plan  Generate a pipeline from a natural language goal
+///   check   Validate one or more YAML pipelines
+///   run     Execute a YAML pipeline
+///   plan    Generate a pipeline from a natural language goal
+///   schema  Export the pipeline JSON Schema and editor config snippets
+///   version Report build provenance and detect a stale installation
 use std::collections::BTreeMap;
 
 use clap::{Parser, ValueEnum};
@@ -23,6 +25,7 @@ mod run;
 mod schema;
 mod test_cmd;
 mod trace;
+mod version;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -39,7 +42,12 @@ enum OutputType {
 }
 
 #[derive(Parser)]
-#[command(name = "crux", version, about = "crux pipeline runner and planner")]
+#[command(
+    name = "crux",
+    version,
+    propagate_version = true,
+    about = "crux pipeline runner and planner"
+)]
 enum Cli {
     /// Manage golden traces and run offline regression evaluation
     Regress {
@@ -129,6 +137,18 @@ enum Cli {
         /// Write the schema to a file for editor configuration
         #[arg(short, long)]
         output: Option<String>,
+        /// Print an editor config snippet registering the schema instead
+        #[arg(long, value_enum, value_name = "EDITOR")]
+        editor: Option<schema::SchemaEditor>,
+    },
+    /// Report build provenance and detect a stale installation
+    Version {
+        /// Compare the binary against HEAD of the surrounding crux source checkout
+        #[arg(long)]
+        check: bool,
+        /// Directory to search upward from (default: current directory)
+        #[arg(long, value_name = "DIR")]
+        path: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -241,7 +261,12 @@ fn main() {
             plugins,
             json,
         } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict, json),
-        Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
+        Cli::Schema {
+            format,
+            output,
+            editor,
+        } => schema::cmd_schema(format, output.as_deref(), editor),
+        Cli::Version { check, path } => version::cmd_version(check, path.as_deref()),
         Cli::Run {
             pipeline,
             target_or_input,

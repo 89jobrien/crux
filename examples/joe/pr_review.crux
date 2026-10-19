@@ -61,7 +61,7 @@ steps:
         # Suggestions only; approve with inline annotations but do not block merge.
 
   - route_on_confidence: post
-    value: "{{ steps.verdict.confidence }}"
+    value: "{{ input.confidence }}"
     routes:
       - range: "[0.0, 0.5)"
         label: uncertain

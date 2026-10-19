@@ -16,6 +16,7 @@ pub mod step_runner;
 pub mod validator;
 
 use schema::{CruxfileDef, PipelineDef};
+use serde_json::Value as JsonValue;
 
 /// Load a pipeline definition from a YAML string.
 pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
@@ -26,14 +27,14 @@ pub fn load(yaml: &str) -> Result<PipelineDef, serde_saphyr::Error> {
 pub fn load_file(path: impl AsRef<std::path::Path>) -> Result<PipelineDef, LoadError> {
     let mut stack = Vec::new();
     let value = load_composed_value(path.as_ref(), &mut stack)?;
-    let contents = serde_yaml::to_string(&value)?;
+    let contents = serde_saphyr::to_string(&value)?;
     Ok(serde_saphyr::from_str(&contents)?)
 }
 
 fn load_composed_value(
     path: &std::path::Path,
     stack: &mut Vec<std::path::PathBuf>,
-) -> Result<serde_yaml::Value, LoadError> {
+) -> Result<JsonValue, LoadError> {
     let canonical = path.canonicalize()?;
     if let Some(start) = stack.iter().position(|ancestor| ancestor == &canonical) {
         let mut cycle = stack[start..].to_vec();
@@ -48,7 +49,10 @@ fn load_composed_value(
     }
     stack.push(canonical.clone());
     let contents = std::fs::read_to_string(&canonical)?;
-    let mut value: serde_yaml::Value = serde_yaml::from_str(&contents)?;
+    // Composition walks a JSON-shaped tree: `serde-saphyr` exposes `from_str` and
+    // `to_string` but no YAML value type, and pipeline YAML is JSON-representable
+    // by construction (string keys, standard scalars).
+    let mut value: JsonValue = serde_saphyr::from_str(&contents)?;
     let base = canonical
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
@@ -57,38 +61,38 @@ fn load_composed_value(
     Ok(value)
 }
 
+/// Returns the `include`/`import` target of a step entry, if it declares one.
+fn include_target(step: &JsonValue) -> Option<&str> {
+    let entry = step.as_object()?;
+    ["include", "import"]
+        .into_iter()
+        .find_map(|key| entry.get(key).and_then(JsonValue::as_str))
+}
+
 fn expand_includes(
-    value: &mut serde_yaml::Value,
+    value: &mut JsonValue,
     base: &std::path::Path,
     stack: &mut Vec<std::path::PathBuf>,
 ) -> Result<(), LoadError> {
     match value {
-        serde_yaml::Value::Mapping(mapping) => {
-            if let Some(serde_yaml::Value::Sequence(steps)) =
-                mapping.get_mut(serde_yaml::Value::String("steps".to_string()))
-            {
+        JsonValue::Object(mapping) => {
+            if let Some(JsonValue::Array(steps)) = mapping.get_mut("steps") {
                 let mut expanded = Vec::new();
                 for mut step in std::mem::take(steps) {
-                    let include = step.as_mapping().and_then(|entry| {
-                        ["include", "import"].into_iter().find_map(|key| {
-                            entry
-                                .get(serde_yaml::Value::String(key.to_string()))
-                                .and_then(serde_yaml::Value::as_str)
-                        })
-                    });
-                    if let Some(include) = include {
-                        let child = load_composed_value(&base.join(include), stack)?;
-                        let child_steps = child
-                            .as_mapping()
-                            .and_then(|pipeline| {
-                                pipeline.get(serde_yaml::Value::String("steps".to_string()))
-                            })
-                            .and_then(serde_yaml::Value::as_sequence)
-                            .ok_or_else(|| LoadError::InvalidInclude(include.to_string()))?;
-                        expanded.extend(child_steps.iter().cloned());
-                    } else {
-                        expand_includes(&mut step, base, stack)?;
-                        expanded.push(step);
+                    let include = include_target(&step).map(str::to_string);
+                    match include {
+                        Some(include) => {
+                            let child = load_composed_value(&base.join(&include), stack)?;
+                            let child_steps = child
+                                .get("steps")
+                                .and_then(JsonValue::as_array)
+                                .ok_or_else(|| LoadError::InvalidInclude(include.clone()))?;
+                            expanded.extend(child_steps.iter().cloned());
+                        }
+                        None => {
+                            expand_includes(&mut step, base, stack)?;
+                            expanded.push(step);
+                        }
                     }
                 }
                 *steps = expanded;
@@ -97,7 +101,7 @@ fn expand_includes(
                 expand_includes(nested, base, stack)?;
             }
         }
-        serde_yaml::Value::Sequence(values) => {
+        JsonValue::Array(values) => {
             for nested in values {
                 expand_includes(nested, base, stack)?;
             }
@@ -131,7 +135,7 @@ pub enum LoadError {
     #[error("YAML parse error: {0}")]
     Yaml(#[from] serde_saphyr::Error),
     #[error("YAML composition error: {0}")]
-    CompositionYaml(#[from] serde_yaml::Error),
+    CompositionSerialize(#[from] serde_saphyr::SerializeError),
     #[error("include cycle detected: {0}")]
     IncludeCycle(String),
     #[error("included pipeline '{0}' has no steps sequence")]

@@ -17,6 +17,6 @@ baml = "0.221.0"
 crux-runtime = { workspace = true } #unified
 crux-script = { workspace = true } #unified
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

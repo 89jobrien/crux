@@ -468,7 +468,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crux"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-agentic",
  "crux-derive",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "crux-agentic"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "baml",
  "bollard",
@@ -504,8 +504,8 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "serde",
+ "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "sha2",
  "tempfile",
  "thiserror",
@@ -514,20 +514,20 @@ dependencies = [
 
 [[package]]
 name = "crux-baml"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "baml",
  "crux-runtime",
  "crux-script",
+ "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "thiserror",
  "tokio",
 ]
 
 [[package]]
 name = "crux-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -544,15 +544,15 @@ dependencies = [
  "miette",
  "proptest",
  "serde",
+ "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
 name = "crux-derive"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "crux-domain"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crux-types",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "crux-improve"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crux-schema",
@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "crux-model"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proptest",
  "serde",
@@ -596,7 +596,7 @@ dependencies = [
 
 [[package]]
 name = "crux-planner"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-baml",
  "crux-runtime",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "crux-plugin"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-runtime",
  "crux-script",
@@ -625,7 +625,7 @@ dependencies = [
 
 [[package]]
 name = "crux-regression"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crux-improve",
@@ -641,7 +641,7 @@ dependencies = [
 
 [[package]]
 name = "crux-runtime"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crux-domain",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "crux-schema"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "crux-types",
@@ -672,7 +672,7 @@ dependencies = [
 
 [[package]]
 name = "crux-script"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-runtime",
  "crux-schema",
@@ -683,7 +683,6 @@ dependencies = [
  "serde",
  "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror",
  "tokio",
@@ -691,15 +690,15 @@ dependencies = [
 
 [[package]]
 name = "crux-stdlib"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-runtime",
  "crux-script",
  "glob",
  "proptest",
  "serde",
+ "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror",
  "tokio",
@@ -707,7 +706,7 @@ dependencies = [
 
 [[package]]
 name = "crux-task"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -726,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "crux-types"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "miette",
@@ -739,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "crux-typesafe"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "crux-runtime",
  "crux-script",
@@ -2132,9 +2131,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -2332,19 +2331,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2798,12 +2784,6 @@ name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

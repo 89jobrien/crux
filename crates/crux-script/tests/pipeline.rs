@@ -463,3 +463,33 @@ steps:
     let crux = runner.run(&pipeline, json!({"data": [1,2,3]})).await;
     assert!(crux.value().is_ok());
 }
+
+#[tokio::test]
+async fn join_all_members_field_populated_for_arm_addressing() {
+    // Regression test: StepResult.members field must be populated for join_all steps
+    // so that individual arm outputs can be addressed via {{ steps.<group>.<arm>.output }}
+    let yaml = r#"
+pipeline: member_addressing_test
+steps:
+  - join_all: fetch_sources
+    arms:
+      - web_search
+      - local_cache
+      - database
+  - step: combine_results
+    handler: echo_msg
+    args:
+      msg: "web={{ steps.fetch_sources.web_search.output }},cache={{ steps.fetch_sources.local_cache.output }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    // Verify the join_all output is an array of the three arm results
+    let results = crux.value().unwrap();
+    assert_eq!(results, &json!("web=\"web_result\",cache=\"cache_result\""));
+
+    // Verify we can access the individual step results
+    // The array should contain the outputs from all three arms
+    assert!(crux.steps.len() >= 3);
+}

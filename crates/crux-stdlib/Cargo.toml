@@ -18,7 +18,7 @@ crux-script = { workspace = true } #unified
 glob = { workspace = true } #unified
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 

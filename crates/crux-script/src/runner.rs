@@ -1,6 +1,7 @@
 //! Validation, execution, replay, and control-flow interpretation for pipelines.
 
 /// Pipeline runner — interprets a parsed YAML pipeline against CruxCtx + HandlerRegistry.
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crux_runtime::prelude::*;
@@ -473,10 +474,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             label.to_string(),
-            StepResult {
-                output: last_output.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(last_output.clone(), None),
         );
         Ok(last_output)
     }
@@ -542,10 +540,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             label.to_string(),
-            StepResult {
-                output: last_output.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(last_output.clone(), None),
         );
         Ok(last_output)
     }
@@ -639,10 +634,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             label.to_string(),
-            StepResult {
-                output: last_output.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(last_output.clone(), None),
         );
         Ok(last_output)
     }
@@ -723,13 +715,9 @@ impl Runner {
             last_output = trace.value?;
             expr_ctx.steps.extend(iteration_steps);
         }
-        expr_ctx.steps.insert(
-            label,
-            StepResult {
-                output: last_output.clone(),
-                confidence: None,
-            },
-        );
+        expr_ctx
+            .steps
+            .insert(label, StepResult::scalar(last_output.clone(), None));
         Ok(last_output)
     }
 
@@ -784,10 +772,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             node.poll.clone(),
-            StepResult {
-                output: last_output.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(last_output.clone(), None),
         );
         Ok(last_output)
     }
@@ -870,10 +855,7 @@ impl Runner {
                                 let failed_val = failed_allowed_value(&e2);
                                 expr_ctx.steps.insert(
                                     node.step.clone(),
-                                    StepResult {
-                                        output: failed_val.clone(),
-                                        confidence: None,
-                                    },
+                                    StepResult::scalar(failed_val.clone(), None),
                                 );
                                 return Ok(failed_val);
                             }
@@ -884,10 +866,7 @@ impl Runner {
                     let failed_val = failed_allowed_value(&e);
                     expr_ctx.steps.insert(
                         node.step.clone(),
-                        StepResult {
-                            output: failed_val.clone(),
-                            confidence: None,
-                        },
+                        StepResult::scalar(failed_val.clone(), None),
                     );
                     return Ok(failed_val);
                 } else {
@@ -902,10 +881,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             node.step.clone(),
-            StepResult {
-                output: handler_out.clone(),
-                confidence,
-            },
+            StepResult::scalar(handler_out.clone(), confidence),
         );
         Ok(handler_out)
     }
@@ -996,10 +972,7 @@ impl Runner {
         }
         expr_ctx.steps.insert(
             handler.node.step.clone(),
-            StepResult {
-                output: output.clone(),
-                confidence,
-            },
+            StepResult::scalar(output.clone(), confidence),
         );
         Ok(output)
     }
@@ -1587,10 +1560,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             step_name.to_string(),
-            StepResult {
-                output: output.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(output.clone(), None),
         );
         Ok(output)
     }
@@ -1629,10 +1599,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             node.pipe.clone(),
-            StepResult {
-                output: output.clone(),
-                confidence,
-            },
+            StepResult::scalar(output.clone(), confidence),
         );
         Ok(output)
     }
@@ -1695,7 +1662,15 @@ impl Runner {
             results.as_ref().err(),
         )?;
         let results = results?;
-        let output = Value::Array(results);
+        let output = Value::Array(results.clone());
+
+        // Build members map: arm label -> arm output
+        let members: HashMap<String, Value> = node
+            .arms
+            .iter()
+            .zip(results.iter())
+            .map(|(arm, result)| (arm.label().to_string(), result.clone()))
+            .collect();
 
         // Average confidence across arms that provided a score; None if none did.
         let scored: Vec<f32> = confidence_cells
@@ -1713,6 +1688,7 @@ impl Runner {
             StepResult {
                 output: output.clone(),
                 confidence,
+                members,
             },
         );
         Ok(output)
@@ -1790,10 +1766,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             node.route_on_confidence.clone(),
-            StepResult {
-                output: result.clone(),
-                confidence: handler_confidence,
-            },
+            StepResult::scalar(result.clone(), handler_confidence),
         );
         Ok(result)
     }
@@ -1853,10 +1826,7 @@ impl Runner {
 
         expr_ctx.steps.insert(
             node.speculate.clone(),
-            StepResult {
-                output: result.clone(),
-                confidence: None,
-            },
+            StepResult::scalar(result.clone(), None),
         );
         Ok(result)
     }
@@ -1910,10 +1880,7 @@ fn record_typed_result(
 ) {
     expr_ctx.steps.insert(
         name.to_string(),
-        StepResult {
-            output: output.clone(),
-            confidence,
-        },
+        StepResult::scalar(output.clone(), confidence),
     );
 }
 
