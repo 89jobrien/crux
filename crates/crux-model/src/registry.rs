@@ -68,7 +68,7 @@ impl ModelCapabilities {
             && (requirements.allow_deprecated || !self.deprecated)
             && requirements
                 .max_cost_tier
-                .map_or(true, |max| self.cost_tier.map_or(true, |tier| tier <= max))
+                .is_none_or(|max| self.cost_tier.is_none_or(|tier| tier <= max))
     }
 }
 
