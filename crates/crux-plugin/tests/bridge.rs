@@ -1,7 +1,7 @@
 //! Subprocess integration tests for bridging plugin handlers into a registry.
 
 use crux_plugin::bridge::register_plugins;
-use crux_plugin::manifest::PluginEntry;
+use crux_plugin::manifest::{EnvValue, PluginEntry};
 use crux_script::{
     CompileOptions, HandlerRegistry, Runner, ValidationCode, ValueSchema, compile_pipeline, load,
 };
@@ -24,10 +24,12 @@ fn echo_entry() -> PluginEntry {
 fn typed_echo_entry(plugin: &str, handler: &str, schema: ValueSchema) -> PluginEntry {
     let mut entry = echo_entry();
     entry.name = plugin.into();
-    entry.env.insert("ECHO_HANDLER".into(), handler.into());
+    entry
+        .env
+        .insert("ECHO_HANDLER".into(), EnvValue::Literal(handler.into()));
     entry.env.insert(
         "ECHO_OUTPUT_SCHEMA".into(),
-        serde_json::to_string(&schema).unwrap(),
+        EnvValue::Literal(serde_json::to_string(&schema).unwrap()),
     );
     entry
 }
@@ -74,8 +76,12 @@ steps:
 fn delayed_echo_entry(name: &str, handler: &str) -> PluginEntry {
     let mut entry = echo_entry();
     entry.name = name.into();
-    entry.env.insert("ECHO_HANDLER".into(), handler.into());
-    entry.env.insert("ECHO_DELAY_MS".into(), "250".into());
+    entry
+        .env
+        .insert("ECHO_HANDLER".into(), EnvValue::Literal(handler.into()));
+    entry
+        .env
+        .insert("ECHO_DELAY_MS".into(), EnvValue::Literal("250".into()));
     entry
 }
 
@@ -88,6 +94,24 @@ async fn bridge_registers_plugin_handlers_in_registry() {
         registry.get_handler("echo::reflect").is_some(),
         "echo::reflect should be registered"
     );
+}
+
+/// #122 (t28): every plugin handler registered through [`register_plugins`] must
+/// also be reachable as a contract-bearing [`crux_script::StepRunner`], not just
+/// as a bare closure in the legacy handler map. This is what lets the typed/
+/// compiled pipeline path (which looks up `registry.runner(name)`) enforce the
+/// plugin's declared output schema instead of only the permissive closure path.
+#[tokio::test]
+async fn plugin_bridge_registers_contract_runner() {
+    let mut registry = HandlerRegistry::new();
+    let entries = vec![echo_entry()];
+    register_plugins(&mut registry, &entries).await.unwrap();
+
+    let runner = registry
+        .runner("echo::reflect")
+        .expect("a registered plugin handler must be reachable as a StepRunner");
+    assert_eq!(runner.metadata().name, "echo::reflect");
+    assert_eq!(runner.metadata().description, "Returns input unchanged");
 }
 
 #[tokio::test]

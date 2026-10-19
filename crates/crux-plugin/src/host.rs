@@ -43,9 +43,16 @@ impl PluginHost {
     }
 
     /// Spawn a plugin, send `Declare`, register its handlers.
+    ///
+    /// All `env://VAR` references in the plugin entry are resolved from the
+    /// host process environment before the subprocess is spawned.
     pub async fn load_plugin(&mut self, entry: &PluginEntry) -> Result<(), PluginError> {
+        let resolved_env = entry
+            .resolve_env()
+            .map_err(|e| PluginError::EnvResolution(e.to_string()))?;
+
         let mut child = Command::new(&entry.path)
-            .envs(&entry.env)
+            .envs(&resolved_env)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
@@ -205,4 +212,6 @@ pub enum PluginError {
         #[source]
         source: crux_script::SchemaBuildError,
     },
+    #[error("env resolution failed for plugin: {0}")]
+    EnvResolution(String),
 }

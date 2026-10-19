@@ -1,6 +1,6 @@
 //! Parsing tests for minimal, environment-aware, and multi-plugin manifests.
 
-use crux_plugin::manifest::PluginManifest;
+use crux_plugin::manifest::{EnvValue, PluginManifest};
 
 #[test]
 fn parse_minimal_manifest() {
@@ -25,7 +25,10 @@ path = "crux-slack"
 env = { SLACK_TOKEN = "xoxb-test" }
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
-    assert_eq!(manifest.plugin[0].env["SLACK_TOKEN"], "xoxb-test");
+    assert_eq!(
+        manifest.plugin[0].env["SLACK_TOKEN"],
+        EnvValue::Literal("xoxb-test".into())
+    );
 }
 
 #[test]
