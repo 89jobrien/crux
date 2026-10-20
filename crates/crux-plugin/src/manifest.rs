@@ -251,8 +251,7 @@ mod tests {
             [[plugin]]
             name = "p"
             path = "bin"
-            [plugin.0.env]
-            LOG_LEVEL = "debug"
+            env = { LOG_LEVEL = "debug" }
         "#;
         let manifest: PluginManifest = toml::from_str(toml).expect("parse");
         let entry = &manifest.plugin[0];
@@ -265,8 +264,7 @@ mod tests {
             [[plugin]]
             name = "p"
             path = "bin"
-            [plugin.0.env]
-            TOKEN = "env://MY_TOKEN"
+            env = { TOKEN = "env://MY_TOKEN" }
         "#;
         let manifest: PluginManifest = toml::from_str(toml).expect("parse");
         let entry = &manifest.plugin[0];
@@ -341,7 +339,7 @@ mod tests {
     #[test]
     fn serialize_env_ref_produces_env_prefix() {
         let val = EnvValue::EnvRef("FOO".into());
-        let s = toml::to_string(&val).expect("serialize");
+        let s = serde_json::to_string(&val).expect("serialize");
         assert!(s.contains("env://FOO"), "got: {s}");
     }
 
