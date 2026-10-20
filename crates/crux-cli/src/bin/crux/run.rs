@@ -664,7 +664,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         };
         home.and_then(|home| persist_automatic_trace(&crux, &home, pipeline_name, None))
     };
-    let trace_persistence_error = match trace_path {
+    let trace_persistence_error = match &trace_path {
         Ok(path) => {
             if !cfg.quiet && !cfg.json {
                 eprintln!("[crux] trace saved to {}", path.display());

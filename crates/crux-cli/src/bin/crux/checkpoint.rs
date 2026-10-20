@@ -111,6 +111,7 @@ impl RunState {
     /// Construct a `RunState` from a completed or paused run.
     ///
     /// `stopped_at_step` is `Some` when `--through <step>` was used.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_run(
         run_id: String,
         pipeline_path: String,
