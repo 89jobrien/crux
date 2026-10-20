@@ -121,8 +121,8 @@ mod tests {
             "DescribeProject",
             "ExtractEntities",
             "GenerateChangelog",
-            "Summarize",
             "SuggestRelated",
+            "Summarize",
         ];
         let reg = BamlFunctionRegistry::from_defs(defs);
         let actual = reg.function_names();
