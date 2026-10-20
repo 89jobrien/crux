@@ -83,3 +83,16 @@ jobs:
 
       - name: Rust tests with BAML integration
         run: cargo nextest run -p crux-agentic -p crux-baml --features crux-agentic/baml -E 'not (package(crux-agentic) & (binary(llm_extract) | binary(planner)))'
+
+      - name: Build crux CLI for catalog check
+        run: cargo build -p crux-cli --bin crux
+
+      - name: Check handler catalog drift
+        run: |
+          ./target/debug/crux handlers --output /tmp/handler-catalog-generated.md
+          if ! diff -u docs/handler-catalog.md /tmp/handler-catalog-generated.md; then
+            echo ""
+            echo "ERROR: docs/handler-catalog.md is out of date."
+            echo "Run 'cargo run -p crux-cli --bin crux -- handlers --output docs/handler-catalog.md' and commit the result."
+            exit 1
+          fi

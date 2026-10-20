@@ -3,6 +3,56 @@
 use crux_script::HandlerRegistry;
 use serde_json::json;
 
+// ---------------------------------------------------------------------------
+// Trace JSON helpers for replay_dry_run tests
+// ---------------------------------------------------------------------------
+
+/// Build a minimal valid trace JSON string with the given steps.
+///
+/// Each step entry is expected to have at least `name`, `status`, `kind`,
+/// `confidence`, `started_at`, `duration_ms`, `input_hash`, and `attempt`.
+fn minimal_trace_json(agent: &str, steps: &[serde_json::Value]) -> String {
+    serde_json::to_string(&json!({
+        "id": "crux_01J0000000000000000000000",
+        "agent": agent,
+        "value": {"Ok": null},
+        "steps": steps,
+        "children": [],
+        "started_at": "2026-01-01T00:00:00Z",
+        "finished_at": "2026-01-01T00:00:01Z"
+    }))
+    .unwrap()
+}
+
+fn ok_step(name: &str) -> serde_json::Value {
+    json!({
+        "name": name,
+        "kind": "Plain",
+        "status": "ok",
+        "origin": "live",
+        "confidence": 1.0,
+        "started_at": "2026-01-01T00:00:00Z",
+        "duration_ms": 10,
+        "input_hash": 42,
+        "attempt": 1
+    })
+}
+
+fn err_step(name: &str) -> serde_json::Value {
+    json!({
+        "name": name,
+        "kind": "Plain",
+        "status": "err",
+        "origin": "live",
+        "confidence": 0.0,
+        "started_at": "2026-01-01T00:00:00Z",
+        "duration_ms": 5,
+        "input_hash": 99,
+        "attempt": 1,
+        "error": "step failed"
+    })
+}
+
 fn registry() -> HandlerRegistry {
     let mut r = HandlerRegistry::new();
     crux_agentic::analysis::register(&mut r);
@@ -179,4 +229,161 @@ async fn patch_schema_check_empty() {
     let input = json!({"patch": ""});
     let out = h(input).await.outcome.unwrap();
     assert_eq!(out.value["valid"], false);
+}
+
+// ---------------------------------------------------------------------------
+// replay_dry_run — in-process analysis
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn replay_dry_run_missing_trace_path() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+    let out = h(json!({})).await.outcome.unwrap();
+    assert_eq!(out.value["ok"], false);
+    let mismatches = out.value["mismatches"].as_array().unwrap();
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.as_str().unwrap().contains("missing trace_path")),
+        "expected missing trace_path in mismatches: {mismatches:?}"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_invalid_path_chars() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+    // Leading dash triggers the injection guard.
+    let out = h(json!({"trace_path": "-rm rf /"})).await;
+    assert!(
+        out.outcome.is_err(),
+        "expected error for suspicious path, got ok"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_clean_trace_ok() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    let trace = minimal_trace_json("test-agent", &[ok_step("fetch"), ok_step("parse")]);
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), &trace).unwrap();
+
+    let out = h(json!({"trace_path": tmp.path().to_str().unwrap()}))
+        .await
+        .outcome
+        .unwrap();
+    assert_eq!(out.value["ok"], true);
+    assert_eq!(out.value["step_count"], 2);
+    assert_eq!(out.value["agent"], "test-agent");
+    assert_eq!(
+        out.value["mismatches"].as_array().unwrap().len(),
+        0,
+        "expected no mismatches"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_detects_failed_step() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    let trace = minimal_trace_json("test-agent", &[ok_step("fetch"), err_step("validate")]);
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), &trace).unwrap();
+
+    let out = h(json!({"trace_path": tmp.path().to_str().unwrap()}))
+        .await
+        .outcome
+        .unwrap();
+    assert_eq!(out.value["ok"], false);
+    let mismatches = out.value["mismatches"].as_array().unwrap();
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.as_str().unwrap().contains("validate")),
+        "expected 'validate' step in mismatches: {mismatches:?}"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_patch_ordinal_mismatch() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    // Trace has: fetch, parse
+    let trace = minimal_trace_json("test-agent", &[ok_step("fetch"), ok_step("parse")]);
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), &trace).unwrap();
+
+    // Patch says steps are: fetch, transform  — "transform" != "parse" at ordinal 1
+    let patch = "steps:\n  - name: fetch\n  - name: transform\n";
+
+    let out = h(json!({
+        "trace_path": tmp.path().to_str().unwrap(),
+        "patch": patch,
+    }))
+    .await
+    .outcome
+    .unwrap();
+    assert_eq!(out.value["ok"], false);
+    let mismatches = out.value["mismatches"].as_array().unwrap();
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.as_str().unwrap().contains("transform")),
+        "expected ordinal mismatch for 'transform': {mismatches:?}"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_patch_aligns_returns_ok() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    // Trace has: fetch, parse
+    let trace = minimal_trace_json("test-agent", &[ok_step("fetch"), ok_step("parse")]);
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), &trace).unwrap();
+
+    // Patch step names match trace exactly
+    let patch = "steps:\n  - name: fetch\n  - name: parse\n";
+
+    let out = h(json!({
+        "trace_path": tmp.path().to_str().unwrap(),
+        "patch": patch,
+    }))
+    .await
+    .outcome
+    .unwrap();
+    assert_eq!(out.value["ok"], true);
+}
+
+#[tokio::test]
+async fn replay_dry_run_malformed_trace_returns_err() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), b"not valid json {{{").unwrap();
+
+    let out = h(json!({"trace_path": tmp.path().to_str().unwrap()})).await;
+    assert!(
+        out.outcome.is_err(),
+        "expected error for malformed trace JSON"
+    );
+}
+
+#[tokio::test]
+async fn replay_dry_run_nonexistent_file_returns_err() {
+    let reg = registry();
+    let h = reg.get_handler("analysis::replay_dry_run").unwrap();
+
+    let out = h(json!({"trace_path": "/tmp/does-not-exist-crux-test-12345.json"})).await;
+    assert!(
+        out.outcome.is_err(),
+        "expected error for missing trace file"
+    );
 }

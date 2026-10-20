@@ -1,142 +1,212 @@
 project: crux
 id: crux
-updated: 2026-10-18
+updated: 2026-10-20
 items:
-- id: uncommitted-work
+- id: t27
   doob_uuid: null
-  name: uncommitted-work
-  priority: P1
-  status: open
-  title: Uncommitted changes (16 files)
-  description: |-
-    Working tree has uncommitted changes:
-    .ctx/HANDOFF.crux.crux.yaml
-    .ctx/HANDOFF.md
-    .ctx/rustqual-baseline.json
-    crates/crux-plugin/src/bridge.rs
-    crates/crux-plugin/src/host.rs
-    crates/crux-plugin/src/protocol.rs
-    crates/crux-plugin/tests/bridge.rs
-    crates/crux-plugin/tests/fixtures/echo-plugin.rs
-    crates/crux-plugin/tests/protocol.rs
-    crates/crux-script/src/metadata.rs
-    crates/crux-script/tests/value_schema.rs
-    docs/crux-plugins.md
-    site/style.css
-    taskit-todo-sync.lock
-    docs/designs/2026-09-22-governed-http-e2e-design.md
-    examples/joe/sys_triage.crux
-  files:
-  - .ctx/HANDOFF.crux.crux.yaml
-  - .ctx/HANDOFF.md
-  - .ctx/rustqual-baseline.json
-  - crates/crux-plugin/src/bridge.rs
-  - crates/crux-plugin/src/host.rs
-  - crates/crux-plugin/src/protocol.rs
-  - crates/crux-plugin/tests/bridge.rs
-  - crates/crux-plugin/tests/fixtures/echo-plugin.rs
-  - crates/crux-plugin/tests/protocol.rs
-  - crates/crux-script/src/metadata.rs
-  - crates/crux-script/tests/value_schema.rs
-  - docs/crux-plugins.md
-  - site/style.css
-  - taskit-todo-sync.lock
-  - docs/designs/2026-09-22-governed-http-e2e-design.md
-  - examples/joe/sys_triage.crux
+  name: extend-plugin-declarations-with-contracts
+  priority: P2
+  status: pending
+  title: Extend plugin declarations with contracts
+  description: 'Verify command repointed on 2026-09-30: the planned test handler_decl_round_trips_metadata was never written. Implementation (HandlerDecl::output_schema on the wire, PROTOCOL_VERSION 1.0 -> 1.1) is complete in the working tree and verified under the actual test name declared_output_schema_round_trips in crates/crux-plugin/tests/protocol.rs. Covers the declaration half only; the register_plugins metadata-lifting half is tracked separately under t28.'
+  files: []
+  completed: null
+  extra: []
+- id: t28
+  doob_uuid: null
+  name: adapt-plugins-into-steprunner
+  priority: P2
+  status: pending
+  title: Adapt plugins into StepRunner
+  description: Queued work, not yet started (t28)
+  files: []
+  completed: null
+  extra: []
+- id: t29
+  doob_uuid: null
+  name: contract-control-and-text-handlers
+  priority: P2
+  status: pending
+  title: Contract control and text handlers
+  description: Queued work, not yet started (t29)
+  files: []
+  completed: null
+  extra: []
+- id: t30
+  doob_uuid: null
+  name: contract-filesystem-and-git-handlers
+  priority: P2
+  status: pending
+  title: Contract filesystem and Git handlers
+  description: Queued work, not yet started (t30)
+  files: []
+  completed: null
+  extra: []
+- id: t31
+  doob_uuid: null
+  name: contract-json-and-shell-handlers
+  priority: P2
+  status: pending
+  title: Contract JSON and shell handlers
+  description: Queued work, not yet started (t31)
+  files: []
+  completed: null
+  extra: []
+- id: t32
+  doob_uuid: null
+  name: contract-analysis-handlers
+  priority: P2
+  status: pending
+  title: Contract analysis handlers
+  description: Queued work, not yet started (t32)
+  files: []
+  completed: null
+  extra: []
+- id: t33
+  doob_uuid: null
+  name: contract-ci-and-review-handlers
+  priority: P2
+  status: pending
+  title: Contract CI and review handlers
+  description: Queued work, not yet started (t33)
+  files: []
+  completed: null
+  extra: []
+- id: t34
+  doob_uuid: null
+  name: contract-triage-handlers
+  priority: P2
+  status: pending
+  title: Contract triage handlers
+  description: Queued work, not yet started (t34)
+  files: []
+  completed: null
+  extra: []
+- id: t35
+  doob_uuid: null
+  name: contract-container--rx--task--and-harness-handlers
+  priority: P2
+  status: pending
+  title: Contract container, rx, task, and harness handlers
+  description: Queued work, not yet started (t35)
+  files: []
+  completed: null
+  extra: []
+- id: t36
+  doob_uuid: null
+  name: contract-sqlite-handlers
+  priority: P2
+  status: pending
+  title: Contract SQLite handlers
+  description: Queued work, not yet started (t36)
+  files: []
+  completed: null
+  extra: []
+- id: t37
+  doob_uuid: null
+  name: contract-llm-handlers-and-agents
+  priority: P2
+  status: pending
+  title: Contract LLM handlers and agents
+  description: Queued work, not yet started (t37)
+  files: []
+  completed: null
+  extra: []
+- id: t38
+  doob_uuid: null
+  name: contract-baml-handlers
+  priority: P2
+  status: pending
+  title: Contract BAML handlers
+  description: Queued work, not yet started (t38)
+  files: []
+  completed: null
+  extra: []
+- id: t39
+  doob_uuid: null
+  name: strict-compile-core-and-harness-examples
+  priority: P2
+  status: pending
+  title: Strict-compile core and harness examples
+  description: Queued work, not yet started (t39)
+  files: []
+  completed: null
+  extra: []
+- id: t40
+  doob_uuid: null
+  name: strict-compile-ci-and-review-workflow-examples
+  priority: P2
+  status: pending
+  title: Strict-compile CI and review workflow examples
+  description: Queued work, not yet started (t40)
+  files: []
+  completed: null
+  extra: []
+- id: t41
+  doob_uuid: null
+  name: strict-compile-deployment-and-triage-workflow-examples
+  priority: P2
+  status: pending
+  title: Strict-compile deployment and triage workflow examples
+  description: Queued work, not yet started (t41)
+  files: []
+  completed: null
+  extra: []
+- id: t42
+  doob_uuid: null
+  name: strict-compile-handoff-workflow-examples
+  priority: P2
+  status: pending
+  title: Strict-compile handoff workflow examples
+  description: Queued work, not yet started (t42)
+  files: []
+  completed: null
+  extra: []
+- id: t43
+  doob_uuid: null
+  name: remove-legacy-runner-and-unchecked-execution-apis
+  priority: P2
+  status: pending
+  title: Remove legacy runner and unchecked execution APIs
+  description: Queued work, not yet started (t43)
+  files: []
+  completed: null
+  extra: []
+- id: t44
+  doob_uuid: null
+  name: update-conformance-and-architecture-documentation
+  priority: P2
+  status: pending
+  title: Update conformance and architecture documentation
+  description: Queued work, not yet started (t44)
+  files: []
   completed: null
   extra: []
 log:
+- date: '20261019.063939'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
 - date: '20261001.014104'
   summary: done=71 running=0 pending=18 blocked=0
-  commits:
-  - !Sha cc85f699e4b1b40078455b553b064f7b71d23a6e
-  - !Sha 6ee842a9bda85ce757f536a83259e68d080e6acb
-  - !Sha 27f83647dfe389d33fc7d798f3fc2d6694f6f391
-  - !Sha bfdb8949cb9255423010c881cc4a8a3adfb4d672
-  - !Sha 2bd48cdb93ba154d8c5949e16cd0ab9fd7a8a8fa
-  - !Sha fe563dc56b2c2b6b68a5b23111b7790c64dcd435
-  - !Sha 6e3decce9aec9c544b697d63afa3cf31d9808b6c
-  - !Sha 399533d70917bf133575da4e02ce1bc1421e7971
-  - !Sha 016bb8793fd3f4512281e80acb60cdb7d26e3ae9
-  - !Sha 63ac041467ee2e5210e1d1fcb901e24c237edc4f
+  commits: []
 - date: '20260929.185946'
   summary: done=71 running=0 pending=18 blocked=0
-  commits:
-  - !Sha 2bd48cdb93ba154d8c5949e16cd0ab9fd7a8a8fa
-  - !Sha fe563dc56b2c2b6b68a5b23111b7790c64dcd435
-  - !Sha 6e3decce9aec9c544b697d63afa3cf31d9808b6c
-  - !Sha 399533d70917bf133575da4e02ce1bc1421e7971
-  - !Sha 016bb8793fd3f4512281e80acb60cdb7d26e3ae9
-  - !Sha 63ac041467ee2e5210e1d1fcb901e24c237edc4f
-  - !Sha d547307c8fda1dee8601f30316197b62251e6dd7
-  - !Sha 392308e45e47eebeaa7d58b0e8cced74a2e131bc
-  - !Sha 4ccca3978d62d04d42df7a2db804eeed86cc78e3
-  - !Sha 0403d13f154f9d74af4be9130700800eefc69c6b
+  commits: []
 - date: '20260922.175938'
   summary: done=57 running=2 pending=18 blocked=0
-  commits:
-  - !Sha 8ac1412897310fb38044c0070d732fff5a36914e
-  - !Sha 09dd1bad671dc84d8486f5c737e8fcb204a1071f
-  - !Sha d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc
-  - !Sha fd64bb494cc773a8dbf4bfcf55c8929823727cb6
-  - !Sha 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e
-  - !Sha 2004a307345fd5b968c820ebca3ceeb01967251b
-  - !Sha c21c012f45d016aadef05ea79cc767f65a5e87df
-  - !Sha e01e8bef023564241f933f8bdaf68dfdbd3418e2
-  - !Sha 3957c8e3e75e88723aae9661eab1f597d3b40798
-  - !Sha 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b
+  commits: []
 - date: '20260922.144159'
   summary: done=43 running=2 pending=18 blocked=0
-  commits:
-  - !Sha 09dd1bad671dc84d8486f5c737e8fcb204a1071f
-  - !Sha d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc
-  - !Sha fd64bb494cc773a8dbf4bfcf55c8929823727cb6
-  - !Sha 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e
-  - !Sha 2004a307345fd5b968c820ebca3ceeb01967251b
-  - !Sha c21c012f45d016aadef05ea79cc767f65a5e87df
-  - !Sha e01e8bef023564241f933f8bdaf68dfdbd3418e2
-  - !Sha 3957c8e3e75e88723aae9661eab1f597d3b40798
-  - !Sha 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b
-  - !Sha 59d48d08c00f6aae1b2ad97225eff50d545f2c80
+  commits: []
 - date: '20260920.012242'
   summary: done=25 running=1 pending=30 blocked=0
-  commits:
-  - !Sha 86aa6288c614a9762390fb56c02570bb7abb44e7
-  - !Sha b8c7fe8eb985f1a1357594dd60f5c178a01192a3
-  - !Sha dc41728cf8900f20ba88d0ffb55f954dd55de6a1
-  - !Sha 81a7940043b7badd99fa274b5e9d4b84281f2eaa
-  - !Sha e6ced60a34596c9024759a74fabc403a2041755f
-  - !Sha 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
-  - !Sha 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
-  - !Sha de45a1c63e76eb3441dbb88226c040acd39aa5d2
-  - !Sha 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
-  - !Sha 8b03908184af5e789cf87e7192c932f83f651d89
+  commits: []
 - date: '20260920.003720'
   summary: done=24 running=1 pending=31 blocked=0
-  commits:
-  - !Sha b8c7fe8eb985f1a1357594dd60f5c178a01192a3
-  - !Sha dc41728cf8900f20ba88d0ffb55f954dd55de6a1
-  - !Sha 81a7940043b7badd99fa274b5e9d4b84281f2eaa
-  - !Sha e6ced60a34596c9024759a74fabc403a2041755f
-  - !Sha 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
-  - !Sha 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
-  - !Sha de45a1c63e76eb3441dbb88226c040acd39aa5d2
-  - !Sha 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
-  - !Sha 8b03908184af5e789cf87e7192c932f83f651d89
-  - !Sha 6d45857b415b633acde04d005cd6b86dc8147278
+  commits: []
 - date: '20260909.015838'
   summary: done=7 running=0 pending=22 blocked=1
-  commits:
-  - !Sha d12599b4af2e53b7544c5e2bc613fc92a9906ba3
-  - !Sha dc34c5fe8148ac12f715d6da6ccd21b116ab72c7
-  - !Sha 879758356573547e7e05eff112a1e78b0c62176d
-  - !Sha 8bed133237e96e735f5b00d8b3b199b8cad8b279
-  - !Sha fa39f727bf1ecaf41dbbf30da6ef3cb77e4b5d00
-  - !Sha 5153af6b671f0334ee53e9787dcdb8b19c7240f1
-  - !Sha 7a49aab20c4c390977d8dcf05b0fcc7698880460
-  - !Sha 38ad396550508d10888076c98c431e02fa11ae9e
-  - !Sha e2bff9cf5a240586583205b7dd054771b93bd7ee
-  - !Sha b32536491cbbaabe1bcfef40085f63cf56238d33
+  commits: []
 - date: '20260823.081522'
   summary: done=2 running=0 pending=12 blocked=0
   commits: []
