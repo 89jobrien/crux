@@ -1,0 +1,5 @@
+{
+  "image_name": "crux-agent:latest",
+  "config_path": "/etc/crux/harness.yaml",
+  "timeout_seconds": 30
+}

@@ -16,173 +16,176 @@ items:
   doob_uuid: null
   name: adapt-plugins-into-steprunner
   priority: P2
-  status: pending
+  status: done
   title: Adapt plugins into StepRunner
-  description: Queued work, not yet started (t28)
+  description: StepRunner trait implementation with handler declaration and invocation. Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t29
   doob_uuid: null
   name: contract-control-and-text-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract control and text handlers
-  description: Queued work, not yet started (t29)
+  description: Handler contracts for control flow (8 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t30
   doob_uuid: null
   name: contract-filesystem-and-git-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract filesystem and Git handlers
-  description: Queued work, not yet started (t30)
+  description: Handler contracts for filesystem and git operations (8 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t31
   doob_uuid: null
   name: contract-json-and-shell-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract JSON and shell handlers
-  description: Queued work, not yet started (t31)
+  description: Handler contracts for JSON and shell operations (8 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t32
   doob_uuid: null
   name: contract-analysis-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract analysis handlers
-  description: Queued work, not yet started (t32)
+  description: Handler contracts for analysis operations (9 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t33
   doob_uuid: null
   name: contract-ci-and-review-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract CI and review handlers
-  description: Queued work, not yet started (t33)
+  description: Handler contracts for CI and review operations (16 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t34
   doob_uuid: null
   name: contract-triage-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract triage handlers
-  description: Queued work, not yet started (t34)
+  description: Handler contracts for triage operations (19 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t35
   doob_uuid: null
   name: contract-container--rx--task--and-harness-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract container, rx, task, and harness handlers
-  description: Queued work, not yet started (t35)
+  description: Handler contracts for container, rx, task, and harness operations (11 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t36
   doob_uuid: null
   name: contract-sqlite-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract SQLite handlers
-  description: Queued work, not yet started (t36)
+  description: Handler contracts for SQLite operations (7 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t37
   doob_uuid: null
   name: contract-llm-handlers-and-agents
   priority: P2
-  status: pending
+  status: done
   title: Contract LLM handlers and agents
-  description: Queued work, not yet started (t37)
+  description: Handler contracts for LLM operations and agent delegation (8 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t38
   doob_uuid: null
   name: contract-baml-handlers
   priority: P2
-  status: pending
+  status: done
   title: Contract BAML handlers
-  description: Queued work, not yet started (t38)
+  description: Handler contracts for BAML operations (4 handlers). Completed by agent ae4a574d.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t39
   doob_uuid: null
   name: strict-compile-core-and-harness-examples
   priority: P2
-  status: pending
+  status: done
   title: Strict-compile core and harness examples
-  description: Queued work, not yet started (t39)
+  description: Example pipeline core_harness.crux demonstrating harness management. Completed by agent adcfb7ce.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t40
   doob_uuid: null
   name: strict-compile-ci-and-review-workflow-examples
   priority: P2
-  status: pending
+  status: done
   title: Strict-compile CI and review workflow examples
-  description: Queued work, not yet started (t40)
+  description: Example pipeline ci_review.crux demonstrating CI workflow with parallel checks. Completed by agent adcfb7ce.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t41
   doob_uuid: null
   name: strict-compile-deployment-and-triage-workflow-examples
   priority: P2
-  status: pending
+  status: done
   title: Strict-compile deployment and triage workflow examples
-  description: Queued work, not yet started (t41)
+  description: Example pipeline deployment_triage.crux demonstrating deployment validation. Completed by agent adcfb7ce.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t42
   doob_uuid: null
   name: strict-compile-handoff-workflow-examples
   priority: P2
-  status: pending
+  status: done
   title: Strict-compile handoff workflow examples
-  description: Queued work, not yet started (t42)
+  description: Example pipeline handoff.crux demonstrating handoff with state checkpoints. Completed by agent adcfb7ce.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t43
   doob_uuid: null
   name: remove-legacy-runner-and-unchecked-execution-apis
   priority: P2
-  status: pending
+  status: done
   title: Remove legacy runner and unchecked execution APIs
-  description: Queued work, not yet started (t43)
+  description: Removed Runner::run_unchecked() and consolidated execution path. Completed by agent a0f4d0cc.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t44
   doob_uuid: null
   name: update-conformance-and-architecture-documentation
   priority: P2
-  status: pending
+  status: done
   title: Update conformance and architecture documentation
-  description: Queued work, not yet started (t44)
+  description: Updated CONFORMANCE.md, ARCHITECTURE.md, and 4 crate READMEs with handler contract specs. Completed by agent a3388cdb.
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 log:
+- date: '20261020.235959'
+  summary: 'P2 completion wave: all 18 items done. t27 marked complete. t28-t38 handler contracts (105+ handlers, 17 tests) implemented via ae4a574d. t39-t42 example pipelines created via adcfb7ce (4 examples + tests). t43 legacy API cleanup via a0f4d0cc. t44 docs (CONFORMANCE + ARCHITECTURE + 4 READMEs) via a3388cdb. Build passing, all commits on develop.'
+  commits: []
 - date: '20261020.200000'
   summary: Fixed P0 borrow-checker error in crux-cli run.rs (trace_path move/use-after-move). Added clippy too-many-arguments suppression on from_run. Build passing, lint clean. Pre-commit hook validated. Commit 357f3b9.
   commits: []

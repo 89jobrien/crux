@@ -1,0 +1,48 @@
+pipeline: core_harness
+description: Core agent and harness management example
+input_schema:
+  type: object
+  properties:
+    image_name:
+      type: string
+    config_path:
+      type: string
+    timeout_seconds:
+      type: integer
+  required:
+    - image_name
+    - config_path
+
+budget:
+  steps: 10
+  tokens: 5000
+  duration_ms: 60000
+
+vars:
+  agent_name: "core_harness_{{ input.image_name }}"
+
+steps:
+  - step: fetch_config
+    handler: core::fetch
+    args:
+      path: "{{ input.config_path }}"
+    timeout_ms: 5000
+    allow_failure: false
+
+  - step: validate_image
+    handler: core::validate
+    args:
+      image: "{{ input.image_name }}"
+    timeout_ms: 10000
+    allow_failure: true
+
+  - step: prepare_harness
+    handler: core::prepare
+    args:
+      config: "{{ steps.fetch_config }}"
+      agent_id: "{{ vars.agent_name }}"
+
+  - step: summarize
+    handler: core::echo
+    args:
+      message: "Harness {{ vars.agent_name }} prepared successfully"
