@@ -1,0 +1,74 @@
+pipeline: handoff
+description: Handoff workflow with state checkpoints and recovery
+input_schema:
+  type: object
+  properties:
+    session_id:
+      type: string
+    handoff_state:
+      type: object
+    priority:
+      type: string
+      enum: ["low", "medium", "high", "critical"]
+  required:
+    - session_id
+    - handoff_state
+
+budget:
+  steps: 12
+  duration_ms: 600000
+  tokens: 5000
+
+display:
+  title: "Handoff Workflow"
+  output: always
+
+vars:
+  handoff_id: "hoff_{{ input.session_id }}"
+  priority_level: "{{ input.priority | default: 'medium' }}"
+
+steps:
+  - step: prepare_checkpoint
+    handler: handoff::prepare
+    args:
+      state: "{{ input.handoff_state }}"
+      session_id: "{{ input.session_id }}"
+      priority: "{{ vars.priority_level }}"
+
+  - step: save_checkpoint
+    handler: handoff::save
+    args:
+      handoff_id: "{{ vars.handoff_id }}"
+      checkpoint: "{{ steps.prepare_checkpoint }}"
+    timeout_ms: 5000
+
+  - step: validate_state
+    handler: handoff::validate
+    args:
+      checkpoint: "{{ steps.prepare_checkpoint }}"
+
+  - step: pipe_transfer
+    pipe: "transfer_handoff"
+    stages:
+      - step: extract_context
+        handler: handoff::extract
+        args:
+          data: "{{ steps.prepare_checkpoint }}"
+
+      - step: transfer
+        handler: handoff::transfer
+        args:
+          context: "{{ steps.extract_context }}"
+
+  - step: finalize_handoff
+    handler: handoff::finalize
+    args:
+      handoff_id: "{{ vars.handoff_id }}"
+      checkpoint: "{{ steps.prepare_checkpoint }}"
+
+  - step: summary
+    handler: handoff::report
+    args:
+      handoff_id: "{{ vars.handoff_id }}"
+      session_id: "{{ input.session_id }}"
+      priority: "{{ vars.priority_level }}"
