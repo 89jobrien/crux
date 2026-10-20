@@ -6,11 +6,11 @@ items:
   doob_uuid: null
   name: extend-plugin-declarations-with-contracts
   priority: P2
-  status: pending
+  status: done
   title: Extend plugin declarations with contracts
   description: 'Verify command repointed on 2026-09-30: the planned test handler_decl_round_trips_metadata was never written. Implementation (HandlerDecl::output_schema on the wire, PROTOCOL_VERSION 1.0 -> 1.1) is complete in the working tree and verified under the actual test name declared_output_schema_round_trips in crates/crux-plugin/tests/protocol.rs. Covers the declaration half only; the register_plugins metadata-lifting half is tracked separately under t28.'
   files: []
-  completed: null
+  completed: 2026-10-20
   extra: []
 - id: t28
   doob_uuid: null
