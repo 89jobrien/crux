@@ -18,6 +18,13 @@ let mut registry = HandlerRegistry::new();
 register_all(&mut registry);
 ```
 
+Every handler in this crate conforms to the **handler contract** defined in [`docs/CONFORMANCE.md`](../../docs/CONFORMANCE.md):
+- Input: JSON-serializable `serde_json::Value`
+- Output: `Result<HandlerOutput, CruxErr>` with optional confidence scores
+- Async execution with timeout, retry, and error-recovery support
+
+See [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) for handler registry design, contract-based loading, and the relationship between step handlers and plugin manifests.
+
 ## Handler families
 
 - `llm`: invoke, stream, and provider fallback; structured extraction/planning is feature-gated.

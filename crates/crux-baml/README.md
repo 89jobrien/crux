@@ -9,6 +9,10 @@ Hand-written wrappers in `extract.rs` and `planner.rs` adapt generated BAML clie
 `HandlerRegistry`. `crux-agentic` optionally calls `register_all_with_plugins`, passing external
 handler descriptions into the planner prompt.
 
+All `llm::*` handlers conform to the standard contract (see [`docs/CONFORMANCE.md`](../../docs/CONFORMANCE.md)):
+they accept JSON input, return `Result<HandlerOutput, CruxErr>` with confidence scores, and report retry attempts
+as `confidence = self_report * 0.8^(attempts-1)`.
+
 ```rust
 use crux_baml::register_all;
 use crux_script::HandlerRegistry;
