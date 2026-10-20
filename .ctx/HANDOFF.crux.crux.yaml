@@ -183,6 +183,9 @@ items:
   completed: null
   extra: []
 log:
+- date: '20261020.200000'
+  summary: Fixed P0 borrow-checker error in crux-cli run.rs (trace_path move/use-after-move). Added clippy too-many-arguments suppression on from_run. Build passing, lint clean. Pre-commit hook validated. Commit 357f3b9.
+  commits: []
 - date: '20261019.063939'
   summary: done=71 running=0 pending=18 blocked=0
   commits: []
