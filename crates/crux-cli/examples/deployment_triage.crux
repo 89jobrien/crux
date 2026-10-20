@@ -1,0 +1,68 @@
+pipeline: deployment_triage
+description: Deployment validation and issue triage workflow
+input_schema:
+  type: object
+  properties:
+    deployment_id:
+      type: string
+    target_env:
+      type: string
+      enum: ["dev", "staging", "production"]
+    manifest_url:
+      type: string
+  required:
+    - deployment_id
+    - target_env
+    - manifest_url
+
+budget:
+  steps: 12
+  duration_ms: 300000
+
+vars:
+  deployment_name: "{{ input.target_env }}_{{ input.deployment_id }}"
+
+steps:
+  - step: fetch_manifest
+    handler: deploy::fetch
+    args:
+      url: "{{ input.manifest_url }}"
+    timeout_ms: 10000
+    retry:
+      count: 2
+      delay_ms: 2000
+
+  - step: validate_manifest
+    handler: deploy::validate
+    args:
+      manifest: "{{ steps.fetch_manifest }}"
+    allow_failure: true
+
+  - step: parse_services
+    handler: deploy::parse
+    args:
+      data: "{{ steps.fetch_manifest }}"
+
+  - step: for_each_service
+    for_each: "check_service as service"
+    items: "{{ steps.parse_services }}"
+    steps:
+      - step: health_check
+        handler: deploy::health
+        args:
+          service: "{{ iter.service }}"
+        timeout_ms: 5000
+        allow_failure: true
+
+  - step: collect_results
+    handler: deploy::collect
+    args:
+      deployment_id: "{{ input.deployment_id }}"
+      target_env: "{{ input.target_env }}"
+      validation: "{{ steps.validate_manifest }}"
+
+  - step: report_results
+    handler: deploy::report
+    args:
+      results: "{{ steps.collect_results }}"
+      deployment_name: "{{ vars.deployment_name }}"
