@@ -120,8 +120,10 @@ impl PluginHost {
     ///
     /// Rejects with [`PluginError::NotAccepting`] if the owning plugin is
     /// not currently [`PluginLifecycle::Running`] (e.g. draining a reload,
-    /// or failed). On a process-level I/O failure, attempts one automatic
-    /// restart before returning an error.
+    /// or failed). On a process-level I/O failure, automatically restarts the
+    /// plugin and retries the request. Keeps retrying until the request succeeds
+    /// or restart attempts are exhausted, returning [`PluginError::RestartExhausted`]
+    /// if all retries fail.
     pub async fn invoke(
         &self,
         handler: &str,
@@ -152,16 +154,31 @@ impl PluginHost {
         };
 
         let mut proc = slot.process.lock().await;
-        match send_recv(&mut proc, &req).await {
-            Ok(resp) => decode_invoke_response(handler, resp),
-            Err(_io_err) => {
-                // Process-level failure: try one automatic restart, then
-                // retry the request exactly once.
-                *slot.state.write().await = PluginLifecycle::Failed;
-                restart_locked_process(&slot.entry, &mut proc, &slot.restart_count).await?;
-                *slot.state.write().await = PluginLifecycle::Running;
-                let resp = send_recv(&mut proc, &req).await?;
-                decode_invoke_response(handler, resp)
+        loop {
+            match send_recv(&mut proc, &req).await {
+                Ok(resp) => {
+                    // On success, restore Running state if we were in Failed state
+                    *slot.state.write().await = PluginLifecycle::Running;
+                    return decode_invoke_response(handler, resp);
+                }
+                Err(_io_err) => {
+                    // Process-level failure: mark failed and attempt restart.
+                    // Keep retrying until either the request succeeds or we exhaust
+                    // restart attempts.
+                    *slot.state.write().await = PluginLifecycle::Failed;
+                    match restart_locked_process(&slot.entry, &mut proc, &slot.restart_count).await
+                    {
+                        Ok(()) => {
+                            // Restart succeeded, mark running and retry the request.
+                            *slot.state.write().await = PluginLifecycle::Running;
+                            // Loop back to retry send_recv
+                        }
+                        Err(e) => {
+                            // Restart exhausted or failed; return the error.
+                            return Err(e);
+                        }
+                    }
+                }
             }
         }
     }
