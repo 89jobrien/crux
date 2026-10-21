@@ -1,6 +1,7 @@
 [workspace]
 crates = [
-  { dir = "crates/crux", pkg = "crux" },
+  { dir = "crates/crux", pkg = "crux-dsl" },
+  { dir = "crates/crux-cli", pkg = "crux-dsl-cli" },
   { dir = "crates/crux-domain", pkg = "crux-domain" },
   { dir = "crates/crux-runtime", pkg = "crux-runtime" },
   { dir = "crates/crux-types", pkg = "crux-types" },
@@ -12,13 +13,18 @@ crates = [
   { dir = "crates/crux-stdlib", pkg = "crux-stdlib" },
   { dir = "crates/crux-improve", pkg = "crux-improve" },
   { dir = "crates/crux-planner", pkg = "crux-planner" },
+  { dir = "crates/crux-schema", pkg = "crux-schema" },
+  { dir = "crates/crux-regression", pkg = "crux-regression" },
+  { dir = "crates/crux-typesafe", pkg = "crux-typesafe" },
+  { dir = "crates/crux-task", pkg = "crux-task" },
+  { dir = "crates/crux-verify", pkg = "crux-verify" },
 ]
 # offline_skip = "test(/.*network.*/)"
 
 
 [[workspace.propagation]]
 source = "crux-agentic"
-dependents = ["crux", "crux-planner"]
+dependents = ["crux-dsl", "crux-planner"]
 
 [[workspace.propagation]]
 source = "crux-baml"
@@ -26,11 +32,11 @@ dependents = ["crux-agentic"]
 
 [[workspace.propagation]]
 source = "crux-domain"
-dependents = ["crux", "crux", "crux-runtime"]
+dependents = ["crux-dsl", "crux-dsl", "crux-runtime"]
 
 [[workspace.propagation]]
 source = "crux-derive"
-dependents = ["crux"]
+dependents = ["crux-dsl"]
 
 [[workspace.propagation]]
 source = "crux-model"
@@ -42,11 +48,11 @@ dependents = ["crux-agentic"]
 
 [[workspace.propagation]]
 source = "crux-runtime"
-dependents = ["crux", "crux-script", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib", "crux-planner"]
+dependents = ["crux-dsl", "crux-script", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib", "crux-planner"]
 
 [[workspace.propagation]]
 source = "crux-script"
-dependents = ["crux", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib"]
+dependents = ["crux-dsl", "crux-agentic", "crux-baml", "crux-plugin", "crux-stdlib"]
 
 [[workspace.propagation]]
 source = "crux-stdlib"
