@@ -35,21 +35,6 @@ steps:
   - step: parse_diff
     handler: text::parse_diff
 
-  - step: parallel_checks
-    join_all: "run_all_checks"
-    arms:
-      - step: lint_check
-        handler: ci::clippy_violations
-        allow_failure: true
-
-      - step: test_check
-        handler: ci::nextest_failures
-        allow_failure: true
-
-      - step: build_check
-        handler: ci::compile_errors
-        allow_failure: true
-
   - step: deduplicate
     handler: ci::deduplicate_spans
 
