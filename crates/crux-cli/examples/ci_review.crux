@@ -1,8 +1,8 @@
 pipeline: ci_review
 description: CI/review workflow — collect diff, parse violations, classify, and report
 input_schema:
-  type: object
-  definition:
+  schema:
+    type: object
     properties:
       branch:
         type: string
