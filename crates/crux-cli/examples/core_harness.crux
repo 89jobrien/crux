@@ -7,14 +7,17 @@ input_schema:
       image_name:
         schema:
           type: string
+          definition: null
         required: true
       config_path:
         schema:
           type: string
+          definition: null
         required: true
       timeout_seconds:
         schema:
           type: integer
+          definition: null
         required: false
 
 budget:

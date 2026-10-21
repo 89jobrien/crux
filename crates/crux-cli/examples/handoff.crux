@@ -7,14 +7,17 @@ input_schema:
       session_id:
         schema:
           type: string
+          definition: null
         required: true
       handoff_state:
         schema:
           type: object
+          definition: {}
         required: true
       priority:
         schema:
           type: string
+          definition: null
         required: false
 
 budget:

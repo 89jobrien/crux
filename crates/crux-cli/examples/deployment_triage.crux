@@ -7,14 +7,17 @@ input_schema:
       deployment_id:
         schema:
           type: string
+          definition: null
         required: true
       target_env:
         schema:
           type: string
+          definition: null
         required: true
       manifest_path:
         schema:
           type: string
+          definition: null
         required: true
 
 budget:

@@ -7,10 +7,12 @@ input_schema:
       branch:
         schema:
           type: string
+          definition: null
         required: true
       repository:
         schema:
           type: string
+          definition: null
         required: true
 
 budget:
