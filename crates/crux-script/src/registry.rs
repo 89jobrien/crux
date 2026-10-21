@@ -525,6 +525,30 @@ impl Default for HandlerRegistry {
     }
 }
 
+impl HandlerRegistry {
+    /// Register all five built-in step runners (`shell`, `fs-write`, `git-commit`,
+    /// `json-update`, `llm-call`) into this registry.
+    ///
+    /// This is the production counterpart to the legacy `StepRunnerRegistry::register_builtin_runners`.
+    /// Prefer this over constructing a separate `StepRunnerRegistry` for testing or CLI use.
+    pub fn with_builtin_runners(mut self) -> Self {
+        use crate::step_runner::{
+            FsWriteRunner, GitCommitRunner, JsonUpdateRunner, LlmCallRunner, ShellRunner,
+        };
+        self.register(ShellRunner)
+            .expect("shell is not a duplicate in a fresh registry");
+        self.register(FsWriteRunner)
+            .expect("fs-write is not a duplicate in a fresh registry");
+        self.register(GitCommitRunner)
+            .expect("git-commit is not a duplicate in a fresh registry");
+        self.register(JsonUpdateRunner)
+            .expect("json-update is not a duplicate in a fresh registry");
+        self.register(LlmCallRunner)
+            .expect("llm-call is not a duplicate in a fresh registry");
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

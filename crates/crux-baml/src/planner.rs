@@ -32,7 +32,7 @@ pub fn register_plan(registry: &mut HandlerRegistry, extra_handlers: Vec<String>
                 .await
                 .map_err(|e| CruxErr::step_failed("llm::plan", format!("BAML: {e}")))?;
 
-            let yaml = serde_yaml::to_string(&result)
+            let yaml = serde_saphyr::to_string(&result)
                 .map_err(|e| CruxErr::step_failed("llm::plan", format!("YAML serialize: {e}")))?;
             Ok(json!({
                 "pipeline_name": result.pipeline,
@@ -83,6 +83,6 @@ pub async fn generate_pipeline(
         .call(goal.to_string(), &handlers, constraints.map(str::to_string))
         .await
         .map_err(|e| CruxErr::step_failed("llm::plan", format!("BAML: {e}")))?;
-    serde_yaml::to_string(&result)
+    serde_saphyr::to_string(&result)
         .map_err(|e| CruxErr::step_failed("llm::plan", format!("YAML serialize: {e}")))
 }

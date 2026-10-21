@@ -4,12 +4,14 @@
 ///
 /// This is separate from [`HandlerRegistry`] (async, closure-based) and serves
 /// as an auditable catalog of built-in step kinds with their required capabilities.
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::LazyLock};
 
 use miette::{IntoDiagnostic, Result, miette};
 use serde_json::Value;
 
-use crate::{HandlerExecution, HandlerMetadata};
+use crux_types::error::CruxErr;
+
+use crate::{HandlerExecution, HandlerMetadata, HandlerOutput};
 
 /// Future returned by an asynchronous [`StepRunner`].
 pub type StepFuture<'a> = Pin<Box<dyn Future<Output = HandlerExecution> + Send + 'a>>;
@@ -275,6 +277,223 @@ fn config_str<'a>(config: &'a Value, key: &str) -> Result<&'a str> {
         .ok_or_else(|| miette!("missing string config field '{key}'"))
 }
 
+fn config_str_owned(config: &Value, key: &str) -> std::result::Result<String, CruxErr> {
+    config
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| CruxErr::step_failed(key, format!("missing string config field '{key}'")))
+}
+
+// ── Production StepRunner implementations ──────────────────────────────────
+// These give the built-in runners a first-class presence in the production
+// HandlerRegistry surface (see HandlerRegistry::register_builtin_runners).
+
+impl StepRunner for ShellRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("shell"));
+        &META
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let (_, args) = invocation.into_parts();
+        Box::pin(async move {
+            let cmd = match config_str_owned(&args, "cmd") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            match tokio::task::spawn_blocking(move || {
+                std::process::Command::new("sh").args(["-c", &cmd]).output()
+            })
+            .await
+            {
+                Ok(Ok(output)) => {
+                    HandlerExecution::free(Ok(HandlerOutput::new(serde_json::json!({
+                        "exit_code": output.status.code(),
+                        "stdout": String::from_utf8_lossy(&output.stdout),
+                        "stderr": String::from_utf8_lossy(&output.stderr),
+                    }))))
+                }
+                Ok(Err(e)) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("shell", e.to_string())))
+                }
+                Err(e) => HandlerExecution::free(Err(CruxErr::step_failed("shell", e.to_string()))),
+            }
+        })
+    }
+}
+
+impl StepRunner for FsWriteRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("fs-write"));
+        &META
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let (_, args) = invocation.into_parts();
+        Box::pin(async move {
+            let path = match config_str_owned(&args, "path") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let content = match config_str_owned(&args, "content") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let bytes = content.len();
+            let path_for_result = path.clone();
+            match tokio::task::spawn_blocking(move || std::fs::write(&path, &content)).await {
+                Ok(Ok(())) => HandlerExecution::free(Ok(HandlerOutput::new(
+                    serde_json::json!({"path": path_for_result, "bytes_written": bytes}),
+                ))),
+                Ok(Err(e)) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("fs-write", e.to_string())))
+                }
+                Err(e) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("fs-write", e.to_string())))
+                }
+            }
+        })
+    }
+}
+
+impl StepRunner for GitCommitRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        static META: LazyLock<HandlerMetadata> =
+            LazyLock::new(|| HandlerMetadata::new("git-commit"));
+        &META
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let (_, args) = invocation.into_parts();
+        Box::pin(async move {
+            let repo = match config_str_owned(&args, "repo") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let message = match config_str_owned(&args, "message") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let result = tokio::task::spawn_blocking(move || -> miette::Result<Value> {
+                run_git(&repo, &["add", "-A"])?;
+                // --no-verify: this step runs unattended inside a pipeline, so it must
+                // not execute the target repository's hooks. Hooks are arbitrary
+                // commands supplied by that repo; firing them here lets an unrelated
+                // repository act on the caller's environment.
+                run_git(&repo, &["commit", "--no-verify", "-m", &message])?;
+                let commit = run_git(&repo, &["rev-parse", "HEAD"])?;
+                Ok(serde_json::json!({"committed": true, "commit": commit.trim()}))
+            })
+            .await;
+            match result {
+                Ok(Ok(v)) => HandlerExecution::free(Ok(HandlerOutput::new(v))),
+                Ok(Err(e)) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("git-commit", e.to_string())))
+                }
+                Err(e) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("git-commit", e.to_string())))
+                }
+            }
+        })
+    }
+}
+
+impl StepRunner for JsonUpdateRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        static META: LazyLock<HandlerMetadata> =
+            LazyLock::new(|| HandlerMetadata::new("json-update"));
+        &META
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let (_, args) = invocation.into_parts();
+        Box::pin(async move {
+            let mut document = match args.get("document").cloned() {
+                Some(v) => v,
+                None => {
+                    return HandlerExecution::free(Err(CruxErr::step_failed(
+                        "json-update",
+                        "json-update requires args.document",
+                    )));
+                }
+            };
+            let pointer = match config_str_owned(&args, "pointer") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let replacement = match args.get("value").cloned() {
+                Some(v) => v,
+                None => {
+                    return HandlerExecution::free(Err(CruxErr::step_failed(
+                        "json-update",
+                        "json-update requires args.value",
+                    )));
+                }
+            };
+            match document.pointer_mut(&pointer) {
+                Some(slot) => {
+                    *slot = replacement;
+                    HandlerExecution::free(Ok(HandlerOutput::new(document)))
+                }
+                None => HandlerExecution::free(Err(CruxErr::step_failed(
+                    "json-update",
+                    format!("JSON pointer does not exist: {pointer}"),
+                ))),
+            }
+        })
+    }
+}
+
+impl StepRunner for LlmCallRunner {
+    fn metadata(&self) -> &HandlerMetadata {
+        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("llm-call"));
+        &META
+    }
+
+    fn run(&self, invocation: StepInvocation) -> StepFuture<'_> {
+        let (_, args) = invocation.into_parts();
+        Box::pin(async move {
+            let cmd = match config_str_owned(&args, "cmd") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let prompt = match config_str_owned(&args, "prompt") {
+                Ok(s) => s,
+                Err(e) => return HandlerExecution::free(Err(e)),
+            };
+            let result = tokio::task::spawn_blocking(move || {
+                std::process::Command::new("sh")
+                    .args(["-c", &cmd])
+                    .env("CRUX_PROMPT", &prompt)
+                    .output()
+            })
+            .await;
+            match result {
+                Ok(Ok(output)) if output.status.success() => {
+                    HandlerExecution::free(Ok(HandlerOutput::new(serde_json::json!({
+                        "response": String::from_utf8_lossy(&output.stdout),
+                        "provider": "command",
+                    }))))
+                }
+                Ok(Ok(output)) => HandlerExecution::free(Err(CruxErr::step_failed(
+                    "llm-call",
+                    format!(
+                        "LLM provider command failed: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
+                ))),
+                Ok(Err(e)) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("llm-call", e.to_string())))
+                }
+                Err(e) => {
+                    HandlerExecution::free(Err(CruxErr::step_failed("llm-call", e.to_string())))
+                }
+            }
+        })
+    }
+}
+
 fn run_git(repo: &str, args: &[&str]) -> Result<String> {
     let output = std::process::Command::new("git")
         .args(args)
@@ -291,130 +510,105 @@ fn run_git(repo: &str, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-// ── Conformance helper ─────────────────────────────────────────────────────
-
-/// Assert the basic contract for any `StepRunner` implementation.
-///
-/// Verifies:
-/// - `kind()` is non-empty
-/// - `run()` does not panic
 #[cfg(test)]
-pub fn assert_step_runner_contract(runner: &dyn LegacyStepRunner) {
-    assert!(!runner.kind().is_empty(), "runner kind must be non-empty");
-    let ctx = StepContext {
-        alias: "test".to_string(),
-        config: serde_json::Value::Null,
-    };
-    let _ = runner.run(ctx); // must not panic
-}
+mod builtin_runner_tests {
+    use std::sync::Arc;
 
-#[cfg(test)]
-mod step_runner_registry_tests {
+    use serde_json::json;
+
     use super::*;
+    use crate::HandlerRegistry;
+
+    const BUILTIN_NAMES: &[&str] = &["shell", "fs-write", "git-commit", "json-update", "llm-call"];
 
     #[test]
-    fn registry_get_unknown_kind_returns_none() {
-        let registry = StepRunnerRegistry::new();
-        assert!(registry.get("unknown").is_none());
+    fn handler_registry_has_no_unknown_builtin() {
+        let registry = HandlerRegistry::new();
+        assert!(registry.runner("unknown").is_none());
     }
 
     #[test]
-    fn registry_list_includes_all_registered_kinds() {
-        let mut registry = StepRunnerRegistry::new();
-        registry.register_builtin_runners();
-        let kinds: Vec<&str> = registry.list().iter().map(|(k, _)| *k).collect();
-        assert!(kinds.contains(&"shell"));
-        assert!(kinds.contains(&"fs-write"));
-        assert!(kinds.contains(&"git-commit"));
-        assert!(kinds.contains(&"json-update"));
-        assert!(kinds.contains(&"llm-call"));
-    }
-
-    #[test]
-    fn shell_runner_declares_shell_capability() {
-        let mut registry = StepRunnerRegistry::new();
-        registry.register_builtin_runners();
-        let (_, caps) = registry
-            .list()
-            .into_iter()
-            .find(|(k, _)| *k == "shell")
-            .unwrap();
-        assert!(caps.contains(&RunnerCapability::Shell));
-    }
-
-    #[test]
-    fn llm_call_runner_declares_output_propagation() {
-        let mut registry = StepRunnerRegistry::new();
-        registry.register_builtin_runners();
-        let (_, caps) = registry
-            .list()
-            .into_iter()
-            .find(|(k, _)| *k == "llm-call")
-            .unwrap();
-        assert!(caps.contains(&RunnerCapability::LlmCall));
-        assert!(caps.contains(&RunnerCapability::OutputPropagation));
-    }
-
-    #[test]
-    fn all_builtin_runners_satisfy_contract() {
-        let mut registry = StepRunnerRegistry::new();
-        registry.register_builtin_runners();
-        for (kind, _) in registry.list() {
-            let runner = registry
-                .get(kind)
-                .expect("runner must be findable by its own kind");
-            assert_step_runner_contract(runner);
+    fn with_builtin_runners_registers_all_five() {
+        let registry = HandlerRegistry::new().with_builtin_runners();
+        let names: Vec<&str> = registry
+            .runners()
+            .map(|r| r.metadata().name.as_str())
+            .collect();
+        for expected in BUILTIN_NAMES {
+            assert!(names.contains(expected), "missing runner: {expected}");
         }
     }
 
     #[test]
-    fn builtin_runners_perform_declared_operations() {
-        let temp = tempfile::tempdir().unwrap();
-        let written = temp.path().join("written.txt");
-
-        let shell = ShellRunner
-            .run(StepContext {
-                alias: "shell".into(),
-                config: serde_json::json!({"cmd": "printf hello"}),
-            })
-            .unwrap();
-        assert_eq!(shell.value["stdout"], "hello");
-
-        let write = FsWriteRunner
-            .run(StepContext {
-                alias: "write".into(),
-                config: serde_json::json!({"path": written, "content": "saved"}),
-            })
-            .unwrap();
-        assert_eq!(write.value["bytes_written"], 5);
-        assert_eq!(std::fs::read_to_string(&written).unwrap(), "saved");
-
-        let updated = JsonUpdateRunner
-            .run(StepContext {
-                alias: "json".into(),
-                config: serde_json::json!({
-                    "document": {"status": "old"},
-                    "pointer": "/status",
-                    "value": "new"
-                }),
-            })
-            .unwrap();
-        assert_eq!(updated.value["status"], "new");
-
-        let llm = LlmCallRunner
-            .run(StepContext {
-                alias: "llm".into(),
-                config: serde_json::json!({
-                    "cmd": "printf response:$CRUX_PROMPT",
-                    "prompt": "hello"
-                }),
-            })
-            .unwrap();
-        assert_eq!(llm.value["response"], "response:hello");
+    fn builtin_runner_names_match_metadata() {
+        let registry = HandlerRegistry::new().with_builtin_runners();
+        for name in BUILTIN_NAMES {
+            let runner = registry.runner(name).expect("runner should be present");
+            assert_eq!(runner.metadata().name, *name);
+        }
     }
 
-    #[test]
-    fn git_commit_runner_creates_commit() {
+    #[tokio::test]
+    async fn shell_runner_executes_command() {
+        let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
+        let runner = registry.runner("shell").unwrap();
+        let execution = runner
+            .run(StepInvocation::new(
+                json!(null),
+                json!({"cmd": "printf hello"}),
+            ))
+            .await;
+        let output = execution.outcome.unwrap();
+        assert_eq!(output.value["stdout"], "hello");
+    }
+
+    #[tokio::test]
+    async fn fs_write_runner_writes_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("written.txt");
+        let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
+        let runner = registry.runner("fs-write").unwrap();
+        let execution = runner
+            .run(StepInvocation::new(
+                json!(null),
+                json!({"path": path, "content": "saved"}),
+            ))
+            .await;
+        let output = execution.outcome.unwrap();
+        assert_eq!(output.value["bytes_written"], 5);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "saved");
+    }
+
+    #[tokio::test]
+    async fn json_update_runner_mutates_document() {
+        let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
+        let runner = registry.runner("json-update").unwrap();
+        let execution = runner
+            .run(StepInvocation::new(
+                json!(null),
+                json!({"document": {"status": "old"}, "pointer": "/status", "value": "new"}),
+            ))
+            .await;
+        let output = execution.outcome.unwrap();
+        assert_eq!(output.value["status"], "new");
+    }
+
+    #[tokio::test]
+    async fn llm_call_runner_invokes_command() {
+        let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
+        let runner = registry.runner("llm-call").unwrap();
+        let execution = runner
+            .run(StepInvocation::new(
+                json!(null),
+                json!({"cmd": "printf response:$CRUX_PROMPT", "prompt": "hello"}),
+            ))
+            .await;
+        let output = execution.outcome.unwrap();
+        assert_eq!(output.value["response"], "response:hello");
+    }
+
+    #[tokio::test]
+    async fn git_commit_runner_creates_commit() {
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path();
         let repo_arg = repo.to_str().unwrap();
@@ -449,13 +643,15 @@ mod step_runner_registry_tests {
         git(&["config", "core.hooksPath", "/dev/null"]);
 
         std::fs::write(repo.join("file.txt"), "content").unwrap();
-
-        let output = GitCommitRunner
-            .run(StepContext {
-                alias: "commit".into(),
-                config: serde_json::json!({"repo": repo_arg, "message": "test commit"}),
-            })
-            .unwrap();
+        let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
+        let runner = registry.runner("git-commit").unwrap();
+        let execution = runner
+            .run(StepInvocation::new(
+                json!(null),
+                json!({"repo": repo_arg, "message": "test commit"}),
+            ))
+            .await;
+        let output = execution.outcome.unwrap();
         assert_eq!(output.value["committed"], true);
         assert!(output.value["commit"].as_str().unwrap().len() >= 7);
     }

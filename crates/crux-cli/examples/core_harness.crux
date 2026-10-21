@@ -1,0 +1,56 @@
+pipeline: core_harness
+description: Core agent and harness management — read config, verify, evolve harness
+input_schema:
+  type: object
+  definition:
+    properties:
+      image_name:
+        schema:
+          type: string
+          definition: null
+        required: true
+      config_path:
+        schema:
+          type: string
+          definition: null
+        required: true
+      timeout_seconds:
+        schema:
+          type: integer
+          definition: null
+        required: false
+
+budget:
+  steps: 10
+  tokens: 5000
+  duration_ms: 60000
+
+vars:
+  agent_name: "core_harness_{{ input.image_name }}"
+
+steps:
+  - step: fetch_config
+    handler: fs::read
+    args:
+      path: "{{ input.config_path }}"
+    timeout_ms: 5000
+    allow_failure: false
+
+  - step: validate_config
+    handler: ctrl::assert
+    args:
+      condition: "{{ steps.fetch_config }}"
+      message: "Config at {{ input.config_path }} must not be empty"
+
+  - step: canary_check
+    handler: harness::canary
+    timeout_ms: 10000
+    allow_failure: true
+
+  - step: evolve_harness
+    handler: harness::evolve
+
+  - step: summarize
+    handler: ctrl::log
+    args:
+      pretty: true

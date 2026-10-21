@@ -9,6 +9,13 @@ The crate owns the declarative execution model. `HandlerRegistry` is the extensi
 `crux-stdlib`, `crux-agentic`, `crux-baml`, and `crux-plugin` supply handlers. `Runner` executes a
 validated `PipelineDef` against `CruxCtx` and returns a complete `Crux<Value>` trace.
 
+Handlers conform to a standard **contract** (see [`docs/CONFORMANCE.md`](../../docs/CONFORMANCE.md)):
+- Accept JSON input (`Value`)
+- Return `Result<HandlerOutput, CruxErr>` with optional confidence scores
+- Execute asynchronously with timeout, retry, and error-recovery support
+
+For registry architecture and contract-based handler loading, see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md).
+
 ## Pipeline formats
 
 - A pipeline has a top-level `pipeline:` key and one execution flow.

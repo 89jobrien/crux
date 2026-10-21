@@ -1,6 +1,33 @@
 [tools]
 "cargo:baml-cli" = "0.221.0"
 
+# Workspace tasks — build/test/lint, mirrors justfile.
+
+[tasks.build]
+description = "cargo build --all-targets"
+run = "cargo build --all-targets"
+
+[tasks.test]
+description = "cargo nextest run"
+run = "cargo nextest run"
+
+[tasks.lint]
+description = "cargo clippy --all-targets -- -D warnings"
+run = "cargo clippy --all-targets -- -D warnings"
+
+[tasks.fmt]
+description = "cargo fmt --all -- --check"
+run = "cargo fmt --all -- --check"
+
+[tasks.fix]
+description = "cargo fmt --all (in-place)"
+run = "cargo fmt --all"
+
+[tasks.baml-generate]
+description = "Regenerate baml_client via mise-pinned baml-cli"
+run = "baml-cli generate"
+dir = "crates/crux-agentic"
+
 # Read-only crux pipelines — analysis, audit, and diagnostics.
 # Side-effect pipelines (deploy, approve, release) are excluded.
 

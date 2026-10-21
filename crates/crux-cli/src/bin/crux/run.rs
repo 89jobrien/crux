@@ -13,6 +13,9 @@ use crux_script::{
 };
 use serde_json::{Value, json};
 
+use crate::checkpoint::{
+    ArtifactRef, BudgetSnapshot, RunState, RunStatus, default_checkpoint_path, save_checkpoint,
+};
 use crate::output::{render_summary, render_trace};
 use crate::registry::{build_registry, collect_handler_names, warn_missing_env};
 
@@ -46,6 +49,8 @@ pub struct RunConfig<'a> {
     pub events_jsonl_path: Option<&'a str>,
     pub through_step: Option<&'a str>,
     pub strict: bool,
+    /// If set, write a [`RunState`] checkpoint to this path after the run.
+    pub checkpoint_path: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -639,8 +644,6 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
     };
     let elapsed = start.elapsed();
 
-    // TODO(automation-11): Persist run state, checkpoints, trace paths, artifacts, and final
-    // status under one run ID instead of leaving trace files detached from TaskRegistry.
     let trace_path = if let Some(path) = save_trace_path {
         let path = PathBuf::from(path);
         persist_trace(&crux, &path).map(|()| path)
@@ -661,7 +664,7 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
         };
         home.and_then(|home| persist_automatic_trace(&crux, &home, pipeline_name, None))
     };
-    let trace_persistence_error = match trace_path {
+    let trace_persistence_error = match &trace_path {
         Ok(path) => {
             if !cfg.quiet && !cfg.json {
                 eprintln!("[crux] trace saved to {}", path.display());
@@ -675,21 +678,86 @@ fn cmd_run(pipeline_path: &str, input_path: Option<&str>, cfg: &RunConfig<'_>) {
             Some(error.to_string())
         }
     };
-    let event_persistence_error = events_jsonl_path.and_then(|path| {
-        let path = PathBuf::from(path);
-        match persist_events_jsonl(&crux, &path) {
-            Ok(()) => {
-                if !cfg.quiet && !cfg.json {
-                    eprintln!("[crux] events saved to {}", path.display());
+    let saved_events_path: Option<PathBuf> = events_jsonl_path.map(PathBuf::from);
+    let event_persistence_error =
+        saved_events_path
+            .as_deref()
+            .and_then(|path| match persist_events_jsonl(&crux, path) {
+                Ok(()) => {
+                    if !cfg.quiet && !cfg.json {
+                        eprintln!("[crux] events saved to {}", path.display());
+                    }
+                    None
                 }
-                None
-            }
-            Err(error) => {
-                eprintln!("[crux] failed to save events: {error}");
-                Some(error.to_string())
+                Err(error) => {
+                    eprintln!("[crux] failed to save events: {error}");
+                    Some(error.to_string())
+                }
+            });
+
+    // Build and persist a checkpoint (explicit path or automatic under ~/.crux/checkpoints/).
+    {
+        let execution_ok = crux.value().is_ok();
+        let run_status = match (execution_ok, cfg.through_step.is_some()) {
+            (false, _) => RunStatus::Failed,
+            (true, true) => RunStatus::Paused,
+            (true, false) => RunStatus::Complete,
+        };
+        let budget = BudgetSnapshot {
+            steps_recorded: crux.steps.len(),
+            duration_ms_total: crux.steps.iter().map(|s| s.duration_ms).sum(),
+        };
+        let completed: Vec<String> = crux.steps.iter().map(|s| s.name.clone()).collect();
+        let mut artifacts: Vec<ArtifactRef> = Vec::new();
+        if let Ok(ref tp) = trace_path {
+            artifacts.push(ArtifactRef {
+                path: tp.clone(),
+                kind: "trace".to_string(),
+            });
+        }
+        if let Some(ref ep) = saved_events_path {
+            artifacts.push(ArtifactRef {
+                path: ep.clone(),
+                kind: "events".to_string(),
+            });
+        }
+        let effective_trace_path = trace_path.as_ref().map(|p| p.clone()).unwrap_or_default();
+        let state = RunState::from_run(
+            crux.id.to_string(),
+            pipeline_path.to_string(),
+            input_path.map(str::to_string),
+            cfg.plugins_path.map(str::to_string),
+            effective_trace_path,
+            saved_events_path.clone(),
+            completed,
+            cfg.through_step.map(str::to_string),
+            budget,
+            artifacts,
+            run_status,
+            crux.started_at,
+        );
+
+        let ckpt_path: Option<PathBuf> = cfg.checkpoint_path.map(PathBuf::from).or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|home| default_checkpoint_path(&home, crux.id.as_str()))
+        });
+
+        if let Some(ckpt_path) = ckpt_path {
+            match save_checkpoint(&state, &ckpt_path) {
+                Ok(()) => {
+                    if !cfg.quiet && !cfg.json {
+                        eprintln!("[crux] checkpoint saved to {}", ckpt_path.display());
+                    }
+                }
+                Err(error) => {
+                    if !cfg.json {
+                        eprintln!("[crux] failed to save checkpoint: {error}");
+                    }
+                }
             }
         }
-    });
+    }
 
     match output_mode(cfg) {
         OutputMode::Verbose => {
@@ -821,6 +889,7 @@ mod tests {
             events_jsonl_path: None,
             through_step: None,
             strict: false,
+            checkpoint_path: None,
         }
     }
 

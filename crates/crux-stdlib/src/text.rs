@@ -139,7 +139,7 @@ pub fn parse_frontmatter(input: &str) -> (Value, String) {
             .strip_prefix('\n')
             .unwrap_or(body);
 
-        let fm: Value = serde_yaml::from_str(yaml_block).unwrap_or(Value::Null);
+        let fm: Value = serde_saphyr::from_str(yaml_block).unwrap_or(Value::Null);
         (fm, body.to_string())
     } else {
         (Value::Null, input.to_string())

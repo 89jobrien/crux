@@ -13,6 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+crux-model = { workspace = true }
 crux-runtime = { workspace = true } #unified
 crux-schema = { workspace = true }
 crux-types = { workspace = true }
@@ -22,7 +23,6 @@ schemars = { workspace = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 

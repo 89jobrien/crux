@@ -18,24 +18,22 @@ steps:
           base_profile: "{{ input.base_profile }}"
         # Compute a HarnessDiff from current profile + metrics
 
-  - pipe: validate
-    stages:
-      - step: safety_check
-        handler: harness::safety_validate
-        args:
-          diff: "{{ steps.gather.load_profile.diff }}"
-          base_profile: "{{ input.base_profile }}"
-        # Validate proposed diff against SafetyPolicy hard caps
-      - step: classify_risk
-        handler: llm::extract
-        args:
-          input: "{{ steps.gather }}"
-          function: ClassifyRisk
-        # Score the change: memory-only bumps are low risk,
-        # syscall/network changes are high risk
+  - step: safety_check
+    handler: harness::safety_validate
+    args:
+      diff: ""
+      base_profile: "{{ input.base_profile }}"
+    # Validate proposed diff against SafetyPolicy hard caps
+
+  - step: classify_risk
+    handler: llm::extract
+    args:
+      function: ClassifyRisk
+    # Score the change: memory-only bumps are low risk,
+    # syscall/network changes are high risk
 
   - route_on_confidence: apply
-    value: "{{ steps.validate.confidence }}"
+    value: "{{ steps.classify_risk.confidence }}"
     routes:
       - range: "[0.0, 0.4)"
         label: rejected

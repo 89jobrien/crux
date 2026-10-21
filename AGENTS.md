@@ -104,6 +104,24 @@ crux run examples/showcase.crux -v    # verbose
 
 Pipeline files use `.crux` extension (YAML syntax).
 
+After editing the CLI, reinstall it so `crux` on PATH matches the source:
+
+```bash
+cargo install --path crates/crux-cli --bin crux --force
+crux version --check   # exit 0 current, 1 stale, 2 undeterminable
+```
+
+`crux version` prints version, commit, build time, profile, and binary path.
+`--check` compares the binary's build commit against HEAD of the surrounding
+crux checkout and reports a reinstall command when they differ.
+
+## Editor Support
+
+`crux schema` exports the pipeline JSON Schema. `crux schema --editor
+yaml-language-server` prints a ready-to-paste `yaml.schemas` snippet, and
+`crux init` scaffolds `.vscode/crux-schema.json` plus `.vscode/settings.json`.
+See `docs/editor-integration.md`.
+
 ## BAML
 
 - `baml_client/` is generated and gitignored. Regenerate with

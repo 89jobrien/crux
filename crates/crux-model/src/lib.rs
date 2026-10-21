@@ -14,7 +14,7 @@ pub use canonical::CanonicalModelId;
 pub use error::ModelParseError;
 pub use parser::ProviderModelId;
 pub use provider_ref::{ModelMetadata, ProviderModelRef};
-pub use registry::{ModelCapabilities, ModelCost, ModelRegistry, ModelRequirements};
+pub use registry::{CostTier, ModelCapabilities, ModelCost, ModelRegistry, ModelRequirements};
 pub use vendor::Vendor;
 
 #[cfg(test)]
@@ -36,6 +36,7 @@ mod capability_registry_tests {
                     input_cents_per_million_tokens: 300,
                     output_cents_per_million_tokens: 1_500,
                 }),
+                cost_tier: Some(CostTier::Medium),
                 aliases: vec!["claude-sonnet-4".into()],
                 deprecated: false,
             },
@@ -47,6 +48,7 @@ mod capability_registry_tests {
             requires_json_mode: true,
             requires_vision: false,
             allow_deprecated: false,
+            max_cost_tier: None,
         };
 
         assert_eq!(registry.select(&requirements), vec![id.clone()]);

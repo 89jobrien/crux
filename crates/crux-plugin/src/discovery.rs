@@ -83,8 +83,8 @@ env = {{ AWS_REGION = "us-east-1" }}
         assert_eq!(entries[0].path, "crux-github");
         assert_eq!(entries[1].name, "s3");
         assert_eq!(
-            entries[1].env.get("AWS_REGION").map(String::as_str),
-            Some("us-east-1")
+            entries[1].env.get("AWS_REGION"),
+            Some(&crate::manifest::EnvValue::Literal("us-east-1".into()))
         );
     }
 
@@ -112,6 +112,7 @@ env = {{ AWS_REGION = "us-east-1" }}
             name: "test".into(),
             path: "test-bin".into(),
             env: Default::default(),
+            sandbox: Default::default(),
         };
         let disc = FixedDiscovery(vec![entry]);
         let entries = disc.discover().unwrap();

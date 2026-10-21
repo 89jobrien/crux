@@ -19,5 +19,53 @@
       "Bash(head:*)",
       "Bash(xargs:*)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu .claude/hooks/session-start-lock-check.nu",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu .claude/hooks/no-raw-cargo.nu",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nu .claude/hooks/protocol-drift-check.nu",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "nu .claude/hooks/propagation-check.nu",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "nu .claude/hooks/cargo-toml-propagation-check.nu",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

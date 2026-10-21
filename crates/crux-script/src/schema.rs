@@ -1,5 +1,6 @@
 //! Deserializable definitions for pipelines, Cruxfiles, and control-flow nodes.
 
+use crux_model::{CostTier, ModelRequirements};
 use crux_types::budget::UsdAmount;
 /// YAML schema types for pipeline definitions.
 use indexmap::IndexMap;
@@ -236,6 +237,71 @@ pub struct PollNode {
     pub interval_ms: Option<u64>,
 }
 
+/// Broad cost classification for budget-aware model routing.
+///
+/// Mirrors [`crux_model::CostTier`] with `JsonSchema` support for pipeline YAML.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CostTierDef {
+    /// Cheapest models (e.g. GPT-4o-mini, Claude Haiku).
+    Low,
+    /// Mid-tier models (e.g. GPT-4o, Claude Sonnet).
+    Medium,
+    /// Premium models (e.g. o1, Claude Opus).
+    High,
+}
+
+impl From<CostTierDef> for CostTier {
+    fn from(def: CostTierDef) -> Self {
+        match def {
+            CostTierDef::Low => CostTier::Low,
+            CostTierDef::Medium => CostTier::Medium,
+            CostTierDef::High => CostTier::High,
+        }
+    }
+}
+
+/// Model capability requirements declared on an LLM step.
+///
+/// Mirrors [`crux_model::ModelRequirements`] with `JsonSchema` support for
+/// pipeline YAML. Use [`ModelRequirementsDef::into_requirements`] to obtain
+/// the domain type for registry lookup.
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
+pub struct ModelRequirementsDef {
+    /// Minimum context window size required (tokens).
+    #[serde(default)]
+    pub min_context_window: u64,
+    /// Step requires tool-calling support.
+    #[serde(default)]
+    pub requires_tools: bool,
+    /// Step requires JSON-mode / structured output support.
+    #[serde(default)]
+    pub requires_json_mode: bool,
+    /// Step requires vision / image input support.
+    #[serde(default)]
+    pub requires_vision: bool,
+    /// Allow deprecated models to be selected.
+    #[serde(default)]
+    pub allow_deprecated: bool,
+    /// Upper bound on cost tier; `None` accepts any tier.
+    #[serde(default)]
+    pub max_cost_tier: Option<CostTierDef>,
+}
+
+impl ModelRequirementsDef {
+    /// Convert into the domain [`ModelRequirements`] used by [`crux_model::ModelRegistry`].
+    pub fn into_requirements(self) -> ModelRequirements {
+        ModelRequirements {
+            min_context_window: self.min_context_window,
+            requires_tools: self.requires_tools,
+            requires_json_mode: self.requires_json_mode,
+            requires_vision: self.requires_vision,
+            allow_deprecated: self.allow_deprecated,
+            max_cost_tier: self.max_cost_tier.map(CostTier::from),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct StepNode {
     pub step: String,
@@ -269,6 +335,11 @@ pub struct StepNode {
     /// `allow_failure` (if set) still applies to the fallback's error.
     #[serde(default)]
     pub on_error: Option<OnErrorDef>,
+    /// Model capability requirements for LLM steps. When set, the pipeline runner
+    /// consults the registered [`crux_model::ModelRegistry`] and resolves the first
+    /// model (in registration order) that satisfies all declared constraints.
+    #[serde(default)]
+    pub model: Option<ModelRequirementsDef>,
 }
 
 /// A fallback handler invocation run when a step's handler (and retries) fail (#88).
@@ -364,6 +435,56 @@ fn default_speculate_mode() -> SpeculateMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn step_model_requirements_round_trip() {
+        let yaml = r#"
+pipeline: test
+steps:
+  - step: summarize
+    handler: llm::extract
+    model:
+      min_context_window: 32000
+      requires_tools: true
+      requires_json_mode: true
+      max_cost_tier: medium
+"#;
+        let def: PipelineDef = serde_saphyr::from_str(yaml).expect("parse");
+        let step = match &def.steps[0] {
+            StepDef::Step(node) => node,
+            other => panic!("expected StepNode, got {other:?}"),
+        };
+        let model = step.model.as_ref().expect("model should be present");
+        assert_eq!(model.min_context_window, 32_000);
+        assert!(model.requires_tools);
+        assert!(model.requires_json_mode);
+        assert!(!model.requires_vision);
+        assert_eq!(model.max_cost_tier, Some(CostTierDef::Medium));
+
+        let requirements = model.clone().into_requirements();
+        assert_eq!(requirements.min_context_window, 32_000);
+        assert!(requirements.requires_tools);
+        assert_eq!(
+            requirements.max_cost_tier,
+            Some(crux_model::CostTier::Medium)
+        );
+    }
+
+    #[test]
+    fn step_without_model_field_parses_normally() {
+        let yaml = r#"
+pipeline: test
+steps:
+  - step: fetch
+    handler: http::get
+"#;
+        let def: PipelineDef = serde_saphyr::from_str(yaml).expect("parse");
+        let step = match &def.steps[0] {
+            StepDef::Step(node) => node,
+            other => panic!("expected StepNode, got {other:?}"),
+        };
+        assert!(step.model.is_none());
+    }
 
     #[test]
     fn compound_budget_preserves_all_constraints() {

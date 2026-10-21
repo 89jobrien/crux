@@ -3,11 +3,12 @@
 //! Messages are newline-delimited JSON on stdin/stdout.
 //! Host sends `Request`, plugin replies with `Response`.
 
+use crux_script::ValueSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Current stable protocol version. Major changes are incompatible; minor changes are additive.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion { major: 1, minor: 0 };
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion { major: 1, minor: 1 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProtocolVersion {
@@ -110,17 +111,36 @@ pub struct ProtocolError {
 }
 
 /// A handler declared by a plugin.
-// TODO(feature-idea-17): Add an optional `output_schema` so a plugin can
-// declare its result type. Today the declaration carries no schema, and
-// `register_plugins` registers every handler without metadata, so plugin
-// outputs are typed `Dynamic`. Anything consuming them statically — a
-// `for_each` over a plugin step's output — cannot be checked and compiles
-// with "for_each items must be an array, but its schema is dynamic".
-// This is the protocol half; `register_plugins` is the registration half.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandlerDecl {
     /// Namespaced handler name, e.g. "github::create_issue".
     pub name: String,
     /// One-line description for planner/help output.
     pub description: String,
+    /// Declared shape of a successful result, or `None` when undeclared.
+    ///
+    /// The host lifts this into `HandlerMetadata::output_schema`, which lets
+    /// the compiler type the step statically. A plugin that omits the field
+    /// keeps a `Dynamic` output: that accepts any value but cannot be
+    /// structurally validated, so a downstream `for_each` over such a step
+    /// reports a dynamic-boundary diagnostic instead of type-checking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<ValueSchema>,
+}
+
+impl HandlerDecl {
+    /// Declare a handler without a typed result, keeping its output `Dynamic`.
+    pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            output_schema: None,
+        }
+    }
+
+    /// Declare the shape of a successful result.
+    pub fn output_schema(mut self, schema: ValueSchema) -> Self {
+        self.output_schema = Some(schema);
+        self
+    }
 }

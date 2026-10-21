@@ -1,0 +1,65 @@
+pipeline: crux_preflight
+
+# Crux project preflight checks before committing
+# Validates environment, git state, Rust build gates, and test suite
+
+steps:
+    # ============================================================================
+    # Environment & Basic Validation
+    # ============================================================================
+
+    - step: detect_shell
+      allow_failure: true
+      description: "Detect shell environment"
+
+    - step: check_tools
+      allow_failure: true
+      description: "Verify required tools installed"
+
+    - step: check_pwd
+      allow_failure: true
+      description: "Validate working directory"
+
+    # ============================================================================
+    # Git State Checks
+    # ============================================================================
+
+    - step: git::status
+      allow_failure: true
+      description: "Check uncommitted changes"
+
+    - step: git::log
+      allow_failure: true
+      description: "Inspect recent commits"
+
+    # ============================================================================
+    # Development Environment
+    # ============================================================================
+
+    - step: op::auth_check
+      allow_failure: true
+      description: "Verify 1Password authentication (for BAML/LLM gates)"
+
+    # ============================================================================
+    # Crux-Specific Gates
+    # ============================================================================
+
+    - step: crux_fmt_check
+      command: "just fmt"
+      allow_failure: false
+      description: "Rust formatting check (cargo fmt --all -- --check)"
+
+    - step: crux_lint
+      command: "just lint"
+      allow_failure: false
+      description: "Clippy lint check (cargo clippy --all-targets -- -D warnings)"
+
+    - step: crux_test
+      command: "just test"
+      allow_failure: false
+      description: "Run test suite (cargo nextest run)"
+
+    - step: crux_doc_tests
+      command: "cargo test --doc"
+      allow_failure: false
+      description: "Run documentation tests"

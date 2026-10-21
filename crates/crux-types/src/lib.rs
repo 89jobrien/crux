@@ -7,12 +7,20 @@
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
 
+pub mod approval;
 pub mod budget;
 pub mod emission;
 pub mod error;
+pub mod evolution;
+pub mod execution;
+pub mod harness;
 pub mod id;
+pub mod llm;
+pub mod metrics;
 pub mod planner;
 pub mod recovery;
+pub mod replay;
+pub mod safety;
 pub mod step;
 pub mod task;
 

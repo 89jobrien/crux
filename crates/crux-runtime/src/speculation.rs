@@ -15,7 +15,6 @@ use crate::ctx::CruxCtx;
 use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
 use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
-use crux_domain::plan_result::PlanResult;
 use crux_types::emission::Emission;
 
 /// A named speculation arm.
@@ -395,18 +394,7 @@ where
     }
 
     fn planned_result(&self) -> Result<Option<T>, CruxErr> {
-        match self.ctx.plan_action(&self.name) {
-            PlanResult::Allow(_) => Ok(None),
-            PlanResult::Deny { reason } => Err(CruxErr::Denied {
-                step: self.name.clone(),
-                reason,
-            }),
-            PlanResult::Simulate { output } => {
-                serde_json::from_value(output).map(Some).map_err(|error| {
-                    CruxErr::step_failed(&self.name, format!("planner simulation: {error}"))
-                })
-            }
-        }
+        self.ctx.route_through_planner_gate::<T>(&self.name)
     }
 }
 

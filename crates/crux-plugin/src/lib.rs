@@ -10,3 +10,6 @@ pub mod discovery;
 pub mod host;
 pub mod manifest;
 pub mod protocol;
+
+pub use host::{PluginError, PluginHost};
+pub use manifest::{NetworkPolicy, PluginEntry, PluginLifecycle, SandboxPolicy};

@@ -29,7 +29,7 @@ Run relative-path examples from the repository root:
 cargo build -p crux-cli
 ./target/debug/crux --help
 ./target/debug/crux list examples
-./target/debug/crux run examples/read_and_pick.crux --check
+./target/debug/crux check examples/read_and_pick.crux
 ./target/debug/crux run examples/read_and_pick.crux examples/input_read_and_pick.json
 ./target/debug/crux plan --goal "fetch data and summarize it"
 ```
@@ -37,11 +37,13 @@ cargo build -p crux-cli
 The rule planner emits templates. Register or replace any generated handler that is not built in
 before executing the result with `--strict`.
 
-`run --check` parses and validates without executing handlers. There is no
-standalone `crux check` CLI variant. `run -` reads a pipeline or Cruxfile from
-stdin. The default rule planner needs no API key; `plan --planner llm` goes
-through BAML, which prefers a local Ollama and needs no credentials when one is
-reachable.
+`crux check <paths...>` is a first-class subcommand that compile-checks one or more `.crux`
+pipelines or Cruxfiles without executing them. It accepts `--strict` (reject dynamic boundaries),
+`--plugins` (path to plugins.toml), and `--json` (emit diagnostics as JSON for editors and CI).
+`crux run --check` is an alias for the same validation pass on a single pipeline.
+`run -` reads a pipeline or Cruxfile from stdin. The default rule planner needs no API key;
+`plan --planner llm` goes through BAML, which prefers a local Ollama and needs no credentials
+when one is reachable.
 
 Some checked-in pipelines use relative paths internally, so direct execution
 must use repository-root cwd even when the pipeline path itself is absolute.

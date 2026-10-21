@@ -1,0 +1,53 @@
+pipeline: deployment_triage
+description: Deployment validation and issue triage — fetch manifest, check services, classify results
+input_schema:
+  type: object
+  definition:
+    properties:
+      deployment_id:
+        schema:
+          type: string
+          definition: null
+        required: true
+      target_env:
+        schema:
+          type: string
+          definition: null
+        required: true
+      manifest_path:
+        schema:
+          type: string
+          definition: null
+        required: true
+
+budget:
+  steps: 12
+  duration_ms: 300000
+
+vars:
+  deployment_name: "{{ input.target_env }}_{{ input.deployment_id }}"
+
+steps:
+  - step: fetch_manifest
+    handler: fs::read
+    args:
+      path: "{{ input.manifest_path }}"
+    timeout_ms: 10000
+    retry:
+      count: 2
+      delay_ms: 2000
+
+  - step: parse_services
+    handler: json::jq
+    args:
+      expr: ".services"
+
+  - step: filter_active_services
+    handler: json::filter_nonempty
+    args:
+      field: "name"
+
+  - step: report_results
+    handler: ctrl::log
+    args:
+      pretty: true

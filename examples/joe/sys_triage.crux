@@ -1,0 +1,104 @@
+pipeline: sys_triage
+# Sample macOS process + disk usage and report. READ-ONLY: this pipeline never
+# kills anything and never deletes anything. It terminates at a proposal,
+# matching the authority model in the `sys-usage` skill — a human reviews the
+# findings, picks pids, then runs `sys-reap` as a separate confirmed call.
+#
+# Run:  crux run examples/joe/sys_triage.crux
+#
+# CRUX YAML CONSTRAINTS, learned the hard way while writing this file. Each one
+# cost a failed run, so they are worth stating up front:
+#
+#  1. Templates `{{ steps.x.output.y }}` expand ONLY in top-level `step:` args.
+#     They are NOT expanded in `pipe` stage or `join_all` arm args
+#     (see examples/joe/session_handoff.crux). So this pipeline is a flat list
+#     of top-level steps, not a join_all + pipe shape.
+#
+#  2. `shell::*` handlers return `{"exit_code", "stderr", "stdout"}` with stdout
+#     as a STRING. So `json::pick` / `json::jq` cannot see inside it.
+#
+#  3. `json::jq` is not real jq: dot-paths plus a few built-ins (keys, length,
+#     type, first, last, has). No array indexing, so `.[0].stdout` is null.
+#
+#  4. `text::parse_jsonl` needs one JSON object PER LINE, and nu's `to json`
+#     emits pretty multi-line JSON by default — it silently yields empty.
+#
+# Given (2) and (4), post-processing shell JSON inside crux is not worth it. The
+# analysis lives in `sys-triage`, where it is unit-tested by
+# `~/dev/nu_libs/lib/sys/validate.nu`, and each step here renders its own
+# human-readable report that `ctrl::log` passes straight through.
+#
+# No `route_on_confidence` on purpose: a YAML step's `.confidence` is not
+# defined by the handler catalog — only Rust `handler()` registrations emitting
+# `HandlerOutput::with_confidence` can supply one, and YAML pipelines cannot
+# register one. `crux run --check` flags that pattern in
+# examples/joe/branch_cleanup.crux as
+# `dynamic_boundary: step 'classify' may not report confidence`, which is a
+# genuine warning there — that pipeline routes onto a value nothing produces.
+#
+# CORRECTION: an earlier revision of this comment called branch_cleanup.crux a
+# "cautionary example" whose handlers do not exist. That was wrong. Its
+# `triage::detect_orphaned_worktrees` and `triage::build_cleanup_plan` ARE real
+# registry constants (handlers.rs:95-96, registered in triage/worktree.rs) — the
+# original claim came from truncating a grep with `head` and missing them. Its
+# only real defect is the confidence routing noted above.
+#
+# Handlers used are all real registry constants in crux-agentic
+# (crates/crux-agentic/src/handlers.rs): SHELL_CAPTURE, SHELL_EXEC, CTRL_LOG.
+
+# The disk step dominates wall-clock: depth-1 over ~/dev costs ~90-135s because
+# it stats every file in every Rust target/ and node_modules/. Running these steps
+# sequentially rather than in a join_all costs ~14s of parallelism, which is not
+# worth giving up constraint (1) and a real report.
+budget: { calls: 10, duration_ms: 420000 }
+
+steps:
+  - step: mem_report
+    handler: shell::capture
+    args:
+      cmd: "nu --no-config-file -c 'use /Users/joe/dev/nu_libs/lib/sys/sys-scan.nu *; use /Users/joe/dev/nu_libs/lib/sys/sys-triage.nu *; let t = (sys-scan --no-footprint | sys-triage --idle-mb 512.0 --swap-warn 80.0); print $\"swap ($t.swap_used_pct | math round)% used, escalated: ($t.escalated)\"; print $\"reclaimable: rss ($t.reclaim_rss_mb | math round) MB, swap ($t.reclaim_swap_mb | math round) MB\"; $t.findings | where kind != ok | first 10 | select kind name rss_mb swap_gap_mb cpu_pct | to text'"
+    # Lead with `escalated`: free-RAM percentage stays flattering while swap
+    # fills, which is exactly when RSS-only triage reports "plenty of headroom".
+    #
+    # Findings are ranked by swap_gap_mb, so a small-RSS/huge-swap process
+    # (e.g. rust-analyzer at 56 MB resident but 800 MB swapped) sorts above a
+    # large-RSS one that is actually working. RSS-only ranking buries those.
+
+  - step: disk_report
+    handler: shell::exec
+    args:
+      cmd: "nu --no-config-file -c 'use /Users/joe/dev/nu_libs/lib/sys/sys-disk.nu *; let d = (sys-disk --root /Users/joe/dev --depth 1 --min-mb 100); print $\"disk under (/($d.root)) : ($d.total_mb | math round) MB total\"; $d.summary | to text; print \"top entries:\"; $d.entries | first 10 | select category path mb | to text'"
+    # Best-effort (`shell::exec`, not capture): a slow or missing tree degrades
+    # to empty rather than failing the pipeline. Never deletes. `worktree` is
+    # kept separate from `rebuildable` because a worktree holds real checkouts —
+    # removing one can discard uncommitted work.
+
+  - step: swap_context
+    handler: shell::exec
+    args:
+      cmd: "sysctl -n vm.swapusage"
+    # Human-readable swap line for the trace, useful when a percentage above
+    # looks wrong.
+
+  - step: next_actions
+    handler: ctrl::log
+    # Ends here by design. To act on the findings, a human picks pids and runs:
+    #   sys-reap --pids [...] --dry-run
+    #   sys-reap --pids [...]            # SIGTERM
+    #   sys-reap --pids [...] --escalate # SIGKILL survivors, if any
+    # sys-reap refuses its own ancestry, so it cannot kill the session that
+    # invoked it.
+
+  # crux pipelines surface only the LAST step's output, so the two reports above
+  # would otherwise be buried in the trace. Top-level `step:` args DO expand
+  # templates (constraint 1), so re-emit them here to make the pipeline's result
+  # the actual report a human reads.
+  - step: assemble
+    handler: shell::exec
+    args:
+      cmd: "printf '%s\\n\\n' '{{ steps.mem_report.output.stdout }}' '{{ steps.disk_report.output.stdout }}' 'swap: {{ steps.swap_context.output.stdout }}'"
+
+  - step: report
+    handler: ctrl::log
+    # Unwraps the shell handler's {exit_code, stderr, stdout} so the pipeline
+    # result is the report text itself.

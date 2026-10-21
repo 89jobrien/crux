@@ -24,6 +24,7 @@ crux-plugin = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-task = { workspace = true }
 crux-types = { workspace = true }
+crux-typesafe = { workspace = true }
 crux-script = { workspace = true } #unified
 crux-stdlib = { workspace = true } #unified
 futures = { workspace = true, optional = true }
@@ -32,7 +33,7 @@ reqwest = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 

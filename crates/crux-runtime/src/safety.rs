@@ -1,22 +1,8 @@
 //! Safety-policy port for validating and approving harness changes.
 
 use crate::types::harness::{HarnessDiff, HarnessProfile};
-use thiserror::Error;
 
-/// Why a safety policy rejected a proposed diff.
-#[derive(Debug, Clone, Error)]
-pub enum SafetyViolation {
-    #[error("hard cap exceeded: {resource} limit={limit}, proposed={proposed}")]
-    HardCapExceeded {
-        resource: String,
-        limit: u64,
-        proposed: u64,
-    },
-    #[error("forbidden syscall: {syscall}")]
-    ForbiddenSyscall { syscall: String },
-    #[error("policy violation: {reason}")]
-    Custom { reason: String },
-}
+pub use crux_types::safety::SafetyViolation;
 
 /// Port: validates proposed harness changes against safety constraints.
 pub trait SafetyPolicy: Send + Sync {

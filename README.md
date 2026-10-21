@@ -81,23 +81,26 @@ Either way, the returned `Crux<T>` is:
 
 ## Installation
 
-The crates.io names `crux` and `crux-cli` are owned by another publisher, so
-install the facade and CLI directly from the release tag. Supporting workspace
-crates such as `crux-types`, `crux-runtime`, and `crux-script` are available on
-crates.io.
+The crates.io names `crux` and `crux-cli` are owned by another publisher, so the
+facade and CLI are published here as `crux-dsl` and `crux-dsl-cli`. Supporting
+workspace crates such as `crux-types`, `crux-runtime`, and `crux-script` are
+available on crates.io.
 
 Install the pipeline CLI:
 
 ```bash
-cargo install --git https://github.com/89jobrien/crux --tag v0.4.2 crux-cli
+cargo install crux-dsl-cli
 ```
 
 Add the Rust DSL to a project:
 
 ```toml
 [dependencies]
-crux = { git = "https://github.com/89jobrien/crux", tag = "v0.4.2" }
+crux-dsl = "0.5.0"
 ```
+
+The facade still exposes the `crux` lib name, so the DSL is imported as
+`use crux::prelude::*;` and agents are annotated with `#[crux::agent]`.
 
 Requires Rust 1.89+ (edition 2024).
 
@@ -129,8 +132,8 @@ be registered through a plugin or replaced before running with `--strict`.
 
 | Crate                                 | Description                                             |
 | ------------------------------------- | ------------------------------------------------------- |
-| [`crux`](crates/crux)                 | Facade -- re-exports runtime + macros                   |
-| [`crux-cli`](crates/crux-cli)         | `crux` pipeline runner and planner                      |
+| [`crux-dsl`](crates/crux)             | Facade -- re-exports runtime + macros                   |
+| [`crux-dsl-cli`](crates/crux-cli)     | `crux` pipeline runner and planner                      |
 | [`crux-runtime`](crates/crux-runtime) | Core types, traits, and runtime                         |
 | [`crux-types`](crates/crux-types)     | Wire-format types (`Crux<T>`, `Step`, `Budget`)         |
 | [`crux-derive`](crates/crux-macros)   | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
@@ -144,10 +147,13 @@ be registered through a plugin or replaced before running with `--strict`.
 | [`crux-stdlib`](crates/crux-stdlib)   | Standard library handlers (fs, git, json, text, ctrl)   |
 | [`crux-task`](crates/crux-task)       | Project task management                                 |
 | [`crux-improve`](crates/crux-improve) | Improvement protocol: strategies, diffs, comparisons    |
+| [`crux-schema`](crates/crux-schema)   | Schema types and `Crux<T>` value plumbing              |
+| [`crux-regression`](crates/crux-regression) | Golden trace regression storage and evaluation    |
+| [`crux-typesafe`](crates/crux-typesafe)   | Typesafe projection helpers                        |
 
 ## Feature flags
 
-The `crux` facade crate provides:
+The `crux-dsl` facade crate provides:
 
 | Flag            | Default | Description                        |
 | --------------- | ------- | ---------------------------------- |
@@ -156,10 +162,27 @@ The `crux` facade crate provides:
 | `tracing`       | no      | Instrument with `tracing` spans    |
 | `script`        | no      | YAML pipeline parsing and types    |
 
-Build `crux-cli` with its `baml` feature to enable BAML-backed structured
+Build `crux-dsl-cli` with its `baml` feature to enable BAML-backed structured
 extraction and the LLM planner.
 
 <!-- TODO(docs): Add an index for repository-local skills under `.agents/skills/`. -->
+
+## Pre-Commit Validation (Hooklings)
+
+Automated preflight checks run before commits via hooklings:
+
+```bash
+hooklings preflight
+```
+
+This validates:
+- **Environment** — Shell, tools, working directory
+- **Git state** — Uncommitted changes, recent commits
+- **Build gates** — `cargo fmt`, `cargo clippy`, `cargo nextest`, doc tests
+- **1Password** — Auth status (optional, for BAML tests)
+
+**Configuration**: `hooklings.crux` (Crux DSL pipeline)  
+**Setup**: See [`docs/HOOKLINGS_PREFLIGHT.md`](docs/HOOKLINGS_PREFLIGHT.md) for details, troubleshooting, and CI/CD integration.
 
 ## Documentation
 

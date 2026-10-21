@@ -10,6 +10,7 @@ fn echo_entry() -> PluginEntry {
         name: "echo".into(),
         path: bin.into(),
         env: HashMap::new(),
+        sandbox: Default::default(),
     }
 }
 

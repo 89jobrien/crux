@@ -12,16 +12,7 @@ use crate::types::id::TaskId;
 use super::backend::RegistryBackend;
 use super::error::RegistryErr;
 
-/// Status of a task in the registry.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskStatus {
-    #[default]
-    Pending,
-    Running,
-    Done,
-    Failed,
-}
+pub use crux_types::task::TaskStatus;
 
 /// A task stored in the registry — wraps typed input with status and optional checkpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]

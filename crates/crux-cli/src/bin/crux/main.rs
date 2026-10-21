@@ -3,14 +3,17 @@
 /// crux — pipeline runner and planner for crux-script.
 ///
 /// Subcommands:
-///   check Validate one or more YAML pipelines
-///   run   Execute a YAML pipeline
-///   plan  Generate a pipeline from a natural language goal
+///   check   Validate one or more YAML pipelines
+///   run     Execute a YAML pipeline
+///   plan    Generate a pipeline from a natural language goal
+///   schema  Export the pipeline JSON Schema and editor config snippets
+///   version Report build provenance and detect a stale installation
 use std::collections::BTreeMap;
 
 use clap::{Parser, ValueEnum};
 
 mod check;
+mod checkpoint;
 mod doctor;
 mod handlers;
 mod init;
@@ -19,10 +22,13 @@ mod plan;
 mod registry;
 mod regress;
 mod replay_debug;
+mod resume;
 mod run;
 mod schema;
+mod task;
 mod test_cmd;
 mod trace;
+mod version;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OutputType {
@@ -39,7 +45,12 @@ enum OutputType {
 }
 
 #[derive(Parser)]
-#[command(name = "crux", version, about = "crux pipeline runner and planner")]
+#[command(
+    name = "crux",
+    version,
+    propagate_version = true,
+    about = "crux pipeline runner and planner"
+)]
 enum Cli {
     /// Manage golden traces and run offline regression evaluation
     Regress {
@@ -60,6 +71,9 @@ enum Cli {
         /// Path to plugins.toml (default: ~/.crux/plugins.toml)
         #[arg(long)]
         plugins: Option<String>,
+        /// Write output to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Scaffold a new Crux Rust project and sample pipeline
     Init {
@@ -129,6 +143,18 @@ enum Cli {
         /// Write the schema to a file for editor configuration
         #[arg(short, long)]
         output: Option<String>,
+        /// Print an editor config snippet registering the schema instead
+        #[arg(long, value_enum, value_name = "EDITOR")]
+        editor: Option<schema::SchemaEditor>,
+    },
+    /// Report build provenance and detect a stale installation
+    Version {
+        /// Compare the binary against HEAD of the surrounding crux source checkout
+        #[arg(long)]
+        check: bool,
+        /// Directory to search upward from (default: current directory)
+        #[arg(long, value_name = "DIR")]
+        path: Option<String>,
     },
     /// Execute a .crux pipeline or Cruxfile ("-" reads from stdin)
     Run {
@@ -181,6 +207,25 @@ enum Cli {
         /// Execute through this named top-level step (inclusive)
         #[arg(long, value_name = "STEP")]
         through: Option<String>,
+        /// Write a run-state checkpoint JSON to this path after execution
+        #[arg(long, value_name = "PATH")]
+        checkpoint: Option<String>,
+    },
+    /// Resume a paused or failed run from a checkpoint file
+    Resume {
+        /// Path to the checkpoint JSON written by a previous `crux run`
+        checkpoint: String,
+        /// Replay matching mode: "strict" (default) or "lenient"
+        #[arg(long, default_value = "strict")]
+        replay_mode: String,
+    },
+    /// Manage project tasks (create, list, update, get)
+    Task {
+        #[command(subcommand)]
+        command: task::TaskCommand,
+        /// Database path (redb). Overrides CRUX_TASK_DB env var.
+        #[arg(long, global = false)]
+        db: Option<String>,
     },
     /// Generate a pipeline from a natural language goal
     Plan {
@@ -211,8 +256,12 @@ fn main() {
     match cli {
         Cli::Regress { command } => regress::cmd_regress(command),
         Cli::List { root } => cmd_list(&root),
-        Cli::Handlers { format, plugins } => {
-            handlers::cmd_handlers(format, plugins.as_deref());
+        Cli::Handlers {
+            format,
+            plugins,
+            output,
+        } => {
+            handlers::cmd_handlers(format, plugins.as_deref(), output.as_deref());
         }
         Cli::Init { path } => init::cmd_init(&path),
         Cli::Doctor { plugins } => doctor::cmd_doctor(plugins.as_deref()),
@@ -241,7 +290,12 @@ fn main() {
             plugins,
             json,
         } => check::cmd_check_with_options(&paths, plugins.as_deref(), strict, json),
-        Cli::Schema { format, output } => schema::cmd_schema(format, output.as_deref()),
+        Cli::Schema {
+            format,
+            output,
+            editor,
+        } => schema::cmd_schema(format, output.as_deref(), editor),
+        Cli::Version { check, path } => version::cmd_version(check, path.as_deref()),
         Cli::Run {
             pipeline,
             target_or_input,
@@ -260,6 +314,7 @@ fn main() {
             events_jsonl,
             through,
             strict,
+            checkpoint,
         } => {
             if check
                 && let Some(path) = pipeline.as_ref()
@@ -291,8 +346,14 @@ fn main() {
                 events_jsonl_path: events_jsonl.as_deref(),
                 through_step: through.as_deref(),
                 strict,
+                checkpoint_path: checkpoint.as_deref(),
             });
         }
+        Cli::Resume {
+            checkpoint,
+            replay_mode,
+        } => resume::cmd_resume(&checkpoint, &replay_mode),
+        Cli::Task { command, db } => task::cmd_task(command, db.as_deref()),
         Cli::Plan {
             goal,
             output,

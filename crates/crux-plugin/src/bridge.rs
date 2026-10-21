@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use crate::host::{PluginError, PluginHost};
 use crate::manifest::PluginEntry;
+use crate::protocol::HandlerDecl;
 use crux_runtime::prelude::CruxErr;
-use crux_script::HandlerRegistry;
+use crux_script::{HandlerMetadata, HandlerRegistry, ValueSchema};
 
 /// Load all plugins from the given entries and register their
 /// handlers into the registry.
@@ -18,29 +19,32 @@ pub async fn register_plugins(
 ) -> Result<(), PluginError> {
     let mut host = PluginHost::new();
     for entry in entries {
-        host.load_plugin(entry).await?;
+        if let Err(e) = host.load_plugin(entry).await {
+            host.shutdown_all().await;
+            return Err(e);
+        }
     }
 
-    let handler_names: Vec<String> = host
-        .declared_handlers()
-        .iter()
-        .map(|h| h.name.clone())
-        .collect();
+    let declarations = host.declared_handlers().to_vec();
+
+    let mut metadatas = Vec::with_capacity(declarations.len());
+    for decl in &declarations {
+        match metadata_for(decl) {
+            Ok(metadata) => metadatas.push((decl.name.clone(), metadata)),
+            Err(e) => {
+                host.shutdown_all().await;
+                return Err(e);
+            }
+        }
+    }
 
     let host = Arc::new(host);
 
-    for name in handler_names {
+    for (name, metadata) in metadatas {
         let host = host.clone();
-        let handler_name = name.clone();
-        // TODO(feature-idea-17): Register through `handler_value_with_metadata`
-        // with the handler's declared output schema. `handler_value` builds
-        // `HandlerMetadata::new(name)`, which carries no `output_schema`, so
-        // every plugin step is typed `Dynamic` and a downstream `for_each` over
-        // a plugin output loses its array check. Needs `HandlerDecl::output_schema`
-        // in the plugin protocol first, then a `ValueSchema` on the wire.
-        registry.handler_value(name, move |input: serde_json::Value| {
+        registry.handler_value_with_metadata(metadata, move |input: serde_json::Value| {
             let host = host.clone();
-            let name = handler_name.clone();
+            let name = name.clone();
             async move {
                 host.invoke(&name, input)
                     .await
@@ -50,4 +54,25 @@ pub async fn register_plugins(
     }
 
     Ok(())
+}
+
+/// Lift one plugin declaration into handler metadata.
+///
+/// An undeclared result shape becomes an explicit `Dynamic` schema, which is
+/// the same contract the compiler would have inferred from absent metadata.
+/// A declared one is checked for recursive validity first: the schema arrives
+/// over the wire from a subprocess, and a malformed one has to fail at load
+/// time rather than midway through a run.
+fn metadata_for(decl: &HandlerDecl) -> Result<HandlerMetadata, PluginError> {
+    let output_schema = decl.output_schema.clone().unwrap_or(ValueSchema::Dynamic);
+    output_schema
+        .validate_definition()
+        .map_err(|source| PluginError::InvalidSchema {
+            handler: decl.name.clone(),
+            source,
+        })?;
+
+    Ok(HandlerMetadata::new(&decl.name)
+        .describe(&decl.description)
+        .output_schema(output_schema))
 }

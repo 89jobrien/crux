@@ -9,6 +9,8 @@ This crate implements handlers for `crux-script::HandlerRegistry`; it does not o
 runtime. Handler metadata describes arguments, capabilities, risk, side effects, confidence, and
 whether an operation is deterministic. `crux-agentic::register_all` installs this library first.
 
+All handlers conform to the standard **contract** documented in [`docs/CONFORMANCE.md`](../../docs/CONFORMANCE.md): they accept JSON input, return `Result<HandlerOutput, CruxErr>` with optional confidence, and support retry/timeout/error-recovery semantics.
+
 ```rust
 use crux_script::HandlerRegistry;
 

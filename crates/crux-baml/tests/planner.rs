@@ -28,6 +28,6 @@ async fn generate_pipeline_returns_valid_yaml() {
 
     // Verify YAML serialization doesn't panic (same path as generate_pipeline()).
     let yaml =
-        serde_yaml::to_string(&result).expect("GeneratePipeline output should serialize to YAML");
+        serde_saphyr::to_string(&result).expect("GeneratePipeline output should serialize to YAML");
     assert!(yaml.contains("test-pipeline"));
 }

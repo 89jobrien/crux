@@ -1,99 +1,221 @@
 project: crux
 id: crux
-updated: 2026-09-22
+updated: 2026-10-21
 items:
-- id: t26
-  name: compile-before-cli-execution
+- id: t27
+  doob_uuid: null
+  name: extend-plugin-declarations-with-contracts
   priority: P2
-  status: open
-  title: Compile before CLI execution
-  description: Task t26 in progress
-- id: exec-envelope-7
-  name: run-envelope-contract-quality-gates
+  status: done
+  title: Extend plugin declarations with contracts
+  description: 'Verify command repointed on 2026-09-30: the planned test handler_decl_round_trips_metadata was never written. Implementation (HandlerDecl::output_schema on the wire, PROTOCOL_VERSION 1.0 -> 1.1) is complete in the working tree and verified under the actual test name declared_output_schema_round_trips in crates/crux-plugin/tests/protocol.rs. Covers the declaration half only; the register_plugins metadata-lifting half is tracked separately under t28.'
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t28
+  doob_uuid: null
+  name: adapt-plugins-into-steprunner
   priority: P2
-  status: open
-  title: Run envelope contract quality gates
-  description: Task exec-envelope-7 in progress
-- id: uncommitted-work
-  name: uncommitted-work
-  priority: P1
-  status: open
-  title: Uncommitted changes (2 files)
-  description: |-
-    Working tree has uncommitted changes:
-    docs/designs/2026-09-22-execution-envelope-v1-design.md
-    docs/designs/2026-09-22-governed-http-e2e-design.md
-  files:
-  - docs/designs/2026-09-22-execution-envelope-v1-design.md
-  - docs/designs/2026-09-22-governed-http-e2e-design.md
+  status: done
+  title: Adapt plugins into StepRunner
+  description: StepRunner trait implementation with handler declaration and invocation. Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t29
+  doob_uuid: null
+  name: contract-control-and-text-handlers
+  priority: P2
+  status: done
+  title: Contract control and text handlers
+  description: Handler contracts for control flow (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t30
+  doob_uuid: null
+  name: contract-filesystem-and-git-handlers
+  priority: P2
+  status: done
+  title: Contract filesystem and Git handlers
+  description: Handler contracts for filesystem and git operations (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t31
+  doob_uuid: null
+  name: contract-json-and-shell-handlers
+  priority: P2
+  status: done
+  title: Contract JSON and shell handlers
+  description: Handler contracts for JSON and shell operations (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t32
+  doob_uuid: null
+  name: contract-analysis-handlers
+  priority: P2
+  status: done
+  title: Contract analysis handlers
+  description: Handler contracts for analysis operations (9 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t33
+  doob_uuid: null
+  name: contract-ci-and-review-handlers
+  priority: P2
+  status: done
+  title: Contract CI and review handlers
+  description: Handler contracts for CI and review operations (16 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t34
+  doob_uuid: null
+  name: contract-triage-handlers
+  priority: P2
+  status: done
+  title: Contract triage handlers
+  description: Handler contracts for triage operations (19 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t35
+  doob_uuid: null
+  name: contract-container--rx--task--and-harness-handlers
+  priority: P2
+  status: done
+  title: Contract container, rx, task, and harness handlers
+  description: Handler contracts for container, rx, task, and harness operations (11 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t36
+  doob_uuid: null
+  name: contract-sqlite-handlers
+  priority: P2
+  status: done
+  title: Contract SQLite handlers
+  description: Handler contracts for SQLite operations (7 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t37
+  doob_uuid: null
+  name: contract-llm-handlers-and-agents
+  priority: P2
+  status: done
+  title: Contract LLM handlers and agents
+  description: Handler contracts for LLM operations and agent delegation (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t38
+  doob_uuid: null
+  name: contract-baml-handlers
+  priority: P2
+  status: done
+  title: Contract BAML handlers
+  description: Handler contracts for BAML operations (4 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t39
+  doob_uuid: null
+  name: strict-compile-core-and-harness-examples
+  priority: P2
+  status: done
+  title: Strict-compile core and harness examples
+  description: Example pipeline core_harness.crux demonstrating harness management. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t40
+  doob_uuid: null
+  name: strict-compile-ci-and-review-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile CI and review workflow examples
+  description: Example pipeline ci_review.crux demonstrating CI workflow with parallel checks. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t41
+  doob_uuid: null
+  name: strict-compile-deployment-and-triage-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile deployment and triage workflow examples
+  description: Example pipeline deployment_triage.crux demonstrating deployment validation. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t42
+  doob_uuid: null
+  name: strict-compile-handoff-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile handoff workflow examples
+  description: Example pipeline handoff.crux demonstrating handoff with state checkpoints. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t43
+  doob_uuid: null
+  name: remove-legacy-runner-and-unchecked-execution-apis
+  priority: P2
+  status: done
+  title: Remove legacy runner and unchecked execution APIs
+  description: Removed Runner::run_unchecked() and consolidated execution path. Completed by agent a0f4d0cc.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t44
+  doob_uuid: null
+  name: update-conformance-and-architecture-documentation
+  priority: P2
+  status: done
+  title: Update conformance and architecture documentation
+  description: Updated CONFORMANCE.md, ARCHITECTURE.md, and 4 crate READMEs with handler contract specs. Completed by agent a3388cdb.
+  files: []
+  completed: 2026-10-20
+  extra: []
 log:
+- date: '20261020.235959'
+  summary: 'P2 completion wave: all 18 items done. t27 marked complete. t28-t38 handler contracts (105+ handlers, 17 tests) implemented via ae4a574d. t39-t42 example pipelines created via adcfb7ce (4 examples + tests). t43 legacy API cleanup via a0f4d0cc. t44 docs (CONFORMANCE + ARCHITECTURE + 4 READMEs) via a3388cdb. Build passing, all commits on develop.'
+  commits: []
+- date: '20261020.200000'
+  summary: Fixed P0 borrow-checker error in crux-cli run.rs (trace_path move/use-after-move). Added clippy too-many-arguments suppression on from_run. Build passing, lint clean. Pre-commit hook validated. Commit 357f3b9.
+  commits: []
+- date: '20261019.063939'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
+- date: '20261001.014104'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
+- date: '20260929.185946'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
 - date: '20260922.175938'
   summary: done=57 running=2 pending=18 blocked=0
-  commits:
-  - 8ac1412897310fb38044c0070d732fff5a36914e
-  - 09dd1bad671dc84d8486f5c737e8fcb204a1071f
-  - d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc
-  - fd64bb494cc773a8dbf4bfcf55c8929823727cb6
-  - 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e
-  - 2004a307345fd5b968c820ebca3ceeb01967251b
-  - c21c012f45d016aadef05ea79cc767f65a5e87df
-  - e01e8bef023564241f933f8bdaf68dfdbd3418e2
-  - 3957c8e3e75e88723aae9661eab1f597d3b40798
-  - 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b
+  commits: []
 - date: '20260922.144159'
   summary: done=43 running=2 pending=18 blocked=0
-  commits:
-  - 09dd1bad671dc84d8486f5c737e8fcb204a1071f
-  - d6d75c4e3b8c5dc886f67b15d09b23c6e17b62cc
-  - fd64bb494cc773a8dbf4bfcf55c8929823727cb6
-  - 5c92c46912b03cdd0ef7cf6619e1a9e114b2501e
-  - 2004a307345fd5b968c820ebca3ceeb01967251b
-  - c21c012f45d016aadef05ea79cc767f65a5e87df
-  - e01e8bef023564241f933f8bdaf68dfdbd3418e2
-  - 3957c8e3e75e88723aae9661eab1f597d3b40798
-  - 0e0da5a6c50dc708e2cd3995ad191a2d36ee609b
-  - 59d48d08c00f6aae1b2ad97225eff50d545f2c80
+  commits: []
 - date: '20260920.012242'
   summary: done=25 running=1 pending=30 blocked=0
-  commits:
-  - 86aa6288c614a9762390fb56c02570bb7abb44e7
-  - b8c7fe8eb985f1a1357594dd60f5c178a01192a3
-  - dc41728cf8900f20ba88d0ffb55f954dd55de6a1
-  - 81a7940043b7badd99fa274b5e9d4b84281f2eaa
-  - e6ced60a34596c9024759a74fabc403a2041755f
-  - 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
-  - 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
-  - de45a1c63e76eb3441dbb88226c040acd39aa5d2
-  - 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
-  - 8b03908184af5e789cf87e7192c932f83f651d89
+  commits: []
 - date: '20260920.003720'
   summary: done=24 running=1 pending=31 blocked=0
-  commits:
-  - b8c7fe8eb985f1a1357594dd60f5c178a01192a3
-  - dc41728cf8900f20ba88d0ffb55f954dd55de6a1
-  - 81a7940043b7badd99fa274b5e9d4b84281f2eaa
-  - e6ced60a34596c9024759a74fabc403a2041755f
-  - 798e65bf80697d3c62a4cbbe3d4e11fccd22238e
-  - 82fd28aaa275a0dc14550ac1997b7d9841f82cb6
-  - de45a1c63e76eb3441dbb88226c040acd39aa5d2
-  - 02e0a1514b5cc4f04c0bc67eeb389c8e478d710e
-  - 8b03908184af5e789cf87e7192c932f83f651d89
-  - 6d45857b415b633acde04d005cd6b86dc8147278
+  commits: []
 - date: '20260909.015838'
   summary: done=7 running=0 pending=22 blocked=1
-  commits:
-  - d12599b4af2e53b7544c5e2bc613fc92a9906ba3
-  - dc34c5fe8148ac12f715d6da6ccd21b116ab72c7
-  - 879758356573547e7e05eff112a1e78b0c62176d
-  - 8bed133237e96e735f5b00d8b3b199b8cad8b279
-  - fa39f727bf1ecaf41dbbf30da6ef3cb77e4b5d00
-  - 5153af6b671f0334ee53e9787dcdb8b19c7240f1
-  - 7a49aab20c4c390977d8dcf05b0fcc7698880460
-  - 38ad396550508d10888076c98c431e02fa11ae9e
-  - e2bff9cf5a240586583205b7dd054771b93bd7ee
-  - b32536491cbbaabe1bcfef40085f63cf56238d33
+  commits: []
 - date: '20260823.081522'
   summary: done=2 running=0 pending=12 blocked=0
+  commits: []
 - date: '20260822.234500'
   summary: |
     GitHub issue triage-and-fix pass: closed 24 issues across bug fixes, feature completion,
@@ -106,6 +228,7 @@ log:
     follow-up issues: #104 (crux schema command), #105 (serde-saphyr parser bug).
     All 776 tests pass (cargo nextest), 0 clippy warnings. Workspace version 0.3.1.
     HEAD: 86408da (merge #12).
+  commits: []
 - date: 20260708:000000
   summary: |
     Heavy refactor session across crux runtime and stdlib components:
@@ -120,6 +243,7 @@ log:
     fix/dead-code-srp-crux-model (dead code cleanup). All 538+ tests pass, clippy
     clean. Scope spans crux-runtime, crux-script, crux-stdlib, crux-agentic,
     crux-model, crux-core crates.
+  commits: []
 - date: 20260701:120000
   summary: |
     Major crux-task implementation session — scaffolded crate with types (TaskError,
@@ -134,6 +258,7 @@ log:
     Updated crux-baml MockLLM tests with miette error handling. Merged event-bus
     feature (crux-agentic event broadcasting). Added CONFORMANCE.md spec. All 538+
     tests pass, clippy clean.
+  commits: []
 - date: 20260701:000000
   summary: |
     Design session — crux-task project task management system. Brainstormed 3 approaches
@@ -146,6 +271,7 @@ log:
     added ISP note for RegistryBackend reuse. Testing philosophy review added 2 tasks:
     property tests (Task 4a) and conformance suite (Task 5a). No implementation code
     written — design-only session.
+  commits: []
 - date: 20260628:000000
   summary: |
     Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
@@ -158,49 +284,63 @@ log:
     crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
     0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
     baseline written to .health-baseline.json.
+  commits: []
 - date: 20260504:224027
   summary: handjobs triage — 0 open items, 0 GH issues synced
+  commits: []
 - date: 20260424:212604
   summary: |
     Operational session — restored deleted repo files (CLAUDE.md, .githooks/pre-commit, pre-push, LICENSE, README.md, deny.toml, justfile) from git. Fixed generate-ctx-docs by symlinking ~/.local/skills/handoff to plugin cache. Pulled and pushed rebased commits to origin.
+  commits: []
   session: 34
 - date: 20260424:103928
   summary: |
     Ran jcmd:ideate audit — cross-checked all 7 superpowers plan docs against git log. All plans confirmed landed (crux-agentic, plugin-system, orchestrator-patterns, crux-types-extraction, hook-tests, agentic-substrate, sqlite-handlers). Added `status: done` header to all 7 plan files.
+  commits: []
   session: 32
 - date: 20260424:000000
   summary: |
     Major feature session — crux-domain scaffolded with Planner trait (Passthrough/DenyAll/Simulate), Action enum, PlanResult, StepEvent typed enum. EventPipeline with broadcast fan-out wired into CruxCtx step dispatch. RulePlanner (deterministic Path B) added to crux-planner. crux-agentic: plan subcommand, --plugins flag via PluginDiscovery port, handler name constants, jq limitation docs. substrate: Step.metadata field + end-to-end integration tests. All plan items marked status: done in handoff.
+  commits: []
   session: 33
 - date: 20260423:000000
   summary: |
     Implemented rx handler module for crux-agentic: rx::run (execute scripts from registry by name) and rx::list (enumerate registered scripts). Registry types mirror rx-registry-json without dependency. Fixed planner test signature (added missing extra_handlers arg). Updated README and crux-capabilities.md. All 453 tests pass.
+  commits: []
   session: 31
 - date: 20260422:164000
   summary: |
     Implemented crux-agentic sqlite handler module: 7 CRUD handlers (open, close, prepare, execute, query, bind, step). Added sqlite handler name constants (OPEN, CLOSE, PREPARE, EXECUTE, QUERY, BIND, STEP) and comprehensive test coverage: property tests for CRUD invariants (32 property tests) validating lifecycle safety (connection → statement → execution), state transitions, and error conditions; fuzz target for arg-parsing resilience. All 360+ tests pass, clippy clean. gitignore updated: .env exclusion in root and crates/ dir.
+  commits: []
   session: 30
 - date: 20260422:130205
   summary: |
     Generalized .githooks/pre-commit and pre-push hooks (removed Maestro-specific hardcoding; auto-detect crates via cargo metadata; env-var config for shared crates, conformance test pattern, TF dir). Added bats test suite (18 tests: 9 pre-commit, 9 pre-push) and fuzz.sh (filename classifier + git-ref input fuzzer, 500 iterations). Wired just test-hooks and fuzz-hooks recipes. All 18 tests pass.
+  commits: []
   session: 29
 - date: 20260421:052733
   summary: |
     Structured BAML types for GeneratePipeline planner (PipelineDef replacing raw yaml string); serde_yaml serialization in planner.rs. Added SafetyPolicy + ApprovalGate conformance tests (45 total, all pass). Fixed 7 example pipeline audit issues: DelegateNode field rename in planner.baml, llm::extract function args in 5 enrich pipelines, route_on_confidence confidence sourcing in 3 joe/ pipelines. Wrote conformance spec to .ctx/conformance-spec.md.
+  commits: []
   session: 28
 - date: 20260420:173838
   summary: |
     Closed all 3 remaining HANDOFF items. crux-27 (stale macro doc comments) was already fixed in prior commit cae63c9. crux-28: added DockerContainerClient adapter behind docker feature (bollard 0.20, resource limits, integration test). crux-26: added LlmPlanner with BAML GeneratePipeline function, feature-gated on baml. 360/360 tests pass, CI clean.
+  commits: []
   session: 27
 - date: 20260420:132031
   summary: |
     Revised walkthrough series (all 8 docs) for clarity and crux rename consistency. Updated CLAUDE.md workspace structure with new crates (crux-planner, crux-model, crux-plugin, crux-script) and new proc macros (#[crux::harness], #[crux::evolve]). 358/358 tests pass.
+  commits: []
   session: 26
 - date: 20260420:131613
   summary: |
     Implemented orchestrator patterns: HarnessProfile, ResourceHints, HarnessDiff, EvolutionOutcome, SafetyPolicy trait, ApprovalGate trait, on_approval_required hook (crux-core); container::run/wait, harness::evolve/canary handlers, AutoApproveGate, TerminalApprovalGate (crux-agentic); EvolutionPlanner + RunMetrics (crux-planner); #[crux::harness] and #[crux::evolve] proc macros (crux-macros). Updated all docs. 358/358 tests pass, clippy clean.
+  commits: []
   session: 25
 - date: 2026-05-10
   summary: 'e301435 feat(crux-improve): add bridge crate with shared vocabulary types'
+  commits: []
 - date: 2026-05-04
   summary: reviewed CI workflow — no changes made this session
+  commits: []

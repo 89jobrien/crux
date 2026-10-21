@@ -64,10 +64,26 @@ pub(crate) fn parse_expression(expr: &str) -> Result<ParsedExpression, ExprError
 /// `confidence` is `None` for steps that produced no score (e.g. `handler_value` handlers).
 /// Routing steps (`route_on_confidence`) that reference such a step will receive an
 /// [`ExprError::NoConfidence`] rather than a spurious `1.0`.
+///
+/// `members` names the individual arms of a `join_all` group, so `{{ steps.<group>.<arm>.output }}`
+/// can address one arm. Without it a group's output is an unnamed array and no arm is reachable.
 #[derive(Debug, Clone)]
 pub struct StepResult {
     pub output: Value,
     pub confidence: Option<f32>,
+    /// Arm name -> arm output, populated only for `join_all` groups. Empty otherwise.
+    pub members: HashMap<String, Value>,
+}
+
+impl StepResult {
+    /// A plain step: no addressable members.
+    pub fn scalar(output: Value, confidence: Option<f32>) -> Self {
+        Self {
+            output,
+            confidence,
+            members: HashMap::new(),
+        }
+    }
 }
 
 /// Per-iteration bindings exposed inside a loop construct's `steps:` block
@@ -198,6 +214,33 @@ impl ExprContext {
             };
         }
 
+        // `steps.<group>.<arm>.<field>...` — one arm of a `join_all` group. Handled
+        // before the 3-segment cases below because the arm name occupies a segment
+        // that `steps.<name>.output` would otherwise consume as the trailing field.
+        if let Some(rest) = path.strip_prefix("steps.") {
+            let segments: Vec<&str> = rest.split('.').collect();
+            if segments.len() >= 3 && segments[1] != "output" && segments[1] != "confidence" {
+                let (group, arm) = (segments[0], segments[1]);
+                let Some(result) = self.steps.get(group) else {
+                    return Err(ExprError::UnknownStep(group.to_string()));
+                };
+                let Some(arm_output) = result.members.get(arm) else {
+                    return Err(ExprError::UnknownArm {
+                        group: group.to_string(),
+                        arm: arm.to_string(),
+                    });
+                };
+                let tail = segments[2..].join(".");
+                let tail = tail.strip_prefix("output").unwrap_or(&tail);
+                let tail = tail.strip_prefix('.').unwrap_or(tail);
+                if tail.is_empty() {
+                    return Ok(arm_output.clone());
+                }
+                return json_get(arm_output, tail)
+                    .ok_or_else(|| ExprError::UnknownPath(path.to_string()));
+            }
+        }
+
         const MAX_PATH_SEGMENTS: usize = 3;
         let parts: Vec<&str> = path.splitn(MAX_PATH_SEGMENTS, '.').collect();
         match parts.as_slice() {
@@ -253,6 +296,10 @@ pub enum ExprError {
     Syntax(String),
     #[error("unknown step: {0}")]
     UnknownStep(String),
+    /// A `join_all` group exists but has no arm by that name. Carries both names so
+    /// the diagnostic can suggest `steps.<group>.output` (the whole array).
+    #[error("step group '{group}' has no arm '{arm}' — use steps.{group}.output for all arms")]
+    UnknownArm { group: String, arm: String },
     #[error("unknown path: {0}")]
     UnknownPath(String),
     #[error("forward reference: {0}")]
@@ -283,15 +330,47 @@ mod tests {
         let mut ctx = ExprContext::new(Value::Null);
         ctx.steps.insert(
             "s1".to_string(),
-            StepResult {
-                output: json!({ "output": { "something": "value" } }),
-                confidence: None,
-            },
+            StepResult::scalar(json!({ "output": { "something": "value" } }), None),
         );
 
         let result = ctx
             .resolve_path("steps.s1.output.output.something")
             .expect("path should resolve");
         assert_eq!(result, json!("value"));
+    }
+
+    /// Regression test: join_all arm member access via `steps.<group>.<arm>.output`.
+    /// Verifies that individual arms of a join_all group can be addressed by name.
+    #[test]
+    fn join_all_arm_member_access_by_name() {
+        let mut ctx = ExprContext::new(Value::Null);
+        let mut members = HashMap::new();
+        members.insert("fetch_status".to_string(), json!({ "code": 200 }));
+        members.insert("fetch_body".to_string(), json!("success"));
+
+        ctx.steps.insert(
+            "parallel_fetch".to_string(),
+            StepResult {
+                output: json!([{ "code": 200 }, "success"]),
+                confidence: Some(0.95),
+                members,
+            },
+        );
+
+        // Access first arm
+        let status = ctx
+            .resolve_path("steps.parallel_fetch.fetch_status.output")
+            .expect("fetch_status arm should resolve");
+        assert_eq!(status, json!({ "code": 200 }));
+
+        // Access second arm
+        let body = ctx
+            .resolve_path("steps.parallel_fetch.fetch_body.output")
+            .expect("fetch_body arm should resolve");
+        assert_eq!(body, json!("success"));
+
+        // Unknown arm should error
+        let err = ctx.resolve_path("steps.parallel_fetch.unknown_arm.output");
+        assert!(matches!(err, Err(ExprError::UnknownArm { .. })));
     }
 }

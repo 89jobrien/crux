@@ -16,6 +16,7 @@ categories.workspace = true
 chrono = { workspace = true }
 clap = { workspace = true }
 crux-agentic = { workspace = true }
+crux-task = { workspace = true }
 crux-baml = { workspace = true } #unified
 crux-improve = { workspace = true }
 crux-plugin = { workspace = true }
@@ -28,7 +29,7 @@ dirs = { workspace = true }
 miette = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]

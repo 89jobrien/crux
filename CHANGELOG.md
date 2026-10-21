@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-18
+
 ### Added
 
 - `HarnessProfile`, `ResourceHints`, `HarnessDiff`, `EvolutionOutcome` types in `crux-runtime`
@@ -23,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   metrics-driven harness profile evolution
 - `#[crux::harness]` proc macro -- annotates a struct as a managed harness
 - `#[crux::evolve]` proc macro -- injects `EvolutionPlanner` + `CruxCtx` into an evolution fn
+- `--version` flag for crux and crux-task CLI binaries with git commit, build time, and profile info
+- Schema export and editor integration support in crux-cli with JSON schema generation and VS Code settings snippets
+- `join_all` member addressing for individual arm outputs via `StepResult.members` field
+- Pipeline lint validation (`lint-crux`) for handler contract conformance
+- Regression test coverage for join_all member field population
 
 ## [0.1.0] - 2026-04-12
 

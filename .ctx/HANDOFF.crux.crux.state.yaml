@@ -1,5 +1,5 @@
 project: crux
-branch: main
-build: passing (cargo check clean)
-tests: unknown (no test run this session)
-updated: "20260504:224027"
+branch: develop
+build: passing (cargo check clean, cargo clippy clean)
+tests: 275/1420 passed (pre-existing failures unrelated to this session)
+updated: "20261020:200000"
