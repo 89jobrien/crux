@@ -47,19 +47,6 @@ steps:
     args:
       field: "name"
 
-  - step: for_each_service
-    for_each: "check_service as service"
-    items: "{{ steps.filter_active_services }}"
-    steps:
-      - step: log_service
-        handler: ctrl::log
-        args:
-          field: "name"
-          compact: true
-
-  - step: classify_results
-    handler: triage::classify_severity
-
   - step: report_results
     handler: ctrl::log
     args:
