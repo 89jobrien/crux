@@ -18,7 +18,6 @@ publish = false
 verify = []
 
 [dependencies]
-crux-types = { workspace = true }
 
 [dev-dependencies]
 # hooo: propositional logic with exponentials — used to verify .hooo proof files.

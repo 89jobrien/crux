@@ -15,8 +15,6 @@ categories.workspace = true
 crux-baml = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-types = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
