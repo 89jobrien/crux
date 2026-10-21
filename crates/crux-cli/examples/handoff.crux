@@ -1,8 +1,8 @@
 pipeline: handoff
 description: Handoff workflow — serialize state, write checkpoint, extract context, transfer
 input_schema:
+  type: object
   definition:
-    type: object
     properties:
       session_id:
         type: string

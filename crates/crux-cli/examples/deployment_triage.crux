@@ -1,8 +1,8 @@
 pipeline: deployment_triage
 description: Deployment validation and issue triage — fetch manifest, check services, classify results
 input_schema:
+  type: object
   definition:
-    type: object
     properties:
       deployment_id:
         type: string
