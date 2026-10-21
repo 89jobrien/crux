@@ -4,7 +4,7 @@ flowchart TB
 %%
 %% Rendered by scripts/render-diagrams.sh. Edit this file, not the SVG.
 
-  interface["INTERFACE<br/><b>crux</b> facade &middot; crux-cli &middot; xtask<br/><i>what consumers touch</i>"]
+  interface["INTERFACE<br/><b>crux-dsl</b> facade &middot; crux-dsl-cli &middot; xtask<br/><i>what consumers touch</i>"]
   orchestration["ORCHESTRATION<br/>crux-agentic &middot; crux-planner<br/>crux-improve &middot; crux-regression"]
   handlers["HANDLERS<br/>crux-stdlib &middot; crux-baml &middot; crux-plugin &middot; crux-task<br/><i>deterministic &middot; LLM &middot; subprocess &middot; tasks</i>"]
   script["INTERPRETATION<br/><b>crux-script</b><br/><i>turns a .crux definition into executable steps</i>"]

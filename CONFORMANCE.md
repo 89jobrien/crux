@@ -303,8 +303,8 @@ the `crux` facade's integration tests.
 | crux-runtime   |   233 | Runtime context, delegation, speculation, replay, hooks, registry, trust, governance, safety, audit |
 | crux-script    |   210 | YAML parsing, compilation, validation, runner semantics (loops, expect, retry, timeout), confidence |
 | crux-agentic   |   117 | Handlers, adapters, analysis, CI, sqlite, review, triage, plugin discovery, CLI passthroughs |
-| crux (facade)  |   112 | Conformance suite, macros, combinators, delegation, speculation, checkpoints, research pipeline |
-| crux-cli       |    72 | `crux` binary: check, handlers, schema, trace, regress, doctor, init |
+| crux-dsl (facade) |   112 | Conformance suite, macros, combinators, delegation, speculation, checkpoints, research pipeline |
+| crux-dsl-cli |    72 | `crux` binary: check, handlers, schema, trace, regress, doctor, init |
 | crux-baml      |    71 | Mock BAML server, extraction, completion, analyze, planner          |
 | crux-stdlib    |    62 | Shell, fs, git, json, text, ctrl handlers                            |
 | crux-types     |    55 | Wire types, error classification, ids, budgets, emission, serde     |

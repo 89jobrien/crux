@@ -1,5 +1,5 @@
 [package]
-name = "crux-cli"
+name = "crux-dsl-cli"
 description = "Command-line interface for crux pipelines"
 version.workspace = true
 edition.workspace = true

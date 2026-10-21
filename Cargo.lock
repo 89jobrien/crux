@@ -482,21 +482,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
-name = "crux"
-version = "0.5.0"
-dependencies = [
- "crux-agentic",
- "crux-derive",
- "crux-domain",
- "crux-runtime",
- "crux-script",
- "futures",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "crux-agentic"
 version = "0.5.0"
 dependencies = [
@@ -539,7 +524,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "crux-cli"
+name = "crux-derive"
+version = "0.5.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "crux-domain"
+version = "0.5.0"
+dependencies = [
+ "chrono",
+ "crux-types",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "crux-dsl"
+version = "0.5.0"
+dependencies = [
+ "crux-agentic",
+ "crux-derive",
+ "crux-domain",
+ "crux-runtime",
+ "crux-script",
+ "futures",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "crux-dsl-cli"
 version = "0.5.0"
 dependencies = [
  "chrono",
@@ -561,26 +581,6 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "crux-derive"
-version = "0.5.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "crux-domain"
-version = "0.5.0"
-dependencies = [
- "chrono",
- "crux-types",
- "serde",
- "serde_json",
  "tokio",
 ]
 
@@ -617,8 +617,6 @@ dependencies = [
  "crux-types",
  "indoc",
  "insta",
- "serde",
- "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -774,7 +772,6 @@ dependencies = [
 name = "crux-verify"
 version = "0.5.0"
 dependencies = [
- "crux-types",
  "hooo",
 ]
 

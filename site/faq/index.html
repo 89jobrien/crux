@@ -121,10 +121,9 @@
         <details class="faq-item">
           <summary>How do I install it? The name on crates.io looks taken.</summary>
           <div class="faq-body">
-            <p>Install from git with an explicit tag rather than from crates.io:</p>
-<pre>cargo install --git https://github.com/89jobrien/crux \
-  --tag v0.4.2 crux-cli</pre>
-            <p>The workspace is at 0.4.0 with tags through v0.4.2. The unrelated <code>crux</code> crate on crates.io belongs to a different publisher.</p>
+            <p>The <code>crux</code> and <code>crux-cli</code> names on crates.io belong to a different publisher, so the facade and CLI ship as <code>crux-dsl</code> and <code>crux-dsl-cli</code>:</p>
+<pre>cargo install crux-dsl-cli</pre>
+            <p>The facade keeps the <code>crux</code> lib name, so <code>use crux::prelude::*;</code> is unchanged. Supporting crates such as <code>crux-types</code>, <code>crux-runtime</code>, and <code>crux-script</code> publish under their own names.</p>
           </div>
         </details>
 

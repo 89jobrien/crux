@@ -38,7 +38,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # crux-baml owns the only generated BAML client and is a hard dependency
-      # of crux-planner and crux-cli, so it cannot be excluded from the build
+      # of crux-planner and crux-dsl-cli, so it cannot be excluded from the build
       # graph. The generated tree is not rustfmt-clean, but `pub mod
       # baml_client` carries #[rustfmt::skip], so fmt checks handwritten code
       # only and needs no stub to satisfy the module tree.
@@ -93,7 +93,7 @@ jobs:
         run: cargo nextest run -p crux-agentic -p crux-baml -E 'not (package(crux-agentic) & (binary(llm_extract) | binary(planner)))'
 
       - name: Build crux CLI for catalog check
-        run: cargo build -p crux-cli --bin crux
+        run: cargo build -p crux-dsl-cli --bin crux
 
       - name: Check handler catalog drift
         run: |
@@ -101,6 +101,6 @@ jobs:
           if ! diff -u docs/handler-catalog.md /tmp/handler-catalog-generated.md; then
             echo ""
             echo "ERROR: docs/handler-catalog.md is out of date."
-            echo "Run 'cargo run -p crux-cli --bin crux -- handlers --output docs/handler-catalog.md' and commit the result."
+            echo "Run 'cargo run -p crux-dsl-cli --bin crux -- handlers --output docs/handler-catalog.md' and commit the result."
             exit 1
           fi

@@ -37,7 +37,7 @@ All crates live in `crates/`:
 
 | Crate          | Role                                                                      |
 | -------------- | ------------------------------------------------------------------------- |
-| `crux`         | Facade -- re-exports runtime + macros. Integration tests here.            |
+| `crux-dsl`     | Facade -- re-exports runtime + macros. Integration tests here.            |
 | `crux-runtime` | Core types, traits, runtime. All domain logic.                            |
 | `crux-types`   | Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxErr`). Minimal deps. |
 | `crux-macros`  | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.      |
@@ -47,7 +47,7 @@ All crates live in `crates/`:
 | `crux-plugin`  | Subprocess plugin host.                                                   |
 | `crux-planner` | Metrics-driven harness profile evolution.                                 |
 
-<!-- TODO(docs): Add crux-cli, crux-domain, crux-baml, crux-stdlib, crux-task, and crux-improve. -->
+<!-- TODO(docs): Add crux-dsl-cli, crux-domain, crux-baml, crux-stdlib, crux-task, and crux-improve. -->
 
 ## Feature Flags
 
@@ -93,10 +93,10 @@ Lenient mode does a forward name scan for recovery.
 
 ## Pipeline Binary
 
-The CLI binary is `crux` (not `crux-run`), built from `crux-cli`:
+The CLI binary is `crux` (not `crux-run`), built from `crux-dsl-cli`:
 
 ```bash
-cargo build -p crux-cli --bin crux --release
+cargo build -p crux-dsl-cli --bin crux --release
 crux run examples/showcase.crux
 crux run examples/showcase.crux -q    # quiet
 crux run examples/showcase.crux -v    # verbose

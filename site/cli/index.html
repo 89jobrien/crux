@@ -25,7 +25,7 @@
         <h1><code>crux</code> pipeline runner and planner</h1>
         <p class="lead">Eleven subcommands in the source. The output blocks below are captured from a real run unless the caption says otherwise.</p>
         <div class="meta-row">
-          <span class="meta">cargo install --git https://github.com/89jobrien/crux --tag v0.4.2 crux-cli</span>
+          <span class="meta">cargo install crux-dsl-cli</span>
         </div>
       </header>
 
@@ -199,7 +199,7 @@ steps:
               <tr><td><code>just lint</code></td><td><code>cargo clippy --all-targets -- -D warnings</code></td></tr>
               <tr><td><code>just lint-crux</code></td><td><code>crux run --check</code> across every <code>examples/**/*.crux</code></td></tr>
               <tr><td><code>cargo nextest run -p crux-runtime</code></td><td>one crate</td></tr>
-              <tr><td><code>cargo build -p crux-cli --bin crux --release</code></td><td>the release binary</td></tr>
+              <tr><td><code>cargo build -p crux-dsl-cli --bin crux --release</code></td><td>the release binary</td></tr>
             </tbody>
           </table>
         </div>

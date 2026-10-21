@@ -1,3 +1,0 @@
-# crux-cli
-
-<!-- Crate documentation -->

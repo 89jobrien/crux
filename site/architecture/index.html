@@ -39,7 +39,7 @@
           (<picture>
             <source srcset="diagrams/architecture.print.svg" media="print">
             <img src="../diagrams/architecture.svg" width="880" height="620" loading="lazy" decoding="async"
-               alt="The crux workspace as seven stacked layers, dependencies pointing inward. At the top, the interface layer: the crux facade, crux-cli, and xtask. Below it orchestration: crux-agentic, crux-planner, crux-improve, and crux-regression. Then handlers: crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script, which interprets pipeline files. Then crux-runtime, the core execution. Then crux-schema and crux-domain, pure types with no I/O. At the centre, the leaf layer: crux-types, crux-model, and the crux-derive proc macro, which has no workspace dependencies.">
+               alt="The crux workspace as seven stacked layers, dependencies pointing inward. At the top, the interface layer: the crux-dsl facade, crux-dsl-cli, and xtask. Below it orchestration: crux-agentic, crux-planner, crux-improve, and crux-regression. Then handlers: crux-stdlib, crux-baml, crux-plugin, and crux-task. Then crux-script, which interprets pipeline files. Then crux-runtime, the core execution. Then crux-schema and crux-domain, pure types with no I/O. At the centre, the leaf layer: crux-types, crux-model, and the crux-derive proc macro, which has no workspace dependencies.">
           </picture>
           <figcaption>Edges are read from each crate manifest. <code>crux-derive</code> sits in the leaf band because a proc-macro crate compiles separately and cannot import runtime types. The source is <a href="../diagrams/architecture.mmd"><code>diagrams/architecture.mmd</code></a>, rendered at build time, with a light variant for print. Edit the .mmd, not the SVG.</figcaption>
         </figure>
@@ -101,7 +101,7 @@
           <p>Tracked surfaces include <code>crux-domain-planner</code>, <code>crux-runtime-recorder</code>, <code>crux-runtime-audit</code>, <code>crux-runtime-safety</code>, <code>crux-runtime-agent</code>, <code>crux-runtime-approval</code>, <code>crux-runtime-context</code>, <code>crux-types-emission</code>, <code>crux-script-step_runner</code>, <code>crux-agentic-provider</code>, <code>crux-plugin-discovery</code>, <code>crux-improve-lib</code>, and <code>crux-planner-generator</code>.</p>
         </div>
         <div class="note note-warn">
-          <p>The crate list in <code>taskit.toml</code> omits <code>crux-cli</code>, <code>crux-macros</code>, <code>crux-schema</code>, <code>crux-regression</code>, and <code>crux-task</code>, so affected-crate propagation for those members is behind the actual workspace.</p>
+          <p>The crate list in <code>taskit.toml</code> omits <code>crux-dsl-cli</code>, <code>crux-macros</code>, <code>crux-schema</code>, <code>crux-regression</code>, and <code>crux-task</code>, so affected-crate propagation for those members is behind the actual workspace.</p>
         </div>
       </section>
 

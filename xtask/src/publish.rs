@@ -44,11 +44,13 @@ pub(crate) const PUBLISH_ORDER: &[CrateSpec] = &[
     CrateSpec {
         name: "crux-agentic",
     },
-    CrateSpec { name: "crux-cli" },
+    CrateSpec {
+        name: "crux-dsl-cli",
+    },
     CrateSpec {
         name: "crux-planner",
     },
-    CrateSpec { name: "crux" },
+    CrateSpec { name: "crux-dsl" },
 ];
 
 pub(crate) const POLL_RETRIES: u32 = 30;
@@ -327,7 +329,7 @@ mod tests {
 
     #[test]
     fn publish_order_ends_with_facade() {
-        assert_eq!(PUBLISH_ORDER.last().map(|spec| spec.name), Some("crux"));
+        assert_eq!(PUBLISH_ORDER.last().map(|spec| spec.name), Some("crux-dsl"));
     }
 
     #[test]
@@ -372,8 +374,8 @@ mod tests {
 
     #[test]
     fn sparse_index_url_facade_crate() {
-        let url = sparse_index_url("crux");
-        assert_eq!(url, "https://index.crates.io/cr/ux/crux");
+        let url = sparse_index_url("crux-dsl");
+        assert_eq!(url, "https://index.crates.io/cr/ux/crux-dsl");
     }
 
     #[test]

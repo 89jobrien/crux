@@ -1,8 +1,9 @@
-# crux
+# crux-dsl
 
 Primary facade for the Crux agentic DSL. It gives Rust consumers one dependency for the runtime,
 wire types, domain vocabulary, and attribute macros; implementation logic remains in the owning
-crates.
+crates. The crates.io name is `crux-dsl` because `crux` is owned by another publisher; the lib
+name stays `crux`, so `use crux::prelude::*;` is unchanged.
 
 ## Architecture role
 
@@ -15,7 +16,7 @@ users do.
 
 ```toml
 [dependencies]
-crux = "0.4.0"
+crux-dsl = "0.5.0"
 ```
 
 ```rust

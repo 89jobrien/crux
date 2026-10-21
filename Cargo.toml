@@ -23,7 +23,8 @@ base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 crux-agentic = { path = "crates/crux-agentic", version = "0.5.0" }
 crux-baml = { path = "crates/crux-baml", version = "0.5.0" }
-crux-cli = { path = "crates/crux-cli", version = "0.5.0" }
+crux-dsl = { path = "crates/crux", version = "0.5.0" }
+crux-dsl-cli = { path = "crates/crux-cli", version = "0.5.0" }
 
 # Internal crates
 crux-domain = { path = "crates/crux-domain", version = "0.5.0" }

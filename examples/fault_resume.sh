@@ -27,7 +27,7 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
 printf '\n== Build and validate ==\n'
-cargo build --manifest-path "$ROOT/Cargo.toml" -p crux-cli --bin crux
+cargo build --manifest-path "$ROOT/Cargo.toml" -p crux-dsl-cli --bin crux
 "$CRUX_BIN" run "$PIPELINE" --check
 
 SERVER_PID=''

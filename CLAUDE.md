@@ -33,7 +33,7 @@ Always use `cargo nextest run` instead of `cargo test`.
 
 Crates in `crates/`:
 
-- **`crux`** -- Facade crate. Re-exports `crux-domain`, `crux-derive`, `crux-runtime` (optional
+- **`crux-dsl`** -- Facade crate. Re-exports `crux-domain`, `crux-derive`, `crux-runtime` (optional
   `crux-script`). Integration tests live here (`tests/agent_macro.rs`, `checkpoint.rs`,
   `combinators.rs`, `conformance.rs`, `delegation.rs`, `evolve_macro.rs`, `harness_macro.rs`,
   `research_pipeline.rs`, `speculation.rs`, `streaming.rs`, `substrate_integration.rs`,
@@ -45,7 +45,7 @@ Crates in `crates/`:
   `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
 - **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
   `AutoApproveGate`, `TerminalApprovalGate`.
-- **`crux-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
+- **`crux-dsl-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
   for handlers/registry.
 <!-- TODO(docs): Attribute shell, fs, git, JSON, text, and control handlers to `crux-stdlib`. -->
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
@@ -142,7 +142,7 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   `generators.baml` exactly. When bumping baml, update both files together.
 - `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
   `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
-- Build `crux` with `cargo build -p crux-cli --bin crux --features baml` or
+- Build `crux` with `cargo build -p crux-dsl-cli --bin crux --features baml` or
   `llm::extract` / `llm::decompose` won't register.
 - Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux
 examples/<pipeline>.crux examples/input_<name>.json`
