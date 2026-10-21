@@ -76,12 +76,10 @@ fn parse_sandbox_table_with_all_fields() {
 [[plugin]]
 name = "s3"
 path = "crux-s3"
-
-[plugin.0.sandbox]
-env_allow = ["AWS_PROFILE"]
-fs_allow = ["/tmp/crux-s3"]
-network = "deny"
-max_memory_mb = 256
+sandbox.env_allow = ["AWS_PROFILE"]
+sandbox.fs_allow = ["/tmp/crux-s3"]
+sandbox.network = "deny"
+sandbox.max_memory_mb = 256
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
     let sandbox = &manifest.plugin[0].sandbox;

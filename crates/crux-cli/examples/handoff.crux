@@ -2,17 +2,23 @@ pipeline: handoff
 description: Handoff workflow — serialize state, write checkpoint, extract context, transfer
 input_schema:
   type: object
-  properties:
-    session_id:
-      type: string
-    handoff_state:
-      type: object
-    priority:
-      type: string
-      enum: ["low", "medium", "high", "critical"]
-  required:
-    - session_id
-    - handoff_state
+  definition:
+    properties:
+      session_id:
+        schema:
+          type: string
+          definition: null
+        required: true
+      handoff_state:
+        schema:
+          type: object
+          definition: {}
+        required: true
+      priority:
+        schema:
+          type: string
+          definition: null
+        required: false
 
 budget:
   steps: 12
@@ -48,8 +54,7 @@ steps:
       condition: "{{ steps.save_checkpoint }}"
       message: "Checkpoint write must succeed before transfer"
 
-  - step: pipe_transfer
-    pipe: "transfer_handoff"
+  - pipe: "transfer_handoff"
     stages:
       - step: extract_context
         handler: json::pick

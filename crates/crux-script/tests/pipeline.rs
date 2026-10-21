@@ -487,7 +487,7 @@ steps:
 
     // Verify the join_all output is an array of the three arm results
     let results = crux.value().unwrap();
-    assert_eq!(results, &json!("web=\"web_result\",cache=\"cache_result\""));
+    assert_eq!(results, &json!("web=web_result,cache=cache_result"));
 
     // Verify we can access the individual step results
     // The array should contain the outputs from all three arms

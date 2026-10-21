@@ -27,7 +27,7 @@ fn minimal_trace_json(agent: &str, steps: &[serde_json::Value]) -> String {
 fn ok_step(name: &str) -> serde_json::Value {
     json!({
         "name": name,
-        "kind": "Plain",
+        "kind": "plain",
         "status": "ok",
         "origin": "live",
         "confidence": 1.0,
@@ -41,7 +41,7 @@ fn ok_step(name: &str) -> serde_json::Value {
 fn err_step(name: &str) -> serde_json::Value {
     json!({
         "name": name,
-        "kind": "Plain",
+        "kind": "plain",
         "status": "err",
         "origin": "live",
         "confidence": 0.0,

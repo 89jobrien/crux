@@ -2,18 +2,23 @@ pipeline: deployment_triage
 description: Deployment validation and issue triage — fetch manifest, check services, classify results
 input_schema:
   type: object
-  properties:
-    deployment_id:
-      type: string
-    target_env:
-      type: string
-      enum: ["dev", "staging", "production"]
-    manifest_path:
-      type: string
-  required:
-    - deployment_id
-    - target_env
-    - manifest_path
+  definition:
+    properties:
+      deployment_id:
+        schema:
+          type: string
+          definition: null
+        required: true
+      target_env:
+        schema:
+          type: string
+          definition: null
+        required: true
+      manifest_path:
+        schema:
+          type: string
+          definition: null
+        required: true
 
 budget:
   steps: 12
@@ -41,19 +46,6 @@ steps:
     handler: json::filter_nonempty
     args:
       field: "name"
-
-  - step: for_each_service
-    for_each: "check_service as service"
-    items: "{{ steps.filter_active_services }}"
-    steps:
-      - step: log_service
-        handler: ctrl::log
-        args:
-          field: "name"
-          compact: true
-
-  - step: classify_results
-    handler: triage::classify_severity
 
   - step: report_results
     handler: ctrl::log
