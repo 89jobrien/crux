@@ -1,0 +1,70 @@
+pipeline: handoff
+description: Handoff workflow — serialize state, write checkpoint, extract context, transfer
+input_schema:
+  type: object
+  properties:
+    session_id:
+      type: string
+    handoff_state:
+      type: object
+    priority:
+      type: string
+      enum: ["low", "medium", "high", "critical"]
+  required:
+    - session_id
+    - handoff_state
+
+budget:
+  steps: 12
+  duration_ms: 600000
+  tokens: 5000
+
+display:
+  title: "Handoff Workflow"
+  output: always
+
+vars:
+  handoff_id: "hoff_{{ input.session_id }}"
+  checkpoint_path: "/tmp/crux-handoff-{{ input.session_id }}.json"
+
+steps:
+  - step: prepare_checkpoint
+    handler: json::merge
+    args:
+      with:
+        handoff_id: "{{ vars.handoff_id }}"
+        priority: "{{ input.priority }}"
+
+  - step: save_checkpoint
+    handler: fs::write
+    args:
+      path: "{{ vars.checkpoint_path }}"
+      content: "{{ steps.prepare_checkpoint }}"
+    timeout_ms: 5000
+
+  - step: validate_state
+    handler: ctrl::assert
+    args:
+      condition: "{{ steps.save_checkpoint }}"
+      message: "Checkpoint write must succeed before transfer"
+
+  - step: pipe_transfer
+    pipe: "transfer_handoff"
+    stages:
+      - step: extract_context
+        handler: json::pick
+        args:
+          fields:
+            - "handoff_id"
+            - "priority"
+
+      - step: write_transfer
+        handler: fs::write
+        args:
+          path: "{{ vars.checkpoint_path }}.transfer"
+          content: "{{ steps.extract_context }}"
+
+  - step: finalize_handoff
+    handler: ctrl::log
+    args:
+      pretty: true

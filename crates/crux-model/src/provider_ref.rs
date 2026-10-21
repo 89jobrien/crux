@@ -1,3 +1,5 @@
+//! Provider model references pairing raw IDs with canonical identities and metadata.
+
 use serde::{Deserialize, Serialize};
 
 use crate::{canonical::CanonicalModelId, vendor::Vendor};
@@ -24,6 +26,7 @@ pub struct ProviderModelRef {
 }
 
 impl ProviderModelRef {
+    /// Associates a raw provider ID with its canonical model identity.
     pub fn new(
         vendor: Vendor,
         provider_id: impl Into<String>,
@@ -37,6 +40,7 @@ impl ProviderModelRef {
         }
     }
 
+    /// Attaches provider-supplied model metadata.
     pub fn with_metadata(mut self, meta: ModelMetadata) -> Self {
         self.metadata = Some(meta);
         self

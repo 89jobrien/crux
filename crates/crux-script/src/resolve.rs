@@ -39,6 +39,8 @@ impl std::error::Error for ResolveError {}
 pub struct TargetResolver {
     /// target -> list of targets it depends on
     edges: HashMap<String, Vec<String>>,
+    /// Target declaration order from the source Cruxfile.
+    target_order: Vec<String>,
 }
 
 impl TargetResolver {
@@ -63,9 +65,42 @@ impl TargetResolver {
             edges.insert(name.clone(), target.depends.clone());
         }
 
-        let resolver = Self { edges };
+        let resolver = Self {
+            edges,
+            target_order: cruxfile.targets.keys().cloned().collect(),
+        };
         resolver.check_cycles()?;
         Ok(resolver)
+    }
+
+    /// Return every target in stable dependency order.
+    ///
+    /// Dependencies retain their declaration order, and disconnected targets
+    /// retain their Cruxfile declaration order.
+    pub fn complete_order(&self) -> Vec<&str> {
+        fn visit<'a>(
+            target: &'a str,
+            edges: &'a HashMap<String, Vec<String>>,
+            visited: &mut HashSet<&'a str>,
+            order: &mut Vec<&'a str>,
+        ) {
+            if !visited.insert(target) {
+                return;
+            }
+            if let Some(dependencies) = edges.get(target) {
+                for dependency in dependencies {
+                    visit(dependency, edges, visited, order);
+                }
+            }
+            order.push(target);
+        }
+
+        let mut visited = HashSet::new();
+        let mut order = Vec::with_capacity(self.target_order.len());
+        for target in &self.target_order {
+            visit(target, &self.edges, &mut visited, &mut order);
+        }
+        order
     }
 
     /// Return the topologically sorted execution order for a target,

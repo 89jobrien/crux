@@ -2,7 +2,9 @@
 title: FinalPhase
 tags: [type, core]
 ---
-# FinalPhase
+
+## FinalPhase
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/crux_value.rs`
 
 Severity-ordered enum (Ord derived): Succeeded < Skipped < Aborted < Failed < Errored.

@@ -1,5 +1,8 @@
+//! Normalization of Google Gemini model names.
+
 use crate::{canonical::CanonicalModelId, error::ModelParseError, vendor::Vendor};
 
+/// Splits a Gemini provider ID into generation and variant components.
 pub fn parse(raw: &str) -> Result<CanonicalModelId, ModelParseError> {
     let Some(rest) = raw.strip_prefix("gemini-") else {
         return Ok(super::fallback::parse(Vendor::Google, raw));

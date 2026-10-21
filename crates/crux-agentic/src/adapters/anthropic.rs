@@ -1,3 +1,5 @@
+//! Anthropic Messages API adapter for Crux LLM requests.
+
 use crux_model::{ProviderModelId, ProviderModelRef, Vendor};
 use crux_runtime::prelude::CruxErr;
 use serde_json::json;
@@ -11,6 +13,7 @@ pub struct AnthropicAdapter {
 }
 
 impl AnthropicAdapter {
+    /// Builds an adapter from `ANTHROPIC_API_KEY` and the default endpoint and model.
     pub fn from_env() -> Self {
         Self {
             api_key: std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
@@ -19,6 +22,7 @@ impl AnthropicAdapter {
         }
     }
 
+    /// Builds an adapter with explicit credentials, model, and API endpoint.
     pub fn new(
         api_key: impl Into<String>,
         model: ProviderModelRef,

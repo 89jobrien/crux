@@ -1,6 +1,5 @@
 # Wiki Index
 
-
 ## Summary
 
 - [core-types-reference](summary/core-types-reference.md)

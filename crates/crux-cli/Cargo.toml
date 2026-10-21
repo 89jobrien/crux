@@ -1,0 +1,42 @@
+[package]
+name = "crux-cli"
+description = "Command-line interface for crux pipelines"
+version.workspace = true
+edition.workspace = true
+readme = "../../README.md"
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+clap = { workspace = true }
+crux-agentic = { workspace = true }
+crux-task = { workspace = true }
+crux-baml = { workspace = true } #unified
+crux-improve = { workspace = true }
+crux-plugin = { workspace = true }
+crux-regression = { workspace = true }
+crux-runtime = { workspace = true }
+crux-schema = { workspace = true }
+crux-types = { workspace = true, features = ["miette"] }
+crux-script = { workspace = true }
+dirs = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-saphyr = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "crux"
+path = "src/bin/crux/main.rs"
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

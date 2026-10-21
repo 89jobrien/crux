@@ -1,3 +1,5 @@
+//! Multi-arm speculative execution with scored winner selection.
+
 /// SpeculationBuilder — run several approaches, pick the best.
 ///
 /// Created by `CruxCtx::speculate(name, arms)`. Arms run sequentially
@@ -8,14 +10,51 @@ use std::pin::Pin;
 
 use chrono::Utc;
 
+use crate::context::InvocationMeter;
 use crate::ctx::CruxCtx;
+use crate::types::budget::HandlerUsage;
 use crate::types::error::CruxErr;
-use crate::types::step::{Step, StepKind, StepStatus};
+use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
+use crux_types::emission::Emission;
 
 /// A named speculation arm.
 pub struct SpecArm<T> {
     pub name: String,
     pub fut: Pin<Box<dyn Future<Output = Result<T, CruxErr>> + Send>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BranchScore {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl BranchScore {
+    pub const fn new(quality: f32, cost: f32, latency: f32) -> Self {
+        Self {
+            quality,
+            cost,
+            latency,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScoreWeights {
+    pub quality: f32,
+    pub cost: f32,
+    pub latency: f32,
+}
+
+impl Default for ScoreWeights {
+    fn default() -> Self {
+        Self {
+            quality: 1.0,
+            cost: 0.25,
+            latency: 0.25,
+        }
+    }
 }
 impl CruxCtx {
     /// Start a speculation: run multiple approaches, pick the best.
@@ -66,13 +105,51 @@ where
     where
         F: Fn(&T) -> f32,
     {
-        trace_speculate!(&self.name, self.arms.len());
+        self.pick_best_by_metered(f, |_| None).await
+    }
+
+    pub async fn pick_best_scored<F>(self, weights: ScoreWeights, score: F) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> BranchScore,
+    {
+        self.pick_best_by(|value| {
+            let score = score(value);
+            score.quality * weights.quality
+                - score.cost * weights.cost
+                - score.latency * weights.latency
+        })
+        .await
+    }
+
+    /// Run all arms while recording each completed arm before starting the next.
+    pub async fn pick_best_by_metered<F, R>(self, f: F, mut report: R) -> Result<T, CruxErr>
+    where
+        F: Fn(&T) -> f32,
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
+        self.ctx.emit(Emission::SpeculateStart {
+            name: self.name.clone(),
+            arm_count: self.arms.len(),
+        });
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         // Run all arms, collect results
         let mut completed: Vec<(String, Result<T, CruxErr>)> = Vec::new();
         for arm in self.arms {
+            self.ctx.reserve_invocations(1)?;
             let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
             completed.push((arm.name, result));
         }
 
@@ -97,9 +174,11 @@ where
                     Ok(_) => unreachable!(),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status: StepStatus::Err,
+                    origin: StepOrigin::Live,
                     confidence: 0.0,
                     started_at: Utc::now(),
                     duration_ms: 0,
@@ -107,8 +186,10 @@ where
                     content_hash: None,
                     output: None,
                     error: Some(error),
+                    cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -126,9 +207,11 @@ where
                 match result {
                     Ok(val) => {
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Ok,
+                            origin: StepOrigin::Live,
                             confidence: best_score,
                             started_at: Utc::now(),
                             duration_ms: 0,
@@ -136,8 +219,10 @@ where
                             content_hash: None,
                             output: serde_json::to_value(&val).ok(),
                             error: None,
+                            cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -146,9 +231,11 @@ where
                     Err(e) => {
                         let err_msg = e.to_string();
                         self.ctx.push_step(Step {
+                            stable_id: Some(format!("{}::{}", self.name, arm_name)),
                             name: format!("{}::{}", self.name, arm_name),
                             kind: StepKind::Speculation,
                             status: StepStatus::Err,
+                            origin: StepOrigin::Live,
                             confidence: best_score,
                             started_at: Utc::now(),
                             duration_ms: 0,
@@ -156,8 +243,10 @@ where
                             content_hash: None,
                             output: None,
                             error: Some(err_msg.clone()),
+                            cited_reason: None,
                             attempt: 1,
                             events: vec![],
+                            event_subscribers: Default::default(),
                             metadata: std::collections::HashMap::new(),
                             findings: vec![],
                         });
@@ -170,9 +259,11 @@ where
                     Err(e) => (StepStatus::Err, None, Some(e.to_string())),
                 };
                 self.ctx.push_step(Step {
+                    stable_id: Some(format!("{}::{}", self.name, arm_name)),
                     name: format!("{}::{}", self.name, arm_name),
                     kind: StepKind::Speculation,
                     status,
+                    origin: StepOrigin::Live,
                     confidence: 0.0,
                     started_at: Utc::now(),
                     duration_ms: 0,
@@ -180,8 +271,10 @@ where
                     content_hash: None,
                     output,
                     error,
+                    cited_reason: None,
                     attempt: 1,
                     events: vec![],
+                    event_subscribers: Default::default(),
                     metadata: std::collections::HashMap::new(),
                     findings: vec![],
                 });
@@ -217,17 +310,44 @@ where
 
     /// Return the first arm that succeeds. Failed arms recorded as Rejected.
     pub async fn first_ok(self) -> Result<T, CruxErr> {
-        trace_speculate!(&self.name, self.arms.len());
+        self.first_ok_metered(|_| None).await
+    }
+
+    /// Return the first successful arm, accounting each completed attempt immediately.
+    pub async fn first_ok_metered<R>(self, mut report: R) -> Result<T, CruxErr>
+    where
+        R: FnMut(&str) -> Option<(HandlerUsage, std::time::Duration)>,
+    {
+        self.ctx.emit(Emission::SpeculateStart {
+            name: self.name.clone(),
+            arm_count: self.arms.len(),
+        });
+        if let Some(result) = self.planned_result()? {
+            return Ok(result);
+        }
         let (_ordinal, input_hash) = self.ctx.recorder_mut().next_ordinal(&self.name);
 
         let mut last_err = None;
         for arm in self.arms {
-            match arm.fut.await {
+            self.ctx.reserve_invocations(1)?;
+            let result = arm.fut.await;
+            if let Some((usage, duration)) = report(&arm.name)
+                && let Err(mut accounting_error) =
+                    self.ctx.record_invocation_usage(&arm.name, usage, duration)
+            {
+                if let Err(source) = &result {
+                    attach_budget_source(&mut accounting_error, source.clone());
+                }
+                return Err(accounting_error);
+            }
+            match result {
                 Ok(val) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Ok,
+                        origin: StepOrigin::Live,
                         confidence: 1.0,
                         started_at: Utc::now(),
                         duration_ms: 0,
@@ -235,8 +355,10 @@ where
                         content_hash: None,
                         output: serde_json::to_value(&val).ok(),
                         error: None,
+                        cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });
@@ -244,9 +366,11 @@ where
                 }
                 Err(e) => {
                     self.ctx.push_step(Step {
+                        stable_id: Some(format!("{}::{}", self.name, arm.name)),
                         name: format!("{}::{}", self.name, arm.name),
                         kind: StepKind::Speculation,
                         status: StepStatus::Rejected,
+                        origin: StepOrigin::Live,
                         confidence: 0.0,
                         started_at: Utc::now(),
                         duration_ms: 0,
@@ -254,8 +378,10 @@ where
                         content_hash: None,
                         output: None,
                         error: Some(e.to_string()),
+                        cited_reason: None,
                         attempt: 1,
                         events: vec![],
+                        event_subscribers: Default::default(),
                         metadata: std::collections::HashMap::new(),
                         findings: vec![],
                     });
@@ -266,6 +392,24 @@ where
 
         Err(last_err.unwrap_or_else(|| CruxErr::step_failed(&self.name, "no speculation arms")))
     }
+
+    fn planned_result(&self) -> Result<Option<T>, CruxErr> {
+        self.ctx.route_through_planner_gate::<T>(&self.name)
+    }
+}
+
+fn attach_budget_source(error: &mut CruxErr, source: CruxErr) {
+    match error {
+        CruxErr::UnreportedCost {
+            source: error_source,
+            ..
+        }
+        | CruxErr::UsdBudgetExceeded {
+            source: error_source,
+            ..
+        } => *error_source = Some(Box::new(source)),
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -274,6 +418,38 @@ mod tests {
     use crate::ctx::CruxCtx;
     use crate::types::error::CruxErr;
     use crate::types::step::StepStatus;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[tokio::test]
+    async fn planner_denies_speculation_before_arms_are_polled() {
+        use crux_domain::planner::DenyAllPlanner;
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let arm_polls = Arc::clone(&polls);
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_planner(DenyAllPlanner {
+            reason: "no speculation".into(),
+        });
+        let result = ctx
+            .speculate(
+                "choose",
+                vec![(
+                    "arm",
+                    Box::pin(async move {
+                        arm_polls.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, CruxErr>(1)
+                    }),
+                )],
+            )
+            .first_ok()
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
+        assert_eq!(polls.load(Ordering::SeqCst), 0);
+    }
 
     fn ok_arm<T: Send + 'static>(name: &str, val: T) -> SpecArm<T> {
         SpecArm {
@@ -351,6 +527,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multi_metric_scoring_balances_quality_cost_and_latency() {
+        let mut ctx = CruxCtx::new("test");
+        let arms = vec![ok_arm("expensive", 1_i32), ok_arm("efficient", 2_i32)];
+        let winner = SpeculationBuilder::new(&mut ctx, "rank", arms)
+            .pick_best_scored(ScoreWeights::default(), |value| {
+                if *value == 1 {
+                    BranchScore::new(1.0, 1.0, 1.0)
+                } else {
+                    BranchScore::new(0.9, 0.1, 0.1)
+                }
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(winner, 2);
+    }
+
+    #[tokio::test]
     async fn pick_best_all_fail_returns_err() {
         let mut ctx = CruxCtx::new("test");
         let arms: Vec<SpecArm<serde_json::Value>> = vec![err_arm("a"), err_arm("b"), err_arm("c")];
@@ -404,6 +598,50 @@ mod tests {
         // Both arms score 5.0; first arm should win (strict > comparison).
         let result = builder.pick_best_by(|_| 5.0).await.unwrap();
         assert_eq!(result.as_str().unwrap(), "a");
+    }
+
+    #[tokio::test]
+    async fn pick_best_multiple_arms_without_score_resolve_deterministically() {
+        // Issue #68: arms with no "score" field must not silently tie at 0.0
+        // and win arbitrarily by iteration order. The fallback (byte-length of
+        // serialized output) must deterministically pick the same winner
+        // regardless of arm order.
+        let mut ctx_a = CruxCtx::new("test");
+        let arms_a = vec![
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+        ];
+        let result_a = SpeculationBuilder::new(&mut ctx_a, "spec", arms_a)
+            .pick_best()
+            .await
+            .unwrap();
+
+        let mut ctx_b = CruxCtx::new("test");
+        let arms_b = vec![
+            ok_arm("third", serde_json::json!({"answer": "mid-length"})),
+            ok_arm(
+                "second",
+                serde_json::json!({"answer": "a much longer answer"}),
+            ),
+            ok_arm("first", serde_json::json!({"answer": "short"})),
+        ];
+        let result_b = SpeculationBuilder::new(&mut ctx_b, "spec", arms_b)
+            .pick_best()
+            .await
+            .unwrap();
+
+        // Same logical winner regardless of arm order -- not an arbitrary
+        // first-wins tie at score 0.0.
+        assert_eq!(result_a["answer"], result_b["answer"]);
+        assert_eq!(
+            result_a["answer"].as_str().unwrap(),
+            "a much longer answer",
+            "expected the longest-serialized arm to win deterministically"
+        );
     }
 
     // first_ok tests

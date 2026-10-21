@@ -1,3 +1,5 @@
+//! Tests for registering custom agents for delegated pipeline steps.
+
 /// Verify that agents can be pre-registered for delegate: steps.
 use crux_script::HandlerRegistry;
 use serde_json::{Value, json};

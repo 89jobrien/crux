@@ -1,3 +1,5 @@
+//! Filesystem integration tests for installing and listing rx commands.
+
 use crux_agentic::rx;
 use crux_script::HandlerRegistry;
 use serde_json::json;
@@ -33,6 +35,7 @@ async fn rx_install_and_list() {
         },
     }))
     .await
+    .outcome
     .unwrap();
 
     assert_eq!(result["installed"], "hello");
@@ -43,6 +46,7 @@ async fn rx_install_and_list() {
         "args": { "registry": registry_path.to_string_lossy() },
     }))
     .await
+    .outcome
     .unwrap();
 
     let commands = list_result["commands"].as_array().unwrap();
@@ -71,7 +75,8 @@ async fn rx_install_missing_source_fails() {
             "registry": registry_path.to_string_lossy(),
         },
     }))
-    .await;
+    .await
+    .outcome;
 
     assert!(result.is_err());
 }
@@ -99,14 +104,15 @@ async fn rx_install_replaces_existing_entry() {
         })
     };
 
-    install(mk_input(&script_v1)).await.unwrap();
-    install(mk_input(&script_v2)).await.unwrap();
+    install(mk_input(&script_v1)).await.outcome.unwrap();
+    install(mk_input(&script_v2)).await.outcome.unwrap();
 
     let list = reg.get_handler("rx::list").unwrap();
     let list_result = list(json!({
         "args": { "registry": registry_path.to_string_lossy() },
     }))
     .await
+    .outcome
     .unwrap();
     let commands = list_result["commands"].as_array().unwrap();
     assert_eq!(commands.len(), 1);

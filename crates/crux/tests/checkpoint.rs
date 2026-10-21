@@ -1,3 +1,5 @@
+//! Integration tests for checkpoint persistence and replay restoration.
+
 /// Integration tests for checkpoint/resume functionality.
 use crux::prelude::*;
 use crux::registry::{InMemoryBackend, TaskRegistry, TaskStatus};

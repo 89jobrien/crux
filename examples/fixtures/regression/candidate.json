@@ -1,0 +1,49 @@
+{
+  "id": "crux_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+  "agent": "nightly-regression-fixture",
+  "pipeline_version": "fixture-v1",
+  "value": {
+    "Ok": {
+      "answer": 42
+    }
+  },
+  "steps": [
+    {
+      "stable_id": "safety_gate",
+      "name": "safety_gate",
+      "kind": "plain",
+      "status": "ok",
+      "origin": "live",
+      "confidence": 1.0,
+      "started_at": "2026-01-01T00:00:00Z",
+      "duration_ms": 10,
+      "input_hash": 1,
+      "content_hash": 11,
+      "output": {
+        "approved": true
+      },
+      "error": null,
+      "attempt": 1
+    },
+    {
+      "stable_id": "answer",
+      "name": "answer",
+      "kind": "plain",
+      "status": "ok",
+      "origin": "live",
+      "confidence": 1.0,
+      "started_at": "2026-01-01T00:00:01Z",
+      "duration_ms": 20,
+      "input_hash": 2,
+      "content_hash": 22,
+      "output": {
+        "answer": 42
+      },
+      "error": null,
+      "attempt": 1
+    }
+  ],
+  "children": [],
+  "started_at": "2026-01-02T00:00:00Z",
+  "finished_at": "2026-01-02T00:00:02Z"
+}

@@ -1127,7 +1127,6 @@ git -C /Users/joe/dev/crux commit -m "test(agentic): conformance tests for sqlit
 
 - Create or modify: `fuzz/Cargo.toml`
 - Create: `fuzz/fuzz_targets/sqlite_args.rs`
-
 - [ ] **Step 1: Check if fuzz crate exists**
 
 ```bash

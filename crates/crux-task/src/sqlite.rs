@@ -15,6 +15,7 @@ pub struct SqliteBackend {
 }
 
 impl SqliteBackend {
+    /// Opens the database and creates the task table when absent.
     pub fn open(path: &str) -> Result<Self, TaskErr> {
         let conn =
             Connection::open(path).map_err(|e| TaskErr::Storage(format!("sqlite open: {e}")))?;

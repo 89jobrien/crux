@@ -1,3 +1,5 @@
+//! Concurrent named futures collected in stable input order with `join_all`.
+
 /// Join-all: fan out to multiple named futures concurrently, collect results.
 ///
 /// Shows:

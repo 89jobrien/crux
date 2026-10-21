@@ -2,7 +2,9 @@
 title: CruxErr
 tags: [type, core, error]
 ---
-# CruxErr
+
+## CruxErr
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/error.rs`
 
 Tagged enum (`#[serde(tag = "kind")]`). Variants: StepFailed, LowConfidence,

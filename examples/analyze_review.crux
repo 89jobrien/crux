@@ -1,0 +1,53 @@
+pipeline: analyze_review
+# Demonstrates the two LLM-backed analysis steps:
+#   llm::analyze     -- evidence in, summary + severity-tagged findings out
+#   llm::confidence  -- claim in, 0.0-1.0 support score out
+#
+# Both handlers report a confidence score, so either can drive
+# route_on_confidence. `llm::confidence` is the natural final step: it turns a
+# vague "is this good?" into a calibrated score over a named claim.
+#
+# Both bind to the BAML `Local` client (Ollama first, then hosted providers),
+# so this runs with no API keys as long as `ollama serve` is up.
+budget: { calls: 4 }
+
+steps:
+  - step: gather
+    handler: shell::capture
+    args:
+      cmd: "git diff --staged"
+
+  - step: inspect
+    handler: llm::analyze
+    args:
+      subject: "staged diff"
+      evidence: "{{ steps.gather.output.stdout }}"
+      focus: correctness and security
+    # -> { summary, findings[{title, detail, severity, evidence}], recommendation, confidence }
+
+  - step: score
+    handler: llm::confidence
+    args:
+      claim: "The staged diff is safe to commit as-is."
+      evidence: "{{ steps.inspect.output.summary }}"
+      criteria:
+        - "Is the evidence direct and unambiguous?"
+        - "Is the evidence complete?"
+        - "Does anything contradict the claim?"
+    # -> { score, level, reasoning, factors } with score as the step confidence
+
+  - route_on_confidence: verdict
+    value: "{{ steps.score.confidence }}"
+    routes:
+      - range: "[0.0, 0.4)"
+        label: blockers
+        handler: ctrl::log
+        # Evidence does not support committing -- blocking findings present
+      - range: "[0.4, 0.8)"
+        label: review
+        handler: ctrl::log
+        # Mixed evidence -- worth a human look before commit
+      - range: "[0.8, 1.0]"
+        label: clean
+        handler: ctrl::log
+        # Evidence supports committing as-is

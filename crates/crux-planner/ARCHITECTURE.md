@@ -25,7 +25,7 @@ Two independent planning subsystems in one crate.
 
 ## Pipeline Planning
 
-```
+```text
 Goal (natural language or structured)
   -> DeterministicPlanner (rule-based, Path B)
      OR LlmPlanner (BAML-backed, Path A)
@@ -35,7 +35,7 @@ Goal (natural language or structured)
 
 ## Harness Evolution
 
-```
+```text
 RunMetrics (from completed pipeline run)
   -> EvolutionPlanner
   -> HarnessDiff (incremental profile change)

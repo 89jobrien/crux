@@ -2,7 +2,9 @@
 title: TaskId
 tags: [type, identity]
 ---
-# TaskId
+
+## TaskId
+
 **Crate:** [[crux-types]] | **File:** `crates/crux-types/src/id.rs`
 
 ULID-based unique task identifier. Prefix `task_`. Used in [[TaskRegistry]] and [[Task]].

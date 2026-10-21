@@ -1,0 +1,26 @@
+[package]
+name = "crux-verify"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Formal verification proofs for crux trace invariants (budget monotonicity, delegation termination)"
+keywords = ["agent", "formal-verification", "proof"]
+categories = ["development-tools"]
+publish = false
+
+[features]
+# Enables the hooo-backed formal verification test suite.
+# Zero runtime cost: all verification code is #[cfg(feature = "verify")] guarded.
+# Run with: cargo nextest run -p crux-verify --features verify
+verify = []
+
+[dependencies]
+crux-types = { workspace = true }
+
+[dev-dependencies]
+# hooo: propositional logic with exponentials — used to verify .hooo proof files.
+# https://crates.io/crates/hooo
+hooo = { version = "0.13" }

@@ -1,0 +1,31 @@
+pipeline: invoke_confidence
+# Every LLM step can feed `route_on_confidence` directly — no separate scoring
+# step required. This is a free-text `llm::invoke` (no `schema`); the score is
+# the model's self-report, adjusted by how many attempts BAML needed to reach a
+# parseable answer.
+budget: { steps: 3, calls: 2 }
+
+steps:
+  - step: context
+    handler: shell::capture
+    args:
+      cmd: "cat Cargo.toml | head -5"
+
+  - step: assess
+    handler: llm::invoke
+    args:
+      prompt: "In one sentence, what does this workspace do?\n\n{{ steps.context.output.stdout }}"
+      system: "You are terse. One sentence, no preamble."
+    # -> { content, confidence, attempts, client, schema_valid }
+
+  - route_on_confidence: report
+    value: "{{ steps.assess.confidence }}"
+    routes:
+      - range: "[0.0, 0.5)"
+        label: unsure
+        handler: ctrl::log
+        # The model was not confident in the answer it gave
+      - range: "[0.5, 1.0]"
+        label: confident
+        handler: ctrl::log
+        # The model reported high confidence and BAML needed only one attempt

@@ -1,10 +1,11 @@
-//! LLM-based planner — delegates to `crux-agentic::planner::generate_pipeline`.
+//! LLM-based planner — delegates to `crux_baml::planner::generate_pipeline`.
 
 use crux_runtime::prelude::CruxErr;
 
 /// Generates crux-script pipeline YAML from a natural language goal using an LLM.
 ///
-/// Requires the `baml` feature and a valid `OPENAI_API_KEY` (or configured BAML client).
+/// Routed through BAML, so it prefers a local Ollama and needs no API key when
+/// one is reachable, falling back to the hosted providers otherwise.
 ///
 /// # Example
 ///
@@ -46,7 +47,7 @@ impl LlmPlanner {
     ///
     /// Returns the raw YAML string on success.
     pub async fn plan(&self, goal: &str) -> Result<String, CruxErr> {
-        crux_agentic::planner::generate_pipeline(
+        crux_baml::planner::generate_pipeline(
             goal,
             self.constraints.as_deref(),
             &self.extra_handlers,
@@ -75,8 +76,8 @@ mod tests {
         assert!(planner.constraints.is_some());
     }
 
-    /// Integration test: requires OPENAI_API_KEY (or configured BAML client).
-    /// Run with: `cargo nextest run -p crux-planner --features baml -- llm_planner_generates`
+    /// Integration test: uses whatever BAML client resolves, preferring a local Ollama.
+    /// Run with: `cargo nextest run -p crux-planner -- llm_planner_generates`
     #[tokio::test]
     #[ignore = "requires live LLM credentials"]
     async fn llm_planner_generates_valid_yaml() {

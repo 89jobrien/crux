@@ -1,3 +1,5 @@
+//! Standard-library handler errors and JSON argument extraction helpers.
+
 use crux_runtime::prelude::CruxErr;
 use thiserror::Error;
 

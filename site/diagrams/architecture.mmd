@@ -1,0 +1,20 @@
+flowchart TB
+%% crux workspace layers. Dependencies point inward: each layer may depend on
+%% the layer below it and on nothing above it.
+%%
+%% Rendered by scripts/render-diagrams.sh. Edit this file, not the SVG.
+
+  interface["INTERFACE<br/><b>crux</b> facade &middot; crux-cli &middot; xtask<br/><i>what consumers touch</i>"]
+  orchestration["ORCHESTRATION<br/>crux-agentic &middot; crux-planner<br/>crux-improve &middot; crux-regression"]
+  handlers["HANDLERS<br/>crux-stdlib &middot; crux-baml &middot; crux-plugin &middot; crux-task<br/><i>deterministic &middot; LLM &middot; subprocess &middot; tasks</i>"]
+  script["INTERPRETATION<br/><b>crux-script</b><br/><i>turns a .crux definition into executable steps</i>"]
+  runtime["CORE RUNTIME<br/><b>crux-runtime</b><br/><i>CruxCtx &middot; Agent &middot; replay &middot; hooks<br/>registry &middot; governance &middot; trust &middot; safety</i>"]
+  domain["SCHEMA AND DOMAIN<br/>crux-schema &middot; crux-domain<br/><i>pure types, no I/O</i>"]
+  wire["WIRE &mdash; LEAF<br/>crux-types &middot; crux-model &middot; crux-derive<br/><i>no workspace dependencies</i>"]
+
+  interface --> orchestration
+  orchestration --> handlers
+  handlers --> script
+  script --> runtime
+  runtime --> domain
+  domain --> wire

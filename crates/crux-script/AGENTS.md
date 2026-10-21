@@ -38,6 +38,7 @@ in `crux-agentic`, `crux-stdlib`, and `crux-baml`.
 ### Pipeline File Format
 
 Files use `.crux` extension (YAML syntax). Two formats:
+
 - **Pipeline** — `pipeline:` top-level key
 - **Cruxfile** — `targets:` top-level key (multi-target)
 

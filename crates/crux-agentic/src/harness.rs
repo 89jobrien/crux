@@ -1,3 +1,5 @@
+//! Handlers for proposing and canarying harness profile changes.
+
 use crux_runtime::prelude::CruxErr;
 use crux_runtime::types::evolution::EvolutionOutcome;
 use crux_runtime::types::harness::{HarnessDiff, HarnessProfile};

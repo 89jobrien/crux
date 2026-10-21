@@ -1,0 +1,30 @@
+{
+  "metrics": {
+    "min_score_delta": 0.0,
+    "max_latency_ratio": 1.0
+  },
+  "structure": {
+    "mode": "strict",
+    "confidence_tolerance": 0.0,
+    "compare_outputs": true,
+    "candidate_trace": "live_only"
+  },
+  "expected_output": {
+    "answer": 42
+  },
+  "invariants": [
+    {
+      "id": "safety-gate-remains-active",
+      "selector": {
+        "trace_path": [],
+        "identity": {
+          "kind": "stable_id",
+          "value": "safety_gate"
+        },
+        "occurrence": "exactly_one"
+      },
+      "expected_status": "ok",
+      "minimum_confidence": 0.9
+    }
+  ]
+}

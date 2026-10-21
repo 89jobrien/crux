@@ -1,3 +1,5 @@
+//! Lookup, serialization, storage, and compare-and-swap registry errors.
+
 /// Registry-specific errors.
 use thiserror::Error;
 

@@ -2,5 +2,7 @@
 title: ProviderModelRef
 tags: [type, model]
 ---
-# ProviderModelRef
+
+## ProviderModelRef
+
 **Crate:** [[crux-model]] | Fields: vendor([[Vendor]]), provider_id, canonical([[CanonicalModelId]]), metadata(Option).

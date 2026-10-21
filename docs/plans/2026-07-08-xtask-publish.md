@@ -35,7 +35,7 @@ with `--from <crate>` for mid-run resume; then collapse `release.yml` to a singl
    There is no test here — this task is purely additive to Cargo.toml. Verify the build
    fails before the change by confirming `ureq` is not resolvable:
 
-   ```
+   ```text
    grep -r 'ureq' xtask/   # expect: no output
    ```
 
@@ -49,7 +49,7 @@ with `--from <crate>` for mid-run resume; then collapse `release.yml` to a singl
 
 3. Verify:
 
-   ```
+   ```text
    cargo build -p xtask    → compiles cleanly
    ```
 
@@ -144,7 +144,7 @@ These two functions are pure and testable without network access.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings  → zero warnings
    ```
@@ -220,7 +220,7 @@ These two functions are pure and testable without network access.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings  → zero warnings
    ```
@@ -342,7 +342,7 @@ These two functions are pure and testable without network access.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings  → zero warnings
    ```
@@ -429,7 +429,7 @@ tested without network/process access. Test the integration path via a fake that
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings  → zero warnings
    ```
@@ -571,7 +571,7 @@ tested without network/process access. Test the integration path via a fake that
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings  → zero warnings
    cargo build -p xtask          → binary compiles
@@ -619,7 +619,7 @@ tested without network/process access. Test the integration path via a fake that
 
 3. Verify:
 
-   ```
+   ```text
    cargo build -p xtask    → binary compiles cleanly
    ```
 

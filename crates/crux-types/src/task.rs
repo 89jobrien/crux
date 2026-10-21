@@ -1,6 +1,17 @@
-//! Wire-format types for project task management.
+//! Wire-format types for project task management and registry task lifecycle.
 
 use serde::{Deserialize, Serialize};
+
+/// Status of a task in the registry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    #[default]
+    Pending,
+    Running,
+    Done,
+    Failed,
+}
 
 /// Task priority levels, ordered by urgency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -26,6 +37,45 @@ pub enum DependencyKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_status_default_is_pending() {
+        assert_eq!(TaskStatus::default(), TaskStatus::Pending);
+    }
+
+    #[test]
+    fn task_status_serde_round_trip() {
+        for status in [
+            TaskStatus::Pending,
+            TaskStatus::Running,
+            TaskStatus::Done,
+            TaskStatus::Failed,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let back: TaskStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, status);
+        }
+    }
+
+    #[test]
+    fn task_status_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Pending).unwrap(),
+            "\"pending\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Running).unwrap(),
+            "\"running\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Done).unwrap(),
+            "\"done\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Failed).unwrap(),
+            "\"failed\""
+        );
+    }
 
     #[test]
     fn priority_ordering() {

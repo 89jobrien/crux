@@ -1,3 +1,5 @@
+//! Trace-analysis and pipeline-improvement handlers.
+
 use chrono::{DateTime, Utc};
 use crux_runtime::prelude::CruxErr;
 use crux_script::{HandlerMetadata, HandlerOutput, HandlerRegistry, RiskLevel};
@@ -5,6 +7,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use crate::handlers;
+use crux_runtime::prelude::{Crux, StepStatus};
 
 const SLOW_STEP_MULTIPLIER: f64 = 2.0;
 const TOP_TOKEN_SPEND_COUNT: usize = 3;
@@ -19,6 +22,7 @@ const SUGGESTED_RETRY_COUNT: u64 = 3;
 /// Suggested initial backoff in milliseconds for retry suggestions.
 const SUGGESTED_BACKOFF_MS: u64 = 1000;
 
+/// Registers trace metrics, optimization suggestions, and replay checks.
 pub fn register(registry: &mut HandlerRegistry) {
     register_latency_profile(registry);
     register_token_spend(registry);
@@ -380,7 +384,7 @@ fn register_patch_schema_check(registry: &mut HandlerRegistry) {
                 return Ok(json!({"valid": false, "errors": ["empty patch"]}));
             }
 
-            match serde_yaml::from_str::<Value>(patch) {
+            match serde_saphyr::from_str::<Value>(patch) {
                 Ok(_) => Ok(json!({"valid": true, "errors": []})),
                 Err(e) => Ok(json!({"valid": false, "errors": [e.to_string()]})),
             }
@@ -391,7 +395,10 @@ fn register_patch_schema_check(registry: &mut HandlerRegistry) {
 fn register_replay_dry_run(registry: &mut HandlerRegistry) {
     registry.handler_value_with_metadata(
         HandlerMetadata::new(handlers::ANALYSIS_REPLAY_DRY_RUN)
-            .describe("Dry-run a replay with a patch to detect step ordinal mismatches.")
+            .describe(
+                "In-process replay analysis: inspect a persisted trace for ordinal mismatches, \
+                 failed steps, and budget/confidence issues without spawning a subprocess.",
+            )
             .risk(RiskLevel::Low)
             .deterministic(true),
         |input: Value| async move {
@@ -401,11 +408,11 @@ fn register_replay_dry_run(registry: &mut HandlerRegistry) {
                 .unwrap_or("");
             let patch = input.get("patch").and_then(|p| p.as_str()).unwrap_or("");
 
-            if trace_path.is_empty() || patch.is_empty() {
-                return Ok(json!({"ok": false, "mismatches": ["missing trace_path or patch"]}));
+            if trace_path.is_empty() {
+                return Ok(json!({"ok": false, "mismatches": ["missing trace_path"]}));
             }
 
-            // Reject paths with suspicious characters (argument injection guard)
+            // Reject paths with suspicious characters (argument injection guard).
             if trace_path.starts_with('-') || trace_path.contains('\0') {
                 return Err(CruxErr::step_failed(
                     "analysis::replay_dry_run",
@@ -413,35 +420,100 @@ fn register_replay_dry_run(registry: &mut HandlerRegistry) {
                 ));
             }
 
-            let tmp =
-                std::env::temp_dir().join(format!("crux-replay-patch-{}.yaml", std::process::id()));
-            tokio::fs::write(&tmp, patch).await.map_err(|e| {
-                CruxErr::step_failed("analysis::replay_dry_run", format!("write temp: {e}"))
+            // Load and deserialize the trace in-process.
+            let raw = tokio::fs::read_to_string(trace_path).await.map_err(|e| {
+                CruxErr::step_failed("analysis::replay_dry_run", format!("read trace file: {e}"))
             })?;
 
-            let output = tokio::process::Command::new("crux")
-                .args([
-                    "replay",
-                    "--lenient",
-                    "--",
-                    trace_path,
-                    tmp.to_str().unwrap_or(""),
-                ])
-                .output()
-                .await
-                .map_err(|e| {
-                    CruxErr::step_failed("analysis::replay_dry_run", format!("exec: {e}"))
-                })?;
+            let trace: Crux<Value> = serde_json::from_str(&raw).map_err(|e| {
+                CruxErr::step_failed("analysis::replay_dry_run", format!("parse trace JSON: {e}"))
+            })?;
 
-            let ok = output.status.success();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let mismatches: Vec<String> = if ok {
-                vec![]
+            let mut mismatches: Vec<String> = Vec::new();
+
+            // Step-level integrity checks — these are ordinal mismatches in the trace
+            // itself and would cause a replay to diverge.
+            for (ordinal, step) in trace.steps.iter().enumerate() {
+                if step.name.is_empty() {
+                    mismatches.push(format!("step[{ordinal}]: missing name"));
+                }
+                if step.status == StepStatus::Err {
+                    mismatches.push(format!(
+                        "step[{ordinal}] '{}': recorded status is Err",
+                        step.name
+                    ));
+                }
+                if step.status == StepStatus::Rejected {
+                    mismatches.push(format!(
+                        "step[{ordinal}] '{}': recorded status is Rejected",
+                        step.name
+                    ));
+                }
+            }
+
+            // If a pipeline patch is provided, validate its YAML syntax and check
+            // whether the step names declared in the patch align with the trace
+            // at each ordinal (simulating lenient-mode ordinal mismatch detection).
+            if !patch.is_empty() {
+                match serde_saphyr::from_str::<Value>(patch) {
+                    Ok(patched_pipeline) => {
+                        if let Some(patch_steps) =
+                            patched_pipeline.get("steps").and_then(|s| s.as_array())
+                        {
+                            for (ordinal, patch_step) in patch_steps.iter().enumerate() {
+                                let patch_name = patch_step
+                                    .get("name")
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or("");
+                                if patch_name.is_empty() {
+                                    continue;
+                                }
+                                match trace.steps.get(ordinal) {
+                                    Some(trace_step) if trace_step.name != patch_name => {
+                                        mismatches.push(format!(
+                                            "ordinal {ordinal}: patch expects '{}', trace has '{}'",
+                                            patch_name, trace_step.name
+                                        ));
+                                    }
+                                    None => {
+                                        mismatches.push(format!(
+                                            "ordinal {ordinal}: patch step '{}' has no \
+                                             corresponding trace entry",
+                                            patch_name
+                                        ));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        mismatches.push(format!("patch YAML parse error: {e}"));
+                    }
+                }
+            }
+
+            let step_count = trace.steps.len();
+            let confidence_avg = if step_count > 0 {
+                trace
+                    .steps
+                    .iter()
+                    .map(|s| f64::from(s.confidence))
+                    .sum::<f64>()
+                    / step_count as f64
             } else {
-                stderr.lines().map(|l| l.to_string()).collect()
+                0.0
             };
+            let ok = mismatches.is_empty();
 
-            Ok(json!({"ok": ok, "mismatches": mismatches}))
+            Ok(json!({
+                "ok": ok,
+                "mismatches": mismatches,
+                "step_count": step_count,
+                "confidence_avg": confidence_avg,
+                "agent": trace.agent,
+                "pipeline_version": trace.pipeline_version,
+            }))
         },
     );
 }

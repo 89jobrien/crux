@@ -1,3 +1,5 @@
+//! End-to-end combinator trace tests using a simulated research workflow.
+
 /// End-to-end integration test: a multi-stage research pipeline.
 ///
 /// Exercises all five combinators in a single coherent scenario:
@@ -10,8 +12,6 @@ mod common;
 
 use common::CounterAgent;
 use crux::prelude::*;
-
-// -- Types --------------------------------------------------------------------
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SearchResult {
@@ -141,8 +141,6 @@ async fn research_pipeline(query: String) -> Crux<String> {
 
     Ok(action)
 }
-
-// -- Tests --------------------------------------------------------------------
 
 #[tokio::test]
 async fn pipeline_succeeds_and_produces_output() {

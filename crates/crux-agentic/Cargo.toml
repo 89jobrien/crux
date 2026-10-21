@@ -13,19 +13,18 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-baml = ["dep:crux-baml"]
 docker = ["dep:bollard", "dep:futures"]
 
 [dependencies]
 bollard = { version = "0.20", optional = true }
 chrono = { workspace = true }
-clap = { workspace = true }
-crux-baml = { workspace = true, optional = true } #unified
+crux-baml = { workspace = true } #unified
 crux-model = { workspace = true } #unified
 crux-plugin = { workspace = true } #unified
 crux-runtime = { workspace = true } #unified
 crux-task = { workspace = true }
 crux-types = { workspace = true }
+crux-typesafe = { workspace = true }
 crux-script = { workspace = true } #unified
 crux-stdlib = { workspace = true } #unified
 futures = { workspace = true, optional = true }
@@ -34,15 +33,12 @@ reqwest = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
-[[bin]]
-name = "crux"
-path = "src/bin/crux/main.rs"
-
 [dev-dependencies]
+baml = "0.221.0"
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

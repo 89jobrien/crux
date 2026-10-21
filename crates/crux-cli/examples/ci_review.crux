@@ -1,0 +1,61 @@
+pipeline: ci_review
+description: CI/review workflow — collect diff, parse violations, classify, and report
+input_schema:
+  type: object
+  properties:
+    branch:
+      type: string
+    repository:
+      type: string
+  required:
+    - branch
+    - repository
+
+budget:
+  calls: 20
+  duration_ms: 180000
+  steps: 10
+
+display:
+  title: "CI Review Pipeline"
+  output: auto
+
+steps:
+  - step: get_diff
+    handler: git::diff
+    args:
+      cwd: "{{ input.repository }}"
+      revision: "{{ input.branch }}"
+    timeout_ms: 30000
+
+  - step: parse_diff
+    handler: text::parse_diff
+
+  - step: parallel_checks
+    join_all: "run_all_checks"
+    arms:
+      - step: lint_check
+        handler: ci::clippy_violations
+        allow_failure: true
+
+      - step: test_check
+        handler: ci::nextest_failures
+        allow_failure: true
+
+      - step: build_check
+        handler: ci::compile_errors
+        allow_failure: true
+
+  - step: deduplicate
+    handler: ci::deduplicate_spans
+
+  - step: classify_results
+    handler: ci::classify_severity
+
+  - step: attach_owners
+    handler: ci::attach_owners
+
+  - step: summary
+    handler: ctrl::log
+    args:
+      pretty: true
