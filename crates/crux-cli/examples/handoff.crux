@@ -54,8 +54,7 @@ steps:
       condition: "{{ steps.save_checkpoint }}"
       message: "Checkpoint write must succeed before transfer"
 
-  - step: pipe_transfer
-    pipe: "transfer_handoff"
+  - pipe: "transfer_handoff"
     stages:
       - step: extract_context
         handler: json::pick
