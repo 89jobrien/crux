@@ -7,15 +7,15 @@ input_schema:
       session_id:
         schema:
           type: string
+        required: true
       handoff_state:
         schema:
           type: object
+        required: true
       priority:
         schema:
           type: string
-    required:
-      - session_id
-      - handoff_state
+        required: false
 
 budget:
   steps: 12

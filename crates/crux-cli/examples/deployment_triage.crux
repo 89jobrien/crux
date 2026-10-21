@@ -7,16 +7,15 @@ input_schema:
       deployment_id:
         schema:
           type: string
+        required: true
       target_env:
         schema:
           type: string
+        required: true
       manifest_path:
         schema:
           type: string
-    required:
-      - deployment_id
-      - target_env
-      - manifest_path
+        required: true
 
 budget:
   steps: 12

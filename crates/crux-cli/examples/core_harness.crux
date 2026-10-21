@@ -7,15 +7,15 @@ input_schema:
       image_name:
         schema:
           type: string
+        required: true
       config_path:
         schema:
           type: string
+        required: true
       timeout_seconds:
         schema:
           type: integer
-    required:
-      - image_name
-      - config_path
+        required: false
 
 budget:
   steps: 10

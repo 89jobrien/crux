@@ -7,12 +7,11 @@ input_schema:
       branch:
         schema:
           type: string
+        required: true
       repository:
         schema:
           type: string
-    required:
-      - branch
-      - repository
+        required: true
 
 budget:
   calls: 20
