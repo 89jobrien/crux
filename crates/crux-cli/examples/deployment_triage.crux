@@ -1,20 +1,19 @@
 pipeline: deployment_triage
 description: Deployment validation and issue triage — fetch manifest, check services, classify results
 input_schema:
-  schema:
-    type: object
-    properties:
-      deployment_id:
-        type: string
-      target_env:
-        type: string
-        enum: ["dev", "staging", "production"]
-      manifest_path:
-        type: string
-    required:
-      - deployment_id
-      - target_env
-      - manifest_path
+  type: object
+  properties:
+    deployment_id:
+      type: string
+    target_env:
+      type: string
+      enum: ["dev", "staging", "production"]
+    manifest_path:
+      type: string
+  required:
+    - deployment_id
+    - target_env
+    - manifest_path
 
 budget:
   steps: 12
