@@ -1,18 +1,19 @@
 pipeline: handoff
 description: Handoff workflow — serialize state, write checkpoint, extract context, transfer
 input_schema:
-  type: object
-  properties:
-    session_id:
-      type: string
-    handoff_state:
-      type: object
-    priority:
-      type: string
-      enum: ["low", "medium", "high", "critical"]
-  required:
-    - session_id
-    - handoff_state
+  definition:
+    type: object
+    properties:
+      session_id:
+        type: string
+      handoff_state:
+        type: object
+      priority:
+        type: string
+        enum: ["low", "medium", "high", "critical"]
+    required:
+      - session_id
+      - handoff_state
 
 budget:
   steps: 12
