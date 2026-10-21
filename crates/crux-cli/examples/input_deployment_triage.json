@@ -1,5 +1,5 @@
 {
   "deployment_id": "v1.2.3-build-456",
   "target_env": "staging",
-  "manifest_url": "https://releases.example.com/v1.2.3/manifest.json"
+  "manifest_path": "/tmp/crux-deployment-v1.2.3-manifest.json"
 }

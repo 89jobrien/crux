@@ -1,5 +1,5 @@
 pipeline: handoff
-description: Handoff workflow with state checkpoints and recovery
+description: Handoff workflow — serialize state, write checkpoint, extract context, transfer
 input_schema:
   type: object
   properties:
@@ -25,50 +25,46 @@ display:
 
 vars:
   handoff_id: "hoff_{{ input.session_id }}"
-  priority_level: "{{ input.priority | default: 'medium' }}"
+  checkpoint_path: "/tmp/crux-handoff-{{ input.session_id }}.json"
 
 steps:
   - step: prepare_checkpoint
-    handler: handoff::prepare
+    handler: json::merge
     args:
-      state: "{{ input.handoff_state }}"
-      session_id: "{{ input.session_id }}"
-      priority: "{{ vars.priority_level }}"
+      with:
+        handoff_id: "{{ vars.handoff_id }}"
+        priority: "{{ input.priority }}"
 
   - step: save_checkpoint
-    handler: handoff::save
+    handler: fs::write
     args:
-      handoff_id: "{{ vars.handoff_id }}"
-      checkpoint: "{{ steps.prepare_checkpoint }}"
+      path: "{{ vars.checkpoint_path }}"
+      content: "{{ steps.prepare_checkpoint }}"
     timeout_ms: 5000
 
   - step: validate_state
-    handler: handoff::validate
+    handler: ctrl::assert
     args:
-      checkpoint: "{{ steps.prepare_checkpoint }}"
+      condition: "{{ steps.save_checkpoint }}"
+      message: "Checkpoint write must succeed before transfer"
 
   - step: pipe_transfer
     pipe: "transfer_handoff"
     stages:
       - step: extract_context
-        handler: handoff::extract
+        handler: json::pick
         args:
-          data: "{{ steps.prepare_checkpoint }}"
+          fields:
+            - "handoff_id"
+            - "priority"
 
-      - step: transfer
-        handler: handoff::transfer
+      - step: write_transfer
+        handler: fs::write
         args:
-          context: "{{ steps.extract_context }}"
+          path: "{{ vars.checkpoint_path }}.transfer"
+          content: "{{ steps.extract_context }}"
 
   - step: finalize_handoff
-    handler: handoff::finalize
+    handler: ctrl::log
     args:
-      handoff_id: "{{ vars.handoff_id }}"
-      checkpoint: "{{ steps.prepare_checkpoint }}"
-
-  - step: summary
-    handler: handoff::report
-    args:
-      handoff_id: "{{ vars.handoff_id }}"
-      session_id: "{{ input.session_id }}"
-      priority: "{{ vars.priority_level }}"
+      pretty: true

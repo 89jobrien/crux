@@ -1,5 +1,5 @@
 pipeline: deployment_triage
-description: Deployment validation and issue triage workflow
+description: Deployment validation and issue triage — fetch manifest, check services, classify results
 input_schema:
   type: object
   properties:
@@ -8,12 +8,12 @@ input_schema:
     target_env:
       type: string
       enum: ["dev", "staging", "production"]
-    manifest_url:
+    manifest_path:
       type: string
   required:
     - deployment_id
     - target_env
-    - manifest_url
+    - manifest_path
 
 budget:
   steps: 12
@@ -24,45 +24,38 @@ vars:
 
 steps:
   - step: fetch_manifest
-    handler: deploy::fetch
+    handler: fs::read
     args:
-      url: "{{ input.manifest_url }}"
+      path: "{{ input.manifest_path }}"
     timeout_ms: 10000
     retry:
       count: 2
       delay_ms: 2000
 
-  - step: validate_manifest
-    handler: deploy::validate
-    args:
-      manifest: "{{ steps.fetch_manifest }}"
-    allow_failure: true
-
   - step: parse_services
-    handler: deploy::parse
+    handler: json::jq
     args:
-      data: "{{ steps.fetch_manifest }}"
+      expr: ".services"
+
+  - step: filter_active_services
+    handler: json::filter_nonempty
+    args:
+      field: "name"
 
   - step: for_each_service
     for_each: "check_service as service"
-    items: "{{ steps.parse_services }}"
+    items: "{{ steps.filter_active_services }}"
     steps:
-      - step: health_check
-        handler: deploy::health
+      - step: log_service
+        handler: ctrl::log
         args:
-          service: "{{ iter.service }}"
-        timeout_ms: 5000
-        allow_failure: true
+          field: "name"
+          compact: true
 
-  - step: collect_results
-    handler: deploy::collect
-    args:
-      deployment_id: "{{ input.deployment_id }}"
-      target_env: "{{ input.target_env }}"
-      validation: "{{ steps.validate_manifest }}"
+  - step: classify_results
+    handler: triage::classify_severity
 
   - step: report_results
-    handler: deploy::report
+    handler: ctrl::log
     args:
-      results: "{{ steps.collect_results }}"
-      deployment_name: "{{ vars.deployment_name }}"
+      pretty: true

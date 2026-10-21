@@ -1,5 +1,5 @@
 pipeline: core_harness
-description: Core agent and harness management example
+description: Core agent and harness management — read config, verify, evolve harness
 input_schema:
   type: object
   properties:
@@ -23,26 +23,27 @@ vars:
 
 steps:
   - step: fetch_config
-    handler: core::fetch
+    handler: fs::read
     args:
       path: "{{ input.config_path }}"
     timeout_ms: 5000
     allow_failure: false
 
-  - step: validate_image
-    handler: core::validate
+  - step: validate_config
+    handler: ctrl::assert
     args:
-      image: "{{ input.image_name }}"
+      condition: "{{ steps.fetch_config }}"
+      message: "Config at {{ input.config_path }} must not be empty"
+
+  - step: canary_check
+    handler: harness::canary
     timeout_ms: 10000
     allow_failure: true
 
-  - step: prepare_harness
-    handler: core::prepare
-    args:
-      config: "{{ steps.fetch_config }}"
-      agent_id: "{{ vars.agent_name }}"
+  - step: evolve_harness
+    handler: harness::evolve
 
   - step: summarize
-    handler: core::echo
+    handler: ctrl::log
     args:
-      message: "Harness {{ vars.agent_name }} prepared successfully"
+      pretty: true

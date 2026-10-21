@@ -1,5 +1,5 @@
 pipeline: ci_review
-description: CI/review workflow with parallel validation stages
+description: CI/review workflow — collect diff, parse violations, classify, and report
 input_schema:
   type: object
   properties:
@@ -21,37 +21,41 @@ display:
   output: auto
 
 steps:
-  - step: checkout_branch
-    handler: ci::checkout
+  - step: get_diff
+    handler: git::diff
     args:
-      branch: "{{ input.branch }}"
-      repo: "{{ input.repository }}"
+      cwd: "{{ input.repository }}"
+      revision: "{{ input.branch }}"
     timeout_ms: 30000
+
+  - step: parse_diff
+    handler: text::parse_diff
 
   - step: parallel_checks
     join_all: "run_all_checks"
     arms:
       - step: lint_check
-        handler: ci::lint
+        handler: ci::clippy_violations
         allow_failure: true
 
       - step: test_check
-        handler: ci::test
+        handler: ci::nextest_failures
         allow_failure: true
 
       - step: build_check
-        handler: ci::build
+        handler: ci::compile_errors
         allow_failure: true
 
-  - step: analyze_results
-    handler: ci::analyze
-    args:
-      branch: "{{ input.branch }}"
-      lint_result: "{{ steps.lint_check }}"
-      test_result: "{{ steps.test_check }}"
-      build_result: "{{ steps.build_check }}"
+  - step: deduplicate
+    handler: ci::deduplicate_spans
+
+  - step: classify_results
+    handler: ci::classify_severity
+
+  - step: attach_owners
+    handler: ci::attach_owners
 
   - step: summary
-    handler: ci::report
+    handler: ctrl::log
     args:
-      results: "{{ steps.analyze_results }}"
+      pretty: true
