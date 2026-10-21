@@ -2,16 +2,17 @@ pipeline: core_harness
 description: Core agent and harness management — read config, verify, evolve harness
 input_schema:
   type: object
-  properties:
-    image_name:
-      type: string
-    config_path:
-      type: string
-    timeout_seconds:
-      type: integer
-  required:
-    - image_name
-    - config_path
+  definition:
+    properties:
+      image_name:
+        type: string
+      config_path:
+        type: string
+      timeout_seconds:
+        type: integer
+    required:
+      - image_name
+      - config_path
 
 budget:
   steps: 10
