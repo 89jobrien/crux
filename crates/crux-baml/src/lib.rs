@@ -12,10 +12,12 @@
 #[allow(
     clippy::derivable_impls,
     clippy::empty_line_after_doc_comments,
+    clippy::empty_line_after_outer_attr,
     clippy::map_clone,
     clippy::new_without_default,
     clippy::unwrap_or_default
 )]
+#[rustfmt::skip]
 pub mod baml_client;
 
 pub mod analyze;

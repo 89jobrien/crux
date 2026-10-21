@@ -196,7 +196,11 @@ impl LegacyStepRunner for GitCommitRunner {
         let repo = config_str(&ctx.config, "repo")?;
         let message = config_str(&ctx.config, "message")?;
         run_git(repo, &["add", "-A"])?;
-        run_git(repo, &["commit", "-m", message])?;
+        // --no-verify: this step runs unattended inside a pipeline, so it must
+        // not execute the target repository's hooks. Hooks are arbitrary
+        // commands supplied by that repo; firing them here lets an unrelated
+        // repository act on the caller's environment.
+        run_git(repo, &["commit", "--no-verify", "-m", message])?;
         let commit = run_git(repo, &["rev-parse", "HEAD"])?;
         Ok(StepOutput {
             value: serde_json::json!({"committed": true, "commit": commit.trim()}),
@@ -373,7 +377,11 @@ impl StepRunner for GitCommitRunner {
             };
             let result = tokio::task::spawn_blocking(move || -> miette::Result<Value> {
                 run_git(&repo, &["add", "-A"])?;
-                run_git(&repo, &["commit", "-m", &message])?;
+                // --no-verify: this step runs unattended inside a pipeline, so it must
+                // not execute the target repository's hooks. Hooks are arbitrary
+                // commands supplied by that repo; firing them here lets an unrelated
+                // repository act on the caller's environment.
+                run_git(&repo, &["commit", "--no-verify", "-m", &message])?;
                 let commit = run_git(&repo, &["rev-parse", "HEAD"])?;
                 Ok(serde_json::json!({"committed": true, "commit": commit.trim()}))
             })
@@ -602,27 +610,45 @@ mod builtin_runner_tests {
     #[tokio::test]
     async fn git_commit_runner_creates_commit() {
         let temp = tempfile::tempdir().unwrap();
-        for args in [
-            vec!["init"],
-            vec!["config", "user.email", "crux@example.test"],
-            vec!["config", "user.name", "Crux Test"],
-        ] {
+        let repo = temp.path();
+        let repo_arg = repo.to_str().unwrap();
+
+        // Hermetic setup: every git call names the target path explicitly and
+        // runs with global/system config neutralized, so `git init` cannot
+        // discover and reinitialize an enclosing repository (e.g. when the
+        // suite is run from a git worktree).
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env_remove("GIT_DIR")
+                .env_remove("GIT_WORK_TREE")
+                .env_remove("GIT_INDEX_FILE")
+                .output()
+                .unwrap();
             assert!(
-                std::process::Command::new("git")
-                    .args(args)
-                    .current_dir(temp.path())
-                    .status()
-                    .unwrap()
-                    .success()
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
             );
-        }
-        std::fs::write(temp.path().join("file.txt"), "content").unwrap();
+        };
+
+        git(&["init", repo_arg]);
+        git(&["config", "user.email", "crux@example.test"]);
+        git(&["config", "user.name", "Crux Test"]);
+        // Keep the commit from invoking any hook from an ambient environment.
+        git(&["config", "core.hooksPath", "/dev/null"]);
+
+        std::fs::write(repo.join("file.txt"), "content").unwrap();
         let registry = Arc::new(HandlerRegistry::new().with_builtin_runners());
         let runner = registry.runner("git-commit").unwrap();
         let execution = runner
             .run(StepInvocation::new(
                 json!(null),
-                json!({"repo": temp.path(), "message": "test commit"}),
+                json!({"repo": repo_arg, "message": "test commit"}),
             ))
             .await;
         let output = execution.outcome.unwrap();
