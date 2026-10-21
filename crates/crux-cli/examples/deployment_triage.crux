@@ -5,11 +5,14 @@ input_schema:
   definition:
     properties:
       deployment_id:
-        type: string
+        schema:
+          type: string
       target_env:
-        type: string
+        schema:
+          type: string
       manifest_path:
-        type: string
+        schema:
+          type: string
     required:
       - deployment_id
       - target_env

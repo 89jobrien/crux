@@ -5,9 +5,11 @@ input_schema:
   definition:
     properties:
       branch:
-        type: string
+        schema:
+          type: string
       repository:
-        type: string
+        schema:
+          type: string
     required:
       - branch
       - repository

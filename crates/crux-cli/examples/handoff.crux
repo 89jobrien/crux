@@ -5,11 +5,14 @@ input_schema:
   definition:
     properties:
       session_id:
-        type: string
+        schema:
+          type: string
       handoff_state:
-        type: object
+        schema:
+          type: object
       priority:
-        type: string
+        schema:
+          type: string
     required:
       - session_id
       - handoff_state

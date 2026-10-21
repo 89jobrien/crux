@@ -5,11 +5,14 @@ input_schema:
   definition:
     properties:
       image_name:
-        type: string
+        schema:
+          type: string
       config_path:
-        type: string
+        schema:
+          type: string
       timeout_seconds:
-        type: integer
+        schema:
+          type: integer
     required:
       - image_name
       - config_path
