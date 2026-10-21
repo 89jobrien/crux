@@ -1,3 +1,5 @@
+//! Pipeline handlers for starting containers and waiting for completion.
+
 use crux_runtime::prelude::CruxErr;
 use crux_script::HandlerRegistry;
 use serde_json::{Value, json};

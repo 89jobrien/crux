@@ -20,7 +20,7 @@ howto:
 pitfalls:
   - "Generated YAML must be valid for crux-script::load()"
   - "Evolution diffs must pass SafetyPolicy — never bypass"
-  - "LLM planner tests require API keys (baml feature)"
+  - "LLM planner tests are #[ignore]d and need a reachable LLM backend"
 ---
 
 # Agents: crux-planner
@@ -33,4 +33,4 @@ Two subsystems: pipeline planning and harness evolution.
 
 - Generated pipeline YAML must be valid for `crux-script::load()`
 - Evolution diffs must pass `SafetyPolicy` — never bypass
-- LLM planner tests require API keys (`baml` feature)
+- LLM planner tests are `#[ignore]`d and need a reachable LLM backend

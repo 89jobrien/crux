@@ -1,3 +1,5 @@
+//! Replay-aware context adapter for typed LLM providers.
+
 use std::sync::Arc;
 
 use crux_runtime::context::Context;
@@ -13,6 +15,7 @@ pub struct LlmStep<P: LlmProvider> {
 }
 
 impl<P: LlmProvider> LlmStep<P> {
+    /// Wraps a provider for shared invocation through recorded context steps.
     pub fn new(provider: P) -> Self {
         Self {
             provider: Arc::new(provider),

@@ -31,6 +31,8 @@ pub const CTRL_ASSERT: &str = "ctrl::assert";
 // llm
 pub const LLM_INVOKE: &str = "llm::invoke";
 pub const LLM_EXTRACT: &str = "llm::extract";
+pub const LLM_ANALYZE: &str = "llm::analyze";
+pub const LLM_CONFIDENCE: &str = "llm::confidence";
 pub const LLM_DECOMPOSE: &str = "llm::decompose";
 pub const LLM_PLAN: &str = "llm::plan";
 pub const LLM_STREAM: &str = "llm::stream";

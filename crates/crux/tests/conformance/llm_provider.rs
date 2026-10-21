@@ -1,3 +1,5 @@
+//! Conformance tests for provider completions and request-response wire formats.
+
 /// Conformance tests: LlmProvider port — stub adapter satisfies the trait contract.
 ///
 /// Verifies: a user-defined type can implement LlmProvider, the port types are

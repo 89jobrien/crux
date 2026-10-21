@@ -1,3 +1,5 @@
+//! Evolution-agent marker layered onto the standard agent expansion.
+
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{ItemFn, parse2};

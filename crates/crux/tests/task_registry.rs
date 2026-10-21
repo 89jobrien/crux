@@ -1,3 +1,5 @@
+//! Integration tests for task lifecycle, checkpoints, pending queries, and replay modes.
+
 /// Integration tests for TaskRegistry + replay lifecycle.
 use crux::prelude::*;
 use crux::registry::InMemoryBackend;
@@ -39,7 +41,7 @@ async fn full_task_lifecycle() {
     let crux = adder(7).await;
     assert_eq!(*crux.value().unwrap(), 22); // 7 + 10 + 5
 
-    // Checkpoint.
+    // Persist the completed trace for later replay.
     reg.checkpoint(&id, &crux).await.unwrap();
 
     // Mark done.

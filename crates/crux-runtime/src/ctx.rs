@@ -2,10 +2,6 @@
 //!
 //! Also re-exports `ConfidenceRange` used by `route_on_confidence`.
 
-// TODO(#100): planner-based action dispatch — refactor step/delegate/speculate to return
-//   abstract Action variants (CallProvider | ExecuteTool | Finish) enabling dry-run,
-//   simulation, and side-effect-free testing
-
 /// A half-open or closed confidence range for use with `CruxCtx::route_on_confidence`.
 ///
 /// `lo..hi` is exclusive on the upper end; `lo..=hi` is inclusive.
@@ -105,6 +101,30 @@ pub type ConfidenceRoute<'a, T> = (ConfidenceRange, &'a str, BoxFut<T>);
 /// A named stage for `pipe`: (label, closure producing a future).
 pub type PipeStage<'a, T> = (&'a str, Box<dyn FnOnce(T) -> BoxFut<T> + Send>);
 
+/// Failure behavior for one stage in a recoverable pipe.
+pub enum PipeFailurePolicy<T> {
+    /// Return the stage error and stop the pipe.
+    Propagate,
+    /// Convert the recorded stage error into the next stage's input.
+    SubstituteWith(Box<dyn FnOnce(CruxErr) -> Result<T, CruxErr> + Send>),
+}
+
+impl<T> std::fmt::Debug for PipeFailurePolicy<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Propagate => formatter.write_str("Propagate"),
+            Self::SubstituteWith(_) => formatter.write_str("SubstituteWith(..)"),
+        }
+    }
+}
+
+/// A named pipe stage with explicit failure behavior.
+pub type RecoverablePipeStage<'a, T> = (
+    &'a str,
+    Box<dyn FnOnce(T) -> BoxFut<T> + Send>,
+    PipeFailurePolicy<T>,
+);
+
 /// A named arm for `join_all`: (label, future).
 pub type JoinArm<'a, T> = (&'a str, BoxFut<T>);
 
@@ -114,12 +134,12 @@ use std::future::Future;
 
 use chrono::Utc;
 
-use crux_domain::event::StepEvent;
-use crux_domain::pipeline::EventSender;
+use crux_domain::pipeline::{EventPipeline, EventSender};
 use crux_domain::plan_result::PlanResult;
 use crux_domain::planner::{PassthroughPlanner, Planner};
+use crux_types::emission::Emission;
 
-use crate::context::Context;
+use crate::context::{BudgetedInvocation, Context, InvocationMeter};
 use crate::hooks::HookRegistry;
 use crate::recorder::{StepRecord, StepRecorder};
 use crate::replay::{ReplayCache, ReplayResult, deserialize_replay};
@@ -134,6 +154,7 @@ const DEFAULT_MAX_RETRIES: u32 = 3;
 pub struct CruxCtx {
     id: CruxId,
     agent_name: String,
+    pipeline_version: Option<String>,
     recorder: StepRecorder,
     hooks: HookRegistry,
     replay: ReplayCache,
@@ -142,15 +163,17 @@ pub struct CruxCtx {
     started_at: chrono::DateTime<Utc>,
     max_retries: u32,
     planner: std::sync::Arc<dyn Planner>,
-    event_sender: Option<EventSender>,
+    event_sender: EventSender,
     state: std::sync::Arc<std::sync::RwLock<crux_types::step::StepState>>,
 }
 
 impl CruxCtx {
+    /// Creates a context with default budget, replay, hooks, and passthrough planning.
     pub fn new(agent_name: &str) -> Self {
         Self {
             id: CruxId::new(),
             agent_name: agent_name.to_string(),
+            pipeline_version: None,
             recorder: StepRecorder::new(),
             hooks: HookRegistry::new(),
             replay: ReplayCache::new(),
@@ -159,7 +182,7 @@ impl CruxCtx {
             started_at: Utc::now(),
             max_retries: DEFAULT_MAX_RETRIES,
             planner: std::sync::Arc::new(PassthroughPlanner),
-            event_sender: None,
+            event_sender: default_event_sender(),
             state: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
@@ -219,24 +242,63 @@ impl CruxCtx {
         std::sync::Arc::clone(&self.planner)
     }
 
-    /// Attach an event sender so this context emits `StepEvent`s on every step.
-    pub fn set_event_sender(&mut self, sender: EventSender) {
-        self.event_sender = Some(sender);
+    /// Ask the planner for the abstract action governing an orchestration operation.
+    pub(crate) fn plan_action(&self, name: &str) -> PlanResult {
+        let priority = crate::agent::infer_priority(name).score() as u8;
+        self.planner.next_action(name, priority)
     }
 
-    /// Emit a step event to the attached sender, if any.
-    fn emit(&self, event: StepEvent) {
-        if let Some(ref tx) = self.event_sender {
-            let _ = tx.send(event);
+    /// Unified planner gate for all execution primitives (step, delegation, speculation).
+    ///
+    /// Consults the planner for `name` and resolves its verdict:
+    /// - `Allow` → `Ok(None)`, caller proceeds with live execution.
+    /// - `Simulate { output }` → `Ok(Some(value))` deserialized from the synthetic output,
+    ///   caller must short-circuit and skip live execution.
+    /// - `Deny { reason }` → `Err(CruxErr::Denied)`, caller must short-circuit.
+    ///
+    /// Centralizing this match keeps `step`, `delegate`, and `speculate` consistent and
+    /// ensures the planner is always consulted before replay cache lookup, budget checks,
+    /// or closure execution.
+    pub(crate) fn route_through_planner_gate<T>(&self, name: &str) -> Result<Option<T>, CruxErr>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        match self.plan_action(name) {
+            PlanResult::Deny { reason } => Err(CruxErr::Denied {
+                step: name.to_string(),
+                reason,
+            }),
+            PlanResult::Simulate { output } => {
+                serde_json::from_value(output).map(Some).map_err(|error| {
+                    CruxErr::step_failed(name, format!("planner simulation: {error}"))
+                })
+            }
+            PlanResult::Allow(_) => Ok(None),
         }
+    }
+
+    /// Attach an event sender so this context emits ordered runtime events on every step.
+    pub fn set_event_sender(&mut self, sender: EventSender) {
+        self.event_sender = sender;
+    }
+
+    /// Clone the current event sender for child context propagation.
+    pub(crate) fn event_sender(&self) -> EventSender {
+        self.event_sender.clone()
+    }
+
+    /// Emit a canonical event to the attached ordered sender, if any.
+    pub(crate) fn emit(&self, emission: Emission) {
+        self.event_sender
+            .emit(Some(self.id.clone()), Some(&self.agent_name), emission);
     }
 
     /// Emit an intermediate event for a named step.
     ///
-    /// Broadcasts via the EventPipeline (if attached) as a `StepEvent::Chunk`.
+    /// Broadcasts via the EventPipeline (if attached) as a step chunk emission.
     pub fn emit_step_event(&self, step_name: &str, payload: serde_json::Value) {
-        self.emit(StepEvent::Chunk {
-            step_name: step_name.to_string(),
+        self.emit(Emission::StepChunk {
+            name: step_name.to_string(),
             payload,
         });
     }
@@ -251,6 +313,13 @@ impl CruxCtx {
         self.replay.set_mode(mode);
     }
 
+    /// Set the immutable pipeline definition version persisted in trace snapshots.
+    pub fn set_pipeline_version(&mut self, version: impl Into<String>) {
+        let version = version.into();
+        self.replay.set_pipeline_version(version.clone());
+        self.pipeline_version = Some(version);
+    }
+
     /// Take a mid-run checkpoint: snapshot the current trace into a `Crux<Value>`.
     ///
     /// The snapshot can be persisted to a `TaskRegistry` and later used to
@@ -259,11 +328,27 @@ impl CruxCtx {
         Crux {
             id: self.id.clone(),
             agent: self.agent_name.clone(),
+            pipeline_version: self.pipeline_version.clone(),
             value: Ok(serde_json::Value::Null),
             steps: self.recorder.steps().to_vec(),
             children: self.children.clone(),
             started_at: self.started_at,
             finished_at: None,
+        }
+    }
+
+    /// Append steps produced by isolated child execution in caller-defined order.
+    ///
+    /// Replay identities are reassigned against this context's ordinal sequence so
+    /// independently recorded traces can be merged deterministically.
+    pub fn append_trace_steps(
+        &mut self,
+        steps: impl IntoIterator<Item = crate::types::step::Step>,
+    ) {
+        for mut step in steps {
+            let (_, input_hash) = self.recorder.next_ordinal(&step.name);
+            step.input_hash = input_hash;
+            self.recorder.push_raw(step);
         }
     }
 
@@ -304,6 +389,7 @@ impl CruxCtx {
         Crux {
             id: self.id,
             agent: self.agent_name,
+            pipeline_version: self.pipeline_version,
             value: result,
             steps: self.recorder.into_steps(),
             children: self.children,
@@ -352,7 +438,7 @@ impl CruxCtx {
         output: Option<serde_json::Value>,
         error: Option<String>,
     ) {
-        use crate::types::step::{StepKind, StepStatus};
+        use crate::types::step::{StepKind, StepOrigin, StepStatus};
 
         let status = if child_crux.value.is_ok() {
             StepStatus::Ok
@@ -361,9 +447,11 @@ impl CruxCtx {
         };
 
         self.push_step(crate::types::step::Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Delegation,
             status,
+            origin: StepOrigin::Live,
             confidence: 1.0,
             started_at: child_crux.started_at,
             duration_ms: child_crux.duration_ms().unwrap_or(0),
@@ -371,8 +459,10 @@ impl CruxCtx {
             content_hash: None,
             output,
             error,
+            cited_reason: None,
             attempt: 1,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: std::collections::HashMap::new(),
             findings: vec![],
         });
@@ -447,9 +537,13 @@ impl CruxCtx {
         // Find and run the matching route
         for (range, label, fut) in routes {
             if range.contains(confidence) {
-                trace_route!(name, confidence, label);
+                self.emit(Emission::RouteMatched {
+                    name: name.to_string(),
+                    confidence,
+                    label: label.to_string(),
+                });
                 let step_name = format!("{name}::{label}");
-                let val = self.step(&step_name, move || fut).await?;
+                let val = self.step_budgeted(&step_name, move || fut).await?;
                 // If the handler output is a JSON object with a "confidence" field
                 // (finite f32 in [0.0, 1.0]), propagate it to the recorded step so
                 // that route_on_confidence can act on meaningful handler-reported scores.
@@ -485,12 +579,65 @@ impl CruxCtx {
     where
         T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
     {
-        trace_pipe!(name, stages.len());
+        let stages = stages
+            .into_iter()
+            .map(|(name, stage)| (name, stage, PipeFailurePolicy::Propagate))
+            .collect();
+        self.pipe_with_recovery(name, input, stages).await
+    }
+
+    /// Sequential pipeline with explicit failure behavior for each stage.
+    ///
+    /// Failed stages are recorded before [`PipeFailurePolicy::SubstituteWith`] converts the
+    /// error into the next stage's input. [`PipeFailurePolicy::Propagate`] preserves the
+    /// short-circuit behavior of [`Self::pipe`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the stage error when its policy is [`PipeFailurePolicy::Propagate`], or when a
+    /// substitution callback declines recovery. Safety, replay, and budget errors can therefore
+    /// remain non-recoverable even when ordinary handler failures are substituted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use crux_runtime::prelude::*;
+    ///
+    /// # async fn example() -> Result<(), CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+    ///     "recover",
+    ///     Box::new(|_| Box::pin(async { Err(CruxErr::step_failed("recover", "failed")) })),
+    ///     PipeFailurePolicy::SubstituteWith(Box::new(|_| Ok(42))),
+    /// )];
+    /// assert_eq!(ctx.pipe_with_recovery("pipe", 0, stages).await?, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn pipe_with_recovery<T>(
+        &mut self,
+        name: &str,
+        input: T,
+        stages: Vec<RecoverablePipeStage<'_, T>>,
+    ) -> Result<T, CruxErr>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'static,
+    {
+        self.emit(Emission::PipeStart {
+            name: name.to_string(),
+            stage_count: stages.len(),
+        });
         let mut current = input;
-        for (stage_name, f) in stages {
+        for (stage_name, stage, policy) in stages {
             let step_name = format!("{name}::{stage_name}");
             let val = current;
-            current = self.step(&step_name, move || f(val)).await?;
+            current = match self.step_budgeted(&step_name, move || stage(val)).await {
+                Ok(output) => output,
+                Err(error) => match policy {
+                    PipeFailurePolicy::Propagate => return Err(error),
+                    PipeFailurePolicy::SubstituteWith(substitute) => substitute(error)?,
+                },
+            };
         }
         Ok(current)
     }
@@ -523,7 +670,10 @@ impl CruxCtx {
     {
         use chrono::Utc;
 
-        trace_join_all!(name, arms.len());
+        self.emit(Emission::JoinAllStart {
+            name: name.to_string(),
+            arm_count: arms.len(),
+        });
 
         // Phase 1: allocate ordinals and check replay cache for each arm before
         // dispatching any future. This mirrors step()/pipe() ordinal-first semantics.
@@ -543,10 +693,10 @@ impl CruxCtx {
                 .replay
                 .check_by_name(&step_name, ordinal, input_hash, None)
             {
-                ReplayResult::Hit(cached) => {
+                ReplayResult::Hit(cached, confidence) => {
                     let value: T = deserialize_replay(&step_name, cached.clone())?;
                     self.recorder
-                        .record_replay(&step_name, input_hash, None, 1.0, cached);
+                        .record_replay(&step_name, input_hash, None, confidence, cached);
                     Some(value)
                 }
                 ReplayResult::Mismatch { expected, actual } => {
@@ -597,6 +747,7 @@ impl CruxCtx {
             .collect();
 
         let live_indices: Vec<usize> = live_futs.iter().map(|(i, _)| *i).collect();
+        self.reserve_budgeted_steps(live_indices.len())?;
         let futs_only: Vec<_> = live_futs.into_iter().map(|(_, f)| f).collect();
 
         let outcomes: Vec<(chrono::DateTime<Utc>, u64, Result<T, CruxErr>)> =
@@ -754,8 +905,8 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.emit(StepEvent::Started {
-            step_name: name.to_string(),
+        self.emit(Emission::StepStart {
+            name: name.to_string(),
         });
         let step_start = Utc::now();
         let result = f().await;
@@ -774,7 +925,10 @@ impl CruxCtx {
         match result {
             Ok(val) => {
                 if let Some(recovery) = self.hooks.check_confidence(confidence).await {
-                    trace_hook!("on_low_confidence", name);
+                    self.emit(Emission::HookDispatched {
+                        hook: "on_low_confidence".into(),
+                        step: name.to_string(),
+                    });
                     self.recorder
                         .record_ok(&rec, serde_json::to_value(&val).ok());
                     return self
@@ -783,21 +937,24 @@ impl CruxCtx {
                 }
                 self.recorder
                     .record_ok(&rec, serde_json::to_value(&val).ok());
-                self.emit(StepEvent::Completed {
-                    step_name: name.to_string(),
+                self.emit(Emission::StepComplete {
+                    name: name.to_string(),
                     duration_ms,
                 });
                 Ok(val)
             }
             Err(e) => {
                 self.recorder.record_err(&rec, &e.to_string());
-                self.emit(StepEvent::Failed {
-                    step_name: name.to_string(),
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
                     error: e.to_string(),
                 });
 
                 if let Some(recovery) = self.hooks.check_failure(e.clone()).await {
-                    trace_hook!("on_step_failure", name);
+                    self.emit(Emission::HookDispatched {
+                        hook: "on_step_failure".into(),
+                        step: name.to_string(),
+                    });
                     return self
                         .apply_recovery(name, input_hash, confidence, recovery)
                         .await;
@@ -809,9 +966,18 @@ impl CruxCtx {
     }
 }
 
-// ---------------------------------------------------------------------------
+fn default_event_sender() -> EventSender {
+    #[cfg(feature = "tracing")]
+    let pipeline = EventPipeline::with_sinks(
+        1,
+        vec![std::sync::Arc::new(crate::event_sink::TracingEventSink)],
+    );
+    #[cfg(not(feature = "tracing"))]
+    let pipeline = EventPipeline::new(1);
+    pipeline.sender()
+}
+
 // Stream drain helpers (pure, no `self`)
-// ---------------------------------------------------------------------------
 
 /// The final outcome of draining an async stream to completion.
 enum StreamDrain<T> {
@@ -875,6 +1041,7 @@ impl CruxCtx {
         name: &str,
         confidence: f32,
         content_hash: Option<u64>,
+        budgeted: bool,
         f: F,
     ) -> Result<T, CruxErr>
     where
@@ -882,21 +1049,9 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        trace_step!(name, confidence);
-
-        // Planner check — before replay cache and closure execution.
-        match self.planner.next_action(name, 0) {
-            PlanResult::Deny { reason } => {
-                return Err(CruxErr::Denied {
-                    step: name.to_string(),
-                    reason,
-                });
-            }
-            PlanResult::Simulate { output } => {
-                return serde_json::from_value(output)
-                    .map_err(|e| CruxErr::step_failed(name, e.to_string()));
-            }
-            PlanResult::Allow(_) => {} // proceed normally
+        // Planner gate — before replay cache and closure execution.
+        if let Some(simulated) = self.route_through_planner_gate::<T>(name)? {
+            return Ok(simulated);
         }
 
         // Pre-step safety gate
@@ -916,11 +1071,18 @@ impl CruxCtx {
             .replay
             .check_by_name(name, ordinal, input_hash, content_hash)
         {
-            ReplayResult::Hit(cached) => {
-                trace_replay_hit!(name);
+            ReplayResult::Hit(cached, cached_confidence) => {
+                self.emit(Emission::ReplayHit {
+                    name: name.to_string(),
+                });
                 let value: T = deserialize_replay(name, cached.clone())?;
-                self.recorder
-                    .record_replay(name, input_hash, content_hash, confidence, cached);
+                self.recorder.record_replay(
+                    name,
+                    input_hash,
+                    content_hash,
+                    cached_confidence,
+                    cached,
+                );
                 return Ok(value);
             }
             ReplayResult::Mismatch { expected, actual } => {
@@ -931,7 +1093,9 @@ impl CruxCtx {
                 });
             }
             ReplayResult::Miss => {
-                trace_replay_miss!(name);
+                self.emit(Emission::ReplayMiss {
+                    name: name.to_string(),
+                });
             }
         }
 
@@ -953,8 +1117,47 @@ impl CruxCtx {
             });
         }
 
+        if budgeted {
+            self.budget_tracker.begin_step()?;
+        }
+
         self.execute_single(name, confidence, input_hash, content_hash, f)
             .await
+    }
+
+    fn reserve_budgeted_steps(&mut self, count: usize) -> Result<(), CruxErr> {
+        self.budget_tracker
+            .reserve_steps(u64::try_from(count).unwrap_or(u64::MAX))
+    }
+
+    /// Execute one replay-aware step and reserve one live invocation.
+    ///
+    /// Unlike [`Context::step`], this method increments the typed step budget
+    /// immediately before live work starts. Replay hits return cached output without
+    /// reserving budget or polling `f`; pre-execution rejection also leaves `f`
+    /// untouched. Handler integrations should normally use [`InvocationMeter`] so
+    /// they can distinguish those cases before recording duration and usage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crux_runtime::prelude::{Budget, Context, CruxCtx};
+    ///
+    /// # async fn example() -> Result<(), crux_runtime::prelude::CruxErr> {
+    /// let mut ctx = CruxCtx::new("example");
+    /// ctx.set_budget(Budget::steps(1));
+    /// let value = ctx.step_budgeted("fetch", || async { Ok(42_u32) }).await?;
+    /// assert_eq!(value, 42);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub(crate) async fn step_budgeted<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
+    where
+        F: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<T, CruxErr>> + Send,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send,
+    {
+        self.step_inner(name, 1.0, None, true, f).await
     }
 
     /// Record the outcome of a stream drain and return the final value (or error).
@@ -987,6 +1190,10 @@ impl CruxCtx {
                 if let Some(step) = self.recorder.steps_mut().last_mut() {
                     step.events = events;
                 }
+                self.emit(Emission::StepComplete {
+                    name: name.to_string(),
+                    duration_ms,
+                });
                 Ok(value)
             }
             StreamDrain::Err {
@@ -999,6 +1206,10 @@ impl CruxCtx {
                 if let Some(step) = self.recorder.steps_mut().last_mut() {
                     step.events = events;
                 }
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
+                    error: error.to_string(),
+                });
                 Err(error)
             }
             StreamDrain::Empty {
@@ -1006,9 +1217,66 @@ impl CruxCtx {
             } => {
                 let rec = make_rec(empty_dur);
                 self.recorder.record_err(&rec, "stream yielded no items");
+                self.emit(Emission::StepError {
+                    name: name.to_string(),
+                    error: "stream yielded no items".into(),
+                });
                 Err(CruxErr::step_failed(name, "stream yielded no items"))
             }
         }
+    }
+}
+
+impl InvocationMeter for CruxCtx {
+    fn invoke_budgeted_step<'a, F, Fut, T>(
+        &'a mut self,
+        name: &'a str,
+        f: F,
+    ) -> std::pin::Pin<Box<dyn Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+    where
+        F: FnOnce() -> Fut + Send + 'a,
+        Fut: Future<Output = Result<T, CruxErr>> + Send + 'a,
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+    {
+        Box::pin(async move {
+            use std::sync::atomic::{AtomicBool, Ordering};
+
+            let executed = std::sync::Arc::new(AtomicBool::new(false));
+            let live = std::sync::Arc::clone(&executed);
+            let outcome = self
+                .step_budgeted(name, move || {
+                    live.store(true, Ordering::Release);
+                    f()
+                })
+                .await;
+            BudgetedInvocation {
+                outcome,
+                executed: executed.load(Ordering::Acquire),
+            }
+        })
+    }
+
+    fn reserve_invocations(&mut self, count: u64) -> Result<(), CruxErr> {
+        self.budget_tracker.reserve_steps(count)
+    }
+
+    fn record_invocation_usage(
+        &mut self,
+        step: &str,
+        usage: crate::types::budget::HandlerUsage,
+        duration: std::time::Duration,
+    ) -> Result<(), CruxErr> {
+        let mut violation = self.budget_tracker.record_duration(duration).err();
+        if let Err(error) = self.budget_tracker.record_handler_usage(step, usage)
+            && violation.is_none()
+        {
+            violation = Some(error);
+        }
+        violation.map_or(Ok(()), Err)
+    }
+
+    fn budget_usage(&self) -> crate::types::budget::BudgetUsage {
+        self.budget_tracker.usage()
     }
 }
 
@@ -1030,7 +1298,7 @@ impl Context for CruxCtx {
         K: serde::Serialize + Sync,
     {
         let content_hash = Some(crate::recorder::hash_content(key));
-        self.step_inner(name, 1.0, content_hash, f).await
+        self.step_inner(name, 1.0, content_hash, false, f).await
     }
 
     async fn step_with_confidence<F, Fut, T>(
@@ -1044,7 +1312,7 @@ impl Context for CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        self.step_inner(name, confidence, None, f).await
+        self.step_inner(name, confidence, None, false, f).await
     }
 
     async fn step_retryable<F, Fut, T>(
@@ -1208,16 +1476,17 @@ impl Context for CruxCtx {
         S: futures::Stream<Item = Result<T, CruxErr>> + Send + Unpin,
         T: serde::Serialize + serde::de::DeserializeOwned + Send,
     {
-        trace_step!(name, 1.0_f32);
         let (ordinal, input_hash) = self.recorder.next_ordinal(name);
 
         // Replay check
         match self.replay.check_by_name(name, ordinal, input_hash, None) {
-            ReplayResult::Hit(cached) => {
-                trace_replay_hit!(name);
+            ReplayResult::Hit(cached, confidence) => {
+                self.emit(Emission::ReplayHit {
+                    name: name.to_string(),
+                });
                 let value: T = deserialize_replay(name, cached.clone())?;
                 self.recorder
-                    .record_replay(name, input_hash, None, 1.0, cached);
+                    .record_replay(name, input_hash, None, confidence, cached);
                 return Ok(value);
             }
             ReplayResult::Mismatch { expected, actual } => {
@@ -1228,10 +1497,15 @@ impl Context for CruxCtx {
                 });
             }
             ReplayResult::Miss => {
-                trace_replay_miss!(name);
+                self.emit(Emission::ReplayMiss {
+                    name: name.to_string(),
+                });
             }
         }
 
+        self.emit(Emission::StepStart {
+            name: name.to_string(),
+        });
         let step_start = Utc::now();
         let drain = drain_stream(f(), step_start).await;
         let duration_ms = (Utc::now() - step_start).num_milliseconds().unsigned_abs();
@@ -1257,10 +1531,10 @@ impl Context for CruxCtx {
 /// Determines the worst-case outcome across all steps.
 /// Steps flagged `continue_on_error` are excluded unless `ignore_continue_on_error` is true.
 pub fn determine_final_phase(
-    steps: &[crux_types::crux_value::StepRecord],
+    steps: &[crux_schema::crux_value::StepRecord],
     ignore_continue_on_error: bool,
-) -> crux_types::crux_value::FinalPhase {
-    use crux_types::crux_value::FinalPhase;
+) -> crux_schema::crux_value::FinalPhase {
+    use crux_schema::crux_value::FinalPhase;
     steps
         .iter()
         .filter(|s| ignore_continue_on_error || !s.continue_on_error)
@@ -1272,7 +1546,7 @@ pub fn determine_final_phase(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::step::StepStatus;
+    use crate::types::step::{StepOrigin, StepStatus};
 
     #[tokio::test]
     async fn step_records_success() {
@@ -1282,6 +1556,7 @@ mod tests {
         assert_eq!(ctx.snapshot_steps().len(), 1);
         assert_eq!(ctx.snapshot_steps()[0].name, "greet");
         assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Ok);
+        assert_eq!(ctx.snapshot_steps()[0].origin, StepOrigin::Live);
     }
 
     #[tokio::test]
@@ -1536,6 +1811,47 @@ mod tests {
         assert!(msg.contains("budget exceeded"));
     }
 
+    #[test]
+    fn typed_budget_methods_account_independent_dimensions() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::combined(vec![
+            Budget::steps(1),
+            Budget::usd(crate::types::budget::UsdAmount::ZERO),
+        ]));
+
+        assert!(ctx.reserve_invocations(1).is_ok());
+        assert!(
+            ctx.record_invocation_usage(
+                "free",
+                crate::types::budget::HandlerUsage::free(),
+                std::time::Duration::ZERO,
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            ctx.reserve_invocations(1),
+            Err(CruxErr::StepBudgetExceeded { .. })
+        ));
+    }
+
+    #[test]
+    fn invocation_usage_preserves_unreported_usd_without_synthetic_zero() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.record_invocation_usage(
+            "legacy",
+            crate::types::budget::HandlerUsage {
+                tokens: 3,
+                usd: None,
+            },
+            std::time::Duration::ZERO,
+        )
+        .unwrap();
+
+        let usage = ctx.budget_usage();
+        assert_eq!(usage.tokens, 3);
+        assert_eq!(usage.usd, None);
+    }
+
     #[tokio::test]
     async fn replay_returns_cached_output() {
         let mut ctx1 = CruxCtx::new("agent");
@@ -1556,6 +1872,26 @@ mod tests {
             .unwrap();
         assert_eq!(val, "cached_data");
         assert_eq!(ctx2.snapshot_steps()[0].attempt, 0);
+        assert_eq!(ctx2.snapshot_steps()[0].origin, StepOrigin::Replayed);
+    }
+
+    #[tokio::test]
+    async fn replay_preserves_cached_confidence() {
+        let mut first = CruxCtx::new("test");
+        first
+            .step_with_confidence("score", 0.42, || async { Ok("cached".to_string()) })
+            .await
+            .unwrap();
+        let snapshot = first.finalize(Ok(serde_json::Value::Null));
+
+        let mut replayed = CruxCtx::new("test");
+        replayed.replay_from(&snapshot);
+        replayed
+            .step_with_confidence("score", 1.0, || async { Ok("live".to_string()) })
+            .await
+            .unwrap();
+
+        assert_eq!(replayed.snapshot_steps()[0].confidence, 0.42);
     }
 
     #[tokio::test]
@@ -1753,8 +2089,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- pipe -----------------------------------------------------------------
-
     #[tokio::test]
     async fn pipe_chains_stages() {
         let mut ctx = CruxCtx::new("test");
@@ -1838,6 +2172,87 @@ mod tests {
             .await;
         assert!(result.is_err());
         assert_eq!(ctx.snapshot_steps().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn pipe_with_recovery_records_failure_before_substitution() {
+        let mut ctx = CruxCtx::new("test");
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![
+            (
+                "fail",
+                Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+                PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+            ),
+            (
+                "increment",
+                Box::new(|value| Box::pin(async move { Ok(value + 1) })),
+                PipeFailurePolicy::Propagate,
+            ),
+        ];
+
+        let result = ctx
+            .pipe_with_recovery("recover", 0, stages)
+            .await
+            .expect("substitution should continue the pipe");
+
+        assert_eq!(result, 8);
+        assert_eq!(ctx.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(
+            ctx.snapshot_steps()[0].error.as_deref(),
+            Some("step 'fail' failed: bad")
+        );
+        assert_eq!(ctx.snapshot_steps()[0].output, None);
+        assert_eq!(ctx.snapshot_steps()[1].status, StepStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn pipe_with_recovery_does_not_replay_failed_stage_as_success() {
+        let mut initial = CruxCtx::new("test");
+        let initial_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "bad")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(7))),
+        )];
+        assert_eq!(
+            initial
+                .pipe_with_recovery("recover", 0, initial_stages)
+                .await
+                .unwrap(),
+            7
+        );
+        let snapshot = initial.snapshot();
+
+        let mut replay = CruxCtx::new("test");
+        replay.replay_from(&snapshot);
+        let replay_stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "fail",
+            Box::new(|_value| Box::pin(async { Err(CruxErr::step_failed("fail", "again")) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(|_error| Ok(9))),
+        )];
+        let result = replay
+            .pipe_with_recovery("recover", 0, replay_stages)
+            .await
+            .expect("failed stages should execute and recover again");
+
+        assert_eq!(result, 9);
+        assert_eq!(replay.snapshot_steps()[0].status, StepStatus::Err);
+        assert_eq!(replay.snapshot_steps()[0].output, None);
+    }
+
+    #[tokio::test]
+    async fn pipe_recovery_callback_can_reject_policy_errors() {
+        use crate::hooks::HookVerdict;
+
+        let mut ctx = CruxCtx::new("test");
+        ctx.on_pre_step(|_| HookVerdict::Deny("blocked".into()));
+        let stages: Vec<RecoverablePipeStage<'_, i32>> = vec![(
+            "denied",
+            Box::new(|value| Box::pin(async move { Ok(value) })),
+            PipeFailurePolicy::SubstituteWith(Box::new(Err)),
+        )];
+        let result = ctx.pipe_with_recovery("policy", 0, stages).await;
+
+        assert!(matches!(result, Err(CruxErr::Denied { .. })));
     }
 
     // -- join_all -------------------------------------------------------------
@@ -2053,6 +2468,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn join_all_insufficient_step_budget_does_not_charge_undispatched_arms() {
+        let mut ctx = CruxCtx::new("test");
+        ctx.set_budget(Budget::steps(1));
+
+        let result: Result<Vec<i32>, _> = ctx
+            .join_all(
+                "fetch",
+                vec![
+                    ("a", Box::pin(async { panic!("should not run") })),
+                    ("b", Box::pin(async { panic!("should not run") })),
+                ],
+            )
+            .await;
+
+        assert!(matches!(result, Err(CruxErr::StepBudgetExceeded { .. })));
+        let value = ctx
+            .step_budgeted("after", || async { Ok(7_i32) })
+            .await
+            .expect("failed join must not consume the remaining invocation");
+        assert_eq!(value, 7);
+    }
+
+    #[tokio::test]
     async fn join_all_budget_hook_fires_substitute() {
         let mut ctx = CruxCtx::new("test");
         ctx.set_budget(Budget::tokens(10));
@@ -2139,7 +2577,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(val, "result_a");
-        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0); // replayed
+        assert_eq!(ctx2.snapshot_steps()[0].attempt, 0); // Replay hits retain attempt zero.
     }
 }
 
@@ -2318,8 +2756,6 @@ fn resolve_output_ref_for_guard(
     })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod if_guard_tests {
     use super::*;
@@ -2462,7 +2898,7 @@ mod step_state_tests {
 #[cfg(test)]
 mod final_phase_tests {
     use super::determine_final_phase;
-    use crux_types::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
+    use crux_schema::crux_value::{FinalPhase, StepRecord as PhaseStepRecord};
     use proptest::prelude::*;
 
     #[test]
@@ -2561,9 +2997,9 @@ mod final_phase_tests {
 
         #[test]
         fn ord_is_total_and_consistent(a in arb_phase(), b in arb_phase()) {
-            // Reflexive
+            // Every phase compares equal to itself.
             prop_assert_eq!(a.cmp(&a), std::cmp::Ordering::Equal);
-            // Antisymmetric
+            // Distinct phases cannot compare the same way in both directions.
             if a != b {
                 prop_assert_ne!(a.cmp(&b), b.cmp(&a));
             }

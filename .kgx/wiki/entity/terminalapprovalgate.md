@@ -2,5 +2,7 @@
 title: TerminalApprovalGate
 tags: [type, agentic, adapter, approval]
 ---
-# TerminalApprovalGate
+
+## TerminalApprovalGate
+
 **Crate:** [[crux-agentic]] | Implements [[ApprovalGate]]. Reads y/n from stdin. Singleton.

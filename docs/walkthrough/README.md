@@ -6,7 +6,7 @@ confidence-based routing. Both produce the same `Crux<T>` trace — inspectable,
 and replayable.
 
 If you just want to chain steps, fan out, and call LLMs, write a `.crux` file and run it.
-If you need custom control flow, drop into Rust. Rust edition 2024, MSRV 1.88.
+If you need custom control flow, drop into Rust. Rust edition 2024, MSRV 1.89.0.
 
 ## Who this tutorial is for
 

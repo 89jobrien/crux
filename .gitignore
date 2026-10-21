@@ -33,3 +33,4 @@ crates/.env
 .idea/
 .worktrees/
 .claude/
+.taskit/telemetry/2026/

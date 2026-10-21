@@ -2,7 +2,7 @@
 
 [Introduction](walkthrough/README.md)
 
-# Pipelines
+## Pipelines
 
 - [Your first pipeline](pipelines/01-first-pipeline.md)
 - [Handlers](pipelines/02-handlers.md)
@@ -11,7 +11,7 @@
 - [LLM pipelines](pipelines/05-llm-pipelines.md)
 - [Real-world examples](pipelines/06-real-world-examples.md)
 
-# Rust API
+## Rust API
 
 - [Setup](walkthrough/01-setup.md)
 - [Core types](walkthrough/02-core-types.md)
@@ -21,7 +21,7 @@
 - [Project: planner + executor](walkthrough/06-project-planner-executor.md)
 - [vs existing patterns](walkthrough/07-vs-existing-patterns.md)
 
-# Reference
+## Reference
 
 - [Handlers and capabilities](crux-capabilities.md)
 - [Syntax reference](crux-syntax-reference.md)

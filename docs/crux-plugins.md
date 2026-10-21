@@ -55,6 +55,64 @@ Response:
 }
 ```
 
+#### Declaring a result type
+
+A handler may add an `output_schema` to describe the shape of a successful
+result. The host lifts it into the step's typed contract, so the compiler can
+check consumers statically instead of treating the output as `Dynamic`:
+
+```json
+{
+  "status": "Declare",
+  "data": {
+    "handlers": [
+      {
+        "name": "github::list_labels",
+        "description": "List labels in a repository",
+        "output_schema": { "type": "array", "definition": { "items": { "type": "string" } } }
+      }
+    ]
+  }
+}
+```
+
+Each schema level is a `type` tag with its payload under `definition`, and a
+variant that carries fields nests one level deeper:
+
+```json
+{
+  "type": "array",
+  "definition": {
+    "items": {
+      "type": "object",
+      "definition": {
+        "properties": {
+          "name": { "schema": { "type": "string" }, "required": true }
+        }
+      }
+    }
+  }
+}
+```
+
+A property's `required` flag defaults to `false`, and an object schema's
+`properties` defaults to empty, so both can be omitted when you do not need
+them.
+
+The field is optional and additive, so plugins that omit it still load. An
+undeclared handler keeps a `Dynamic` output: that accepts any value but cannot
+be structurally validated, so a `for_each` over such a step reports a
+dynamic-boundary diagnostic rather than type-checking.
+
+A schema that is not well-formed -- an empty union, for example -- is rejected
+when the plugin loads, not midway through a run. Declaring a schema also makes
+the host verify the plugin's actual output against it and fail the step on a
+mismatch.
+
+Only the output shape can be declared. Strict compilation additionally requires
+an input schema and a confidence capability, which the protocol does not yet
+carry, so plugin steps remain incomplete contracts under `--strict`.
+
 ### Invoke (host -> plugin)
 
 Request:

@@ -1,3 +1,5 @@
+//! End-to-end execution tests for pipeline steps and combinators.
+
 use crux_runtime::prelude::CruxErr;
 /// Integration tests for YAML-driven pipeline execution.
 use crux_script::{HandlerOutput, HandlerRegistry, Runner, load};
@@ -62,6 +64,30 @@ fn test_registry() -> Arc<HandlerRegistry> {
     });
 
     Arc::new(reg)
+}
+
+#[test]
+fn display_metadata_parses_with_defaults() {
+    let yaml = r#"
+pipeline: polished
+display:
+  title: Polished Pipeline
+  steps:
+    analyze: Analysis
+steps:
+  - step: analyze
+    handler: analyzer
+"#;
+
+    let pipeline = load(yaml).unwrap();
+    let display = pipeline.display.as_ref().expect("display metadata");
+
+    assert_eq!(display.title.as_deref(), Some("Polished Pipeline"));
+    assert_eq!(display.output, crux_script::schema::DisplayOutput::Auto);
+    assert_eq!(
+        display.steps.get("analyze").map(String::as_str),
+        Some("Analysis")
+    );
 }
 
 #[tokio::test]
@@ -343,6 +369,87 @@ steps:
 }
 
 #[tokio::test]
+async fn pipe_args_expand_expressions() {
+    let yaml = r#"
+pipeline: pipe_args
+steps:
+  - pipe: transform
+    stages:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "pipe" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("pipe"));
+}
+
+#[tokio::test]
+async fn join_args_expand_expressions() {
+    let yaml = r#"
+pipeline: join_args
+steps:
+  - join_all: joined
+    arms:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "join" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!(["join"]));
+}
+
+#[tokio::test]
+async fn route_args_expand_expressions() {
+    let yaml = r#"
+pipeline: route_args
+steps:
+  - step: analyze
+    handler: analyzer
+  - route_on_confidence: routed
+    value: "{{ steps.analyze.confidence }}"
+    routes:
+      - range: "[0.0, 1.0]"
+        label: selected
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "route" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("route"));
+}
+
+#[tokio::test]
+async fn speculate_args_expand_expressions() {
+    let yaml = r#"
+pipeline: speculate_args
+steps:
+  - speculate: candidates
+    mode: first_ok
+    arms:
+      - step: say
+        handler: echo_msg
+        args:
+          msg: "{{ input.message }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let crux = Runner::new(test_registry())
+        .run(&pipeline, json!({ "message": "speculate" }))
+        .await;
+    assert_eq!(crux.value().unwrap(), &json!("speculate"));
+}
+
+#[tokio::test]
 async fn expression_input_passthrough() {
     let yaml = r#"
 pipeline: expr_test
@@ -355,4 +462,34 @@ steps:
     // The handler ignores input, but we verify the pipeline runs with arbitrary input
     let crux = runner.run(&pipeline, json!({"data": [1,2,3]})).await;
     assert!(crux.value().is_ok());
+}
+
+#[tokio::test]
+async fn join_all_members_field_populated_for_arm_addressing() {
+    // Regression test: StepResult.members field must be populated for join_all steps
+    // so that individual arm outputs can be addressed via {{ steps.<group>.<arm>.output }}
+    let yaml = r#"
+pipeline: member_addressing_test
+steps:
+  - join_all: fetch_sources
+    arms:
+      - web_search
+      - local_cache
+      - database
+  - step: combine_results
+    handler: echo_msg
+    args:
+      msg: "web={{ steps.fetch_sources.web_search.output }},cache={{ steps.fetch_sources.local_cache.output }}"
+"#;
+    let pipeline = load(yaml).unwrap();
+    let runner = Runner::new(test_registry());
+    let crux = runner.run(&pipeline, json!(null)).await;
+
+    // Verify the join_all output is an array of the three arm results
+    let results = crux.value().unwrap();
+    assert_eq!(results, &json!("web=\"web_result\",cache=\"cache_result\""));
+
+    // Verify we can access the individual step results
+    // The array should contain the outputs from all three arms
+    assert!(crux.steps.len() >= 3);
 }

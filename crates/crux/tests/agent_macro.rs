@@ -1,3 +1,5 @@
+//! Integration tests for generated wrappers, agent types, hooks, and error propagation.
+
 /// End-to-end tests for #[crux::agent] proc macro.
 ///
 /// These tests verify that the macro generates correct Agent impls,
@@ -123,7 +125,7 @@ async fn step_fails() -> Crux<i32> {
             Err(CruxErr::step_failed("bad_step", "oops"))
         })
         .await?;
-    Ok(0) // unreachable
+    Ok(0) // The preceding propagated error prevents this value from being returned.
 }
 
 #[tokio::test]

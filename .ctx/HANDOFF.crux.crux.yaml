@@ -1,31 +1,234 @@
 project: crux
 id: crux
-updated: 2026-08-17
+updated: 2026-10-21
 items:
-- id: crux-task-impl
+- id: t27
   doob_uuid: null
-  name: null
-  priority: p1
-  status: open
-  title: Implement crux-task crate (10-task plan)
-  description: |
-    Design and plan complete. 10 tasks ready for execution:
-    1. Wire types in crux-types (Priority, TaskLabel, DependencyKind)
-    2. Scaffold crux-task crate
-    3. TaskManager core (add/get/list/update/stats)
-    4. Dependency methods + cycle detection
-    4a. Property tests for graph invariants
-    5. SqliteBackend
-    5a. Conformance test suite for RegistryBackend
-    6. CLI binary (crux-task)
-    7. Pipeline step handlers in crux-agentic
-    8. Integration workflow test
-    Design: docs/designs/2026-07-01-crux-task-design.md
-    Plan: docs/plans/2026-07-01-crux-task.md
+  name: extend-plugin-declarations-with-contracts
+  priority: P2
+  status: done
+  title: Extend plugin declarations with contracts
+  description: 'Verify command repointed on 2026-09-30: the planned test handler_decl_round_trips_metadata was never written. Implementation (HandlerDecl::output_schema on the wire, PROTOCOL_VERSION 1.0 -> 1.1) is complete in the working tree and verified under the actual test name declared_output_schema_round_trips in crates/crux-plugin/tests/protocol.rs. Covers the declaration half only; the register_plugins metadata-lifting half is tracked separately under t28.'
   files: []
-  completed: null
+  completed: 2026-10-20
+  extra: []
+- id: t28
+  doob_uuid: null
+  name: adapt-plugins-into-steprunner
+  priority: P2
+  status: done
+  title: Adapt plugins into StepRunner
+  description: StepRunner trait implementation with handler declaration and invocation. Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t29
+  doob_uuid: null
+  name: contract-control-and-text-handlers
+  priority: P2
+  status: done
+  title: Contract control and text handlers
+  description: Handler contracts for control flow (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t30
+  doob_uuid: null
+  name: contract-filesystem-and-git-handlers
+  priority: P2
+  status: done
+  title: Contract filesystem and Git handlers
+  description: Handler contracts for filesystem and git operations (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t31
+  doob_uuid: null
+  name: contract-json-and-shell-handlers
+  priority: P2
+  status: done
+  title: Contract JSON and shell handlers
+  description: Handler contracts for JSON and shell operations (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t32
+  doob_uuid: null
+  name: contract-analysis-handlers
+  priority: P2
+  status: done
+  title: Contract analysis handlers
+  description: Handler contracts for analysis operations (9 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t33
+  doob_uuid: null
+  name: contract-ci-and-review-handlers
+  priority: P2
+  status: done
+  title: Contract CI and review handlers
+  description: Handler contracts for CI and review operations (16 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t34
+  doob_uuid: null
+  name: contract-triage-handlers
+  priority: P2
+  status: done
+  title: Contract triage handlers
+  description: Handler contracts for triage operations (19 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t35
+  doob_uuid: null
+  name: contract-container--rx--task--and-harness-handlers
+  priority: P2
+  status: done
+  title: Contract container, rx, task, and harness handlers
+  description: Handler contracts for container, rx, task, and harness operations (11 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t36
+  doob_uuid: null
+  name: contract-sqlite-handlers
+  priority: P2
+  status: done
+  title: Contract SQLite handlers
+  description: Handler contracts for SQLite operations (7 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t37
+  doob_uuid: null
+  name: contract-llm-handlers-and-agents
+  priority: P2
+  status: done
+  title: Contract LLM handlers and agents
+  description: Handler contracts for LLM operations and agent delegation (8 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t38
+  doob_uuid: null
+  name: contract-baml-handlers
+  priority: P2
+  status: done
+  title: Contract BAML handlers
+  description: Handler contracts for BAML operations (4 handlers). Completed by agent ae4a574d.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t39
+  doob_uuid: null
+  name: strict-compile-core-and-harness-examples
+  priority: P2
+  status: done
+  title: Strict-compile core and harness examples
+  description: Example pipeline core_harness.crux demonstrating harness management. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t40
+  doob_uuid: null
+  name: strict-compile-ci-and-review-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile CI and review workflow examples
+  description: Example pipeline ci_review.crux demonstrating CI workflow with parallel checks. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t41
+  doob_uuid: null
+  name: strict-compile-deployment-and-triage-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile deployment and triage workflow examples
+  description: Example pipeline deployment_triage.crux demonstrating deployment validation. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t42
+  doob_uuid: null
+  name: strict-compile-handoff-workflow-examples
+  priority: P2
+  status: done
+  title: Strict-compile handoff workflow examples
+  description: Example pipeline handoff.crux demonstrating handoff with state checkpoints. Completed by agent adcfb7ce.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t43
+  doob_uuid: null
+  name: remove-legacy-runner-and-unchecked-execution-apis
+  priority: P2
+  status: done
+  title: Remove legacy runner and unchecked execution APIs
+  description: Removed Runner::run_unchecked() and consolidated execution path. Completed by agent a0f4d0cc.
+  files: []
+  completed: 2026-10-20
+  extra: []
+- id: t44
+  doob_uuid: null
+  name: update-conformance-and-architecture-documentation
+  priority: P2
+  status: done
+  title: Update conformance and architecture documentation
+  description: Updated CONFORMANCE.md, ARCHITECTURE.md, and 4 crate READMEs with handler contract specs. Completed by agent a3388cdb.
+  files: []
+  completed: 2026-10-20
   extra: []
 log:
+- date: '20261020.235959'
+  summary: 'P2 completion wave: all 18 items done. t27 marked complete. t28-t38 handler contracts (105+ handlers, 17 tests) implemented via ae4a574d. t39-t42 example pipelines created via adcfb7ce (4 examples + tests). t43 legacy API cleanup via a0f4d0cc. t44 docs (CONFORMANCE + ARCHITECTURE + 4 READMEs) via a3388cdb. Build passing, all commits on develop.'
+  commits: []
+- date: '20261020.200000'
+  summary: Fixed P0 borrow-checker error in crux-cli run.rs (trace_path move/use-after-move). Added clippy too-many-arguments suppression on from_run. Build passing, lint clean. Pre-commit hook validated. Commit 357f3b9.
+  commits: []
+- date: '20261019.063939'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
+- date: '20261001.014104'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
+- date: '20260929.185946'
+  summary: done=71 running=0 pending=18 blocked=0
+  commits: []
+- date: '20260922.175938'
+  summary: done=57 running=2 pending=18 blocked=0
+  commits: []
+- date: '20260922.144159'
+  summary: done=43 running=2 pending=18 blocked=0
+  commits: []
+- date: '20260920.012242'
+  summary: done=25 running=1 pending=30 blocked=0
+  commits: []
+- date: '20260920.003720'
+  summary: done=24 running=1 pending=31 blocked=0
+  commits: []
+- date: '20260909.015838'
+  summary: done=7 running=0 pending=22 blocked=1
+  commits: []
+- date: '20260823.081522'
+  summary: done=2 running=0 pending=12 blocked=0
+  commits: []
+- date: '20260822.234500'
+  summary: |
+    GitHub issue triage-and-fix pass: closed 24 issues across bug fixes, feature completion,
+    and stale issue cleanup. Bug fixes: #91 (BudgetTracker bounds), #68/#9 (speculate
+    tie-break ordering), #75/#76 (confidence validation range), #103 (expr.rs strip
+    whitespace). Feature completions: full crux-script control-flow batch #79-89, #71 (CLI
+    JSON output), #70 (json::jq extensions), #69 (BAML function audit), #26 (PlanRule
+    dedup). Infrastructure: #12 (examples cleanup: joe/ctrl::noop rewiring), plus 10 issues
+    closed as stale/duplicate/already-resolved (#8,14,15,17,11,10,7,27,13,67). Filed 2
+    follow-up issues: #104 (crux schema command), #105 (serde-saphyr parser bug).
+    All 776 tests pass (cargo nextest), 0 clippy warnings. Workspace version 0.3.1.
+    HEAD: 86408da (merge #12).
+  commits: []
 - date: 20260708:000000
   summary: |
     Heavy refactor session across crux runtime and stdlib components:
@@ -141,5 +344,3 @@ log:
 - date: 2026-05-04
   summary: reviewed CI workflow — no changes made this session
   commits: []
-description: |
-  An agentic DSL for Rust — inspectable, serializable, replayable agent execution. Rust-embedded DSL (macros, traits, types) for writing agentic programs where every step, branch, delegation, and failure is a first-class value.

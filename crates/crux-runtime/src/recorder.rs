@@ -1,3 +1,5 @@
+//! Step construction, redaction, identity hashing, and trace accumulation.
+
 /// StepRecorder — records steps into the execution trace.
 ///
 /// Single responsibility: step construction and trace accumulation.
@@ -6,7 +8,7 @@ use chrono::{DateTime, Utc};
 
 use std::collections::HashMap;
 
-use crate::types::step::{Step, StepKind, StepStatus};
+use crate::types::step::{Step, StepKind, StepOrigin, StepStatus};
 
 /// Port for redacting sensitive data before it enters the trace.
 ///
@@ -58,6 +60,7 @@ impl std::fmt::Debug for StepRecorder {
 }
 
 impl StepRecorder {
+    /// Creates an empty recorder with ordinal zero and no redactor.
     pub fn new() -> Self {
         Self::default()
     }
@@ -86,9 +89,11 @@ impl StepRecorder {
             (_, v) => v,
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Live,
             confidence: rec.confidence,
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
@@ -96,8 +101,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output,
             error: None,
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -110,9 +117,11 @@ impl StepRecorder {
             None => error.to_string(),
         };
         self.steps.push(Step {
+            stable_id: Some(rec.name.to_string()),
             name: rec.name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Err,
+            origin: StepOrigin::Live,
             confidence: rec.confidence,
             started_at: rec.started_at,
             duration_ms: rec.duration_ms,
@@ -120,8 +129,10 @@ impl StepRecorder {
             content_hash: rec.content_hash,
             output: None,
             error: Some(error),
+            cited_reason: None,
             attempt: rec.attempt,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -130,9 +141,11 @@ impl StepRecorder {
     /// Record a skipped step.
     pub fn record_skipped(&mut self, name: &str, input_hash: u64, confidence: f32) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Skipped,
+            origin: StepOrigin::Live,
             confidence,
             started_at: Utc::now(),
             duration_ms: 0,
@@ -140,8 +153,10 @@ impl StepRecorder {
             content_hash: None,
             output: None,
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -157,9 +172,11 @@ impl StepRecorder {
         output: serde_json::Value,
     ) {
         self.steps.push(Step {
+            stable_id: Some(name.to_string()),
             name: name.to_string(),
             kind: StepKind::Plain,
             status: StepStatus::Ok,
+            origin: StepOrigin::Replayed,
             confidence,
             started_at: Utc::now(),
             duration_ms: 0,
@@ -167,8 +184,10 @@ impl StepRecorder {
             content_hash,
             output: Some(output),
             error: None,
+            cited_reason: None,
             attempt: 0,
             events: vec![],
+            event_subscribers: Default::default(),
             metadata: HashMap::new(),
             findings: vec![],
         });
@@ -218,6 +237,7 @@ pub fn hash_content(value: &impl serde::Serialize) -> u64 {
     hasher.finish()
 }
 
+/// Hashes a step name and ordinal into the strict replay identity.
 pub fn hash_step_identity(name: &str, ordinal: u32) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

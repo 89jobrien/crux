@@ -2,6 +2,8 @@
 title: TomlFileDiscovery
 tags: [type, plugin, adapter]
 ---
-# TomlFileDiscovery
+
+## TomlFileDiscovery
+
 **Crate:** [[crux-plugin]] | Implements [[PluginDiscovery]]. Loads from
 `~/.crux/plugins.toml`. Methods: new(path), default_path().

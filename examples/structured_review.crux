@@ -1,0 +1,65 @@
+pipeline: structured_review
+# Demonstrates caller-supplied structured output, and why it composes with
+# `llm::confidence` rather than replacing it.
+#
+# `llm::invoke` is a free-text completion by default. Passing `schema` injects
+# those fields into the BAML output type, so the model is constrained to answer
+# with exactly this shape and the result is schema-validated rather than prose
+# you have to parse yourself.
+#
+# A completion still does not report a *calibrated* confidence — it reports
+# whatever the model said. `llm::analyze` and `llm::confidence` are the steps
+# that emit a score, and `llm::confidence` is what feeds `route_on_confidence`.
+#
+# Both bind to a local Ollama when one is reachable, so this needs no API keys.
+budget: { calls: 4 }
+
+steps:
+  - step: gather
+    handler: shell::capture
+    args:
+      cmd: "git diff --staged"
+
+  - step: review
+    handler: llm::invoke
+    args:
+      prompt: "Review this diff for correctness and security problems. Report only what the diff shows.\n\n{{ steps.gather.output.stdout }}"
+      system: "You are a senior engineer reviewing a diff."
+      schema:
+        type: object
+        properties:
+          verdict:
+            type: string
+            enum: [approve, comment, block]
+            description: "Overall call on whether the diff is safe to merge."
+          summary:
+            type: string
+            description: "One sentence stating what the diff does."
+          blockers:
+            type: array
+            items: { type: string }
+            description: "Problems that must be fixed before merge. Empty if none."
+    # -> { content, verdict, summary, blockers[], client, schema_valid }
+
+  - step: gate
+    handler: llm::confidence
+    args:
+      claim: "The staged diff is safe to merge without further changes."
+      evidence: "{{ steps.review.output.summary }}"
+      criteria:
+        - "Is the evidence direct and unambiguous?"
+        - "Is the evidence complete?"
+        - "Does anything contradict the claim?"
+    # -> { score, level, reasoning, factors[] } with score as the step confidence
+
+  - route_on_confidence: outcome
+    value: "{{ steps.gate.confidence }}"
+    routes:
+      - range: "[0.0, 0.6)"
+        label: hold
+        handler: ctrl::log
+        # Evidence does not support merging automatically
+      - range: "[0.6, 1.0]"
+        label: proceed
+        handler: ctrl::log
+        # Evidence supports merging; the verdict above says whether it should

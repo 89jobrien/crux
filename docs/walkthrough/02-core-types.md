@@ -77,7 +77,7 @@ for step in result.causal_chain() {
 
 // Only delegation steps:
 for d in result.delegations() {
-    println!("delegated to {}", d.name);
+    println!("delegated to {}", d.to_agent);
 }
 
 // Speculation arms that were considered but not selected:
@@ -259,7 +259,7 @@ The key public methods on `CruxCtx` itself:
 ```rust
 impl CruxCtx {
     // Construct directly (tests, composition root):
-    pub fn new(agent: &str, budget: Budget) -> Self;
+    pub fn new(agent: &str) -> Self;
 
     // Record a unit of work:
     pub async fn step<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
@@ -268,10 +268,18 @@ impl CruxCtx {
         Fut: Future<Output = Result<T, CruxErr>> + Send;
 
     // Delegate to another Agent (returns a builder):
-    pub fn delegate<A: Agent>(&mut self, input: A::Input) -> DelegationBuilder<A>;
+    pub fn delegate<A: Agent>(
+        &mut self,
+        name: &str,
+        input: A::Input,
+    ) -> DelegationBuilder<'_, A>;
 
     // Fan out to competing branches (returns a builder):
-    pub fn speculate<T>(&mut self, name: &str) -> SpeculationBuilder<T>;
+    pub fn speculate<T>(
+        &mut self,
+        name: &str,
+        arms: Vec<(&str, BoxFut<T>)>,
+    ) -> SpeculationBuilder<'_, T>;
 
     // Sequential pipeline:
     pub async fn pipe<T>(&mut self, name: &str, ...) -> Result<T, CruxErr>;
@@ -287,16 +295,24 @@ impl CruxCtx {
     pub fn remaining_budget(&self) -> u64;
 
     // Persistence and replay:
-    pub async fn checkpoint_to(&mut self, backend: &impl RegistryBackend) -> Result<(), CruxErr>;
-    pub async fn resume_from(&mut self, snapshot: &CruxSnapshot) -> Result<(), CruxErr>;
-    pub async fn replay_from(&mut self, snapshot: &CruxSnapshot) -> Result<(), CruxErr>;
+    pub async fn checkpoint_to<B: RegistryBackend>(
+        &self,
+        registry: &TaskRegistry<B>,
+        task_id: &TaskId,
+    ) -> Result<(), RegistryErr>;
+    pub async fn resume_from<B: RegistryBackend>(
+        &mut self,
+        registry: &TaskRegistry<B>,
+        task_id: &TaskId,
+    ) -> Result<(), CruxErr>;
+    pub fn replay_from(&mut self, snapshot: &Crux<serde_json::Value>);
     pub fn set_replay_mode(&mut self, mode: ReplayMode);
 
     // Finalize after agent completes:
     pub fn finalize<T>(self, value: Result<T, CruxErr>) -> Crux<T>;
 
     // Read-only snapshot of current trace:
-    pub fn snapshot(&self) -> CruxSnapshot;
+    pub fn snapshot(&self) -> Crux<serde_json::Value>;
 }
 ```
 

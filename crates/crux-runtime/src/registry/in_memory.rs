@@ -1,3 +1,5 @@
+//! Thread-safe in-memory adapter for the task registry storage port.
+
 /// Adapter: in-memory registry backend for tests and single-process agents.
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -13,6 +15,7 @@ pub struct InMemoryBackend {
 }
 
 impl InMemoryBackend {
+    /// Creates an empty backend shared through an internal lock.
     pub fn new() -> Self {
         Self::default()
     }

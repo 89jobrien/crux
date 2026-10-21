@@ -1,0 +1,15 @@
+{
+  "session_id": "sess_abc123def456",
+  "priority": "high",
+  "handoff_state": {
+    "context": {
+      "task": "deploy-cluster",
+      "subtask": "verify-configuration",
+      "progress": 0.65
+    },
+    "metadata": {
+      "agent": "deployment-orchestrator",
+      "start_time": "2026-10-20T10:15:00Z"
+    }
+  }
+}

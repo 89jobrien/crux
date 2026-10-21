@@ -1,6 +1,5 @@
 //! End-to-end test: Planner + EventPipeline together as the agentic substrate.
 use crux::prelude::*;
-use crux_domain::event::StepEvent;
 use crux_domain::pipeline::EventPipeline;
 use crux_domain::planner::{DenyAllPlanner, SimulatePlanner};
 
@@ -50,17 +49,35 @@ async fn event_pipeline_receives_all_step_lifecycle_events() {
         .await
         .unwrap();
 
-    let events: Vec<StepEvent> = (0..4).map(|_| rx.try_recv().unwrap()).collect();
+    let events: Vec<RuntimeEvent> = (0..6).map(|_| rx.try_recv().unwrap()).collect();
     let kinds: Vec<&str> = events
         .iter()
-        .map(|e| match e {
-            StepEvent::Started { .. } => "started",
-            StepEvent::Completed { .. } => "completed",
+        .map(|e| match e.emission {
+            Emission::ReplayMiss { .. } => "replay_miss",
+            Emission::StepStart { .. } => "started",
+            Emission::StepComplete { .. } => "completed",
             _ => "other",
         })
         .collect();
 
-    assert_eq!(kinds, ["started", "completed", "started", "completed"]);
+    assert_eq!(
+        kinds,
+        [
+            "replay_miss",
+            "started",
+            "completed",
+            "replay_miss",
+            "started",
+            "completed"
+        ]
+    );
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        [0, 1, 2, 3, 4, 5]
+    );
 }
 
 #[tokio::test]
@@ -79,5 +96,7 @@ async fn planner_and_pipeline_compose() {
 
     assert!(result.is_ok());
     let ev = rx.recv().await.unwrap();
-    assert!(matches!(ev, StepEvent::Started { .. }));
+    assert!(matches!(ev.emission, Emission::ReplayMiss { .. }));
+    let ev = rx.recv().await.unwrap();
+    assert!(matches!(ev.emission, Emission::StepStart { .. }));
 }

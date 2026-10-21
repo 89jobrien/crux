@@ -1,3 +1,5 @@
+//! External-service adapters for LLM, container, and approval ports.
+
 pub mod anthropic;
 pub mod container_client;
 pub mod ollama;

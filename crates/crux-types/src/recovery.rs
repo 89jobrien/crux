@@ -1,3 +1,5 @@
+//! Serializable recovery actions that do not carry runtime closures.
+
 use serde::{Deserialize, Serialize};
 
 /// Serializable subset of Recovery<T> — excludes closure variants.

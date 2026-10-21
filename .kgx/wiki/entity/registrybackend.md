@@ -2,7 +2,9 @@
 title: RegistryBackend
 tags: [trait, runtime, port, registry]
 ---
-# RegistryBackend
+
+## RegistryBackend
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/registry/backend.rs`
 
 Trait (Send + Sync) for task storage. Methods: `get(id)`, `put(id, data)`,

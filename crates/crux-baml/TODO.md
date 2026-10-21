@@ -19,7 +19,7 @@ items:
     location: "src/planner.rs::handler_manifest:67"
 ---
 
-# TODO: crux-baml
+## TODO: crux-baml
 
 - [ ] **#69** Only 3 BAML functions wired — add more or make dynamic
 - [ ] **#65** Implement real streaming — currently buffers full response

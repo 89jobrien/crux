@@ -1,62 +1,17 @@
-# Handoff — crux (2026-08-17)
+# Handoff — crux (2026-10-21)
 
-**Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch main. Recent 24h work: e301435 feat(cruxx-improve): add bridge crate with shared vocabulary types. Validation: cargo check passed; cargo test passed.
 
 ## Items
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| crux-task-impl | p1 | open | Implement crux-task crate (10-task plan) |
 
 ## Log
 
-- 20260708:000000: Heavy refactor session across crux runtime and stdlib components:
-IOSP decomposition — extracted magic numbers into named constants (crux-agentic).
-Runtime refactoring — decomposed long context methods: join_all, step_stream,
-step_retryable, step_inner into separate implementations (crux-runtime).
-Script dispatch — extracted per-step-kind dispatch logic in execute_step()
-(crux-script). Stdlib parsing — decomposed parse_diff() into hunk/line/context
-helpers (crux-stdlib). Pure logic separation — separated pure logic from I/O
-in run dispatch, eval_jq, and TargetResolver. Dead code removal across crates.
-Two branch merges: refactor/iosp-magic-numbers-splits (const extraction) and
-fix/dead-code-srp-crux-model (dead code cleanup). All 538+ tests pass, clippy
-clean. Scope spans crux-runtime, crux-script, crux-stdlib, crux-agentic,
-crux-model, crux-core crates.
-
-- 20260701:120000: Major crux-task implementation session — scaffolded crate with types (TaskError,
-TaskState, TaskSnapshot), error handling (anyhow → miette diagnostic errors),
-TaskManager core (add_task, get_task, list_tasks, update_task, get_stats).
-Implemented dependency management with cycle detection (detect_cycle, topological
-sort). SqliteBackend with 6 migrations (tasks table, labels, dependencies, indexes).
-Added conformance test suite for RegistryBackend with 32 test cases covering CRUD
-operations, state transitions, invariants. Implemented CLI binary (crux-task)
-with subcommands: list, show, add, update, delete, deps, plan. Added crux-types
-wire types: Priority enum, TaskLabel, DependencyKind, TaskSnapshot (serde all).
-Updated crux-baml MockLLM tests with miette error handling. Merged event-bus
-feature (crux-agentic event broadcasting). Added CONFORMANCE.md spec. All 538+
-tests pass, clippy clean.
-
-- 20260701:000000: Design session — crux-task project task management system. Brainstormed 3 approaches
-(Registry Evolution, Domain Split, Unified Task), selected Domain Split: runtime
-TaskRegistry stays lean, new crux-task crate owns richer domain types. Design doc
-written (docs/designs/2026-07-01-crux-task-design.md). 10-task implementation plan
-written (docs/plans/2026-07-01-crux-task.md). Doublecheck caught 4 issues: rusqlite
-not workspace dep, dirs crate missing, pipeline handler state isolation (fixed with
-db-arg pattern matching sqlite:: handlers), &Path vs &str mismatch. SOLID review
-added ISP note for RegistryBackend reuse. Testing philosophy review added 2 tasks:
-property tests (Task 4a) and conformance suite (Task 5a). No implementation code
-written — design-only session.
-
-- 20260628:000000: Full quality session — AIL run (2 iterations): updated no-bash-use-nu message with
-concrete nu rewrites; added heredoc git-commit + gh api --jq exceptions to coursers
-rules; smoke tests 5/5 pass, archived. Dead code audit + removal: dropped crux-improve
-crate (650 lines, 0 external callers), crux-agentic shell shim, duplicate crux-baml
-dev-dep. develop -> main merge: fixed dirty Cargo.lock, resolved remote divergence on
-origin/main. Memory banking: populated .ctx/memory-bank/ with 6 standard files +
-patterns.md + mistakes.md. Pattern learner: 11 patterns extracted (skill co-occurrence,
-crate coupling, failure-fix pairs, API conventions). Health assessment: 538/538 tests,
-0 clippy, 18 real TODOs, 0 ring violations; fixed registry.rs Vec->HashSet dedup;
-baseline written to .health-baseline.json.
-
-- 20260504:224027: handjobs triage — 0 open items, 0 GH issues synced
+- 20261020.235959: P2 completion wave: all 18 items done. t27 marked complete. t28-t38 handler contracts (105+ handlers, 17 tests) implemented via ae4a574d. t39-t42 example pipelines created via adcfb7ce (4 examples + tests). t43 legacy API cleanup via a0f4d0cc. t44 docs (CONFORMANCE + ARCHITECTURE + 4 READMEs) via a3388cdb. Build passing, all commits on develop.
+- 20261020.200000: Fixed P0 borrow-checker error in crux-cli run.rs (trace_path move/use-after-move). Added clippy too-many-arguments suppression on from_run. Build passing, lint clean. Pre-commit hook validated. Commit 357f3b9.
+- 20261019.063939: done=71 running=0 pending=18 blocked=0
+- 20261001.014104: done=71 running=0 pending=18 blocked=0
+- 20260929.185946: done=71 running=0 pending=18 blocked=0

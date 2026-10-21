@@ -1,3 +1,5 @@
+//! Integration tests for streamed values, errors, empty streams, and trace events.
+
 /// Integration tests for step_stream (streaming/incremental steps).
 use crux::prelude::*;
 use futures::stream;

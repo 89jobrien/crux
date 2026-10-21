@@ -1,4 +1,6 @@
-/// Shared test helpers for constructing `Step` and `Crux<T>` values.
+//! Feature-gated constructors for concise step fixtures.
+
+/// Shared test helpers for constructing `Step` values.
 ///
 /// Enabled via the `test-utils` feature. Intended for use in `#[cfg(test)]`
 /// blocks and integration test crates across the workspace.
@@ -6,16 +8,16 @@ use chrono::Utc;
 
 use std::collections::HashMap;
 
-use crate::crux_value::Crux;
-use crate::id::CruxId;
-use crate::step::{Step, StepKind, StepStatus};
+use crate::step::{Step, StepKind, StepOrigin, StepStatus};
 
 /// Build a plain, successful `Step` with the given name, input hash, and output.
 pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -> Step {
     Step {
+        stable_id: None,
         name: name.into(),
         kind: StepKind::Plain,
         status: StepStatus::Ok,
+        origin: StepOrigin::Live,
         confidence: 1.0,
         started_at: Utc::now(),
         duration_ms: 0,
@@ -23,8 +25,10 @@ pub fn step_ok(name: &str, input_hash: u64, output: Option<serde_json::Value>) -
         content_hash: None,
         output,
         error: None,
+        cited_reason: None,
         attempt: 1,
         events: vec![],
+        event_subscribers: Default::default(),
         metadata: HashMap::new(),
         findings: vec![],
     }
@@ -40,18 +44,5 @@ pub fn step_with_content(
     Step {
         content_hash,
         ..step_ok(name, input_hash, output)
-    }
-}
-
-/// Build a minimal successful `Crux<T>` with the given agent name, value, and steps.
-pub fn crux_ok<T>(agent: &str, value: T, steps: Vec<Step>) -> Crux<T> {
-    Crux {
-        id: CruxId::new(),
-        agent: agent.into(),
-        value: Ok(value),
-        steps,
-        children: vec![],
-        started_at: Utc::now(),
-        finished_at: Some(Utc::now()),
     }
 }

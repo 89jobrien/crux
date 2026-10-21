@@ -1,3 +1,5 @@
+//! Automatic and interactive terminal implementations of the approval gate.
+
 use crux_runtime::approval::{ApprovalDecision, ApprovalGate, ApprovalRequest, RiskLevel};
 
 /// Auto-approve gate that approves anything at or below the configured risk threshold.
@@ -7,15 +9,19 @@ pub struct AutoApproveGate {
 }
 
 impl AutoApproveGate {
+    /// Sets the highest risk level that may be approved without prompting.
     pub fn new(max_auto_approve: RiskLevel) -> Self {
         Self { max_auto_approve }
     }
 }
 
-// TODO(#101): verify RiskLevel discriminants — old code mapped Low->1..Critical->4;
-//   `as u8` gives Low->0 if no #[repr]. Check enum definition.
 fn risk_severity(level: RiskLevel) -> u8 {
-    level as u8
+    match level {
+        RiskLevel::Low => 1,
+        RiskLevel::Medium => 2,
+        RiskLevel::High => 3,
+        RiskLevel::Critical => 4,
+    }
 }
 
 impl ApprovalGate for AutoApproveGate {
@@ -60,5 +66,18 @@ impl ApprovalGate for TerminalApprovalGate {
                 reason: "user denied".into(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn risk_severity_uses_documented_one_based_scale() {
+        assert_eq!(risk_severity(RiskLevel::Low), 1);
+        assert_eq!(risk_severity(RiskLevel::Medium), 2);
+        assert_eq!(risk_severity(RiskLevel::High), 3);
+        assert_eq!(risk_severity(RiskLevel::Critical), 4);
     }
 }

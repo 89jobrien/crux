@@ -19,6 +19,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 # Always required — Step.output is Option<Value>, children are type-erased
 chrono = { workspace = true }
 crux-domain = { workspace = true, features = ["tokio-pipeline"] } #unified
+crux-schema = { workspace = true }
 crux-types = { workspace = true, features = ["miette"] } #unified
 futures = { workspace = true, optional = true }
 miette = { workspace = true }
@@ -34,6 +35,7 @@ tokio = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
+crux-schema = { workspace = true, features = ["test-utils"] }
 crux-types = { workspace = true, features = ["test-utils"] } #unified
 futures = { workspace = true }
 proptest = { workspace = true }

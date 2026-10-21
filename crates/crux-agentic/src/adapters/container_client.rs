@@ -1,3 +1,5 @@
+//! Container lifecycle port with mock and optional Docker adapters.
+
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -19,6 +21,7 @@ pub struct ContainerHandle {
 
 /// Port: manages container lifecycle.
 pub trait ContainerClient: Send + Sync {
+    /// Starts a container with the requested command and resource limits.
     fn run(
         &self,
         image: &str,
@@ -28,6 +31,7 @@ pub trait ContainerClient: Send + Sync {
         timeout_seconds: u64,
     ) -> impl Future<Output = Result<ContainerHandle, String>> + Send;
 
+    /// Waits for a container to stop or for the timeout to expire.
     fn wait(
         &self,
         container_id: &str,

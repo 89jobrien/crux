@@ -23,22 +23,19 @@ steps:
           cmd: "echo 'candidate metrics placeholder'"
         # Run same workload against candidate profile
 
-  - pipe: compare
-    stages:
-      - step: diff_metrics
-        handler: llm::extract
-        args:
-          input: "baseline={{ steps.run_canary.baseline_run.output }} candidate={{ steps.run_canary.candidate_run.output }}"
-          function: CompareMetrics
-        # Compare p95 latency, error rate, resource usage
-      - step: promote_decision
-        handler: harness::canary
-        args:
-          candidate_profile: "{{ steps.prepare_candidate.proposed_profile }}"
-        # Decide: Promoted, Rejected, or Extended canary window
+  - step: diff_metrics
+    handler: llm::extract
+    args:
+      function: CompareMetrics
+    # Compare p95 latency, error rate, resource usage
+
+  - step: promote_decision
+    handler: harness::canary
+    args: {}
+    # Decide: Promoted, Rejected, or Extended canary window
 
   - route_on_confidence: outcome
-    value: "{{ steps.compare.confidence }}"
+    value: "{{ steps.diff_metrics.confidence }}"
     routes:
       - range: "[0.0, 0.3)"
         label: rollback

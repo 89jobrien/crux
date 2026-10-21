@@ -1,3 +1,5 @@
+//! Tests for confidence propagation from handlers into pipeline routing.
+
 /// Integration test: handler confidence emission for route_on_confidence.
 ///
 /// Verifies that a handler returning `HandlerOutput::with_confidence(value, score)` has its

@@ -10,6 +10,8 @@ Crux is an agentic DSL for Rust. It has two surfaces: YAML pipelines
 trace that is inspectable, serializable, and replayable. Rust edition
 2024, MSRV 1.88.
 
+<!-- TODO(docs): Update the documented MSRV to the workspace's Rust 1.89 requirement. -->
+
 ## Build and Test
 
 ```bash
@@ -44,6 +46,8 @@ All crates live in `crates/`:
 | `crux-model`   | Model ID types and provider parsers.                                      |
 | `crux-plugin`  | Subprocess plugin host.                                                   |
 | `crux-planner` | Metrics-driven harness profile evolution.                                 |
+
+<!-- TODO(docs): Add crux-cli, crux-domain, crux-baml, crux-stdlib, crux-task, and crux-improve. -->
 
 ## Feature Flags
 
@@ -89,16 +93,34 @@ Lenient mode does a forward name scan for recovery.
 
 ## Pipeline Binary
 
-The CLI binary is `crux` (not `crux-run`), built from `crux-agentic`:
+The CLI binary is `crux` (not `crux-run`), built from `crux-cli`:
 
 ```bash
-cargo build -p crux-agentic --bin crux --release
+cargo build -p crux-cli --bin crux --release
 crux run examples/showcase.crux
 crux run examples/showcase.crux -q    # quiet
 crux run examples/showcase.crux -v    # verbose
 ```
 
 Pipeline files use `.crux` extension (YAML syntax).
+
+After editing the CLI, reinstall it so `crux` on PATH matches the source:
+
+```bash
+cargo install --path crates/crux-cli --bin crux --force
+crux version --check   # exit 0 current, 1 stale, 2 undeterminable
+```
+
+`crux version` prints version, commit, build time, profile, and binary path.
+`--check` compares the binary's build commit against HEAD of the surrounding
+crux checkout and reports a reinstall command when they differ.
+
+## Editor Support
+
+`crux schema` exports the pipeline JSON Schema. `crux schema --editor
+yaml-language-server` prints a ready-to-paste `yaml.schemas` snippet, and
+`crux init` scaffolds `.vscode/crux-schema.json` plus `.vscode/settings.json`.
+See `docs/editor-integration.md`.
 
 ## BAML
 

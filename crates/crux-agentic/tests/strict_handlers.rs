@@ -1,3 +1,5 @@
+//! Strict-validation tests for unregistered pipeline handlers.
+
 /// Integration tests for `--strict` mode: unregistered handler detection.
 ///
 /// Tests parse pipelines and check which handler names are missing from the
@@ -29,6 +31,7 @@ fn collect_handler_names(pipeline: &crux_script::schema::PipelineDef) -> Vec<Str
             StepDef::Speculate(node) => {
                 names.extend(node.arms.iter().map(|a| a.handler_name().to_string()));
             }
+            StepDef::Poll(_) | StepDef::ForEach(_) | StepDef::While(_) | StepDef::Repeat(_) => {}
         }
     }
     names.sort();

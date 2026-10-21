@@ -1,5 +1,7 @@
+//! Integration tests for shell execution, capture, and environment handling.
+
+use crux_agentic::shell;
 use crux_script::HandlerRegistry;
-use crux_stdlib::shell;
 use serde_json::json;
 
 fn registry() -> HandlerRegistry {
@@ -14,6 +16,7 @@ async fn exec_runs_echo() {
     let handler = reg.get_handler("shell::exec").unwrap();
     let result = handler(json!({"args": {"cmd": "echo hello"}}))
         .await
+        .outcome
         .unwrap();
     assert_eq!(result["exit_code"], 0);
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "hello");
@@ -23,7 +26,10 @@ async fn exec_runs_echo() {
 async fn exec_does_not_fail_on_nonzero_exit() {
     let reg = registry();
     let handler = reg.get_handler("shell::exec").unwrap();
-    let result = handler(json!({"args": {"cmd": "false"}})).await.unwrap();
+    let result = handler(json!({"args": {"cmd": "false"}}))
+        .await
+        .outcome
+        .unwrap();
     assert_eq!(result["exit_code"], 1);
 }
 
@@ -33,6 +39,7 @@ async fn capture_succeeds_on_zero_exit() {
     let handler = reg.get_handler("shell::capture").unwrap();
     let result = handler(json!({"args": {"cmd": "echo captured"}}))
         .await
+        .outcome
         .unwrap();
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "captured");
 }
@@ -41,7 +48,7 @@ async fn capture_succeeds_on_zero_exit() {
 async fn capture_fails_on_nonzero_exit() {
     let reg = registry();
     let handler = reg.get_handler("shell::capture").unwrap();
-    let result = handler(json!({"args": {"cmd": "false"}})).await;
+    let result = handler(json!({"args": {"cmd": "false"}})).await.outcome;
     assert!(result.is_err());
 }
 
@@ -49,7 +56,7 @@ async fn capture_fails_on_nonzero_exit() {
 async fn exec_missing_cmd_returns_error() {
     let reg = registry();
     let handler = reg.get_handler("shell::exec").unwrap();
-    let result = handler(json!({})).await;
+    let result = handler(json!({})).await.outcome;
     assert!(result.is_err());
 }
 
@@ -64,6 +71,7 @@ async fn exec_env_injection() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "injected");
 }
@@ -79,6 +87,7 @@ async fn capture_env_injection() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "/tmp/test.rs");
 }
@@ -90,6 +99,7 @@ async fn exec_env_missing_var_is_empty() {
     // No env injected — shell var should be empty (not an error)
     let result = handler(json!({"args": {"cmd": "echo ${CRUX_UNSET_VAR:-unset}"}}))
         .await
+        .outcome
         .unwrap();
     assert_eq!(result["stdout"].as_str().unwrap().trim(), "unset");
 }

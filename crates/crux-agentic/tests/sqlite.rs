@@ -1,3 +1,5 @@
+//! Integration tests for SQLite mutation, query, and parameter handlers.
+
 use crux_agentic::sqlite;
 use crux_script::HandlerRegistry;
 use serde_json::json;
@@ -36,6 +38,7 @@ async fn exec_creates_table() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert!(result["rows_affected"].is_number());
 }
@@ -44,7 +47,7 @@ async fn exec_creates_table() {
 async fn exec_missing_db_returns_error() {
     let reg = registry();
     let handler = reg.get_handler("sqlite::exec").unwrap();
-    let result = handler(json!({"args": {"sql": "SELECT 1"}})).await;
+    let result = handler(json!({"args": {"sql": "SELECT 1"}})).await.outcome;
     assert!(result.is_err());
 }
 
@@ -53,7 +56,9 @@ async fn exec_missing_sql_returns_error() {
     let db = NamedTempFile::new().unwrap();
     let reg = registry();
     let handler = reg.get_handler("sqlite::exec").unwrap();
-    let result = handler(json!({"args": {"db": db.path().to_str().unwrap()}})).await;
+    let result = handler(json!({"args": {"db": db.path().to_str().unwrap()}}))
+        .await
+        .outcome;
     assert!(result.is_err());
 }
 
@@ -70,6 +75,7 @@ async fn insert_returns_rowid() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["last_insert_rowid"], 1);
 }
@@ -87,6 +93,7 @@ async fn query_many_returns_inserted_rows() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     insert(json!({
         "args": {
@@ -96,6 +103,7 @@ async fn query_many_returns_inserted_rows() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let query = reg.get_handler("sqlite::query_many").unwrap();
@@ -106,6 +114,7 @@ async fn query_many_returns_inserted_rows() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     let rows = result["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
@@ -126,6 +135,7 @@ async fn query_one_returns_single_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let query = reg.get_handler("sqlite::query_one").unwrap();
@@ -151,7 +161,8 @@ async fn query_one_errors_on_no_rows() {
             "sql": "SELECT * FROM tasks"
         }
     }))
-    .await;
+    .await
+    .outcome;
     assert!(result.is_err());
 }
 
@@ -169,6 +180,7 @@ async fn query_one_errors_on_multiple_rows() {
             }
         }))
         .await
+        .outcome
         .unwrap();
     }
     let query = reg.get_handler("sqlite::query_one").unwrap();
@@ -178,7 +190,8 @@ async fn query_one_errors_on_multiple_rows() {
             "sql": "SELECT * FROM tasks"
         }
     }))
-    .await;
+    .await
+    .outcome;
     assert!(result.is_err());
 }
 
@@ -195,6 +208,7 @@ async fn update_modifies_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let update = reg.get_handler("sqlite::update").unwrap();
@@ -206,6 +220,7 @@ async fn update_modifies_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["rows_affected"], 1);
 
@@ -217,6 +232,7 @@ async fn update_modifies_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(check["row"]["name"], "new");
 }
@@ -234,6 +250,7 @@ async fn delete_removes_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let delete = reg.get_handler("sqlite::delete").unwrap();
@@ -245,6 +262,7 @@ async fn delete_removes_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["rows_affected"], 1);
 
@@ -256,6 +274,7 @@ async fn delete_removes_row() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(check["rows"].as_array().unwrap().len(), 0);
 }
@@ -279,6 +298,7 @@ async fn upsert_inserts_then_replaces() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     upsert(json!({
@@ -289,6 +309,7 @@ async fn upsert_inserts_then_replaces() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let query = reg.get_handler("sqlite::query_one").unwrap();
@@ -299,6 +320,7 @@ async fn upsert_inserts_then_replaces() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["row"]["val"], "2");
 }
@@ -315,6 +337,7 @@ async fn query_many_empty_table_returns_empty_array() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     let rows = result["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 0);
@@ -333,6 +356,7 @@ async fn params_bind_correctly() {
         }
     }))
     .await
+    .outcome
     .unwrap();
 
     let query = reg.get_handler("sqlite::query_one").unwrap();
@@ -344,6 +368,7 @@ async fn params_bind_correctly() {
         }
     }))
     .await
+    .outcome
     .unwrap();
     assert_eq!(result["row"]["done"], 1);
 }

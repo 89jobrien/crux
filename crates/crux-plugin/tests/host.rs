@@ -1,3 +1,5 @@
+//! Subprocess integration tests for plugin declaration, invocation, and shutdown.
+
 use crux_plugin::host::PluginHost;
 use crux_plugin::manifest::PluginEntry;
 use std::collections::HashMap;
@@ -8,6 +10,7 @@ fn echo_entry() -> PluginEntry {
         name: "echo".into(),
         path: bin.into(),
         env: HashMap::new(),
+        sandbox: Default::default(),
     }
 }
 

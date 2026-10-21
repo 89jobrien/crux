@@ -2,7 +2,9 @@
 title: InMemoryAudit
 tags: [type, runtime, adapter, audit]
 ---
-# InMemoryAudit
+
+## InMemoryAudit
+
 **Crate:** [[crux-runtime]] | **File:** `crates/crux-runtime/src/audit.rs`
 
 In-memory adapter implementing [[AuditSink]]. Methods: `entries()`, `denied()`,

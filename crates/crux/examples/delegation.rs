@@ -1,3 +1,5 @@
+//! Parent-child agent delegation with a scoped call budget and child trace.
+
 /// Delegation: a parent agent delegates to a child agent with a scoped budget.
 ///
 /// Shows:
@@ -59,8 +61,6 @@ impl Agent for RouterAgent {
         .await
     }
 }
-
-// -- Main ----------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() {
