@@ -11,6 +11,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+include = ["src/**/*"]
 
 [features]
 docker = ["dep:bollard", "dep:futures"]

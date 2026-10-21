@@ -11,6 +11,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+include = ["src/**/*", "baml_src/**/*"]
 
 [dependencies]
 baml = "0.221.0"
