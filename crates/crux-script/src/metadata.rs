@@ -663,6 +663,22 @@ impl AgentMetadata {
     }
 }
 
+/// Declared usage-reporting contract of a handler.
+///
+/// `Reported` means every completed invocation supplies a usage report, either
+/// measured or an explicit zero. `Unreported` means the handler makes no such
+/// promise, which is the default for custom registrations. When a token or USD
+/// budget is active, an `Unreported` handler is rejected before it runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Metering {
+    /// Every completed invocation reports its usage.
+    Reported,
+    /// The handler does not declare usage reporting.
+    #[default]
+    Unreported,
+}
+
 /// Introspection metadata for a registered handler.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandlerMetadata {
@@ -690,6 +706,8 @@ pub struct HandlerMetadata {
     pub deterministic: bool,
     #[serde(default = "default_deterministic")]
     pub replay_safe: bool,
+    #[serde(default)]
+    pub metering: Metering,
 }
 
 impl HandlerMetadata {
@@ -709,6 +727,7 @@ impl HandlerMetadata {
             capabilities: Vec::new(),
             deterministic: true,
             replay_safe: true,
+            metering: Metering::Unreported,
         }
     }
 
@@ -810,6 +829,12 @@ impl HandlerMetadata {
     /// Marks whether replaying the handler is safe.
     pub fn replay_safe(mut self, replay_safe: bool) -> Self {
         self.replay_safe = replay_safe;
+        self
+    }
+
+    /// Declares whether every completed invocation reports its usage.
+    pub fn metering(mut self, metering: Metering) -> Self {
+        self.metering = metering;
         self
     }
 }

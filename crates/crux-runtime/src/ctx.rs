@@ -1278,6 +1278,10 @@ impl InvocationMeter for CruxCtx {
     fn budget_usage(&self) -> crate::types::budget::BudgetUsage {
         self.budget_tracker.usage()
     }
+
+    fn requires_usage_metering(&self) -> bool {
+        self.budget_tracker.requires_usage_metering()
+    }
 }
 
 impl Context for CruxCtx {

@@ -11,6 +11,7 @@ use crux_types::error::CruxErr;
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::Metering;
 use crate::expr::IterFrame;
 use crate::expr::{ExprContext, ExprError, StepResult};
 use crate::ir::{
@@ -821,6 +822,7 @@ impl Runner {
                 handler.clone(),
                 input.clone(),
                 node.timeout_ms,
+                declared_metering(&self.registry, handler_name),
             )
             .await
             {
@@ -1530,7 +1532,8 @@ impl Runner {
         let input = merge_expanded_args(current_input.clone(), on_err.args.as_ref(), expr_ctx);
 
         let label = format!("{step_name}::on_error");
-        run_step_once(ctx, &label, handler, input, None)
+        let metering = declared_metering(&self.registry, &on_err.handler);
+        run_step_once(ctx, &label, handler, input, None, metering)
             .await
             .map(|(value, _)| value)
     }
@@ -1584,7 +1587,8 @@ impl Runner {
                 .clone();
             let input = merge_expanded_args(output, stage.args(), expr_ctx);
             let step_name = format!("{}::{}", node.pipe, stage.label());
-            match run_step_once(ctx, &step_name, handler, input, None).await {
+            let metering = declared_metering(&self.registry, stage.handler_name());
+            match run_step_once(ctx, &step_name, handler, input, None, metering).await {
                 Ok((value, stage_confidence)) => {
                     output = value;
                     confidence = stage_confidence;
@@ -1988,7 +1992,9 @@ async fn run_step_once<M: InvocationMeter>(
     handler: crate::registry::BoxHandler,
     input: Value,
     timeout_ms: Option<u64>,
+    metering: Metering,
 ) -> Result<(Value, Option<f32>), CruxErr> {
+    ensure_declared_metering(step_label, metering, ctx.requires_usage_metering())?;
     let started_cell: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
     let confidence_cell: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
     let usage_cell: Arc<Mutex<Option<HandlerUsage>>> = Arc::new(Mutex::new(None));
@@ -2053,6 +2059,11 @@ async fn run_typed_step_once<M: InvocationMeter>(
     invocation: crate::StepInvocation,
     timeout_ms: Option<u64>,
 ) -> Result<(Value, Option<f32>), CruxErr> {
+    ensure_declared_metering(
+        step_label,
+        runner.metadata().metering,
+        ctx.requires_usage_metering(),
+    )?;
     validate_handler_invocation(step_label, runner.metadata(), &invocation)?;
     let started_cell = Arc::new(Mutex::new(None));
     let confidence_cell = Arc::new(Mutex::new(None));
@@ -2114,6 +2125,33 @@ async fn run_typed_step_once<M: InvocationMeter>(
     invocation_result
         .outcome
         .map(|value| (value, *confidence_cell.lock().unwrap()))
+}
+
+/// Reject a handler that does not declare metered usage, before it runs, when the
+/// active budget enforces a token or USD limit.
+///
+/// Rejection reuses [`CruxErr::UnreportedCost`], the same error the budget tracker
+/// raises after a run that failed to report usage. The handler is never invoked.
+fn ensure_declared_metering(
+    step: &str,
+    metering: Metering,
+    requires_metering: bool,
+) -> Result<(), CruxErr> {
+    if metering == Metering::Unreported && requires_metering {
+        return Err(CruxErr::UnreportedCost {
+            step: step.to_string(),
+            source: None,
+        });
+    }
+    Ok(())
+}
+
+/// Look up the metering declared by a named handler. Unknown names are treated as
+/// unreported, so they cannot slip past a metered budget.
+fn declared_metering(registry: &HandlerRegistry, handler: &str) -> Metering {
+    registry
+        .get_metadata(handler)
+        .map_or(Metering::Unreported, |metadata| metadata.metering)
 }
 
 fn validate_handler_invocation(
@@ -2437,9 +2475,16 @@ mod tests {
             })
         });
 
-        run_step_once(&mut meter, "timed", handler, Value::Null, None)
-            .await
-            .unwrap();
+        run_step_once(
+            &mut meter,
+            "timed",
+            handler,
+            Value::Null,
+            None,
+            Metering::Unreported,
+        )
+        .await
+        .unwrap();
 
         let duration = meter.duration.expect("duration recorded");
         assert!(duration >= std::time::Duration::from_millis(5));
@@ -2447,6 +2492,230 @@ mod tests {
             duration < std::time::Duration::from_millis(30),
             "{duration:?}"
         );
+    }
+
+    /// Meter that only declares whether a token or USD budget is active.
+    struct MeteringPolicyMeter {
+        requires_metering: bool,
+    }
+
+    impl InvocationMeter for MeteringPolicyMeter {
+        fn invoke_budgeted_step<'a, F, Fut, T>(
+            &'a mut self,
+            _name: &'a str,
+            f: F,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = BudgetedInvocation<T>> + Send + 'a>>
+        where
+            F: FnOnce() -> Fut + Send + 'a,
+            Fut: std::future::Future<Output = Result<T, CruxErr>> + Send + 'a,
+            T: serde::Serialize + serde::de::DeserializeOwned + Send + 'a,
+        {
+            Box::pin(async move {
+                BudgetedInvocation {
+                    outcome: f().await,
+                    executed: true,
+                }
+            })
+        }
+
+        fn reserve_invocations(&mut self, _count: u64) -> Result<(), CruxErr> {
+            Ok(())
+        }
+
+        fn record_invocation_usage(
+            &mut self,
+            _step: &str,
+            _usage: HandlerUsage,
+            _duration: std::time::Duration,
+        ) -> Result<(), CruxErr> {
+            Ok(())
+        }
+
+        fn budget_usage(&self) -> crux_types::budget::BudgetUsage {
+            crux_types::budget::BudgetUsage::default()
+        }
+
+        fn requires_usage_metering(&self) -> bool {
+            self.requires_metering
+        }
+    }
+
+    /// Handler that counts its invocations and echoes its input.
+    fn counting_echo_handler(calls: Arc<AtomicU32>) -> crate::registry::BoxHandler {
+        let handler: crate::registry::BoxHandler = Arc::new(move |input: Value| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(
+                async move { crate::HandlerExecution::free(Ok(crate::HandlerOutput::new(input))) },
+            )
+        });
+        handler
+    }
+
+    /// Typed runner that counts its invocations and echoes its input.
+    struct CountingRunner {
+        metadata: crate::HandlerMetadata,
+        calls: Arc<AtomicU32>,
+    }
+
+    impl crate::StepRunner for CountingRunner {
+        fn metadata(&self) -> &crate::HandlerMetadata {
+            &self.metadata
+        }
+
+        fn run(&self, invocation: crate::StepInvocation) -> crate::StepFuture<'_> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let (input, _args) = invocation.into_parts();
+            Box::pin(
+                async move { crate::HandlerExecution::free(Ok(crate::HandlerOutput::new(input))) },
+            )
+        }
+    }
+
+    #[tokio::test]
+    async fn unreported_handler_is_rejected_before_invocation_under_metered_budget() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let mut meter = MeteringPolicyMeter {
+            requires_metering: true,
+        };
+
+        let result = run_step_once(
+            &mut meter,
+            "unmetered",
+            counting_echo_handler(Arc::clone(&calls)),
+            Value::Null,
+            None,
+            Metering::Unreported,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(CruxErr::UnreportedCost { ref step, source: None }) if step == "unmetered"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn reported_handler_runs_under_metered_budget() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let mut meter = MeteringPolicyMeter {
+            requires_metering: true,
+        };
+
+        let (value, _) = run_step_once(
+            &mut meter,
+            "metered",
+            counting_echo_handler(Arc::clone(&calls)),
+            serde_json::json!(7),
+            None,
+            Metering::Reported,
+        )
+        .await
+        .expect("reported handler should run");
+
+        assert_eq!(value, serde_json::json!(7));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn unreported_handler_runs_when_no_metered_budget_is_set() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let mut meter = MeteringPolicyMeter {
+            requires_metering: false,
+        };
+
+        run_step_once(
+            &mut meter,
+            "unbudgeted",
+            counting_echo_handler(Arc::clone(&calls)),
+            Value::Null,
+            None,
+            Metering::Unreported,
+        )
+        .await
+        .expect("no metered budget means no change");
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn typed_unreported_runner_is_rejected_before_run_under_metered_budget() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let runner: Arc<dyn crate::StepRunner> = Arc::new(CountingRunner {
+            metadata: crate::HandlerMetadata::new("typed"),
+            calls: Arc::clone(&calls),
+        });
+        let mut meter = MeteringPolicyMeter {
+            requires_metering: true,
+        };
+
+        let result = run_typed_step_once(
+            &mut meter,
+            "typed",
+            runner,
+            crate::StepInvocation::new(Value::Null, Value::Null),
+            None,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(CruxErr::UnreportedCost { ref step, source: None }) if step == "typed"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn typed_reported_runner_runs_under_metered_budget() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let runner: Arc<dyn crate::StepRunner> = Arc::new(CountingRunner {
+            metadata: crate::HandlerMetadata::new("typed").metering(Metering::Reported),
+            calls: Arc::clone(&calls),
+        });
+        let mut meter = MeteringPolicyMeter {
+            requires_metering: true,
+        };
+
+        let (value, _) = run_typed_step_once(
+            &mut meter,
+            "typed",
+            runner,
+            crate::StepInvocation::new(serde_json::json!("ok"), Value::Null),
+            None,
+        )
+        .await
+        .expect("reported runner should run");
+
+        assert_eq!(value, serde_json::json!("ok"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn token_budget_rejects_unreported_handler_before_it_runs() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let c = Arc::clone(&calls);
+        let mut reg = HandlerRegistry::new();
+        reg.handler_value("test::unmetered", move |input: Value| {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Ok(input)
+            }
+        });
+        let pipeline = crate::load(
+            "pipeline: gated\nbudget:\n  tokens: 10\nsteps:\n  - step: unmetered\n    handler: test::unmetered\n",
+        )
+        .unwrap();
+
+        let result = Runner::new(Arc::new(reg))
+            .run(&pipeline, serde_json::json!({}))
+            .await;
+
+        assert!(matches!(
+            result.value(),
+            Err(CruxErr::UnreportedCost { step, .. }) if step.as_str() == "unmetered"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
     /// Build a minimal pipeline with a single step that calls a counting handler.

@@ -10,6 +10,7 @@ The crate owns the declarative execution model. `HandlerRegistry` is the extensi
 validated `PipelineDef` against `CruxCtx` and returns a complete `Crux<Value>` trace.
 
 Handlers conform to a standard **contract** (see [`docs/CONFORMANCE.md`](../../docs/CONFORMANCE.md)):
+
 - Accept JSON input (`Value`)
 - Return `Result<HandlerOutput, CruxErr>` with optional confidence scores
 - Execute asynchronously with timeout, retry, and error-recovery support
@@ -48,7 +49,10 @@ let trace = runner.run(&pipeline, serde_json::Value::Null).await;
 ## Key API
 
 - `load`, `load_file`, `load_cruxfile`, `is_cruxfile`: parsing entry points.
-- `HandlerRegistry`, `StepRunner`, `StepRunnerRegistry`: handler and typed runner registration.
+- `HandlerRegistry`, `StepRunner`: handler and typed runner registration. Register the five
+  built-in runners with `HandlerRegistry::with_builtin_runners`.
+- `StepRunnerRegistry` and `LegacyStepRunner`: deprecated. Use `HandlerRegistry` (with
+  `HandlerRegistry::with_builtin_runners` for built-ins) instead.
 - `Runner`: checked execution, replay execution, unchecked execution, and Cruxfile targets.
 - `validate_pipeline`, `validate_cruxfile`: diagnostics without execution.
 - `compile_pipeline`, `CompileOptions`, `CompileMode`, `TypedPipeline`: permissive or strict typed
