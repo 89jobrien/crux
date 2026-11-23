@@ -89,7 +89,7 @@ No declared arguments.
 
 ## `analysis::replay_dry_run`
 
-Dry-run a replay with a patch to detect step ordinal mismatches.
+In-process replay analysis: inspect a persisted trace for ordinal mismatches, failed steps, and budget/confidence issues without spawning a subprocess.
 
 - **Risk:** `Low`
 - **Deterministic:** `true`
@@ -328,10 +328,10 @@ Assert a condition is truthy; fail with message if not
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `condition` | false | `Dynamic` |  |
-| `message` | false | `String` |  |
+| Name        | Required | Schema    | Description |
+| ----------- | -------- | --------- | ----------- |
+| `condition` | false    | `Dynamic` |             |
+| `message`   | false    | `String`  |             |
 
 ### Output
 
@@ -348,11 +348,11 @@ Log input to stderr and pass through unchanged
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `field` | false | `String` |  |
-| `compact` | false | `Boolean` |  |
-| `pretty` | false | `Boolean` |  |
+| Name      | Required | Schema    | Description |
+| --------- | -------- | --------- | ----------- |
+| `field`   | false    | `String`  |             |
+| `compact` | false    | `Boolean` |             |
+| `pretty`  | false    | `Boolean` |             |
 
 ### Output
 
@@ -386,9 +386,9 @@ Check whether a path exists on the filesystem.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `path` | true | `String` |  |
+| Name   | Required | Schema   | Description |
+| ------ | -------- | -------- | ----------- |
+| `path` | true     | `String` |             |
 
 ### Output
 
@@ -405,9 +405,9 @@ Expand a glob pattern and return matching filesystem paths.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `pattern` | true | `String` |  |
+| Name      | Required | Schema   | Description |
+| --------- | -------- | -------- | ----------- |
+| `pattern` | true     | `String` |             |
 
 ### Output
 
@@ -424,9 +424,9 @@ Read the contents of a file from the filesystem.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `path` | true | `String` |  |
+| Name   | Required | Schema   | Description |
+| ------ | -------- | -------- | ----------- |
+| `path` | true     | `String` |             |
 
 ### Output
 
@@ -443,10 +443,10 @@ Write content to a file on the filesystem.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `path` | true | `String` |  |
-| `content` | false | `Dynamic` |  |
+| Name      | Required | Schema    | Description |
+| --------- | -------- | --------- | ----------- |
+| `path`    | true     | `String`  |             |
+| `content` | false    | `Dynamic` |             |
 
 ### Output
 
@@ -463,10 +463,10 @@ Show the git diff, optionally against a specific revision.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cwd` | false | `String` |  |
-| `revision` | false | `String` |  |
+| Name       | Required | Schema   | Description |
+| ---------- | -------- | -------- | ----------- |
+| `cwd`      | false    | `String` |             |
+| `revision` | false    | `String` |             |
 
 ### Output
 
@@ -483,10 +483,10 @@ Return recent git commits as an array of {hash, subject} objects.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cwd` | false | `String` |  |
-| `n` | false | `Integer` |  |
+| Name  | Required | Schema    | Description |
+| ----- | -------- | --------- | ----------- |
+| `cwd` | false    | `String`  |             |
+| `n`   | false    | `Integer` |             |
 
 ### Output
 
@@ -503,9 +503,9 @@ List files staged for commit in the git index.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cwd` | false | `String` |  |
+| Name  | Required | Schema   | Description |
+| ----- | -------- | -------- | ----------- |
+| `cwd` | false    | `String` |             |
 
 ### Output
 
@@ -522,9 +522,9 @@ Return the porcelain git status and a boolean clean flag.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cwd` | false | `String` |  |
+| Name  | Required | Schema   | Description |
+| ----- | -------- | -------- | ----------- |
+| `cwd` | false    | `String` |             |
 
 ### Output
 
@@ -571,15 +571,15 @@ Send a bounded HTTP request subject to an explicit network policy.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `method` | true | `String` |  |
-| `url` | true | `String` |  |
-| `network_policy` | true | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `headers` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `body` | false | `Dynamic` |  |
-| `max_response_bytes` | false | `Integer` |  |
-| `timeout_ms` | false | `Integer` |  |
+| Name                 | Required | Schema                                                               | Description |
+| -------------------- | -------- | -------------------------------------------------------------------- | ----------- |
+| `method`             | true     | `String`                                                             |             |
+| `url`                | true     | `String`                                                             |             |
+| `network_policy`     | true     | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `headers`            | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `body`               | false    | `Dynamic`                                                            |             |
+| `max_response_bytes` | false    | `Integer`                                                            |             |
+| `timeout_ms`         | false    | `Integer`                                                            |             |
 
 ### Output
 
@@ -596,9 +596,9 @@ Filter an array to items where a given field is non-empty.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `field` | false | `String` |  |
+| Name    | Required | Schema   | Description |
+| ------- | -------- | -------- | ----------- |
+| `field` | false    | `String` |             |
 
 ### Output
 
@@ -615,9 +615,9 @@ Group an array of objects by a shared key field.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `key` | false | `String` |  |
+| Name  | Required | Schema   | Description |
+| ----- | -------- | -------- | ----------- |
+| `key` | false    | `String` |             |
 
 ### Output
 
@@ -634,9 +634,9 @@ Evaluate a limited jq-style expression against the input.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `expr` | true | `String` |  |
+| Name   | Required | Schema   | Description |
+| ------ | -------- | -------- | ----------- |
+| `expr` | true     | `String` |             |
 
 ### Output
 
@@ -653,9 +653,9 @@ Merge a static overlay object into the input.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `with` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
+| Name   | Required | Schema                                                               | Description |
+| ------ | -------- | -------------------------------------------------------------------- | ----------- |
+| `with` | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
 
 ### Output
 
@@ -672,9 +672,9 @@ Pick a subset of fields from the input object.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `fields` | false | `Array { items: Dynamic }` |  |
+| Name     | Required | Schema                     | Description |
+| -------- | -------- | -------------------------- | ----------- |
+| `fields` | false    | `Array { items: Dynamic }` |             |
 
 ### Output
 
@@ -691,12 +691,12 @@ Summarize evidence into severity-tagged findings, reporting confidence.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `subject` | true | `String` |  |
-| `evidence` | true | `String` |  |
-| `focus` | false | `String` |  |
-| `client` | false | `String` |  |
+| Name       | Required | Schema   | Description |
+| ---------- | -------- | -------- | ----------- |
+| `subject`  | true     | `String` |             |
+| `evidence` | true     | `String` |             |
+| `focus`    | false    | `String` |             |
+| `client`   | false    | `String` |             |
 
 ### Output
 
@@ -713,12 +713,12 @@ Score how strongly evidence supports a claim, reporting that score as confidence
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `claim` | true | `String` |  |
-| `evidence` | true | `String` |  |
-| `criteria` | false | `Array { items: Dynamic }` |  |
-| `client` | false | `String` |  |
+| Name       | Required | Schema                     | Description |
+| ---------- | -------- | -------------------------- | ----------- |
+| `claim`    | true     | `String`                   |             |
+| `evidence` | true     | `String`                   |             |
+| `criteria` | false    | `Array { items: Dynamic }` |             |
+| `client`   | false    | `String`                   |             |
 
 ### Output
 
@@ -765,13 +765,13 @@ LLM completion routed through BAML; pass 'schema' for structured output.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `prompt` | true | `String` |  |
-| `system` | false | `String` |  |
-| `max_tokens` | false | `Integer` |  |
-| `schema` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `client` | false | `String` |  |
+| Name         | Required | Schema                                                               | Description |
+| ------------ | -------- | -------------------------------------------------------------------- | ----------- |
+| `prompt`     | true     | `String`                                                             |             |
+| `system`     | false    | `String`                                                             |             |
+| `max_tokens` | false    | `Integer`                                                            |             |
+| `schema`     | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `client`     | false    | `String`                                                             |             |
 
 ### Output
 
@@ -788,14 +788,14 @@ LLM completion with provider failover, routed through the BAML fallback client.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `prompt` | true | `String` |  |
-| `system` | false | `String` |  |
-| `max_tokens` | false | `Integer` |  |
-| `schema` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `client` | false | `String` |  |
-| `tiers` | false | `Array { items: Dynamic }` |  |
+| Name         | Required | Schema                                                               | Description |
+| ------------ | -------- | -------------------------------------------------------------------- | ----------- |
+| `prompt`     | true     | `String`                                                             |             |
+| `system`     | false    | `String`                                                             |             |
+| `max_tokens` | false    | `Integer`                                                            |             |
+| `schema`     | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `client`     | false    | `String`                                                             |             |
+| `tiers`      | false    | `Array { items: Dynamic }`                                           |             |
 
 ### Output
 
@@ -827,13 +827,13 @@ Streaming LLM completion routed through BAML; returns assembled content and chun
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `prompt` | true | `String` |  |
-| `system` | false | `String` |  |
-| `max_tokens` | false | `Integer` |  |
-| `schema` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `client` | false | `String` |  |
+| Name         | Required | Schema                                                               | Description |
+| ------------ | -------- | -------------------------------------------------------------------- | ----------- |
+| `prompt`     | true     | `String`                                                             |             |
+| `system`     | false    | `String`                                                             |             |
+| `max_tokens` | false    | `Integer`                                                            |             |
+| `schema`     | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `client`     | false    | `String`                                                             |             |
 
 ### Output
 
@@ -850,14 +850,14 @@ Run a program with a typed argument vector without shell interpolation.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `program` | true | `String` |  |
-| `argv` | true | `Array { items: Dynamic }` |  |
-| `cwd` | false | `String` |  |
-| `env` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `stdin` | false | `String` |  |
-| `fail_on_nonzero` | false | `Boolean` |  |
+| Name              | Required | Schema                                                               | Description |
+| ----------------- | -------- | -------------------------------------------------------------------- | ----------- |
+| `program`         | true     | `String`                                                             |             |
+| `argv`            | true     | `Array { items: Dynamic }`                                           |             |
+| `cwd`             | false    | `String`                                                             |             |
+| `env`             | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `stdin`           | false    | `String`                                                             |             |
+| `fail_on_nonzero` | false    | `Boolean`                                                            |             |
 
 ### Output
 
@@ -1047,12 +1047,12 @@ Run a shell command, capture stdout/stderr, and fail on non-zero exit.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cmd` | true | `String` |  |
-| `cwd` | false | `String` |  |
-| `env` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `ignore_exit` | false | `Boolean` |  |
+| Name          | Required | Schema                                                               | Description |
+| ------------- | -------- | -------------------------------------------------------------------- | ----------- |
+| `cmd`         | true     | `String`                                                             |             |
+| `cwd`         | false    | `String`                                                             |             |
+| `env`         | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `ignore_exit` | false    | `Boolean`                                                            |             |
 
 ### Output
 
@@ -1069,12 +1069,12 @@ Run a shell command and capture stdout/stderr without failing on non-zero exit.
 
 ### Arguments
 
-| Name | Required | Schema | Description |
-| --- | --- | --- | --- |
-| `cmd` | true | `String` |  |
-| `cwd` | false | `String` |  |
-| `env` | false | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |  |
-| `ignore_exit` | false | `Boolean` |  |
+| Name          | Required | Schema                                                               | Description |
+| ------------- | -------- | -------------------------------------------------------------------- | ----------- |
+| `cmd`         | true     | `String`                                                             |             |
+| `cwd`         | false    | `String`                                                             |             |
+| `env`         | false    | `Object(ObjectSchema { properties: {}, additional: Some(Dynamic) })` |             |
+| `ignore_exit` | false    | `Boolean`                                                            |             |
 
 ### Output
 
@@ -1632,4 +1632,3 @@ No declared arguments.
 ### Output
 
 `None`
-
