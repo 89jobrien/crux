@@ -86,7 +86,7 @@ facade and CLI are published here as `crux-dsl` and `crux-dsl-cli`. Supporting
 workspace crates such as `crux-types`, `crux-runtime`, and `crux-script` are
 available on crates.io.
 
-Install the pipeline CLI:
+Install the pipeline CLI (the package is `crux-dsl-cli`, the binary is `crux`):
 
 ```bash
 cargo install crux-dsl-cli
@@ -130,26 +130,26 @@ be registered through a plugin or replaced before running with `--strict`.
 
 ## Crates
 
-| Crate                                 | Description                                             |
-| ------------------------------------- | ------------------------------------------------------- |
-| [`crux-dsl`](crates/crux)             | Facade -- re-exports runtime + macros                   |
-| [`crux-dsl-cli`](crates/crux-cli)     | `crux` pipeline runner and planner                      |
-| [`crux-runtime`](crates/crux-runtime) | Core types, traits, and runtime                         |
-| [`crux-types`](crates/crux-types)     | Wire-format types (`Crux<T>`, `Step`, `Budget`)         |
-| [`crux-derive`](crates/crux-macros)   | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
-| [`crux-agentic`](crates/crux-agentic) | Step handlers: shell, fs, git, llm, container           |
-| [`crux-script`](crates/crux-script)   | YAML pipeline scripting                                 |
-| [`crux-model`](crates/crux-model)     | Model ID types and provider parsers                     |
-| [`crux-plugin`](crates/crux-plugin)   | Subprocess plugin host                                  |
-| [`crux-planner`](crates/crux-planner) | Metrics-driven harness evolution                        |
-| [`crux-domain`](crates/crux-domain)   | Pure domain types -- no async, no LLM deps              |
-| [`crux-baml`](crates/crux-baml)       | BAML-powered LLM handlers (extract, decompose, plan)    |
-| [`crux-stdlib`](crates/crux-stdlib)   | Standard library handlers (fs, git, json, text, ctrl)   |
-| [`crux-task`](crates/crux-task)       | Project task management                                 |
-| [`crux-improve`](crates/crux-improve) | Improvement protocol: strategies, diffs, comparisons    |
-| [`crux-schema`](crates/crux-schema)   | Schema types and `Crux<T>` value plumbing              |
-| [`crux-regression`](crates/crux-regression) | Golden trace regression storage and evaluation    |
-| [`crux-typesafe`](crates/crux-typesafe)   | Typesafe projection helpers                        |
+| Crate                                       | Description                                             |
+| ------------------------------------------- | ------------------------------------------------------- |
+| [`crux-dsl`](crates/crux)                   | Facade -- re-exports runtime + macros                   |
+| [`crux-dsl-cli`](crates/crux-cli)           | `crux` pipeline runner and planner                      |
+| [`crux-runtime`](crates/crux-runtime)       | Core types, traits, and runtime                         |
+| [`crux-types`](crates/crux-types)           | Wire-format types (`Crux<T>`, `Step`, `Budget`)         |
+| [`crux-derive`](crates/crux-macros)         | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` |
+| [`crux-agentic`](crates/crux-agentic)       | Step handlers: shell, fs, git, llm, container           |
+| [`crux-script`](crates/crux-script)         | YAML pipeline scripting                                 |
+| [`crux-model`](crates/crux-model)           | Model ID types and provider parsers                     |
+| [`crux-plugin`](crates/crux-plugin)         | Subprocess plugin host                                  |
+| [`crux-planner`](crates/crux-planner)       | Metrics-driven harness evolution                        |
+| [`crux-domain`](crates/crux-domain)         | Pure domain types -- no async, no LLM deps              |
+| [`crux-baml`](crates/crux-baml)             | BAML-powered LLM handlers (extract, decompose, plan)    |
+| [`crux-stdlib`](crates/crux-stdlib)         | Standard library handlers (fs, git, json, text, ctrl)   |
+| [`crux-task`](crates/crux-task)             | Project task management                                 |
+| [`crux-improve`](crates/crux-improve)       | Improvement protocol: strategies, diffs, comparisons    |
+| [`crux-schema`](crates/crux-schema)         | Schema types and `Crux<T>` value plumbing               |
+| [`crux-regression`](crates/crux-regression) | Golden trace regression storage and evaluation          |
+| [`crux-typesafe`](crates/crux-typesafe)     | Typesafe projection helpers                             |
 
 ## Feature flags
 
@@ -176,6 +176,7 @@ hooklings preflight
 ```
 
 This validates:
+
 - **Environment** — Shell, tools, working directory
 - **Git state** — Uncommitted changes, recent commits
 - **Build gates** — `cargo fmt`, `cargo clippy`, `cargo nextest`, doc tests

@@ -5,8 +5,9 @@
 `crux-types` owns serializable wire data. `crux-domain` owns planning, action,
 and event vocabulary. `crux-runtime` owns execution and ports. `crux-script`
 interprets `.crux` definitions. `crux-stdlib`, `crux-agentic`, and optional
-`crux-baml` provide handlers. `crux-cli` builds the `crux` binary. The `crux`
-facade re-exports runtime and macros from package `crux-derive`.
+`crux-baml` provide handlers. `crux-dsl-cli` builds the `crux` binary. The
+`crux-dsl` facade (library name `crux`) re-exports runtime and macros from
+package `crux-derive`.
 
 `CruxCtx` contains a `StepRecorder`, `HookRegistry`, `ReplayCache`,
 `BudgetTracker`, child traces, a planner, optional event sender, and shared

@@ -50,7 +50,7 @@ at compile time and must not be hand-maintained elsewhere.
 ```console
 cargo nextest run -p crux
 cargo clippy -p crux-derive --all-targets -- -D warnings
-cargo expand -p crux --test agent_macro
+cargo expand -p crux-dsl --test agent_macro
 ```
 
 Integration coverage includes zero-, one-, and multi-argument agents, failures, steps, confidence,

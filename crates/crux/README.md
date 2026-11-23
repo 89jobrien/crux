@@ -15,7 +15,7 @@ users do.
 
 ```toml
 [dependencies]
-crux = "0.4.0"
+crux-dsl = "0.5.0"
 ```
 
 ```rust
@@ -41,12 +41,12 @@ The macro-generated wrapper returns `Crux<String>`, whose result and recorded st
 
 ## Features
 
-| Feature | Default | Effect |
-| --- | --- | --- |
-| `tokio-runtime` | yes | Enables the async runtime surface in `crux-runtime`. |
-| `redb` | no | Enables the persistent redb registry adapter. |
-| `tracing` | no | Enables runtime tracing instrumentation. |
-| `script` | no | Re-exports `crux-script` as `crux::script`. |
+| Feature         | Default | Effect                                               |
+| --------------- | ------- | ---------------------------------------------------- |
+| `tokio-runtime` | yes     | Enables the async runtime surface in `crux-runtime`. |
+| `redb`          | no      | Enables the persistent redb registry adapter.        |
+| `tracing`       | no      | Enables runtime tracing instrumentation.             |
+| `script`        | no      | Re-exports `crux-script` as `crux::script`.          |
 
 ## Implementation status
 
@@ -59,8 +59,8 @@ confidence routing.
 
 ```console
 cargo nextest run -p crux
-cargo clippy -p crux --all-targets -- -D warnings
+cargo clippy -p crux-dsl --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Use `cargo expand -p crux --test agent_macro` when inspecting generated macro code.
+Use `cargo expand -p crux-dsl --test agent_macro` when inspecting generated macro code.

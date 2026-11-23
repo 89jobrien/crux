@@ -32,11 +32,11 @@ build-locked:
 
 # Build with the optional docker feature
 build-full:
-    cargo build --all-targets -p crux-cli --features docker
+    cargo build --all-targets -p crux-dsl-cli --features docker
 
 # Build dev binary and install to cargo bin
 build-dev:
-    cargo build -p crux-cli
+    cargo build -p crux-dsl-cli
     cargo install --path crates/crux-cli
 
 # Run developer setup (auto-detects shell)
@@ -108,14 +108,14 @@ lint-crux:
         exit 0
     fi
     while IFS= read -r file; do
-        cargo run --quiet -p crux-cli --bin crux -- run "$file" --check
+        cargo run --quiet -p crux-dsl-cli --bin crux -- run "$file" --check
     done <<< "$files"
 
 # Demo replay: fresh run vs cached replay with timing comparison
 replay-demo:
     #!/usr/bin/env bash
     set -euo pipefail
-    BIN="cargo run --quiet -p crux-cli --bin crux --"
+    BIN="cargo run --quiet -p crux-dsl-cli --bin crux --"
     PIPE="examples/showcase.crux"
     INPUT="examples/input_showcase.json"
     TRACE="target/replay-demo-trace.json"

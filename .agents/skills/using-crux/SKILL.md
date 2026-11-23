@@ -20,30 +20,31 @@ Executions produce an inspectable, serializable, replayable `Crux<T>` trace.
 
 All packages are under `crates/` except `xtask`.
 
-| Directory | Package | Role |
-| --- | --- | --- |
-| `crux` | `crux` | Facade re-exporting runtime and macros |
-| `crux-runtime` | `crux-runtime` | Context, agents, combinators, replay, hooks, registry, governance |
-| `crux-types` | `crux-types` | Wire types: traces, steps, budgets, errors, tasks |
-| `crux-macros` | `crux-derive` | `agent`, `harness`, `evolve` proc macros |
-| `crux-domain` | `crux-domain` | Actions, planners, events, pipeline vocabulary |
-| `crux-script` | `crux-script` | `.crux` schema, validation, expressions, execution |
-| `crux-stdlib` | `crux-stdlib` | Shell/fs/git/JSON/text/control handlers |
+| Directory      | Package        | Role                                                                |
+| -------------- | -------------- | ------------------------------------------------------------------- |
+| `crux`         | `crux`         | Facade re-exporting runtime and macros                              |
+| `crux-runtime` | `crux-runtime` | Context, agents, combinators, replay, hooks, registry, governance   |
+| `crux-types`   | `crux-types`   | Wire types: traces, steps, budgets, errors, tasks                   |
+| `crux-macros`  | `crux-derive`  | `agent`, `harness`, `evolve` proc macros                            |
+| `crux-domain`  | `crux-domain`  | Actions, planners, events, pipeline vocabulary                      |
+| `crux-script`  | `crux-script`  | `.crux` schema, validation, expressions, execution                  |
+| `crux-stdlib`  | `crux-stdlib`  | Shell/fs/git/JSON/text/control handlers                             |
 | `crux-agentic` | `crux-agentic` | LLM, container, analysis, CI, review, triage, SQLite, task handlers |
-| `crux-baml` | `crux-baml` | Optional BAML-backed handlers |
-| `crux-cli` | `crux-cli` | Builds the `crux` binary |
-| `crux-task` | `crux-task` | Project task management |
-| `crux-plugin` | `crux-plugin` | Subprocess plugin protocol and host |
-| `crux-planner` | `crux-planner` | Harness evolution planner |
-| `crux-model` | `crux-model` | Provider/model identifiers |
-| `crux-improve` | `crux-improve` | Improvement-analysis library |
+| `crux-baml`    | `crux-baml`    | Optional BAML-backed handlers                                       |
+| `crux-cli`     | `crux-dsl-cli` | Builds the `crux` binary                                            |
+| `crux-task`    | `crux-task`    | Project task management                                             |
+| `crux-plugin`  | `crux-plugin`  | Subprocess plugin protocol and host                                 |
+| `crux-planner` | `crux-planner` | Harness evolution planner                                           |
+| `crux-model`   | `crux-model`   | Provider/model identifiers                                          |
+| `crux-improve` | `crux-improve` | Improvement-analysis library                                        |
 
-The facade package is `crux`, not `cruxx`. The proc-macro directory remains
-`crux-macros`, but its package is `crux-derive`.
+The facade package is `crux-dsl`, and its library name is `crux`
+(`use crux::prelude::*`). The proc-macro directory remains `crux-macros`, but
+its package is `crux-derive`.
 
 ## Features
 
-- `crux`: default `tokio-runtime`; optional `redb`, `tracing`, `script`.
+- `crux-dsl`: default `tokio-runtime`; optional `redb`, `tracing`, `script`.
 - `crux-runtime`: default `tokio-runtime`; optional `redb`, `tracing`.
 - `crux-agentic`: optional `baml`, `docker`.
 - `crux-cli`: optional `baml`.
@@ -63,7 +64,7 @@ Always use `cargo nextest run`, not `cargo test`.
 
 ```bash
 cargo nextest run -p crux-runtime
-cargo nextest run -p crux --test agent_macro
+cargo nextest run -p crux-dsl --test agent_macro
 cargo nextest run --features redb
 ```
 
@@ -74,7 +75,7 @@ Never edit generated `crates/crux-baml/src/baml_client/` files.
 
 ```toml
 [dependencies]
-crux = { git = "https://github.com/89jobrien/crux", rev = "<sha>" }
+crux-dsl = { git = "https://github.com/89jobrien/crux", rev = "<sha>" }
 # wire types only
 crux-types = { git = "https://github.com/89jobrien/crux", rev = "<sha>" }
 # plugin protocol

@@ -4,25 +4,25 @@ Native support status for crux-script pipeline step types and handlers.
 
 ## Pipeline Combinators
 
-| Kind               | Pipeline key                       | Status                                                          |
-| ------------------ | ---------------------------------- | --------------------------------------------------------------- |
-| Single step        | `step:`                            | Supported                                                       |
-| Sequential pipe    | `pipe:` + `stages:`                | Supported                                                       |
-| Parallel fan-out   | `join_all:` + `arms:`              | Supported                                                       |
-| Speculate (race)   | `speculate:` + `mode: first_ok`    | Supported                                                       |
-| Speculate (pick)   | `speculate:` + `mode: pick_best`   | Supported -- uses `score` field if present, else deterministic fallback by output length (#68) |
-| Confidence routing | `route_on_confidence:` + `routes:` | Supported -- handlers must use `HandlerOutput::with_confidence` |
-| Delegation         | `delegate:`                        | Supported for registered agents; scoped budget and child trace preserved |
-| Post-step assertions | `step:` + `expect:`               | Supported -- `exit_code`, `stdout_contains`, `stderr_contains`  |
-| Tolerated failure  | `step:`/arm + `allow_failure: true`| Supported -- failing step/arm output becomes an error-describing value instead of aborting |
-| Per-step timeout   | `step:` + `timeout_ms:`            | Supported -- wraps the handler in `tokio::time::timeout`         |
-| Retry with backoff | `step:` + `retry: {count, delay_ms}` | Supported -- each attempt traced as `<step>::attempt<N>`       |
-| Error recovery     | `step:` + `on_error: {handler, args}` | Supported -- runs after retries are exhausted, before `allow_failure` |
-| Pipeline variables | `vars:` (pipeline-level)           | Supported -- resolved once up front, referenced as `{{ vars.NAME }}` |
-| Do-while loop      | `poll:` + `steps:` + `until:`      | Supported -- runs at least once; each iteration traced as `<poll>[<index>]` |
-| Map over collection | `for_each:` + `items:` + `steps:` | Supported -- see note below on the `for_each: "<label> as <binding>"` syntax; `parallel: true` currently still runs sequentially |
-| Pre-condition loop | `while:` + `condition:` + `steps:` | Supported -- condition checked before every iteration            |
-| Fixed-count loop   | `repeat:` + `count:` + `steps:`    | Supported                                                        |
+| Kind                 | Pipeline key                          | Status                                                                                                                           |
+| -------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Single step          | `step:`                               | Supported                                                                                                                        |
+| Sequential pipe      | `pipe:` + `stages:`                   | Supported                                                                                                                        |
+| Parallel fan-out     | `join_all:` + `arms:`                 | Supported                                                                                                                        |
+| Speculate (race)     | `speculate:` + `mode: first_ok`       | Supported                                                                                                                        |
+| Speculate (pick)     | `speculate:` + `mode: pick_best`      | Supported -- uses `score` field if present, else deterministic fallback by output length (#68)                                   |
+| Confidence routing   | `route_on_confidence:` + `routes:`    | Supported -- handlers must use `HandlerOutput::with_confidence`                                                                  |
+| Delegation           | `delegate:`                           | Supported for registered agents; scoped budget and child trace preserved                                                         |
+| Post-step assertions | `step:` + `expect:`                   | Supported -- `exit_code`, `stdout_contains`, `stderr_contains`                                                                   |
+| Tolerated failure    | `step:`/arm + `allow_failure: true`   | Supported -- failing step/arm output becomes an error-describing value instead of aborting                                       |
+| Per-step timeout     | `step:` + `timeout_ms:`               | Supported -- wraps the handler in `tokio::time::timeout`                                                                         |
+| Retry with backoff   | `step:` + `retry: {count, delay_ms}`  | Supported -- each attempt traced as `<step>::attempt<N>`                                                                         |
+| Error recovery       | `step:` + `on_error: {handler, args}` | Supported -- runs after retries are exhausted, before `allow_failure`                                                            |
+| Pipeline variables   | `vars:` (pipeline-level)              | Supported -- resolved once up front, referenced as `{{ vars.NAME }}`                                                             |
+| Do-while loop        | `poll:` + `steps:` + `until:`         | Supported -- runs at least once; each iteration traced as `<poll>[<index>]`                                                      |
+| Map over collection  | `for_each:` + `items:` + `steps:`     | Supported -- see note below on the `for_each: "<label> as <binding>"` syntax; `parallel: true` currently still runs sequentially |
+| Pre-condition loop   | `while:` + `condition:` + `steps:`    | Supported -- condition checked before every iteration                                                                            |
+| Fixed-count loop     | `repeat:` + `count:` + `steps:`       | Supported                                                                                                                        |
 
 All four loop constructs (`poll`, `for_each`, `while`, `repeat`) support an optional
 `break_if:` expression (evaluated after each iteration) and expose `{{ iter.index }}`
@@ -34,7 +34,7 @@ they carry more than 3 non-`#[serde(default)]` fields), the per-item binding nam
 packed into the `for_each:` label instead of a separate `as:` field:
 
 ```yaml
-- for_each: doubles as n   # binds {{ iter.n }}; omit " as <name>" to default to {{ iter.item }}
+- for_each: doubles as n # binds {{ iter.n }}; omit " as <name>" to default to {{ iter.item }}
   items: "{{ input.numbers }}"
   steps:
     - step: doubled
@@ -60,31 +60,31 @@ Two registry methods exist for registering handlers:
 
 ## Native Handlers
 
-| Kind                | What it does                                                                |
-| ------------------- | --------------------------------------------------------------------------- |
-| `shell::exec`       | Run shell command, ignore exit code                                         |
-| `shell::capture`    | Run shell command, fail on non-zero exit                                    |
-| `fs::read`          | Read file to string                                                         |
-| `fs::write`         | Write string to file (`path` + `content` args)                              |
-| `fs::glob`          | Glob pattern match (`pattern` arg)                                          |
-| `fs::exists`        | Check path existence                                                        |
-| `git::staged_files` | `git diff --cached --name-only`                                             |
-| `git::diff`         | `git diff [revision]`                                                       |
-| `git::log`          | `git log -N --format=%H\t%s`                                                |
-| `git::status`       | `git status --porcelain`                                                    |
-| `json::pick`        | Extract named fields from input object                                      |
-| `json::merge`       | Merge static `with` object into input                                       |
+| Kind                | What it does                                                                      |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `shell::exec`       | Run shell command, ignore exit code                                               |
+| `shell::capture`    | Run shell command, fail on non-zero exit                                          |
+| `fs::read`          | Read file to string                                                               |
+| `fs::write`         | Write string to file (`path` + `content` args)                                    |
+| `fs::glob`          | Glob pattern match (`pattern` arg)                                                |
+| `fs::exists`        | Check path existence                                                              |
+| `git::staged_files` | `git diff --cached --name-only`                                                   |
+| `git::diff`         | `git diff [revision]`                                                             |
+| `git::log`          | `git log -N --format=%H\t%s`                                                      |
+| `git::status`       | `git status --porcelain`                                                          |
+| `json::pick`        | Extract named fields from input object                                            |
+| `json::merge`       | Merge static `with` object into input                                             |
 | `json::jq`          | Dot-path, `[idx]` indexing, `\|` pipes, `select(cond)`, `map(expr)` (not full jq) |
-| `ctrl::noop`        | Pass input through unchanged                                                |
-| `ctrl::log`         | Log to stderr and pass through                                              |
-| `ctrl::assert`      | Assert `args.condition` is truthy or fail                                   |
-| `llm::invoke`       | Raw LLM completion (OpenAI/Anthropic/Ollama)                                |
-| `container::run`    | Start a container from a `HarnessProfile` (`image`, `env`, `limits` args)   |
-| `container::wait`   | Block until container exits; emits exit code and captured logs              |
-| `harness::evolve`   | Run `EvolutionPlanner` against `RunMetrics` and apply resulting diff        |
-| `harness::canary`   | Deploy a canary image alongside the current harness (`traffic_percent` arg) |
-| `rx::run`           | Run a script from the rx registry by name (`name`, optional `args`)         |
-| `rx::list`          | List all commands in the rx registry (optional `registry` path override)    |
+| `ctrl::noop`        | Pass input through unchanged                                                      |
+| `ctrl::log`         | Log to stderr and pass through                                                    |
+| `ctrl::assert`      | Assert `args.condition` is truthy or fail                                         |
+| `llm::invoke`       | Raw LLM completion (OpenAI/Anthropic/Ollama)                                      |
+| `container::run`    | Start a container from a `HarnessProfile` (`image`, `env`, `limits` args)         |
+| `container::wait`   | Block until container exits; emits exit code and captured logs                    |
+| `harness::evolve`   | Run `EvolutionPlanner` against `RunMetrics` and apply resulting diff              |
+| `harness::canary`   | Deploy a canary image alongside the current harness (`traffic_percent` arg)       |
+| `rx::run`           | Run a script from the rx registry by name (`name`, optional `args`)               |
+| `rx::list`          | List all commands in the rx registry (optional `registry` path override)          |
 
 ## Text Parsing Handlers
 
@@ -163,19 +163,19 @@ Doob backlog processing and prioritization.
 
 Every handler that makes a model call is routed through BAML, so provider
 selection, retries, and output parsing live in one place. There is no feature
-flag — `crux-baml` is a required dependency of `crux-agentic`, `crux-cli`, and
+flag — `crux-baml` is a required dependency of `crux-agentic`, `crux-dsl-cli`, and
 the `crux` facade.
 
-| Kind                    | What it does                                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `llm::invoke`           | Completion. `{content, confidence, attempts, client, schema_valid}` plus any `schema` fields. Reports confidence. |
-| `llm::stream`           | Same as `llm::invoke` plus `streaming:true` and `chunks`.                                            |
-| `llm::invoke_with_fallback` | Same as `llm::invoke`, pinned to BAML's `Auto` fallback client. Legacy `tiers` arg is accepted and ignored. |
-| `llm::extract`          | Structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
-| `llm::analyze`          | `subject` + `evidence` (+ optional `focus`) in; summary and severity-tagged findings out. Reports confidence. |
-| `llm::confidence`       | `claim` + `evidence` (+ optional `criteria`) in; `0.0`–`1.0` support score out, which becomes the step confidence. |
-| `llm::decompose`        | BAML spec decomposition into task list                                                              |
-| `llm::plan`             | BAML pipeline generation from natural language goal                                                 |
+| Kind                        | What it does                                                                                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm::invoke`               | Completion. `{content, confidence, attempts, client, schema_valid}` plus any `schema` fields. Reports confidence.                                                                                 |
+| `llm::stream`               | Same as `llm::invoke` plus `streaming:true` and `chunks`.                                                                                                                                         |
+| `llm::invoke_with_fallback` | Same as `llm::invoke`, pinned to BAML's `Auto` fallback client. Legacy `tiers` arg is accepted and ignored.                                                                                       |
+| `llm::extract`              | Structured extraction (9 functions: `ExtractEntities`, `Summarize`, `Classify`, `DescribeProject`, `AssessHealth`, `ClassifyProject`, `GenerateChangelog`, `SuggestRelated`, `ClassifyCIFailure`) |
+| `llm::analyze`              | `subject` + `evidence` (+ optional `focus`) in; summary and severity-tagged findings out. Reports confidence.                                                                                     |
+| `llm::confidence`           | `claim` + `evidence` (+ optional `criteria`) in; `0.0`–`1.0` support score out, which becomes the step confidence.                                                                                |
+| `llm::decompose`            | BAML spec decomposition into task list                                                                                                                                                            |
+| `llm::plan`                 | BAML pipeline generation from natural language goal                                                                                                                                               |
 
 ### Every LLM call reports a confidence score
 
@@ -184,10 +184,10 @@ All six handlers emit a step confidence, so any of them can feed
 
 The number is not invented. Two inputs:
 
-| Input | Source | Weight |
-| --- | --- | --- |
-| Self-report | Every BAML completion type declares a `confidence: float`; the prompt asks the model how well the answer is supported | primary |
-| Retry penalty | BAML's `FunctionLog::calls()` returns "all calls made (including retries)" | `0.8^(attempts-1)` |
+| Input         | Source                                                                                                                | Weight             |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Self-report   | Every BAML completion type declares a `confidence: float`; the prompt asks the model how well the answer is supported | primary            |
+| Retry penalty | BAML's `FunctionLog::calls()` returns "all calls made (including retries)"                                            | `0.8^(attempts-1)` |
 
 ```text
 confidence = self_report * RETRY_DECAY ^ (attempts - 1)
@@ -249,9 +249,10 @@ Set `client:` in a pipeline to pin a specific BAML client; see
 ## Known Gaps
 
 <!-- TODO(docs): Document llm::stream, SQLite, task, remaining review, and triage handlers. -->
-| Area                   | Gap                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| `rx::install`          | installs scripts in a local registry (#66)                                         |
-| `route_on_confidence`  | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76) |
-| `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84) |
-| `json::jq`             | Supports dot-path, `[idx]`/`[i][j]` indexing, `\|` pipes, `select(cond)` (comparison ops `== != > < >= <=` or bare truthy test), and `map(expr)` (#70). Still no full jq: no `reduce`, `foreach`, string/math builtins beyond `keys`/`length`/`type`/`first`/`last`/`has()`, no variable bindings (`as $x`), no array/object construction literals, and `select`/`map` only operate on the current array value (no stream semantics). |
+
+| Area                  | Gap                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rx::install`         | installs scripts in a local registry (#66)                                                                                                                                                                                                                                                                                                                                                                                            |
+| `route_on_confidence` | `handler_value` handlers carry no confidence (neutral 0.5 default, not 1.0); use `handler` + `HandlerOutput` to emit a real score (resolved #75/#76)                                                                                                                                                                                                                                                                                  |
+| `for_each: parallel`  | Accepted but currently still executes iterations sequentially -- `CruxCtx` is a single mutable trace recorder, and concurrent nested `ctx.step()` calls across iterations aren't sound without a `crux-runtime` change (#84)                                                                                                                                                                                                          |
+| `json::jq`            | Supports dot-path, `[idx]`/`[i][j]` indexing, `\|` pipes, `select(cond)` (comparison ops `== != > < >= <=` or bare truthy test), and `map(expr)` (#70). Still no full jq: no `reduce`, `foreach`, string/math builtins beyond `keys`/`length`/`type`/`first`/`last`/`has()`, no variable bindings (`as $x`), no array/object construction literals, and `select`/`map` only operate on the current array value (no stream semantics). |

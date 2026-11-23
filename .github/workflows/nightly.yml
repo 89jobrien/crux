@@ -73,7 +73,7 @@ jobs:
         run: cargo nextest run --workspace --exclude crux-baml --exclude crux-agentic
       - name: offline trace regression fixture
         run: |
-          cargo build -p crux-cli --bin crux
+          cargo build -p crux-dsl-cli --bin crux
           STORE="$RUNNER_TEMP/crux-regressions"
           BASELINE="examples/fixtures/regression/trace.json"
           CANDIDATE="examples/fixtures/regression/candidate.json"

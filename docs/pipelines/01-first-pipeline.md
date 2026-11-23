@@ -5,7 +5,7 @@
 Build the pipeline runner from source:
 
 ```bash
-cargo build -p crux-cli --bin crux --release
+cargo build -p crux-dsl-cli --bin crux --release
 ```
 
 The binary lands at `target/release/crux`. Add it to your PATH or
@@ -35,7 +35,6 @@ steps:
     handler: shell::capture
     args:
       cmd: "date -u +%Y-%m-%dT%H:%M:%SZ"
-
 ```
 
 Every `.crux` file has four parts:

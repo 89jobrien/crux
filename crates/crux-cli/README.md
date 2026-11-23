@@ -55,9 +55,9 @@ targets gain a target suffix.
 ## Development and testing
 
 ```console
-cargo nextest run -p crux-cli
-cargo nextest run -p crux-cli
-cargo clippy -p crux-cli --all-targets --all-features -- -D warnings
+cargo nextest run -p crux-dsl-cli
+cargo nextest run -p crux-dsl-cli
+cargo clippy -p crux-dsl-cli --all-targets --all-features -- -D warnings
 ./target/debug/crux --help
 ./target/debug/crux run --help
 ./target/debug/crux plan --help

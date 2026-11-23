@@ -26,7 +26,7 @@ not execute BAML or credentialed pipelines.
 Run relative-path examples from the repository root:
 
 ```bash
-cargo build -p crux-cli
+cargo build -p crux-dsl-cli
 ./target/debug/crux --help
 ./target/debug/crux list examples
 ./target/debug/crux check examples/read_and_pick.crux
@@ -52,7 +52,7 @@ The smoke script handles this with `cd "$ROOT"`.
 ## Test
 
 ```bash
-cargo nextest run -p crux-cli
+cargo nextest run -p crux-dsl-cli
 ```
 
 Use `cargo nextest run`, not `cargo test`. Do not use extraction, decomposition,

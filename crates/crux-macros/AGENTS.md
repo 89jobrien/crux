@@ -13,7 +13,7 @@ howto:
       - "Handle option in relevant expand() function"
       - "Add integration test in crates/crux/tests/"
   - task: "Debug expansion"
-    command: "cargo expand -p crux --test agent_macro"
+    command: "cargo expand -p crux-dsl --test agent_macro"
 pitfalls:
   - "Cannot import runtime types directly (proc-macro boundary)"
   - "Generated code references crux_runtime:: paths — keep stable"
@@ -36,5 +36,5 @@ Proc-macro crate. Changes here affect all downstream `#[crux::agent]`,
 ### Debugging Expansion
 
 ```bash
-cargo expand -p crux --test agent_macro
+cargo expand -p crux-dsl --test agent_macro
 ```

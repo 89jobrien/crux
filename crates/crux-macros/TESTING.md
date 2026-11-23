@@ -8,7 +8,7 @@ tested_via:
     file: tests/agent_macro.rs
     coverage: "End-to-end macro expansion"
 commands:
-  default: "cargo nextest run -p crux -- agent_macro"
+  default: "cargo nextest run -p crux-dsl -- agent_macro"
 notes:
   - "Proc-macro crates cannot have inline unit tests that invoke macros"
   - "Macro expansion issues surface as compile errors in dependent crates"
@@ -25,5 +25,5 @@ tests in the `crux` facade crate.
 ## Running
 
 ```bash
-cargo nextest run -p crux -- agent_macro
+cargo nextest run -p crux-dsl -- agent_macro
 ```

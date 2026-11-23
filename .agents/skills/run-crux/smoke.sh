@@ -7,7 +7,7 @@ cd "$ROOT"
 BIN="$ROOT/target/debug/crux"
 
 echo "== build =="
-cargo build -p crux-cli
+cargo build -p crux-dsl-cli
 
 echo "== help =="
 "$BIN" --help

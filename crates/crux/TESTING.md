@@ -16,8 +16,8 @@ test_files:
     coverage: "Submit, get, update, checkpoint, CAS"
 commands:
   default: "cargo nextest run -p crux"
-  single: "cargo nextest run -p crux -- agent_macro"
-  redb: "cargo nextest run -p crux --features redb"
+  single: "cargo nextest run -p crux-dsl -- agent_macro"
+  redb: "cargo nextest run -p crux-dsl --features redb"
 ---
 
 # Testing: crux
@@ -31,6 +31,6 @@ test).
 
 ```bash
 cargo nextest run -p crux
-cargo nextest run -p crux -- agent_macro    # single test file
-cargo nextest run -p crux --features redb   # redb backend tests
+cargo nextest run -p crux-dsl -- agent_macro    # single test file
+cargo nextest run -p crux-dsl --features redb   # redb backend tests
 ```
