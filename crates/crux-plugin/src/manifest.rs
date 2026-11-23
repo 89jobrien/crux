@@ -8,6 +8,13 @@
 //!   look up, e.g. `env://GITHUB_TOKEN`. This keeps secrets out of manifest
 //!   files; the manifest only records *which* variable to use, not the value.
 //!
+//! **Secret-looking keys must use env-refs.** A key whose name ends in
+//! `_TOKEN`, `_KEY`, `_SECRET`, `_PASSWORD`, or `_PASSPHRASE` (matched
+//! case-insensitively) with a literal value is rejected when the manifest is
+//! loaded ([`load_manifest`] / [`parse_manifest`]). The error names the key and
+//! suggests an `env://VAR` reference, and never echoes the literal. Non-secret
+//! keys accept literals unchanged.
+//!
 //! ```toml
 //! [[plugin]]
 //! name = "github"
@@ -26,6 +33,15 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 // ── EnvValue ─────────────────────────────────────────────────────────────────
 
 const ENV_REF_PREFIX: &str = "env://";
+
+/// Key-name suffixes (compared case-insensitively) that identify a secret.
+const SECRET_KEY_SUFFIXES: &[&str] = &["_TOKEN", "_KEY", "_SECRET", "_PASSWORD", "_PASSPHRASE"];
+
+/// Whether an env key name looks like it holds a secret.
+fn is_secret_key(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase();
+    SECRET_KEY_SUFFIXES.iter().any(|s| upper.ends_with(s))
+}
 
 /// A single environment variable value in a plugin manifest entry.
 ///
@@ -208,7 +224,33 @@ pub fn load_manifest(path: impl AsRef<std::path::Path>) -> Result<PluginManifest
         return Ok(PluginManifest::default());
     }
     let contents = std::fs::read_to_string(path)?;
-    let manifest: PluginManifest = toml::from_str(&contents)?;
+    parse_manifest(&contents)
+}
+
+/// Parse manifest TOML and validate it.
+///
+/// Rejects literal values for secret-looking env keys (see module docs). The
+/// check runs after TOML parsing rather than inside the deserializer so that the
+/// error never echoes the offending literal: TOML's own diagnostics quote the
+/// source line, which would otherwise leak the secret.
+pub fn parse_manifest(contents: &str) -> Result<PluginManifest, ManifestError> {
+    let manifest: PluginManifest = toml::from_str(contents)?;
+    for entry in &manifest.plugin {
+        let mut offending: Vec<&String> = entry
+            .env
+            .iter()
+            .filter(|(k, v)| is_secret_key(k) && matches!(v, EnvValue::Literal(_)))
+            .map(|(k, _)| k)
+            .collect();
+        // Sort so the reported key is deterministic when several are offending.
+        offending.sort();
+        if let Some(key) = offending.first() {
+            return Err(ManifestError::SecretLiteral {
+                plugin: entry.name.clone(),
+                key: (*key).clone(),
+            });
+        }
+    }
     Ok(manifest)
 }
 
@@ -228,6 +270,13 @@ pub enum ManifestError {
         key: String,
         var: String,
     },
+    /// A secret-looking env key was given a literal value instead of an
+    /// `env://VAR` reference. The literal itself is deliberately not included.
+    #[error(
+        "plugin '{plugin}': env key '{key}' looks like a secret and must use an env:// reference \
+         (env://VAR), not a literal value"
+    )]
+    SecretLiteral { plugin: String, key: String },
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -347,5 +396,99 @@ mod tests {
     fn empty_manifest_loads_without_file() {
         let manifest = load_manifest("/nonexistent/path/plugins.toml").expect("load");
         assert!(manifest.plugin.is_empty());
+    }
+
+    #[test]
+    fn literal_secret_key_is_rejected() {
+        let toml = r#"
+            [[plugin]]
+            name = "p"
+            path = "bin"
+            env = { GITHUB_TOKEN = "ghp_plaintext" }
+        "#;
+        let err = parse_manifest(toml).expect_err("literal secret must fail");
+        assert!(
+            matches!(err, ManifestError::SecretLiteral { ref key, .. } if key == "GITHUB_TOKEN")
+        );
+    }
+
+    #[test]
+    fn literal_secret_key_rejected_case_insensitively() {
+        for key in [
+            "api_key",
+            "Db_Password",
+            "SIGNING_PASSPHRASE",
+            "client_secret",
+        ] {
+            let toml = format!(
+                "[[plugin]]\nname = \"p\"\npath = \"bin\"\nenv = {{ {key} = \"value\" }}\n"
+            );
+            assert!(
+                parse_manifest(&toml).is_err(),
+                "literal under '{key}' should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn env_ref_secret_key_is_accepted() {
+        let toml = r#"
+            [[plugin]]
+            name = "p"
+            path = "bin"
+            env = { GITHUB_TOKEN = "env://GITHUB_TOKEN" }
+        "#;
+        let manifest = parse_manifest(toml).expect("env-ref secret should parse");
+        assert_eq!(
+            manifest.plugin[0].env["GITHUB_TOKEN"],
+            EnvValue::EnvRef("GITHUB_TOKEN".into())
+        );
+    }
+
+    #[test]
+    fn non_secret_literal_is_accepted() {
+        let toml = r#"
+            [[plugin]]
+            name = "p"
+            path = "bin"
+            env = { LOG_LEVEL = "debug", AWS_REGION = "us-east-1", MONKEY = "banana" }
+        "#;
+        let manifest = parse_manifest(toml).expect("non-secret literals parse");
+        assert_eq!(
+            manifest.plugin[0].env["LOG_LEVEL"],
+            EnvValue::Literal("debug".into())
+        );
+    }
+
+    #[test]
+    fn secret_rejection_error_names_key_and_suggests_env_ref() {
+        let toml = r#"
+            [[plugin]]
+            name = "p"
+            path = "bin"
+            env = { DB_PASSWORD = "hunter2" }
+        "#;
+        let msg = parse_manifest(toml).expect_err("should fail").to_string();
+        assert!(msg.contains("DB_PASSWORD"), "key missing from error: {msg}");
+        assert!(
+            msg.contains("env://"),
+            "env:// hint missing from error: {msg}"
+        );
+        assert!(
+            !msg.contains("hunter2"),
+            "literal value leaked into error: {msg}"
+        );
+    }
+
+    #[test]
+    fn load_manifest_rejects_literal_secret_from_file() {
+        let mut file = tempfile::NamedTempFile::new().expect("tempfile");
+        std::io::Write::write_all(
+            &mut file,
+            b"[[plugin]]\nname = \"p\"\npath = \"bin\"\nenv = { API_KEY = \"abc\" }\n",
+        )
+        .expect("write");
+        let err = load_manifest(file.path()).expect_err("literal secret must fail");
+        assert!(err.to_string().contains("API_KEY"), "got: {err}");
     }
 }

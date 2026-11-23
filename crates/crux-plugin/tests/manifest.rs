@@ -22,12 +22,12 @@ fn parse_manifest_with_env() {
 [[plugin]]
 name = "slack"
 path = "crux-slack"
-env = { SLACK_TOKEN = "xoxb-test" }
+env = { SLACK_TOKEN = "env://SLACK_TOKEN" }
 "#;
     let manifest: PluginManifest = toml::from_str(toml).unwrap();
     assert_eq!(
         manifest.plugin[0].env["SLACK_TOKEN"],
-        EnvValue::Literal("xoxb-test".into())
+        EnvValue::EnvRef("SLACK_TOKEN".into())
     );
 }
 
