@@ -11,7 +11,7 @@ use crux_types::error::CruxErr;
 use serde_json::Value;
 
 use crate::handler_output::{HandlerExecution, HandlerOutput};
-use crate::metadata::{AgentMetadata, HandlerMetadata, SchemaBuildError};
+use crate::metadata::{AgentMetadata, HandlerMetadata, Metering, SchemaBuildError};
 use crate::step_runner::{StepFuture, StepInvocation, StepRunner};
 
 /// Type-erased async handler returning outcome and invocation usage together.
@@ -323,7 +323,10 @@ impl HandlerRegistry {
             let fut = f(v);
             Box::pin(async move { HandlerExecution::free(fut.await) })
         });
-        self.register_closure(HandlerMetadata::new(name), handler);
+        self.register_closure(
+            HandlerMetadata::new(name).metering(Metering::Reported),
+            handler,
+        );
     }
 
     /// Register an explicitly free confidence-bearing handler with metadata.
@@ -339,7 +342,7 @@ impl HandlerRegistry {
             let fut = f(v);
             Box::pin(async move { HandlerExecution::free(fut.await) })
         });
-        self.register_closure(meta, handler);
+        self.register_closure(meta.metering(Metering::Reported), handler);
     }
 
     /// Register a handler that returns outcome and usage atomically.
@@ -369,7 +372,10 @@ impl HandlerRegistry {
     {
         let name = name.into();
         let handler: BoxHandler = Arc::new(move |v| Box::pin(f(v)));
-        self.register_closure(HandlerMetadata::new(name), handler);
+        self.register_closure(
+            HandlerMetadata::new(name).metering(Metering::Reported),
+            handler,
+        );
     }
 
     /// Register a confidence-bearing handler together with its [`HandlerMetadata`].
@@ -404,7 +410,10 @@ impl HandlerRegistry {
             let fut = f(v);
             Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
         });
-        self.register_closure(HandlerMetadata::new(name), handler);
+        self.register_closure(
+            HandlerMetadata::new(name).metering(Metering::Reported),
+            handler,
+        );
     }
 
     /// Register an explicitly free plain-value handler and metadata atomically.
@@ -419,7 +428,7 @@ impl HandlerRegistry {
             let fut = f(v);
             Box::pin(async move { HandlerExecution::free(fut.await.map(HandlerOutput::from)) })
         });
-        self.register_closure(meta, handler);
+        self.register_closure(meta.metering(Metering::Reported), handler);
     }
 
     /// Register a crux Agent by name for delegation.

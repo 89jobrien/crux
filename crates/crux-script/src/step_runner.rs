@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crux_types::error::CruxErr;
 
-use crate::{HandlerExecution, HandlerMetadata, HandlerOutput};
+use crate::{HandlerExecution, HandlerMetadata, HandlerOutput, Metering};
 
 /// Future returned by an asynchronous [`StepRunner`].
 pub type StepFuture<'a> = Pin<Box<dyn Future<Output = HandlerExecution> + Send + 'a>>;
@@ -291,7 +291,8 @@ fn config_str_owned(config: &Value, key: &str) -> std::result::Result<String, Cr
 
 impl StepRunner for ShellRunner {
     fn metadata(&self) -> &HandlerMetadata {
-        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("shell"));
+        static META: LazyLock<HandlerMetadata> =
+            LazyLock::new(|| HandlerMetadata::new("shell").metering(Metering::Reported));
         &META
     }
 
@@ -325,7 +326,8 @@ impl StepRunner for ShellRunner {
 
 impl StepRunner for FsWriteRunner {
     fn metadata(&self) -> &HandlerMetadata {
-        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("fs-write"));
+        static META: LazyLock<HandlerMetadata> =
+            LazyLock::new(|| HandlerMetadata::new("fs-write").metering(Metering::Reported));
         &META
     }
 
@@ -360,7 +362,7 @@ impl StepRunner for FsWriteRunner {
 impl StepRunner for GitCommitRunner {
     fn metadata(&self) -> &HandlerMetadata {
         static META: LazyLock<HandlerMetadata> =
-            LazyLock::new(|| HandlerMetadata::new("git-commit"));
+            LazyLock::new(|| HandlerMetadata::new("git-commit").metering(Metering::Reported));
         &META
     }
 
@@ -402,7 +404,7 @@ impl StepRunner for GitCommitRunner {
 impl StepRunner for JsonUpdateRunner {
     fn metadata(&self) -> &HandlerMetadata {
         static META: LazyLock<HandlerMetadata> =
-            LazyLock::new(|| HandlerMetadata::new("json-update"));
+            LazyLock::new(|| HandlerMetadata::new("json-update").metering(Metering::Reported));
         &META
     }
 
@@ -447,7 +449,8 @@ impl StepRunner for JsonUpdateRunner {
 
 impl StepRunner for LlmCallRunner {
     fn metadata(&self) -> &HandlerMetadata {
-        static META: LazyLock<HandlerMetadata> = LazyLock::new(|| HandlerMetadata::new("llm-call"));
+        static META: LazyLock<HandlerMetadata> =
+            LazyLock::new(|| HandlerMetadata::new("llm-call").metering(Metering::Reported));
         &META
     }
 

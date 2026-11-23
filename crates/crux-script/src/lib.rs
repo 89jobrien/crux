@@ -148,7 +148,7 @@ pub use handler_output::{HandlerExecution, HandlerOutput};
 pub use ir::{TypedCruxfile, TypedPipeline};
 pub use metadata::{
     AgentMetadata, ArgSchema, ArgSpec, ArgType, Capability, CapabilityViolation,
-    ConfidenceCapability, HandlerMetadata, ObjectSchema, RiskLevel, SchemaBuildError,
+    ConfidenceCapability, HandlerMetadata, Metering, ObjectSchema, RiskLevel, SchemaBuildError,
     SchemaProperty, SchemaViolation, SchemaViolationKind, SideEffect, ValueKind, ValueSchema,
 };
 pub use output::{

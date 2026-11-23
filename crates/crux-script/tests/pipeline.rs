@@ -22,7 +22,7 @@ fn test_registry() -> Arc<HandlerRegistry> {
 
     // Uses `handler` (not `handler_value`) so that a real confidence score of 0.85
     // is emitted, making `{{ steps.analyze.confidence }}` resolvable in routing tests.
-    reg.handler("analyzer", |_input: Value| async {
+    reg.handler_free("analyzer", |_input: Value| async {
         Ok::<HandlerOutput, crux_runtime::prelude::CruxErr>(HandlerOutput::with_confidence(
             json!({ "result": "analyzed" }),
             0.85,

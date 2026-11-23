@@ -49,6 +49,14 @@ pub trait InvocationMeter: Send {
 
     /// Return aggregate usage recorded by this meter.
     fn budget_usage(&self) -> BudgetUsage;
+
+    /// Report whether this meter enforces a token or USD limit.
+    ///
+    /// When true, handler invocations must declare metered usage before they run.
+    /// Meters without such limits keep the default of `false`.
+    fn requires_usage_metering(&self) -> bool {
+        false
+    }
 }
 
 pub trait Context: Send {

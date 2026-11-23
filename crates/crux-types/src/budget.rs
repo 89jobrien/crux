@@ -473,6 +473,16 @@ impl BudgetTracker {
             .unwrap_or(0)
     }
 
+    /// Reports whether a finite token or USD limit is active, so every handler
+    /// invocation must declare metered usage before it runs. The default budget
+    /// tracks tokens with `u64::MAX` (unlimited) and does not count as metered.
+    pub fn requires_usage_metering(&self) -> bool {
+        self.counters.iter().any(|counter| {
+            matches!(counter.kind, BudgetKind::Tokens | BudgetKind::Usd)
+                && counter.limit != u64::MAX
+        })
+    }
+
     /// Reserves one handler attempt.
     ///
     /// An attempt exactly at the configured limit succeeds. A rejected attempt
