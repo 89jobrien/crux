@@ -21,19 +21,19 @@ let pipelines declare friendly display labels.
 
 ### Files to Modify
 
-| File | Purpose | Change |
-| --- | --- | --- |
-| `crates/crux-script/src/schema.rs` | Pipeline YAML schema | Add `PipelineDisplayDef`, `DisplayOutput`, and `PipelineDef::display` |
-| `crates/crux-script/tests/pipeline.rs` | Schema integration tests | Cover display parsing and defaults |
-| `crates/crux-script/src/validator.rs` | Nested pipeline construction | Initialize `display` in direct `PipelineDef` literals |
-| `crates/crux-cli/src/bin/crux/output.rs` | Human-readable rendering | Add smart summary and metadata-aware verbose trace |
-| `crates/crux-cli/src/bin/crux/run.rs` | Output-mode dispatch | Route default summary, verbose, explicit JSON, and quiet output |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI definition | Add `--summary` and output-mode conflicts |
-| `crates/crux-cli/src/bin/crux/check.rs` | Validation registry setup | Initialize `display` in its `PipelineDef` literal |
-| `docs/pipelines/01-first-pipeline.md` | Pipeline walkthrough | Document display metadata and all output modes |
-| `docs/crux-syntax-reference.md` | Syntax reference | Add the `display` schema |
-| `pipelines/crux/ci.crux` in `/Users/joe/dev/bamlish` | Bamlish CI pipeline | Add labels and remove redundant `ctrl::log` |
-| `xtask/src/main.rs` in `/Users/joe/dev/bamlish` | Bamlish Crux launcher | Use the `crux-cli` summary default |
+| File                                                 | Purpose                      | Change                                                                |
+| ---------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
+| `crates/crux-script/src/schema.rs`                   | Pipeline YAML schema         | Add `PipelineDisplayDef`, `DisplayOutput`, and `PipelineDef::display` |
+| `crates/crux-script/tests/pipeline.rs`               | Schema integration tests     | Cover display parsing and defaults                                    |
+| `crates/crux-script/src/validator.rs`                | Nested pipeline construction | Initialize `display` in direct `PipelineDef` literals                 |
+| `crates/crux-cli/src/bin/crux/output.rs`             | Human-readable rendering     | Add smart summary and metadata-aware verbose trace                    |
+| `crates/crux-cli/src/bin/crux/run.rs`                | Output-mode dispatch         | Route default summary, verbose, explicit JSON, and quiet output       |
+| `crates/crux-cli/src/bin/crux/main.rs`               | CLI definition               | Add `--summary` and output-mode conflicts                             |
+| `crates/crux-cli/src/bin/crux/check.rs`              | Validation registry setup    | Initialize `display` in its `PipelineDef` literal                     |
+| `docs/pipelines/01-first-pipeline.md`                | Pipeline walkthrough         | Document display metadata and all output modes                        |
+| `docs/crux-syntax-reference.md`                      | Syntax reference             | Add the `display` schema                                              |
+| `pipelines/crux/ci.crux` in `/Users/joe/dev/bamlish` | Bamlish CI pipeline          | Add labels and remove redundant `ctrl::log`                           |
+| `xtask/src/main.rs` in `/Users/joe/dev/bamlish`      | Bamlish Crux launcher        | Use the `crux-dsl-cli` summary default                                |
 
 ### Dependencies
 
@@ -70,7 +70,7 @@ let pipelines declare friendly display labels.
 
 ## Architecture
 
-- Crates affected: `crux-script`, `crux-cli`, and Bamlish's `xtask` integration.
+- Crates affected: `crux-script`, `crux-dsl-cli`, and Bamlish's `xtask` integration.
 - New types: `PipelineDisplayDef` and `DisplayOutput` in
   `crates/crux-script/src/schema.rs`; internal `OutputMode` in
   `crates/crux-cli/src/bin/crux/run.rs`.
@@ -186,7 +186,7 @@ let pipelines declare friendly display labels.
 
 **Crate**: `crux-script`
 **File(s)**: `crates/crux-script/src/validator.rs`, `crates/crux-cli/src/bin/crux/check.rs`, `crates/crux-cli/src/bin/crux/run.rs`
-**Run**: `cargo check -p crux-script -p crux-cli --all-targets`
+**Run**: `cargo check -p crux-script -p crux-dsl-cli --all-targets`
 
 1. Run the task command.
    Expected: compilation fails with missing field `display` in every direct `PipelineDef` literal.
@@ -207,9 +207,9 @@ let pipelines declare friendly display labels.
 4. Run:
 
    ```text
-   cargo check -p crux-script -p crux-cli --all-targets
+   cargo check -p crux-script -p crux-dsl-cli --all-targets
    cargo nextest run -p crux-script
-   cargo clippy -p crux-script -p crux-cli --all-targets -- -D warnings
+   cargo clippy -p crux-script -p crux-dsl-cli --all-targets -- -D warnings
    ```
 
 5. Run `git branch --show-current`; require `feat/pipeline-display`.
@@ -223,9 +223,9 @@ let pipelines declare friendly display labels.
 
 ### Task 3: Add the Opt-In Summary Renderer
 
-**Crate**: `crux-cli`
+**Crate**: `crux-dsl-cli`
 **File(s)**: `crates/crux-cli/src/bin/crux/output.rs`, `crates/crux-cli/src/bin/crux/run.rs`
-**Run**: `cargo nextest run -p crux-cli summary_output`
+**Run**: `cargo nextest run -p crux-dsl-cli summary_output`
 
 1. Replace the inline test module's imports in `crates/crux-cli/src/bin/crux/run.rs` with:
 
@@ -305,7 +305,7 @@ let pipelines declare friendly display labels.
    }
    ```
 
-3. Run `cargo nextest run -p crux-cli summary_output`.
+3. Run `cargo nextest run -p crux-dsl-cli summary_output`.
    Expected: compilation fails because `render_summary` does not exist.
 
 4. Change the import in `crates/crux-cli/src/bin/crux/output.rs` to:
@@ -426,7 +426,7 @@ let pipelines declare friendly display labels.
    ```
 
    Then pass `name` instead of `step.name` to that `format!`. Apply `DisplayOutput` to
-`render_trace`; verbose mode includes a humanized `Output` section when display policy allows it.
+   `render_trace`; verbose mode includes a humanized `Output` section when display policy allows it.
 
 7. Update the existing verbose test call to pass `Some(&display_metadata())` and assert both
    `Trace:` and `Output:` remain present.
@@ -434,9 +434,9 @@ let pipelines declare friendly display labels.
 8. Run:
 
    ```text
-   cargo nextest run -p crux-cli summary_output
-   cargo nextest run -p crux-cli verbose_output
-   cargo clippy -p crux-cli --all-targets -- -D warnings
+   cargo nextest run -p crux-dsl-cli summary_output
+   cargo nextest run -p crux-dsl-cli verbose_output
+   cargo clippy -p crux-dsl-cli --all-targets -- -D warnings
    cargo fmt --all --check
    ```
 
@@ -446,14 +446,14 @@ let pipelines declare friendly display labels.
 
     ```text
     git add crates/crux-cli/src/bin/crux/output.rs crates/crux-cli/src/bin/crux/run.rs
-    git commit -m "feat(crux-cli): add smart pipeline summary"
+    git commit -m "feat(crux-dsl-cli): add smart pipeline summary"
     ```
 
 ### Task 4: Preserve JSON and Add Explicit Summary Mode
 
-**Crate**: `crux-cli`
+**Crate**: `crux-dsl-cli`
 **File(s)**: `crates/crux-cli/src/bin/crux/main.rs`, `crates/crux-cli/src/bin/crux/run.rs`
-**Run**: `cargo nextest run -p crux-cli output_mode`
+**Run**: `cargo nextest run -p crux-dsl-cli output_mode`
 
 1. Add `Summary`, `Verbose`, `Json`, and `Quiet` output modes. Select `Summary` when no output
    flag is present.
@@ -469,7 +469,7 @@ let pipelines declare friendly display labels.
 
 ### Task 5: Document Display Metadata and Output Modes
 
-**Crate**: `crux-cli`
+**Crate**: `crux-dsl-cli`
 **File(s)**: `docs/pipelines/01-first-pipeline.md`, `docs/crux-syntax-reference.md`, `docs/designs/2026-09-04-pipeline-display-design.md`
 **Run**: `just ci`
 
@@ -485,6 +485,7 @@ let pipelines declare friendly display labels.
    ```
 
    Remove the `log_output` step because summary rendering no longer needs `ctrl::log`.
+
 2. Add the explicit summary output example:
 
    ```text
@@ -508,7 +509,7 @@ let pipelines declare friendly display labels.
 
 4. Add this section to `docs/crux-syntax-reference.md`:
 
-   ```markdown
+   ````markdown
    ## Pipeline display metadata
 
    ```yaml
@@ -520,12 +521,15 @@ let pipelines declare friendly display labels.
        fmt_check: Formatting
        test: Tests
    ```
+   ````
 
    Display metadata changes human-facing output only. Stable pipeline and step identifiers remain
    unchanged in saved traces and replay matching. `output` affects both summary and verbose modes;
    useful successful shell stdout is rendered without its envelope.
 
    ```text
+
+   ```
 
 5. Update `docs/designs/2026-09-04-pipeline-display-design.md` to explicitly state that `--json`
    is supported for regular pipelines only and Cruxfile JSON aggregation is out of scope.
@@ -608,7 +612,7 @@ let pipelines declare friendly display labels.
    #[test]
    fn crux_ci_uses_smart_default_output() {
        let args = crux_ci_args();
-       assert!(args.contains(&"crux-cli"));
+       assert!(args.contains(&"crux-dsl-cli"));
        assert!(!args.contains(&"-v"));
        assert!(!args.contains(&"--json"));
    }
@@ -627,7 +631,7 @@ let pipelines declare friendly display labels.
            "--manifest-path",
            "../crux/Cargo.toml",
            "-p",
-           "crux-cli",
+           "crux-dsl-cli",
            "--bin",
            "crux",
            "--",
@@ -644,8 +648,8 @@ let pipelines declare friendly display labels.
    cargo xtask crux-ci
    cargo xtask pre-commit
    cargo test --workspace
-   cargo run --quiet --manifest-path ../crux/Cargo.toml -p crux-cli --bin crux -- run pipelines/crux/ci.crux -v
-   cargo run --quiet --manifest-path ../crux/Cargo.toml -p crux-cli --bin crux -- run pipelines/crux/ci.crux --json
+   cargo run --quiet --manifest-path ../crux/Cargo.toml -p crux-dsl-cli --bin crux -- run pipelines/crux/ci.crux -v
+   cargo run --quiet --manifest-path ../crux/Cargo.toml -p crux-dsl-cli --bin crux -- run pipelines/crux/ci.crux --json
    ```
 
    Verify the output has one concise `Bamlish CI` summary, eight friendly step labels, no duplicate

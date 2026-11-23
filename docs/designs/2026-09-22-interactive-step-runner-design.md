@@ -52,7 +52,7 @@ server invoke the CLI and render persisted trace data after every boundary.
 ## Crate Ownership
 
 - `crux-script` owns named top-level execution boundaries.
-- `crux-cli` exposes the boundary through `crux run --through`.
+- `crux-dsl-cli` exposes the boundary through `crux run --through`.
 - `examples/` owns orchestration, controls, state projection, and presentation.
 
 ## Public API

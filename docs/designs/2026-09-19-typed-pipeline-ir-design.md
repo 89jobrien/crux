@@ -49,30 +49,30 @@ registry and a redesigned, contract-bearing `StepRunner` as its object-safe exec
 
 ### Files to Modify
 
-| File | Responsibility | Change |
-| --- | --- | --- |
-| `crates/crux-script/src/metadata.rs` | Handler metadata and argument schemas | Add recursive value schemas, handler contracts, and confidence capability |
-| `crates/crux-script/src/step_runner.rs` | Current duplicate synchronous runner API | Redesign `StepRunner`; remove `StepRunnerRegistry` and null runners |
-| `crates/crux-script/src/registry.rs` | Handler and agent registration | Store contract-bearing runners and typed agent metadata |
-| `crates/crux-script/src/compiler.rs` | New compile boundary | Compile parsed DTOs into typed IR and aggregate diagnostics |
-| `crates/crux-script/src/ir.rs` | New runtime-only IR | Own typed pipelines, typed expressions, scopes, and resolved executors |
-| `crates/crux-script/src/runner.rs` | Pipeline execution | Execute typed IR and enforce runtime contracts |
-| `crates/crux-script/src/validator.rs` | Existing static checks | Become compatibility wrappers over compiler diagnostics |
-| `crates/crux-script/src/schema.rs` | YAML DTOs | Add optional pipeline and target input schemas |
-| `crates/crux-script/src/expr.rs` | Runtime expression parser/evaluator | Split parsing from evaluation and execute typed expressions |
-| `crates/crux-script/src/resolve.rs` | Cruxfile target DAG | Feed complete target order into Cruxfile compilation |
-| `crates/crux-script/src/output.rs` | Pipeline introspection | Traverse typed IR where executor resolution is required |
-| `crates/crux-script/src/lib.rs` | Public facade | Export schemas, compiler, typed IR, and redesigned runner API |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI arguments | Add first-class `check` command and shared strict semantics |
-| `crates/crux-cli/src/bin/crux/check.rs` | Validation command | Compile files with the same registry and options as execution |
-| `crates/crux-cli/src/bin/crux/run.rs` | Execution composition root | Compile all pipelines or targets before executing any target |
-| `crates/crux-cli/src/bin/crux/registry.rs` | Registry composition | Remove successful fallback stubs and process exits |
-| `crates/crux-plugin/src/protocol.rs` | Plugin wire declarations | Add optional serialized handler metadata |
-| `crates/crux-plugin/src/host.rs` | Plugin declaration storage | Retain complete declarations rather than names alone |
-| `crates/crux-plugin/src/bridge.rs` | Plugin adapter | Register plugin-backed `StepRunner` implementations |
-| `CONFORMANCE.md` | Normative pipeline contract | Replace stale expression and validation requirements |
-| `crates/crux-script/ARCHITECTURE.md` | Script architecture reference | Document compile and typed-execution layers |
-| `crates/crux-script/README.md` | Public usage | Show compile, contracts, and compiled execution |
+| File                                       | Responsibility                           | Change                                                                    |
+| ------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------- |
+| `crates/crux-script/src/metadata.rs`       | Handler metadata and argument schemas    | Add recursive value schemas, handler contracts, and confidence capability |
+| `crates/crux-script/src/step_runner.rs`    | Current duplicate synchronous runner API | Redesign `StepRunner`; remove `StepRunnerRegistry` and null runners       |
+| `crates/crux-script/src/registry.rs`       | Handler and agent registration           | Store contract-bearing runners and typed agent metadata                   |
+| `crates/crux-script/src/compiler.rs`       | New compile boundary                     | Compile parsed DTOs into typed IR and aggregate diagnostics               |
+| `crates/crux-script/src/ir.rs`             | New runtime-only IR                      | Own typed pipelines, typed expressions, scopes, and resolved executors    |
+| `crates/crux-script/src/runner.rs`         | Pipeline execution                       | Execute typed IR and enforce runtime contracts                            |
+| `crates/crux-script/src/validator.rs`      | Existing static checks                   | Become compatibility wrappers over compiler diagnostics                   |
+| `crates/crux-script/src/schema.rs`         | YAML DTOs                                | Add optional pipeline and target input schemas                            |
+| `crates/crux-script/src/expr.rs`           | Runtime expression parser/evaluator      | Split parsing from evaluation and execute typed expressions               |
+| `crates/crux-script/src/resolve.rs`        | Cruxfile target DAG                      | Feed complete target order into Cruxfile compilation                      |
+| `crates/crux-script/src/output.rs`         | Pipeline introspection                   | Traverse typed IR where executor resolution is required                   |
+| `crates/crux-script/src/lib.rs`            | Public facade                            | Export schemas, compiler, typed IR, and redesigned runner API             |
+| `crates/crux-cli/src/bin/crux/main.rs`     | CLI arguments                            | Add first-class `check` command and shared strict semantics               |
+| `crates/crux-cli/src/bin/crux/check.rs`    | Validation command                       | Compile files with the same registry and options as execution             |
+| `crates/crux-cli/src/bin/crux/run.rs`      | Execution composition root               | Compile all pipelines or targets before executing any target              |
+| `crates/crux-cli/src/bin/crux/registry.rs` | Registry composition                     | Remove successful fallback stubs and process exits                        |
+| `crates/crux-plugin/src/protocol.rs`       | Plugin wire declarations                 | Add optional serialized handler metadata                                  |
+| `crates/crux-plugin/src/host.rs`           | Plugin declaration storage               | Retain complete declarations rather than names alone                      |
+| `crates/crux-plugin/src/bridge.rs`         | Plugin adapter                           | Register plugin-backed `StepRunner` implementations                       |
+| `CONFORMANCE.md`                           | Normative pipeline contract              | Replace stale expression and validation requirements                      |
+| `crates/crux-script/ARCHITECTURE.md`       | Script architecture reference            | Document compile and typed-execution layers                               |
+| `crates/crux-script/README.md`             | Public usage                             | Show compile, contracts, and compiled execution                           |
 
 All registration modules must add complete contracts:
 
@@ -113,7 +113,7 @@ crux-script
     +-- crux-plugin
     +-- crux-baml
     +-- crux-agentic
-    +-- crux-cli
+    +-- crux-dsl-cli
     +-- crux facade (script feature)
 ```
 
@@ -122,21 +122,21 @@ crux-script
 - `crux-stdlib`, `crux-agentic`, and `crux-baml` implement adapters and declare contracts using
   `crux-script` types.
 - `crux-plugin` already depends on `crux-script`; adding serialized metadata creates no cycle.
-- `crux-cli` remains the composition root that loads built-ins and plugins before compilation.
+- `crux-dsl-cli` remains the composition root that loads built-ins and plugins before compilation.
 - The typed IR clones `Arc<dyn StepRunner>` values from the registry and is runtime-only.
 
 ### Existing Coverage
 
-| Test area | Current coverage | Required addition |
-| --- | --- | --- |
-| `crates/crux-script/tests/validation.rs` | Handler args, duplicates, routes, budgets | Recursive types, scope, references, strictness, and control-flow types |
-| `crates/crux-script/src/registry.rs` tests | Closure registration and usage accounting | Contract/runner atomicity and dynamic legacy adapters |
-| `crates/crux-script` integration tests | Raw DTO execution for all combinators | Compile-then-execute parity and inability to bypass compilation |
-| `crates/crux-agentic/tests/register_all.rs` | Built-in registration presence | Every built-in has a complete contract |
-| `crates/crux-plugin/tests/protocol.rs` | Declaration round trips | Old declaration compatibility and contract round trips |
-| `crates/crux-plugin/tests/bridge.rs` | Plugin invocation | Contract-bearing plugin runner registration |
-| CLI integration tests | Current `--strict` handler checks | Shared check/run diagnostics and exit behavior |
-| `examples/**/*.crux` | Parse and selected execution coverage | Strict compilation sweep |
+| Test area                                   | Current coverage                          | Required addition                                                      |
+| ------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+| `crates/crux-script/tests/validation.rs`    | Handler args, duplicates, routes, budgets | Recursive types, scope, references, strictness, and control-flow types |
+| `crates/crux-script/src/registry.rs` tests  | Closure registration and usage accounting | Contract/runner atomicity and dynamic legacy adapters                  |
+| `crates/crux-script` integration tests      | Raw DTO execution for all combinators     | Compile-then-execute parity and inability to bypass compilation        |
+| `crates/crux-agentic/tests/register_all.rs` | Built-in registration presence            | Every built-in has a complete contract                                 |
+| `crates/crux-plugin/tests/protocol.rs`      | Declaration round trips                   | Old declaration compatibility and contract round trips                 |
+| `crates/crux-plugin/tests/bridge.rs`        | Plugin invocation                         | Contract-bearing plugin runner registration                            |
+| CLI integration tests                       | Current `--strict` handler checks         | Shared check/run diagnostics and exit behavior                         |
+| `examples/**/*.crux`                        | Parse and selected execution coverage     | Strict compilation sweep                                               |
 
 Coverage gaps confirmed by the current tree:
 
@@ -151,14 +151,14 @@ Coverage gaps confirmed by the current tree:
 
 ### Reference Patterns
 
-| File | Pattern to Follow |
-| --- | --- |
-| `crates/crux-script/src/schema.rs` | Recursive YAML DTOs and serde conventions |
-| `crates/crux-script/src/validator.rs` | Aggregated Miette diagnostics |
-| `crates/crux-script/src/registry.rs` | Boxed object-safe async callables and atomic registration helpers |
-| `crates/crux-script/src/resolve.rs` | Whole-graph target validation before target execution |
-| `crates/crux-runtime/src/context.rs` | Object-safe port with concrete runtime adapter |
-| `crates/crux-plugin/src/protocol.rs` | Serializable plugin declaration boundary |
+| File                                  | Pattern to Follow                                                 |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `crates/crux-script/src/schema.rs`    | Recursive YAML DTOs and serde conventions                         |
+| `crates/crux-script/src/validator.rs` | Aggregated Miette diagnostics                                     |
+| `crates/crux-script/src/registry.rs`  | Boxed object-safe async callables and atomic registration helpers |
+| `crates/crux-script/src/resolve.rs`   | Whole-graph target validation before target execution             |
+| `crates/crux-runtime/src/context.rs`  | Object-safe port with concrete runtime adapter                    |
+| `crates/crux-plugin/src/protocol.rs`  | Serializable plugin declaration boundary                          |
 
 ### Context Risks
 
@@ -184,7 +184,7 @@ Coverage gaps confirmed by the current tree:
   container, database, analysis, CI, review, and triage handlers.
 - **Plugin adapter**: `crux-plugin` transports contracts and adapts subprocess invocation into
   `StepRunner`.
-- **Composition and presentation**: `crux-cli` assembles the registry, selects compile options,
+- **Composition and presentation**: `crux-dsl-cli` assembles the registry, selects compile options,
   and renders diagnostics.
 
 No new crate or external dependency is introduced.
@@ -210,7 +210,7 @@ checks that static analysis cannot prove.
 The design is implemented in three architecture-safe phases on one branch:
 
 1. `crux-script`: schemas, contracts, `StepRunner`, compiler, typed IR, and runner conversion.
-2. `crux-cli` and `crux-plugin`: shared compile entry points, strict CLI behavior, and plugin
+2. `crux-dsl-cli` and `crux-plugin`: shared compile entry points, strict CLI behavior, and plugin
    metadata transport.
 3. `crux-stdlib`, `crux-agentic`, and `crux-baml`: complete built-in contract migration and strict
    example conformance.
@@ -892,7 +892,7 @@ pub struct HandlerDecl {
 - **Plugin adapter**: `crux-plugin::bridge` implements `StepRunner` through `PluginHost`.
 - **Compiler domain**: `crux-script::compiler` depends only on `HandlerRegistry` contracts and
   parsed DTOs, never concrete infrastructure crates.
-- **Presentation adapter**: `crux-cli` translates compilation diagnostics into human or machine
+- **Presentation adapter**: `crux-dsl-cli` translates compilation diagnostics into human or machine
   output and exit codes.
 
 ## Migration Strategy
@@ -929,15 +929,15 @@ pub struct HandlerDecl {
 ## Risk
 
 - [x] **Breaking public API**: `StepRunner` changes shape; `StepRunnerRegistry` and the null runner
-  types are removed; handler lookup changes from callable closures to runner objects.
+      types are removed; handler lookup changes from callable closures to runner objects.
 - [x] **Behavioral change**: normal execution no longer substitutes successful stubs for unknown
-  handlers or agents.
+      handlers or agents.
 - [x] **Serialization change**: pipeline and plugin DTOs gain optional fields with serde defaults;
-  existing documents remain decodable.
+      existing documents remain decodable.
 - [x] **Wire compatibility risk**: new plugin metadata is optional, but plugins using it must share
-  the same tagged `ValueSchema` representation.
+      the same tagged `ValueSchema` representation.
 - [x] **Contract accuracy risk**: incorrect built-in schemas can reject valid values or admit invalid
-  ones; registration completeness and runtime contract tests are release gates.
+      ones; registration completeness and runtime contract tests are release gates.
 - [x] **Scope risk**: adapter migration spans six crates, mitigated by three bounded delivery phases.
 - [ ] **Circular dependency**: none introduced; `crux-script` remains below all concrete adapters.
 - [ ] **New external dependency**: none.

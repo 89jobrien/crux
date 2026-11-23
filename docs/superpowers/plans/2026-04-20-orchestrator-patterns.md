@@ -1314,7 +1314,7 @@ fn harness_generates_default() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux harness_macro`
+Run: `cargo nextest run -p crux-dsl harness_macro`
 Expected: compilation error — no `harness` attribute
 
 - [ ] **Step 3: Write the macro expansion**
@@ -1407,7 +1407,7 @@ pub fn harness(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p crux harness_macro`
+Run: `cargo nextest run -p crux-dsl harness_macro`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
@@ -1472,7 +1472,7 @@ async fn evolve_macro_runs_function() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo nextest run -p crux evolve_macro`
+Run: `cargo nextest run -p crux-dsl evolve_macro`
 Expected: compilation error — no `evolve` attribute
 
 - [ ] **Step 3: Write the macro expansion**
@@ -1538,7 +1538,7 @@ pub fn evolve(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo nextest run -p crux evolve_macro`
+Run: `cargo nextest run -p crux-dsl evolve_macro`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**

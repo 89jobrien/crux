@@ -22,13 +22,13 @@ This design decouples metadata into layers:
 
 ### Coupling Points
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Validation logic embedded in types | `ValueSchema::validate_at()` | Can't skip validation, can't customize |
-| Serde attributes hardcoded | `#[serde(tag = "type", ...)]` | Locked to one serialization format |
-| Error types tied to validators | `SchemaViolation` defined with validator | Can't change error representation |
-| Conversion logic in domain | `ArgType::from(ValueSchema)` | Business rules coupled to type system |
-| Recursive validation deeply nested | `validate()` method | Hard to test, hard to extend |
+| Issue                              | Location                                 | Impact                                 |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------- |
+| Validation logic embedded in types | `ValueSchema::validate_at()`             | Can't skip validation, can't customize |
+| Serde attributes hardcoded         | `#[serde(tag = "type", ...)]`            | Locked to one serialization format     |
+| Error types tied to validators     | `SchemaViolation` defined with validator | Can't change error representation      |
+| Conversion logic in domain         | `ArgType::from(ValueSchema)`             | Business rules coupled to type system  |
+| Recursive validation deeply nested | `validate()` method                      | Hard to test, hard to extend           |
 
 ### Example: ValueSchema
 
@@ -59,6 +59,7 @@ impl ValueSchema {
 ```
 
 Problems:
+
 - Can't use `ValueSchema` without `SchemaViolation`
 - Can't validate differently (e.g., lenient vs strict mode)
 - Can't test validators independently
@@ -153,6 +154,7 @@ pub struct HandlerMetadata {
 ```
 
 **Key principles**:
+
 - No serde attributes (serialization is an adapter concern)
 - No validation methods (validation is a port)
 - No embedded error types (errors defined in validators)
@@ -208,6 +210,7 @@ pub trait MetadataBuilder {
 ```
 
 **Benefits**:
+
 - Multiple validators can coexist (strict, lenient, custom)
 - Error types decoupled from domain
 - Easy to test with mock validators
@@ -483,7 +486,7 @@ impl MetadataContext {
 1. Update `load()` to return domain types instead of old metadata
 2. Add `MetadataContext` to public API
 3. Deprecate old validation methods
-4. Update all call sites in `crux-cli`, `crux-agentic`, etc.
+4. Update all call sites in `crux-dsl-cli`, `crux-agentic`, etc.
 
 ### Phase 5: Remove Old Code (Cleanup)
 
@@ -497,13 +500,13 @@ impl MetadataContext {
 
 ### SOLID Principles
 
-| Principle | Benefit |
-|-----------|---------|
-| **SRP** | Domain has one reason to change (structure); validators have one reason (logic); serializers have one reason (format) |
-| **OCP** | Add new validators without modifying domain or serializers |
-| **LSP** | Any `SchemaValidator` can replace another |
-| **ISP** | Validators only depend on methods they use (not full domain) |
-| **DIP** | Domain doesn't depend on validators; validators depend on domain trait |
+| Principle | Benefit                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------- |
+| **SRP**   | Domain has one reason to change (structure); validators have one reason (logic); serializers have one reason (format) |
+| **OCP**   | Add new validators without modifying domain or serializers                                                            |
+| **LSP**   | Any `SchemaValidator` can replace another                                                                             |
+| **ISP**   | Validators only depend on methods they use (not full domain)                                                          |
+| **DIP**   | Domain doesn't depend on validators; validators depend on domain trait                                                |
 
 ### Testability
 

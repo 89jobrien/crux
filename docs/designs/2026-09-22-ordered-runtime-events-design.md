@@ -14,28 +14,28 @@ Use `Emission` as the canonical payload inside an ordered `RuntimeEvent` envelop
 
 ### Files to Modify
 
-| File | Purpose | Change |
-| --- | --- | --- |
-| `crates/crux-types/src/emission.rs` | Canonical payload and sink adapters | Add the ordered envelope and filter; make sinks consume it |
-| `crates/crux-domain/src/event.rs` | Legacy step event API | Add lossless conversion into `Emission` |
-| `crates/crux-domain/src/pipeline.rs` | Subscriber fan-out | Sequence and publish `RuntimeEvent` values |
-| `crates/crux-domain/Cargo.toml` | Domain dependencies | Add the existing workspace `crux-types` dependency |
-| `crates/crux-runtime/src/ctx.rs` | Runtime recording | Emit canonical `Emission` values through the ordered sender |
-| `crates/crux-runtime/src/event_log.rs` | Durable event storage | Persist and filter the same `RuntimeEvent` values |
-| `crates/crux-runtime/src/event_sink.rs` | Runtime event tests | Replace fragmented-surface tests with ordered-stream tests |
-| `crates/crux-runtime/src/observability.rs` | JSONL export | Serialize `RuntimeEvent` records |
-| `crates/crux-runtime/src/lib.rs` | Public runtime facade | Re-export the unified event API |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI arguments | Add an explicit event JSONL path option |
-| `crates/crux-cli/src/bin/crux/run.rs` | CLI execution output | Persist canonical runtime event JSONL |
-| `crates/crux/tests/substrate_integration.rs` | Cross-crate wiring | Assert runtime/subscriber ordering |
-| `crates/crux-runtime/TODO.md` | Runtime backlog | Mark the unified event stream item complete |
+| File                                         | Purpose                             | Change                                                      |
+| -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------- |
+| `crates/crux-types/src/emission.rs`          | Canonical payload and sink adapters | Add the ordered envelope and filter; make sinks consume it  |
+| `crates/crux-domain/src/event.rs`            | Legacy step event API               | Add lossless conversion into `Emission`                     |
+| `crates/crux-domain/src/pipeline.rs`         | Subscriber fan-out                  | Sequence and publish `RuntimeEvent` values                  |
+| `crates/crux-domain/Cargo.toml`              | Domain dependencies                 | Add the existing workspace `crux-types` dependency          |
+| `crates/crux-runtime/src/ctx.rs`             | Runtime recording                   | Emit canonical `Emission` values through the ordered sender |
+| `crates/crux-runtime/src/event_log.rs`       | Durable event storage               | Persist and filter the same `RuntimeEvent` values           |
+| `crates/crux-runtime/src/event_sink.rs`      | Runtime event tests                 | Replace fragmented-surface tests with ordered-stream tests  |
+| `crates/crux-runtime/src/observability.rs`   | JSONL export                        | Serialize `RuntimeEvent` records                            |
+| `crates/crux-runtime/src/lib.rs`             | Public runtime facade               | Re-export the unified event API                             |
+| `crates/crux-cli/src/bin/crux/main.rs`       | CLI arguments                       | Add an explicit event JSONL path option                     |
+| `crates/crux-cli/src/bin/crux/run.rs`        | CLI execution output                | Persist canonical runtime event JSONL                       |
+| `crates/crux/tests/substrate_integration.rs` | Cross-crate wiring                  | Assert runtime/subscriber ordering                          |
+| `crates/crux-runtime/TODO.md`                | Runtime backlog                     | Mark the unified event stream item complete                 |
 
 ### Dependencies
 
 - `crux-domain` may depend on `crux-types`; `crux-types` has no dependency on `crux-domain`, so no
   cycle is introduced.
 - `crux-runtime` already depends on both crates and remains the integration boundary.
-- `crux-cli` already depends on `crux-runtime` and consumes its JSONL adapter.
+- `crux-dsl-cli` already depends on `crux-runtime` and consumes its JSONL adapter.
 
 ### Existing Coverage
 
@@ -57,7 +57,7 @@ Use `Emission` as the canonical payload inside an ordered `RuntimeEvent` envelop
   sink port because downstream tools need the wire contract without the runtime.
 - **`crux-domain`** owns the Tokio sequencing/fan-out pipeline and the legacy `StepEvent` adapter.
 - **`crux-runtime`** owns context recording, durable log adaptation, filtering, and trace export.
-- **`crux-cli`** only selects the JSONL file adapter; it does not define another event shape.
+- **`crux-dsl-cli`** only selects the JSONL file adapter; it does not define another event shape.
 
 The explicit issue outcome crosses these four existing layers; no new crate is introduced.
 

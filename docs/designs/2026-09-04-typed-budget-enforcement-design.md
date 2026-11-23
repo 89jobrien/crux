@@ -28,21 +28,21 @@ the completed invocation may exceed the configured amount once before execution 
 
 ### Files to Modify
 
-| File | Responsibility | Change |
-| --- | --- | --- |
-| `crates/crux-types/src/budget.rs` | Budget domain types and accounting | Add fixed-point USD and dimension-specific usage tracking |
-| `crates/crux-types/src/error.rs` | Serializable domain errors | Add unreported-cost, step-limit, and USD-limit diagnostics |
-| `crates/crux-runtime/src/context.rs` | Runtime context port | Add typed usage-recording methods |
-| `crates/crux-runtime/src/ctx.rs` | Runtime accounting implementation | Count invocations and record handler usage |
-| `crates/crux-script/src/handler_output.rs` | Handler execution boundary | Add outcome-plus-usage execution reports |
-| `crates/crux-script/src/registry.rs` | Handler adapter registration | Add explicit free and metered registration methods |
-| `crates/crux-script/src/runner.rs` | Pipeline orchestration | Translate schema budgets and enforce usage around invocations |
-| `crates/crux-script/src/schema.rs` | YAML adapter | Parse canonical `usd`/`steps` and compatibility fields |
-| `crates/crux-script/src/validator.rs` | Configuration diagnostics | Reject conflicting canonical and compatibility values |
-| `crates/crux-stdlib/src/shell.rs` | Free shell adapter | Explicitly report zero USD for shell handlers |
-| `crates/crux-cli/Cargo.toml` | CLI dependencies | Enable Miette diagnostics for `CruxErr` |
-| `crates/crux-cli/src/bin/crux/run.rs` | CLI composition root | Render Miette for human modes and JSON errors for `--json` |
-| `pipelines/crux/ci.crux` in Bamlish | CI pipeline configuration | Use `budget: { usd: 0.00, steps: 8 }` |
+| File                                       | Responsibility                     | Change                                                        |
+| ------------------------------------------ | ---------------------------------- | ------------------------------------------------------------- |
+| `crates/crux-types/src/budget.rs`          | Budget domain types and accounting | Add fixed-point USD and dimension-specific usage tracking     |
+| `crates/crux-types/src/error.rs`           | Serializable domain errors         | Add unreported-cost, step-limit, and USD-limit diagnostics    |
+| `crates/crux-runtime/src/context.rs`       | Runtime context port               | Add typed usage-recording methods                             |
+| `crates/crux-runtime/src/ctx.rs`           | Runtime accounting implementation  | Count invocations and record handler usage                    |
+| `crates/crux-script/src/handler_output.rs` | Handler execution boundary         | Add outcome-plus-usage execution reports                      |
+| `crates/crux-script/src/registry.rs`       | Handler adapter registration       | Add explicit free and metered registration methods            |
+| `crates/crux-script/src/runner.rs`         | Pipeline orchestration             | Translate schema budgets and enforce usage around invocations |
+| `crates/crux-script/src/schema.rs`         | YAML adapter                       | Parse canonical `usd`/`steps` and compatibility fields        |
+| `crates/crux-script/src/validator.rs`      | Configuration diagnostics          | Reject conflicting canonical and compatibility values         |
+| `crates/crux-stdlib/src/shell.rs`          | Free shell adapter                 | Explicitly report zero USD for shell handlers                 |
+| `crates/crux-cli/Cargo.toml`               | CLI dependencies                   | Enable Miette diagnostics for `CruxErr`                       |
+| `crates/crux-cli/src/bin/crux/run.rs`      | CLI composition root               | Render Miette for human modes and JSON errors for `--json`    |
+| `pipelines/crux/ci.crux` in Bamlish        | CI pipeline configuration          | Use `budget: { usd: 0.00, steps: 8 }`                         |
 
 ### Dependency Edges
 
@@ -50,7 +50,7 @@ the completed invocation may exceed the configured amount once before execution 
 - `crux-runtime` implements the existing `Context` port using the typed budget tracker.
 - `crux-script` adapts YAML values and handler execution reports into domain usage.
 - `crux-stdlib` opts shell handlers into the explicit-free adapter path.
-- `crux-cli` renders domain diagnostics; it does not define accounting policy.
+- `crux-dsl-cli` renders domain diagnostics; it does not define accounting policy.
 
 ### Existing Coverage
 
@@ -77,7 +77,7 @@ the completed invocation may exceed the configured amount once before execution 
 - **Runtime owner**: `crux-runtime` owns invocation timing and applies domain accounting.
 - **Port adapter owner**: `crux-script` owns handler execution reports and registry conveniences.
 - **Infrastructure adapter**: `crux-stdlib` marks known-free handlers explicitly.
-- **Presentation adapter**: `crux-cli` renders Miette or JSON diagnostics.
+- **Presentation adapter**: `crux-dsl-cli` renders Miette or JSON diagnostics.
 
 ## Public API
 
@@ -256,7 +256,7 @@ Compatibility behavior:
 
 ## CLI Error Adapter
 
-- `crux-cli` enables the `crux-types/miette` feature and adds its existing workspace `miette`
+- `crux-dsl-cli` enables the `crux-types/miette` feature and adds its existing workspace `miette`
   dependency.
 - Summary, verbose, and quiet modes render `miette::Report` to stderr once.
 - Human renderers do not append duplicate hand-formatted error blocks.

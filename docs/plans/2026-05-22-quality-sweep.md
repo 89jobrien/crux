@@ -87,61 +87,61 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 1. Add named constants at the top of `triage.rs` for all magic numbers:
 
-    ```rust
-    const PRIORITY_CRITICAL_WEIGHT: f64 = 4.0;
-    const PRIORITY_HIGH_WEIGHT: f64 = 3.0;
-    const PRIORITY_MEDIUM_WEIGHT: f64 = 2.0;
-    const PRIORITY_LOW_WEIGHT: f64 = 1.0;
+   ```rust
+   const PRIORITY_CRITICAL_WEIGHT: f64 = 4.0;
+   const PRIORITY_HIGH_WEIGHT: f64 = 3.0;
+   const PRIORITY_MEDIUM_WEIGHT: f64 = 2.0;
+   const PRIORITY_LOW_WEIGHT: f64 = 1.0;
 
-    const CONFIDENCE_BROKEN_SECRETS: f64 = 0.1;
-    const CONFIDENCE_DIRENV_UNLOADED: f64 = 0.3;
-    const CONFIDENCE_KEY_MISSING: f64 = 0.6;
-    const CONFIDENCE_HEALTHY_SECRETS: f64 = 0.95;
+   const CONFIDENCE_BROKEN_SECRETS: f64 = 0.1;
+   const CONFIDENCE_DIRENV_UNLOADED: f64 = 0.3;
+   const CONFIDENCE_KEY_MISSING: f64 = 0.6;
+   const CONFIDENCE_HEALTHY_SECRETS: f64 = 0.95;
 
-    const MAX_HOOK_OVERHEAD_MS: f64 = 5000.0;
+   const MAX_HOOK_OVERHEAD_MS: f64 = 5000.0;
 
-    const CONFIDENCE_ORPHANED_WORKTREES: f64 = 0.3;
-    const MANY_BRANCHES_THRESHOLD: usize = 5;
-    const CONFIDENCE_MANY_BRANCHES: f64 = 0.6;
-    const CONFIDENCE_CLEAN_STATE: f64 = 0.9;
+   const CONFIDENCE_ORPHANED_WORKTREES: f64 = 0.3;
+   const MANY_BRANCHES_THRESHOLD: usize = 5;
+   const CONFIDENCE_MANY_BRANCHES: f64 = 0.6;
+   const CONFIDENCE_CLEAN_STATE: f64 = 0.9;
 
-    const TODO_ISSUE_MATCH_THRESHOLD: f64 = 0.5;
-    ```
+   const TODO_ISSUE_MATCH_THRESHOLD: f64 = 0.5;
+   ```
 
 2. Extract each handler registration closure into a standalone async fn:
 
-    ```rust
-    pub fn register(registry: &mut HandlerRegistry) {
-        register_parse_repo_tags(registry);
-        register_score_urgency(registry);
-        register_deduplicate_intent(registry);
-        register_group_by_repo(registry);
-        register_diagnose_secrets(registry);
-        register_diagnose_hooks(registry);
-        register_diagnose_worktrees(registry);
-        register_sync_todo_issues(registry);
-        // ... one call per handler
-    }
+   ```rust
+   pub fn register(registry: &mut HandlerRegistry) {
+       register_parse_repo_tags(registry);
+       register_score_urgency(registry);
+       register_deduplicate_intent(registry);
+       register_group_by_repo(registry);
+       register_diagnose_secrets(registry);
+       register_diagnose_hooks(registry);
+       register_diagnose_worktrees(registry);
+       register_sync_todo_issues(registry);
+       // ... one call per handler
+   }
 
-    fn register_parse_repo_tags(registry: &mut HandlerRegistry) {
-        registry.handler_value_with_metadata(
-            HandlerMetadata::new(handlers::TRIAGE_PARSE_REPO_TAGS)
-                .describe("Extract repo tag from todo metadata.")
-                .risk(RiskLevel::Low)
-                .deterministic(true),
-            |input: Value| async move {
-                // existing body unchanged
-            },
-        );
-    }
-    ```
+   fn register_parse_repo_tags(registry: &mut HandlerRegistry) {
+       registry.handler_value_with_metadata(
+           HandlerMetadata::new(handlers::TRIAGE_PARSE_REPO_TAGS)
+               .describe("Extract repo tag from todo metadata.")
+               .risk(RiskLevel::Low)
+               .deterministic(true),
+           |input: Value| async move {
+               // existing body unchanged
+           },
+       );
+   }
+   ```
 
 3. Verify:
 
-    ```text
-    cargo nextest run -p crux-agentic -- triage  → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-agentic -- triage  → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 4. Run: `git branch --show-current`
    Commit: `git commit -m "refactor(crux-agentic): split triage.rs register() into per-handler fns"`
@@ -156,11 +156,11 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 1. Add named constants:
 
-    ```rust
-    const MAX_CONTEXT_LINES: usize = 5;
-    const NEXTEST_SECTION_PARTS: usize = 3;
-    const NEXTEST_INDEX_OFFSET: usize = 4;
-    ```
+   ```rust
+   const MAX_CONTEXT_LINES: usize = 5;
+   const NEXTEST_SECTION_PARTS: usize = 3;
+   const NEXTEST_INDEX_OFFSET: usize = 4;
+   ```
 
 2. Extract each handler registration into standalone fns (same pattern
    as Task 1): `register_compile_errors`, `register_clippy_violations`,
@@ -172,10 +172,10 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 4. Verify:
 
-    ```text
-    cargo nextest run -p crux-agentic -- ci  → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-agentic -- ci  → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 5. Commit: `git commit -m "refactor(crux-agentic): split ci.rs register() into per-handler fns"`
 
@@ -194,10 +194,10 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 2. Verify:
 
-    ```text
-    cargo nextest run -p crux-agentic -- review  → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-agentic -- review  → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 3. Commit: `git commit -m "refactor(crux-agentic): split review.rs register() into per-handler fns"`
 
@@ -211,13 +211,13 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 1. Add named constants:
 
-    ```rust
-    const SLOW_STEP_MULTIPLIER: f64 = 2.0;
-    const TOP_TOKEN_SPEND_COUNT: usize = 3;
-    const BUDGET_TIGHTEN_THRESHOLD: f64 = 0.8;
-    const BUDGET_TIGHTEN_FACTOR: f64 = 1.1;
-    const FLAKY_THRESHOLD: f64 = 0.4;
-    ```
+   ```rust
+   const SLOW_STEP_MULTIPLIER: f64 = 2.0;
+   const TOP_TOKEN_SPEND_COUNT: usize = 3;
+   const BUDGET_TIGHTEN_THRESHOLD: f64 = 0.8;
+   const BUDGET_TIGHTEN_FACTOR: f64 = 1.1;
+   const FLAKY_THRESHOLD: f64 = 0.4;
+   ```
 
 2. Extract each handler into standalone fns:
    `register_latency_profile`, `register_token_spend`,
@@ -227,10 +227,10 @@ splitting oversized modules. All changes are behaviour-preserving refactors.
 
 3. Verify:
 
-    ```text
-    cargo nextest run -p crux-agentic -- analysis  → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-agentic -- analysis  → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 4. Commit: `git commit -m "refactor(crux-agentic): split analysis.rs register() into per-handler fns"`
 
@@ -245,28 +245,28 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 1. Create module directory `crates/crux-agentic/src/bin/crux/`:
 
-    ```text
-    crates/crux-agentic/src/bin/crux/main.rs   ← Cli enum + main()
-    crates/crux-agentic/src/bin/crux/run.rs     ← cmd_run, cmd_run_cruxfile,
-                                                    cmd_run_dispatch, cmd_dry_run_*
-    crates/crux-agentic/src/bin/crux/plan.rs    ← cmd_plan, cmd_plan_rule,
-                                                    cmd_plan_llm, format_plan_output
-    crates/crux-agentic/src/bin/crux/check.rs   ← cmd_check
-    crates/crux-agentic/src/bin/crux/list.rs    ← cmd_list
-    crates/crux-agentic/src/bin/crux/util.rs    ← build_registry, print_trace,
-                                                    warn_missing_env, format_handoff
-    ```
+   ```text
+   crates/crux-agentic/src/bin/crux/main.rs   ← Cli enum + main()
+   crates/crux-agentic/src/bin/crux/run.rs     ← cmd_run, cmd_run_cruxfile,
+                                                   cmd_run_dispatch, cmd_dry_run_*
+   crates/crux-agentic/src/bin/crux/plan.rs    ← cmd_plan, cmd_plan_rule,
+                                                   cmd_plan_llm, format_plan_output
+   crates/crux-agentic/src/bin/crux/check.rs   ← cmd_check
+   crates/crux-agentic/src/bin/crux/list.rs    ← cmd_list
+   crates/crux-agentic/src/bin/crux/util.rs    ← build_registry, print_trace,
+                                                   warn_missing_env, format_handoff
+   ```
 
 2. Move each function to its submodule, keeping signatures identical.
    The `main.rs` dispatches to submodule functions.
 
 3. Verify:
 
-    ```text
-    cargo build -p crux-agentic --bin crux  → builds
-    cargo nextest run -p crux-agentic       → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo build -p crux-agentic --bin crux  → builds
+   cargo nextest run -p crux-agentic       → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 4. Commit: `git commit -m "refactor(crux-agentic): split bin/crux.rs into CLI submodules"`
 
@@ -292,11 +292,11 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 5. Verify:
 
-    ```text
-    cargo nextest run -p crux-runtime  → all green
-    cargo nextest run -p crux          → integration tests green
-    cargo clippy -p crux-runtime -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-runtime  → all green
+   cargo nextest run -p crux-dsl          → integration tests green
+   cargo clippy -p crux-runtime -- -D warnings  → zero warnings
+   ```
 
 6. Commit: `git commit -m "refactor(crux-runtime): extract CruxCtx helper methods from long fns"`
 
@@ -311,23 +311,23 @@ new `crates/crux-agentic/src/bin/crux/` directory
 1. Extract per-step-kind dispatch arms from `execute_step` (288 lines)
    into private helpers:
 
-    ```rust
-    async fn execute_plain_step(&self, ...) -> ...
-    async fn execute_pipe(&self, ...) -> ...
-    async fn execute_join_all(&self, ...) -> ...
-    async fn execute_route(&self, ...) -> ...
-    async fn execute_speculate(&self, ...) -> ...
-    async fn execute_delegate(&self, ...) -> ...
-    ```
+   ```rust
+   async fn execute_plain_step(&self, ...) -> ...
+   async fn execute_pipe(&self, ...) -> ...
+   async fn execute_join_all(&self, ...) -> ...
+   async fn execute_route(&self, ...) -> ...
+   async fn execute_speculate(&self, ...) -> ...
+   async fn execute_delegate(&self, ...) -> ...
+   ```
 
 2. `execute_step` becomes a match dispatcher calling these helpers.
 
 3. Verify:
 
-    ```text
-    cargo nextest run -p crux-script  → all green
-    cargo clippy -p crux-script -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-script  → all green
+   cargo clippy -p crux-script -- -D warnings  → zero warnings
+   ```
 
 4. Commit: `git commit -m "refactor(crux-script): extract execute_step dispatch into per-kind helpers"`
 
@@ -349,10 +349,10 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 4. Verify:
 
-    ```text
-    cargo nextest run -p crux-stdlib -- json  → all green
-    cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-stdlib -- json  → all green
+   cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
+   ```
 
 5. Commit: `git commit -m "refactor(crux-stdlib): extract jq engine and split json handler registrations"`
 
@@ -372,10 +372,10 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 3. Verify:
 
-    ```text
-    cargo nextest run -p crux-stdlib  → all green
-    cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-stdlib  → all green
+   cargo clippy -p crux-stdlib -- -D warnings  → zero warnings
+   ```
 
 4. Commit: `git commit -m "refactor(crux-stdlib): reduce parse_diff nesting and extract helper"`
 
@@ -390,26 +390,26 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 1. In `container.rs`, add constants:
 
-    ```rust
-    const DEFAULT_MEMORY_MB: u64 = 512;
-    const DEFAULT_CPU_MILLICORES: u64 = 1000;
-    const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
-    ```
+   ```rust
+   const DEFAULT_MEMORY_MB: u64 = 512;
+   const DEFAULT_CPU_MILLICORES: u64 = 1000;
+   const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
+   ```
 
 2. In `llm.rs`, add a single constant and use it in all three handlers:
 
-    ```rust
-    const DEFAULT_MAX_TOKENS: u32 = 1024;
-    ```
+   ```rust
+   const DEFAULT_MAX_TOKENS: u32 = 1024;
+   ```
 
 3. Replace all bare literals with the named constants.
 
 4. Verify:
 
-    ```text
-    cargo nextest run -p crux-agentic  → all green
-    cargo clippy -p crux-agentic -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-agentic  → all green
+   cargo clippy -p crux-agentic -- -D warnings  → zero warnings
+   ```
 
 5. Commit: `git commit -m "refactor(crux-agentic): name magic numbers in container + llm handlers"`
 
@@ -425,42 +425,42 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 1. In `evolution.rs`, add constants:
 
-    ```rust
-    const OOM_EXIT_CODE: i32 = 137;
-    const MIN_MEMORY_BUMP_MB: u64 = 128;
-    const MIN_MEMORY_BUMP_PRESSURE_MB: u64 = 64;
-    const MIN_TIMEOUT_BUMP_SECONDS: u64 = 30;
-    const DEFAULT_MEMORY_PRESSURE_THRESHOLD: f64 = 0.9;
-    const DEFAULT_TIMEOUT_PRESSURE_THRESHOLD: f64 = 0.9;
-    const DEFAULT_MEMORY_BUMP_FACTOR: f64 = 0.5;
-    const DEFAULT_TIMEOUT_BUMP_FACTOR: f64 = 0.5;
-    ```
+   ```rust
+   const OOM_EXIT_CODE: i32 = 137;
+   const MIN_MEMORY_BUMP_MB: u64 = 128;
+   const MIN_MEMORY_BUMP_PRESSURE_MB: u64 = 64;
+   const MIN_TIMEOUT_BUMP_SECONDS: u64 = 30;
+   const DEFAULT_MEMORY_PRESSURE_THRESHOLD: f64 = 0.9;
+   const DEFAULT_TIMEOUT_PRESSURE_THRESHOLD: f64 = 0.9;
+   const DEFAULT_MEMORY_BUMP_FACTOR: f64 = 0.5;
+   const DEFAULT_TIMEOUT_BUMP_FACTOR: f64 = 0.5;
+   ```
 
 2. In `comparison.rs`, add constants:
 
-    ```rust
-    const IMPROVEMENT_THRESHOLD: f64 = 0.05;
-    const REGRESSION_THRESHOLD: f64 = -0.05;
-    ```
+   ```rust
+   const IMPROVEMENT_THRESHOLD: f64 = 0.05;
+   const REGRESSION_THRESHOLD: f64 = -0.05;
+   ```
 
 3. In `metrics.rs`, add constants:
 
-    ```rust
-    const DEFAULT_CONFIDENCE_WEIGHT: f64 = 0.5;
-    const SUCCESS_RATE_WEIGHT: f64 = 0.6;
-    const CONFIDENCE_WEIGHT: f64 = 0.4;
-    ```
+   ```rust
+   const DEFAULT_CONFIDENCE_WEIGHT: f64 = 0.5;
+   const SUCCESS_RATE_WEIGHT: f64 = 0.6;
+   const CONFIDENCE_WEIGHT: f64 = 0.4;
+   ```
 
 4. Replace all bare literals with the named constants.
 
 5. Verify:
 
-    ```text
-    cargo nextest run -p crux-planner  → all green
-    cargo nextest run -p crux-improve  → all green
-    cargo clippy -p crux-planner -- -D warnings  → zero warnings
-    cargo clippy -p crux-improve -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo nextest run -p crux-planner  → all green
+   cargo nextest run -p crux-improve  → all green
+   cargo clippy -p crux-planner -- -D warnings  → zero warnings
+   cargo clippy -p crux-improve -- -D warnings  → zero warnings
+   ```
 
 6. Commit: `git commit -m "refactor(crux-planner,crux-improve): name magic numbers"`
 
@@ -491,11 +491,11 @@ new `crates/crux-agentic/src/bin/crux/` directory
 
 6. Verify:
 
-    ```text
-    cargo build --all-targets  → builds
-    cargo nextest run          → all green
-    cargo clippy -- -D warnings  → zero warnings
-    ```
+   ```text
+   cargo build --all-targets  → builds
+   cargo nextest run          → all green
+   cargo clippy -- -D warnings  → zero warnings
+   ```
 
 7. Commit: `git commit -m "chore: remove confirmed dead code across 5 crates"`
 

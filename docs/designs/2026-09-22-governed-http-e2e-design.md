@@ -33,14 +33,14 @@ The uncommitted V1 implementation currently lives in
 `/Users/joe/dev/crux/.worktrees/execution-envelope-v1` and must be reconciled onto current
 `develop` without replacing newer workspace or schema-split changes.
 
-| File | Purpose | Required Before Runtime Integration |
-| --- | --- | --- |
-| `Cargo.toml` | Workspace dependencies | Merge `base64`, `hex`, `jcs-admit`, and `sha2`; preserve current dependencies |
-| `crates/crux-types/Cargo.toml` | Wire dependencies and MSRV | Add V1 dependencies and independently verify Rust 1.85 |
-| `crates/crux-types/src/execution/mod.rs` | Envelope V1 contract | Land implementation, ceilings, result validation, and verifier accessors |
-| `crates/crux-types/src/lib.rs` | Public modules | Export `execution` without regressing `crux-schema` split |
-| `crates/crux-types/tests/execution_envelope.rs` | Contract suite | Land lifecycle, tamper, canonicalization, and golden-vector coverage |
-| `crates/crux-types/tests/fixtures/*.json` | Golden vectors | Preserve canonical record and authorization bytes |
+| File                                            | Purpose                    | Required Before Runtime Integration                                           |
+| ----------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------- |
+| `Cargo.toml`                                    | Workspace dependencies     | Merge `base64`, `hex`, `jcs-admit`, and `sha2`; preserve current dependencies |
+| `crates/crux-types/Cargo.toml`                  | Wire dependencies and MSRV | Add V1 dependencies and independently verify Rust 1.85                        |
+| `crates/crux-types/src/execution/mod.rs`        | Envelope V1 contract       | Land implementation, ceilings, result validation, and verifier accessors      |
+| `crates/crux-types/src/lib.rs`                  | Public modules             | Export `execution` without regressing `crux-schema` split                     |
+| `crates/crux-types/tests/execution_envelope.rs` | Contract suite             | Land lifecycle, tamper, canonicalization, and golden-vector coverage          |
+| `crates/crux-types/tests/fixtures/*.json`       | Golden vectors             | Preserve canonical record and authorization bytes                             |
 
 Required V1 API corrections:
 
@@ -84,29 +84,29 @@ impl ExecutionResultV1 {
 
 ### Files To Modify
 
-| File | Purpose | Change |
-| --- | --- | --- |
-| `Cargo.toml` | Shared dependencies | Add `ed25519-dalek` and `fs2` as workspace dependencies |
-| `Cargo.lock` | Dependency resolution | Record wire and crypto dependencies |
-| `crates/crux-runtime/src/governed_execution.rs` | Runtime orchestration | Add ports, staging values, errors, in-memory store, and executor |
-| `crates/crux-runtime/src/lib.rs` | Public modules | Export governed execution |
-| `crates/crux-runtime/src/types/mod.rs` | Wire re-export | Re-export `crux_types::execution` |
-| `crates/crux-runtime/tests/governed_execution.rs` | Port/orchestration tests | Cover ordering, persistence, denial, failures, and CAS |
-| `crates/crux-agentic/Cargo.toml` | Adapter dependencies/features | Add crypto dependency and `test-utils` feature |
-| `crates/crux-agentic/src/adapters/mod.rs` | Adapter exports | Export authorization, admission, store, and HTTP adapters |
-| `crates/crux-agentic/src/lib.rs` | Public modules/features | Export adapters and feature-gated `test_utils` |
-| `crates/crux-agentic/src/adapters/execution_authorization.rs` | Crypto adapter | Strict Ed25519 verification, audience, expiry, and trusted-key checks |
-| `crates/crux-agentic/src/adapters/execution_nonce.rs` | Replay adapter | Process-local nonce reservation, commit, and release |
-| `crates/crux-agentic/src/adapters/execution_admission.rs` | Admission adapter | Enforce requested, signed, executor-maximum capability containment |
-| `crates/crux-agentic/src/adapters/execution_store.rs` | Persistence adapter | Atomic JSON snapshot store with head-digest CAS |
-| `crates/crux-agentic/src/adapters/http_execution.rs` | Action adapter | Map signed capabilities and HTTP action input to staged execution |
-| `crates/crux-agentic/src/http.rs` | Shared transport | Extract bounded transport while preserving `http::request` behavior |
-| `crates/crux-agentic/src/test_utils/mod.rs` | Feature-gated test support | Export local server and deterministic fixture builders |
-| `crates/crux-agentic/src/test_utils/local_http.rs` | Local HTTP fixture | Serve deterministic endpoints and request counters |
-| `crates/crux-agentic/tests/http_execution.rs` | Adapter tests | Verify capability-derived network policy and evidence limits |
-| `crates/crux-agentic/examples/governed_http.rs` | Runnable demo | Exercise success, invalid signature, and admission denial |
-| `crates/crux/Cargo.toml` | Facade dev dependencies | Enable agentic test utilities and signing fixtures |
-| `crates/crux/tests/governed_http.rs` | Full E2E | Run governed executor through real local HTTP adapter and persistence |
+| File                                                          | Purpose                       | Change                                                                |
+| ------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| `Cargo.toml`                                                  | Shared dependencies           | Add `ed25519-dalek` and `fs2` as workspace dependencies               |
+| `Cargo.lock`                                                  | Dependency resolution         | Record wire and crypto dependencies                                   |
+| `crates/crux-runtime/src/governed_execution.rs`               | Runtime orchestration         | Add ports, staging values, errors, in-memory store, and executor      |
+| `crates/crux-runtime/src/lib.rs`                              | Public modules                | Export governed execution                                             |
+| `crates/crux-runtime/src/types/mod.rs`                        | Wire re-export                | Re-export `crux_types::execution`                                     |
+| `crates/crux-runtime/tests/governed_execution.rs`             | Port/orchestration tests      | Cover ordering, persistence, denial, failures, and CAS                |
+| `crates/crux-agentic/Cargo.toml`                              | Adapter dependencies/features | Add crypto dependency and `test-utils` feature                        |
+| `crates/crux-agentic/src/adapters/mod.rs`                     | Adapter exports               | Export authorization, admission, store, and HTTP adapters             |
+| `crates/crux-agentic/src/lib.rs`                              | Public modules/features       | Export adapters and feature-gated `test_utils`                        |
+| `crates/crux-agentic/src/adapters/execution_authorization.rs` | Crypto adapter                | Strict Ed25519 verification, audience, expiry, and trusted-key checks |
+| `crates/crux-agentic/src/adapters/execution_nonce.rs`         | Replay adapter                | Process-local nonce reservation, commit, and release                  |
+| `crates/crux-agentic/src/adapters/execution_admission.rs`     | Admission adapter             | Enforce requested, signed, executor-maximum capability containment    |
+| `crates/crux-agentic/src/adapters/execution_store.rs`         | Persistence adapter           | Atomic JSON snapshot store with head-digest CAS                       |
+| `crates/crux-agentic/src/adapters/http_execution.rs`          | Action adapter                | Map signed capabilities and HTTP action input to staged execution     |
+| `crates/crux-agentic/src/http.rs`                             | Shared transport              | Extract bounded transport while preserving `http::request` behavior   |
+| `crates/crux-agentic/src/test_utils/mod.rs`                   | Feature-gated test support    | Export local server and deterministic fixture builders                |
+| `crates/crux-agentic/src/test_utils/local_http.rs`            | Local HTTP fixture            | Serve deterministic endpoints and request counters                    |
+| `crates/crux-agentic/tests/http_execution.rs`                 | Adapter tests                 | Verify capability-derived network policy and evidence limits          |
+| `crates/crux-agentic/examples/governed_http.rs`               | Runnable demo                 | Exercise success, invalid signature, and admission denial             |
+| `crates/crux/Cargo.toml`                                      | Facade dev dependencies       | Enable agentic test utilities and signing fixtures                    |
+| `crates/crux/tests/governed_http.rs`                          | Full E2E                      | Run governed executor through real local HTTP adapter and persistence |
 
 ### Dependency Edges
 
@@ -126,13 +126,13 @@ the composition root for runtime and adapter implementations.
 
 ### Existing Coverage
 
-| File | Existing Coverage | Gap Filled Here |
-| --- | --- | --- |
-| `crux-types/tests/execution_envelope.rs` in V1 worktree | Wire lifecycle, canonical vectors, capability containment, tamper checks | Real signature and runtime emission remain absent |
-| `crates/crux-runtime/src/approval.rs` | Async port pattern | No execution authorization verifier |
-| `crates/crux-runtime/src/registry/backend.rs` | Async persistence/CAS pattern | No envelope snapshot store |
-| `crates/crux-agentic/tests/http.rs` | Ephemeral local HTTP server and handler bounds | Policy comes from request args, not signed capabilities |
-| `crates/crux/tests/substrate_integration.rs` | Facade-level runtime composition | No governed execution lifecycle |
+| File                                                    | Existing Coverage                                                        | Gap Filled Here                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `crux-types/tests/execution_envelope.rs` in V1 worktree | Wire lifecycle, canonical vectors, capability containment, tamper checks | Real signature and runtime emission remain absent       |
+| `crates/crux-runtime/src/approval.rs`                   | Async port pattern                                                       | No execution authorization verifier                     |
+| `crates/crux-runtime/src/registry/backend.rs`           | Async persistence/CAS pattern                                            | No envelope snapshot store                              |
+| `crates/crux-agentic/tests/http.rs`                     | Ephemeral local HTTP server and handler bounds                           | Policy comes from request args, not signed capabilities |
+| `crates/crux/tests/substrate_integration.rs`            | Facade-level runtime composition                                         | No governed execution lifecycle                         |
 
 ### Reference Patterns
 
@@ -719,7 +719,7 @@ cryptography. It is never exported in production prelude APIs.
 cargo nextest run -p crux-types --test execution_envelope
 cargo nextest run -p crux-runtime governed_execution
 cargo nextest run -p crux-agentic --features test-utils http_execution
-cargo nextest run -p crux --test governed_http
+cargo nextest run -p crux-dsl --test governed_http
 cargo run -p crux-agentic --example governed_http --features test-utils
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check

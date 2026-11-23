@@ -472,6 +472,7 @@ Planner (uses domain types), then EDDOS (uses Planner + recorder).
   ```
 
   Expected: compile error — `set_planner` not found on `CruxCtx`.
+
 - [ ] **Step 4: Add `CruxErr::Denied` variant**
 
   Edit `crates/crux-types/src/error.rs`. Find the `CruxErr` enum and add:
@@ -1031,6 +1032,7 @@ consumers are unaffected.
   ```
 
   Expected: compile error — `set_event_sender` not found.
+
 - [ ] **Step 4: Add `EventSender` field to `CruxCtx`**
 
   In `crates/crux-runtime/src/ctx.rs`:
@@ -1235,7 +1237,7 @@ consumers are unaffected.
 - [ ] **Step 3: Run integration tests**
 
   ```bash
-  cargo nextest run -p crux -- substrate_integration
+  cargo nextest run -p crux-dsl -- substrate_integration
   ```
 
   Expected: all 4 tests pass.

@@ -14,59 +14,59 @@ service implemented as a standalone `rust-script` from a runnable example script
 
 ### Files to Modify
 
-| File | Purpose | Changes Needed |
-| --- | --- | --- |
-| `crates/crux-types/src/step.rs` | Serializable step wire type | Add `StepOrigin` and `Step::origin`; test old/new JSON |
-| `crates/crux-types/src/testing.rs` | Shared step fixtures | Mark generated fixtures as live |
-| `crates/crux-runtime/src/recorder.rs` | Constructs live and replayed steps | Assign provenance at every recording path |
-| `crates/crux-runtime/src/ctx.rs` | Constructs synthetic/delegated steps | Mark direct step construction as live |
-| `crates/crux-runtime/src/speculation.rs` | Constructs speculative steps | Mark speculative records as live |
-| `crates/crux-runtime/src/replay.rs` | Replay behavior tests | Update fixtures and assert replay provenance |
-| `crates/crux-runtime/src/observability.rs` | JSONL and tracing export | Export step provenance |
-| `crates/crux-schema/src/crux_value.rs` | Presentation trace schema | Include provenance and migrate test fixtures |
-| `crates/crux-cli/src/bin/crux/output.rs` | Human run output | Render live and cached/replayed labels |
-| `crates/crux-cli/src/bin/crux/trace.rs` | Trace timeline explorer | Add the provenance column |
-| `crates/crux-cli/src/bin/crux/replay_debug.rs` | Detailed replay inspection | Print serialized provenance |
-| `crates/crux-cli/src/bin/crux/run.rs` | CLI rendering fixtures | Migrate step fixtures |
-| `crates/crux-improve/src/lib.rs` | Analysis test fixtures | Migrate step fixtures |
-| `examples/fault_resume.crux` | Three-stage HTTP pipeline | Define context, evaluation, and finalization requests |
-| `examples/fault_resume_server.rs` | Local HTTP service | Serve deterministic endpoints and persist request counts |
-| `examples/fault_resume.sh` | Demo orchestrator | Run fault, inspect trace, replay, and verify counts |
+| File                                           | Purpose                              | Changes Needed                                           |
+| ---------------------------------------------- | ------------------------------------ | -------------------------------------------------------- |
+| `crates/crux-types/src/step.rs`                | Serializable step wire type          | Add `StepOrigin` and `Step::origin`; test old/new JSON   |
+| `crates/crux-types/src/testing.rs`             | Shared step fixtures                 | Mark generated fixtures as live                          |
+| `crates/crux-runtime/src/recorder.rs`          | Constructs live and replayed steps   | Assign provenance at every recording path                |
+| `crates/crux-runtime/src/ctx.rs`               | Constructs synthetic/delegated steps | Mark direct step construction as live                    |
+| `crates/crux-runtime/src/speculation.rs`       | Constructs speculative steps         | Mark speculative records as live                         |
+| `crates/crux-runtime/src/replay.rs`            | Replay behavior tests                | Update fixtures and assert replay provenance             |
+| `crates/crux-runtime/src/observability.rs`     | JSONL and tracing export             | Export step provenance                                   |
+| `crates/crux-schema/src/crux_value.rs`         | Presentation trace schema            | Include provenance and migrate test fixtures             |
+| `crates/crux-cli/src/bin/crux/output.rs`       | Human run output                     | Render live and cached/replayed labels                   |
+| `crates/crux-cli/src/bin/crux/trace.rs`        | Trace timeline explorer              | Add the provenance column                                |
+| `crates/crux-cli/src/bin/crux/replay_debug.rs` | Detailed replay inspection           | Print serialized provenance                              |
+| `crates/crux-cli/src/bin/crux/run.rs`          | CLI rendering fixtures               | Migrate step fixtures                                    |
+| `crates/crux-improve/src/lib.rs`               | Analysis test fixtures               | Migrate step fixtures                                    |
+| `examples/fault_resume.crux`                   | Three-stage HTTP pipeline            | Define context, evaluation, and finalization requests    |
+| `examples/fault_resume_server.rs`              | Local HTTP service                   | Serve deterministic endpoints and persist request counts |
+| `examples/fault_resume.sh`                     | Demo orchestrator                    | Run fault, inspect trace, replay, and verify counts      |
 
 ### Dependencies
 
-| File | Relationship |
-| --- | --- |
-| `crates/crux-runtime/src/lib.rs` | Re-exports step wire types through the prelude |
-| `crates/crux-script/src/runner.rs` | Uses `CruxCtx` replay and handler invocation paths unchanged |
-| `crates/crux-agentic/src/http.rs` | Existing policy-aware HTTP adapter used by the demo |
-| `crates/crux-cli/src/bin/crux/run.rs` | Loads and saves replay traces through serde |
+| File                                  | Relationship                                                 |
+| ------------------------------------- | ------------------------------------------------------------ |
+| `crates/crux-runtime/src/lib.rs`      | Re-exports step wire types through the prelude               |
+| `crates/crux-script/src/runner.rs`    | Uses `CruxCtx` replay and handler invocation paths unchanged |
+| `crates/crux-agentic/src/http.rs`     | Existing policy-aware HTTP adapter used by the demo          |
+| `crates/crux-cli/src/bin/crux/run.rs` | Loads and saves replay traces through serde                  |
 
 ### Test Coverage
 
-| Test location | Covers |
-| --- | --- |
-| `crates/crux-types/src/step.rs` | Step wire round trips and legacy defaulting |
-| `crates/crux-runtime/src/ctx.rs` | Live and replayed step recording |
-| `crates/crux-script/src/runner.rs` | Partial replay provenance, short-circuiting, and live resume |
-| `crates/crux-cli/src/bin/crux/output.rs` | Human provenance labels |
-| `crates/crux-cli/tests/trace_cli.rs` | Serialized trace timeline output |
-| `crates/crux-cli/tests/replay_debug_cli.rs` | Detailed trace inspection output |
+| Test location                               | Covers                                                       |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| `crates/crux-types/src/step.rs`             | Step wire round trips and legacy defaulting                  |
+| `crates/crux-runtime/src/ctx.rs`            | Live and replayed step recording                             |
+| `crates/crux-script/src/runner.rs`          | Partial replay provenance, short-circuiting, and live resume |
+| `crates/crux-cli/src/bin/crux/output.rs`    | Human provenance labels                                      |
+| `crates/crux-cli/tests/trace_cli.rs`        | Serialized trace timeline output                             |
+| `crates/crux-cli/tests/replay_debug_cli.rs` | Detailed trace inspection output                             |
 
 ### Reference Patterns
 
-| File | Pattern to Follow |
-| --- | --- |
-| `crates/crux-types/src/step.rs` | Serde-compatible wire enums and defaults |
-| `crates/crux-runtime/src/recorder.rs` | Centralized live/replay record construction |
-| `crates/crux-cli/src/bin/crux/output.rs` | Summary and verbose row formatting |
-| `examples/plan_and_run.sh` | Repository-root-aware runnable demo script |
+| File                                     | Pattern to Follow                           |
+| ---------------------------------------- | ------------------------------------------- |
+| `crates/crux-types/src/step.rs`          | Serde-compatible wire enums and defaults    |
+| `crates/crux-runtime/src/recorder.rs`    | Centralized live/replay record construction |
+| `crates/crux-cli/src/bin/crux/output.rs` | Summary and verbose row formatting          |
+| `examples/plan_and_run.sh`               | Repository-root-aware runnable demo script  |
 
 ## Crate Ownership
 
 - **Owner crate**: `crux-types` owns provenance because it is serialized trace vocabulary.
 - **Runtime integration**: `crux-runtime` assigns provenance when recording a step.
-- **Presentation integration**: `crux-schema` and `crux-cli` expose provenance to inspectors and
+- **Presentation integration**: `crux-schema` and `crux-dsl-cli` expose provenance to inspectors and
   humans.
 - **Mechanical consumers**: `crux-improve` only requires fixture migration.
 

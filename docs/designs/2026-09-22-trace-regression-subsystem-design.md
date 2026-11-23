@@ -12,66 +12,66 @@ Build a full regression subsystem with immutable content-addressed artifacts, gu
 
 ### Files to Modify
 
-| File | Purpose | Changes Needed |
-| --- | --- | --- |
-| `Cargo.toml` | Workspace packages and dependencies | Register `crux-regression`, `sha2`, and `fs2` workspace dependencies |
-| `Cargo.lock` | Resolved dependency graph | Regenerate after adding the crate and dependencies |
-| `crates/crux-improve/src/lib.rs` | Pure trace comparison and evaluation | Add structural policies, invariant selectors, serializable latency semantics, and combined evaluation |
-| `crates/crux-improve/README.md` | Improvement API documentation | Document structural regression evaluation and latency representation |
-| `crates/crux-cli/Cargo.toml` | CLI dependencies | Add `crux-regression` |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI argument parsing and dispatch | Add nested `regress` commands |
-| `crates/crux-cli/src/bin/crux/regress.rs` | Regression CLI adapter | Load policies and traces, open the store, render reports, and set exit codes |
-| `crates/crux-cli/tests/regress_cli.rs` | CLI contract tests | Cover ingest, promotion, evaluation, diff, history, and failures |
-| `.github/workflows/nightly.yml` | Nightly release gate | Run an explicit credential-free trace evaluation fixture |
-| `examples/fixtures/regression/trace.json` | Stable offline baseline fixture | Provide the nightly golden artifact |
-| `examples/fixtures/regression/candidate.json` | Stable offline candidate fixture | Exercise evaluation independently from baseline promotion |
-| `examples/fixtures/regression/policy.json` | Stable offline policy fixture | Provide strict deterministic thresholds for nightly evaluation |
+| File                                          | Purpose                              | Changes Needed                                                                                        |
+| --------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `Cargo.toml`                                  | Workspace packages and dependencies  | Register `crux-regression`, `sha2`, and `fs2` workspace dependencies                                  |
+| `Cargo.lock`                                  | Resolved dependency graph            | Regenerate after adding the crate and dependencies                                                    |
+| `crates/crux-improve/src/lib.rs`              | Pure trace comparison and evaluation | Add structural policies, invariant selectors, serializable latency semantics, and combined evaluation |
+| `crates/crux-improve/README.md`               | Improvement API documentation        | Document structural regression evaluation and latency representation                                  |
+| `crates/crux-cli/Cargo.toml`                  | CLI dependencies                     | Add `crux-regression`                                                                                 |
+| `crates/crux-cli/src/bin/crux/main.rs`        | CLI argument parsing and dispatch    | Add nested `regress` commands                                                                         |
+| `crates/crux-cli/src/bin/crux/regress.rs`     | Regression CLI adapter               | Load policies and traces, open the store, render reports, and set exit codes                          |
+| `crates/crux-cli/tests/regress_cli.rs`        | CLI contract tests                   | Cover ingest, promotion, evaluation, diff, history, and failures                                      |
+| `.github/workflows/nightly.yml`               | Nightly release gate                 | Run an explicit credential-free trace evaluation fixture                                              |
+| `examples/fixtures/regression/trace.json`     | Stable offline baseline fixture      | Provide the nightly golden artifact                                                                   |
+| `examples/fixtures/regression/candidate.json` | Stable offline candidate fixture     | Exercise evaluation independently from baseline promotion                                             |
+| `examples/fixtures/regression/policy.json`    | Stable offline policy fixture        | Provide strict deterministic thresholds for nightly evaluation                                        |
 
 ### Files to Add
 
-| File | Purpose |
-| --- | --- |
-| `crates/crux-regression/Cargo.toml` | Regression crate manifest |
-| `crates/crux-regression/README.md` | Public subsystem usage and storage contract |
-| `crates/crux-regression/AGENTS.md` | Crate ownership rules |
-| `crates/crux-regression/src/lib.rs` | Public exports |
-| `crates/crux-regression/src/artifact.rs` | IDs, versioned envelopes, canonical digesting |
-| `crates/crux-regression/src/error.rs` | Regression storage and orchestration errors |
-| `crates/crux-regression/src/harness.rs` | Baseline lifecycle and evaluation orchestration |
-| `crates/crux-regression/src/report.rs` | Persisted report envelope |
-| `crates/crux-regression/src/store/mod.rs` | `RegressionStore` port and conformance helpers |
-| `crates/crux-regression/src/store/file.rs` | Locked atomic filesystem adapter |
-| `crates/crux-regression/src/store/memory.rs` | In-memory adapter |
-| `crates/crux-regression/tests/store_conformance.rs` | Shared adapter contract tests |
+| File                                                | Purpose                                         |
+| --------------------------------------------------- | ----------------------------------------------- |
+| `crates/crux-regression/Cargo.toml`                 | Regression crate manifest                       |
+| `crates/crux-regression/README.md`                  | Public subsystem usage and storage contract     |
+| `crates/crux-regression/AGENTS.md`                  | Crate ownership rules                           |
+| `crates/crux-regression/src/lib.rs`                 | Public exports                                  |
+| `crates/crux-regression/src/artifact.rs`            | IDs, versioned envelopes, canonical digesting   |
+| `crates/crux-regression/src/error.rs`               | Regression storage and orchestration errors     |
+| `crates/crux-regression/src/harness.rs`             | Baseline lifecycle and evaluation orchestration |
+| `crates/crux-regression/src/report.rs`              | Persisted report envelope                       |
+| `crates/crux-regression/src/store/mod.rs`           | `RegressionStore` port and conformance helpers  |
+| `crates/crux-regression/src/store/file.rs`          | Locked atomic filesystem adapter                |
+| `crates/crux-regression/src/store/memory.rs`        | In-memory adapter                               |
+| `crates/crux-regression/tests/store_conformance.rs` | Shared adapter contract tests                   |
 
 ### Dependencies
 
 ```text
-crux-types <- crux-schema <- crux-improve <- crux-regression <- crux-cli
+crux-types <- crux-schema <- crux-improve <- crux-regression <- crux-dsl-cli
 ```
 
 - `crux-improve` remains the owner of pure comparison, diff, metric, and policy types.
 - `crux-regression` owns persistence, baseline lifecycle, orchestration, and report history.
-- `crux-cli` is only the composition and presentation boundary.
-- `crux-regression` must not depend on `crux-runtime`, `crux-script`, `crux-agentic`, or `crux-cli`.
+- `crux-dsl-cli` is only the composition and presentation boundary.
+- `crux-regression` must not depend on `crux-runtime`, `crux-script`, `crux-agentic`, or `crux-dsl-cli`.
 
 ### Existing Coverage and Reference Patterns
 
-| File | Pattern to Follow |
-| --- | --- |
-| `crates/crux-improve/src/lib.rs` | Existing `EvalHarness`, thresholds, metrics, and reports |
-| `crates/crux-runtime/src/replay.rs` | Replay matching and property-test conventions |
-| `crates/crux-task/tests/backend_conformance.rs` | Reusable adapter conformance suite |
-| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | Isolated `HOME` and subprocess CLI assertions |
-| `crates/crux-cli/src/bin/crux/replay_debug.rs` | Raw `Crux<Value>` trace loading |
-| `crates/crux-planner/tests/llm_planner_snapshots.rs` | Focused `insta` snapshot conventions |
-| `.github/workflows/nightly.yml` | Existing credential-free regression job |
+| File                                                  | Pattern to Follow                                        |
+| ----------------------------------------------------- | -------------------------------------------------------- |
+| `crates/crux-improve/src/lib.rs`                      | Existing `EvalHarness`, thresholds, metrics, and reports |
+| `crates/crux-runtime/src/replay.rs`                   | Replay matching and property-test conventions            |
+| `crates/crux-task/tests/backend_conformance.rs`       | Reusable adapter conformance suite                       |
+| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | Isolated `HOME` and subprocess CLI assertions            |
+| `crates/crux-cli/src/bin/crux/replay_debug.rs`        | Raw `Crux<Value>` trace loading                          |
+| `crates/crux-planner/tests/llm_planner_snapshots.rs`  | Focused `insta` snapshot conventions                     |
+| `.github/workflows/nightly.yml`                       | Existing credential-free regression job                  |
 
 ## Crate Ownership
 
 - **Pure evaluation owner**: `crux-improve` -- trace projections, structural diffing, invariant evaluation, metric thresholds, and combined pass/fail decisions.
 - **Lifecycle owner**: `crux-regression` -- immutable artifacts, baseline references, CAS promotion, evaluation orchestration, and history.
-- **Application adapter**: `crux-cli` -- filesystem composition, policy loading, output rendering, and process exit status.
+- **Application adapter**: `crux-dsl-cli` -- filesystem composition, policy loading, output rendering, and process exit status.
 
 ## Public API
 
@@ -494,7 +494,7 @@ crux regress history CASE [--json] [--store PATH]
 
 The existing nightly `regression` job gains a credential-free step after `cargo nextest run`:
 
-1. Build `crux-cli`.
+1. Build `crux-dsl-cli`.
 2. Create a store under `$RUNNER_TEMP`.
 3. Ingest `examples/fixtures/regression/trace.json` as the baseline.
 4. Promote it as the initial `nightly-showcase` baseline.

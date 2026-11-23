@@ -16,31 +16,31 @@ and trace detail while applying the same final-value presentation rules.
 
 ### Files to Modify
 
-| File | Purpose | Changes Needed |
-| --- | --- | --- |
-| `crates/crux-script/src/schema.rs` | Pipeline YAML schema | Add pipeline display metadata types and field |
-| `crates/crux-cli/src/bin/crux/registry.rs` | CLI result rendering | Add smart summary and metadata-aware verbose output |
-| `crates/crux-cli/src/bin/crux/run.rs` | Pipeline execution entry point | Pass display metadata into the renderer |
-| `crates/crux-cli/src/bin/crux/main.rs` | CLI argument definition | Add explicit `--json` output mode |
-| `crates/crux-script/tests/pipeline.rs` | Schema integration tests | Verify display metadata parsing and defaults |
-| `docs/crux-syntax-reference.md` | Pipeline syntax documentation | Document the `display` block |
-| `pipelines/crux/ci.crux` in Bamlish | Bamlish CI pipeline | Add labels and remove duplicate logging step |
-| `xtask/src/main.rs` in Bamlish | Crux CI launcher | Stop forcing verbose mode |
+| File                                       | Purpose                        | Changes Needed                                      |
+| ------------------------------------------ | ------------------------------ | --------------------------------------------------- |
+| `crates/crux-script/src/schema.rs`         | Pipeline YAML schema           | Add pipeline display metadata types and field       |
+| `crates/crux-cli/src/bin/crux/registry.rs` | CLI result rendering           | Add smart summary and metadata-aware verbose output |
+| `crates/crux-cli/src/bin/crux/run.rs`      | Pipeline execution entry point | Pass display metadata into the renderer             |
+| `crates/crux-cli/src/bin/crux/main.rs`     | CLI argument definition        | Add explicit `--json` output mode                   |
+| `crates/crux-script/tests/pipeline.rs`     | Schema integration tests       | Verify display metadata parsing and defaults        |
+| `docs/crux-syntax-reference.md`            | Pipeline syntax documentation  | Document the `display` block                        |
+| `pipelines/crux/ci.crux` in Bamlish        | Bamlish CI pipeline            | Add labels and remove duplicate logging step        |
+| `xtask/src/main.rs` in Bamlish             | Crux CI launcher               | Stop forcing verbose mode                           |
 
 ### Dependencies
 
-| File | Relationship |
-| --- | --- |
-| `crates/crux-cli/src/bin/crux/check.rs` | Constructs an empty `PipelineDef` |
-| `crates/crux-cli/src/bin/crux/run.rs` | Constructs temporary `PipelineDef` values |
-| `crates/crux-script/src/validator.rs` | Constructs nested and test `PipelineDef` values |
+| File                                    | Relationship                                    |
+| --------------------------------------- | ----------------------------------------------- |
+| `crates/crux-cli/src/bin/crux/check.rs` | Constructs an empty `PipelineDef`               |
+| `crates/crux-cli/src/bin/crux/run.rs`   | Constructs temporary `PipelineDef` values       |
+| `crates/crux-script/src/validator.rs`   | Constructs nested and test `PipelineDef` values |
 
 ### Test Coverage
 
-| Test | Covers |
-| --- | --- |
-| `crates/crux-script/tests/pipeline.rs` | YAML parsing and metadata defaults |
-| `crates/crux-cli/src/bin/crux/run.rs` | Verbose summary and output visibility |
+| Test                                   | Covers                                |
+| -------------------------------------- | ------------------------------------- |
+| `crates/crux-script/tests/pipeline.rs` | YAML parsing and metadata defaults    |
+| `crates/crux-cli/src/bin/crux/run.rs`  | Verbose summary and output visibility |
 
 ### Risk
 
@@ -52,7 +52,7 @@ and trace detail while applying the same final-value presentation rules.
 ## Crate Ownership
 
 - **`crux-script`** owns declarative display metadata because it is part of pipeline syntax.
-- **`crux-cli`** owns smart rendering because presentation is a CLI concern.
+- **`crux-dsl-cli`** owns smart rendering because presentation is a CLI concern.
 - **Bamlish** only supplies pipeline-specific labels and removes redundant `ctrl::log` output.
 
 ## Public API
@@ -154,7 +154,7 @@ display:
 
 1. `crux-script` deserializes optional display metadata with the pipeline definition.
 2. The runner executes the pipeline without copying presentation data into runtime traces.
-3. `crux-cli` selects summary, verbose, JSON, or quiet rendering from command-line flags.
+3. `crux-dsl-cli` selects summary, verbose, JSON, or quiet rendering from command-line flags.
 4. The selected renderer resolves labels, classifies the final value, and writes terminal text.
 
 ## Out of Scope

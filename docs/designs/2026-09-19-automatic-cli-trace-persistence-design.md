@@ -15,39 +15,39 @@ timestamped JSON trace, while `--save-trace` remains an explicit destination ove
 
 ### Files to Modify
 
-| File | Purpose | Changes Needed |
-| --- | --- | --- |
-| `crates/crux-cli/src/bin/crux/run.rs` | Pipeline execution and existing opt-in trace writes | Resolve automatic destinations, centralize persistence, and save every executed trace |
-| `crates/crux-cli/src/bin/crux/main.rs` | `crux run` argument definitions | Describe `--save-trace` as an override for automatic persistence |
-| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | End-to-end output and exit-code contracts | Isolate `$HOME`, assert automatic success and failure traces, and account for save notices |
-| `crates/crux-cli/tests/cruxfile_delegates.rs` | End-to-end Cruxfile execution | Isolate `$HOME` and verify target trace persistence |
-| `README.md` | Top-level CLI usage | Document the automatic trace directory and explicit override |
-| `docs/pipelines/01-first-pipeline.md` | First-run walkthrough | Explain that completed CLI runs save replayable traces |
-| `docs/crux-syntax-reference.md` | CLI syntax card | Record automatic persistence and `--save-trace` override behavior |
+| File                                                  | Purpose                                             | Changes Needed                                                                             |
+| ----------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `crates/crux-cli/src/bin/crux/run.rs`                 | Pipeline execution and existing opt-in trace writes | Resolve automatic destinations, centralize persistence, and save every executed trace      |
+| `crates/crux-cli/src/bin/crux/main.rs`                | `crux run` argument definitions                     | Describe `--save-trace` as an override for automatic persistence                           |
+| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | End-to-end output and exit-code contracts           | Isolate `$HOME`, assert automatic success and failure traces, and account for save notices |
+| `crates/crux-cli/tests/cruxfile_delegates.rs`         | End-to-end Cruxfile execution                       | Isolate `$HOME` and verify target trace persistence                                        |
+| `README.md`                                           | Top-level CLI usage                                 | Document the automatic trace directory and explicit override                               |
+| `docs/pipelines/01-first-pipeline.md`                 | First-run walkthrough                               | Explain that completed CLI runs save replayable traces                                     |
+| `docs/crux-syntax-reference.md`                       | CLI syntax card                                     | Record automatic persistence and `--save-trace` override behavior                          |
 
 ### Dependencies
 
-| File | Relationship |
-| --- | --- |
-| `crates/crux-types/src/id.rs` | Supplies the existing unique `CruxId` used in filenames |
-| `crates/crux-types/src/crux_value.rs` | Supplies `Crux<Value>`, `started_at`, and the serialized trace envelope |
-| `crates/crux-cli/Cargo.toml` | Already provides `chrono` and `serde_json`; no dependency change is needed |
+| File                                  | Relationship                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| `crates/crux-types/src/id.rs`         | Supplies the existing unique `CruxId` used in filenames                    |
+| `crates/crux-types/src/crux_value.rs` | Supplies `Crux<Value>`, `started_at`, and the serialized trace envelope    |
+| `crates/crux-cli/Cargo.toml`          | Already provides `chrono` and `serde_json`; no dependency change is needed |
 
 ### Test Coverage
 
-| Test Location | Current Coverage | Required Coverage |
-| --- | --- | --- |
-| `crates/crux-cli/src/bin/crux/run.rs` | Output mode selection and rendering | Deterministic path generation, sanitization, and direct persistence helpers |
+| Test Location                                         | Current Coverage                        | Required Coverage                                                                      |
+| ----------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------- |
+| `crates/crux-cli/src/bin/crux/run.rs`                 | Output mode selection and rendering     | Deterministic path generation, sanitization, and direct persistence helpers            |
 | `crates/crux-cli/tests/moa_review_cli_regressions.rs` | Regular pipeline streams and exit codes | Automatic files for successful, failed, replay, JSON, summary, verbose, and quiet runs |
-| `crates/crux-cli/tests/cruxfile_delegates.rs` | Cruxfile stub and strict behavior | One replayable file per executed target under an isolated home directory |
+| `crates/crux-cli/tests/cruxfile_delegates.rs`         | Cruxfile stub and strict behavior       | One replayable file per executed target under an isolated home directory               |
 
 ### Reference Patterns
 
-| File | Pattern to Follow |
-| --- | --- |
-| `crates/crux-cli/src/bin/crux/run.rs` | Existing pretty JSON serialization and `--save-trace` handling |
-| `crates/crux-cli/src/bin/crux/registry.rs` | Existing `$HOME/.crux/` path resolution convention |
-| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | Existing subprocess-based CLI contract tests |
+| File                                                  | Pattern to Follow                                              |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `crates/crux-cli/src/bin/crux/run.rs`                 | Existing pretty JSON serialization and `--save-trace` handling |
+| `crates/crux-cli/src/bin/crux/registry.rs`            | Existing `$HOME/.crux/` path resolution convention             |
+| `crates/crux-cli/tests/moa_review_cli_regressions.rs` | Existing subprocess-based CLI contract tests                   |
 
 ### Risk
 
@@ -59,7 +59,7 @@ timestamped JSON trace, while `--save-trace` remains an explicit destination ove
 
 ## Crate Ownership
 
-- **Owner crate**: `crux-cli` because automatic persistence is CLI policy and filesystem I/O
+- **Owner crate**: `crux-dsl-cli` because automatic persistence is CLI policy and filesystem I/O
   belongs at the application composition boundary.
 - **Affected crates**: none. Existing types from `crux-runtime` and `crux-types` are consumed
   without modification.
@@ -134,7 +134,7 @@ hyphens, and underscores; other runs become a single hyphen, with `pipeline` as 
 - **Port**: no new domain port is required. Trace persistence is application-level CLI policy,
   not runtime domain behavior.
 - **Adapter**: private `crux-cli::run` helpers perform local filesystem path resolution and writes.
-- **Dependency direction**: `crux-cli` continues depending inward on runtime and wire types; no
+- **Dependency direction**: `crux-dsl-cli` continues depending inward on runtime and wire types; no
   crate depends on CLI persistence code.
 
 ## Error Handling
