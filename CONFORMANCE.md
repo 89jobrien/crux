@@ -207,13 +207,13 @@ Lifecycle hooks intercept step execution at defined points.
 TypeSafe System One endpoint.
 
 1. `judge::score` MUST declare `ConfidenceCapability::Always`. That declaration
-   is what makes *this step's* confidence routable: `Always` is the only
+   is what makes _this step's_ confidence routable: `Always` is the only
    capability the compiler accepts for `{{ steps.<name>.confidence }}` without
    raising `dynamic_boundary`. It is **not** what first made confidence routing
    possible from YAML — `crux-baml` already declares `Always` on five handlers
    (`llm::invoke`, `llm::invoke_with_fallback`, `llm::stream`, `llm::analyze`, and
    `llm::confidence`), so a pipeline routing on `llm::confidence` is valid
-   without this crate. What `judge::score` adds is a *calibrated* confidence to
+   without this crate. What `judge::score` adds is a _calibrated_ confidence to
    route on — a rubric position rather than a model's self-report.
 2. The reported confidence MUST be the rubric position normalized onto
    `0.0..=1.0` and MUST be finite and within `0.0..=1.0`. Normalizing is what
@@ -298,27 +298,27 @@ crates under `crates/` plus the `xtask` runner. Seventeen of the crates contain
 tests; `crux-macros` is a proc-macro crate with none, and is exercised through
 the `crux` facade's integration tests.
 
-| Crate          | Tests | Coverage area                                                       |
-| -------------- | ----: | ------------------------------------------------------------------- |
-| crux-runtime   |   233 | Runtime context, delegation, speculation, replay, hooks, registry, trust, governance, safety, audit |
-| crux-script    |   210 | YAML parsing, compilation, validation, runner semantics (loops, expect, retry, timeout), confidence |
-| crux-agentic   |   117 | Handlers, adapters, analysis, CI, sqlite, review, triage, plugin discovery, CLI passthroughs |
-| crux (facade)  |   112 | Conformance suite, macros, combinators, delegation, speculation, checkpoints, research pipeline |
-| crux-cli       |    72 | `crux` binary: check, handlers, schema, trace, regress, doctor, init |
-| crux-baml      |    71 | Mock BAML server, extraction, completion, analyze, planner          |
-| crux-stdlib    |    62 | Shell, fs, git, json, text, ctrl handlers                            |
-| crux-types     |    55 | Wire types, error classification, ids, budgets, emission, serde     |
-| crux-model     |    44 | Model ID parsing, vendor registry, provider refs, serde round-trips |
-| crux-typesafe  |    42 | Calibration, wire shapes, retry policy, YAML routing                 |
-| crux-improve   |    31 | Self-improvement handlers                                           |
-| crux-task      |    26 | Task lifecycle, workflow, backend conformance                        |
-| crux-plugin    |    23 | Plugin host, protocol, manifest, bridge, discovery                   |
-| crux-planner   |    22 | Deterministic planning, evolution, generator, LLM planner snapshots  |
-| crux-regression|    21 | Regression store conformance, harness, artifacts                     |
-| crux-domain    |    16 | Domain model types, events, pipeline tests                           |
-| xtask          |    16 | Workspace task runner: publish, version                             |
-| crux-schema    |    10 | `CruxValue` JSON schema                                              |
-| crux-macros    |     0 | (proc-macro; tested via crux facade integration tests)              |
+| Crate             | Tests | Coverage area                                                                                       |
+| ----------------- | ----: | --------------------------------------------------------------------------------------------------- |
+| crux-runtime      |   233 | Runtime context, delegation, speculation, replay, hooks, registry, trust, governance, safety, audit |
+| crux-script       |   210 | YAML parsing, compilation, validation, runner semantics (loops, expect, retry, timeout), confidence |
+| crux-agentic      |   117 | Handlers, adapters, analysis, CI, sqlite, review, triage, plugin discovery, CLI passthroughs        |
+| crux-dsl (facade) |   112 | Conformance suite, macros, combinators, delegation, speculation, checkpoints, research pipeline     |
+| crux-dsl-cli      |    72 | `crux` binary: check, handlers, schema, trace, regress, doctor, init                                |
+| crux-baml         |    71 | Mock BAML server, extraction, completion, analyze, planner                                          |
+| crux-stdlib       |    62 | Shell, fs, git, json, text, ctrl handlers                                                           |
+| crux-types        |    55 | Wire types, error classification, ids, budgets, emission, serde                                     |
+| crux-model        |    44 | Model ID parsing, vendor registry, provider refs, serde round-trips                                 |
+| crux-typesafe     |    42 | Calibration, wire shapes, retry policy, YAML routing                                                |
+| crux-improve      |    31 | Self-improvement handlers                                                                           |
+| crux-task         |    26 | Task lifecycle, workflow, backend conformance                                                       |
+| crux-plugin       |    23 | Plugin host, protocol, manifest, bridge, discovery                                                  |
+| crux-planner      |    22 | Deterministic planning, evolution, generator, LLM planner snapshots                                 |
+| crux-regression   |    21 | Regression store conformance, harness, artifacts                                                    |
+| crux-domain       |    16 | Domain model types, events, pipeline tests                                                          |
+| xtask             |    16 | Workspace task runner: publish, version                                                             |
+| crux-schema       |    10 | `CruxValue` JSON schema                                                                             |
+| crux-macros       |     0 | (proc-macro; tested via crux facade integration tests)                                              |
 
 Counts are `cargo nextest list` entries per crate — unit tests plus every
 integration-test binary. They are a snapshot of this revision, not a constant;
