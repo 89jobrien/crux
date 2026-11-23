@@ -67,3 +67,32 @@ pub fn cmd_handlers(format: HandlerFormat, plugins: Option<&str>, output: Option
         None => print!("{content}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The reference catalog checked into the repository.
+    const CHECKED_IN: &str = include_str!("../../../../../docs/handler-catalog.md");
+
+    #[test]
+    fn checked_in_handler_catalog_matches_generated_output() {
+        // A nonexistent plugins path keeps the catalog to built-in handlers,
+        // so the result does not depend on the developer's ~/.crux/plugins.toml.
+        let path =
+            std::env::temp_dir().join(format!("crux-handler-catalog-{}.md", std::process::id()));
+        cmd_handlers(
+            HandlerFormat::Markdown,
+            Some("/nonexistent/crux-test-plugins.toml"),
+            path.to_str(),
+        );
+        let generated = std::fs::read_to_string(&path).expect("catalog was written");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(
+            generated == CHECKED_IN,
+            "docs/handler-catalog.md is out of date; regenerate with \
+             `crux handlers --output docs/handler-catalog.md`"
+        );
+    }
+}
