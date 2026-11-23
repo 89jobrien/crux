@@ -212,7 +212,7 @@ pub enum ProposalTransitionError {
     NotAccepted { current: &'static str },
 
     #[error(
-        "replay comparison requires an accepted or validation-passed proposal (current: {current})"
+        "replay comparison requires a validation-passed, awaiting-approval, or accepted proposal (current: {current})"
     )]
     CannotRecordComparison { current: &'static str },
 
@@ -245,6 +245,9 @@ pub struct ProposalLifecycle {
     pub approval: Option<ApprovalRecord>,
     /// Output of the replay comparison stored after the run completes.
     pub replay_comparison: Option<Comparison>,
+    /// Full regression evaluation stored by [`ProposalLifecycle::evaluate_runs`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression_evaluation: Option<RegressionEvaluation>,
     /// Baseline persisted run attached for comparison.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baseline_run: Option<PersistedRun>,
@@ -269,6 +272,7 @@ impl ProposalLifecycle {
             policy_validation: None,
             approval: None,
             replay_comparison: None,
+            regression_evaluation: None,
             baseline_run: None,
             candidate_run: None,
             history: vec![HistoryEvent::Created { at: now }],
@@ -407,8 +411,9 @@ impl ProposalLifecycle {
 
     /// Stores the replay comparison output for this proposal.
     ///
-    /// May be called from `ValidationPassed` or `Accepted` states (comparison
-    /// can be run before or after formal acceptance).
+    /// May be called from `ValidationPassed`, `AwaitingApproval`, or `Accepted`
+    /// states. Comparison evidence is recorded before the gatekeeper decides,
+    /// and may also be recorded after formal acceptance.
     ///
     /// # Errors
     ///
@@ -419,7 +424,9 @@ impl ProposalLifecycle {
         comparison: Comparison,
     ) -> Result<(), ProposalTransitionError> {
         match &self.status {
-            ProposalStatus::ValidationPassed | ProposalStatus::Accepted { .. } => {}
+            ProposalStatus::ValidationPassed
+            | ProposalStatus::AwaitingApproval
+            | ProposalStatus::Accepted { .. } => {}
             _ => {
                 return Err(ProposalTransitionError::CannotRecordComparison {
                     current: self.status_label(),
@@ -563,6 +570,7 @@ impl ProposalLifecycle {
         let evaluation = crate::evaluate_regression(&baseline.trace, &candidate.trace, policy)
             .map_err(|e| ProposalTransitionError::ComparisonFailed(e.to_string()))?;
         self.record_replay_comparison(evaluation.metrics.comparison.clone())?;
+        self.regression_evaluation = Some(evaluation.clone());
         Ok(evaluation)
     }
 }
@@ -954,6 +962,45 @@ mod tests {
         p.accept().expect("accept must succeed");
 
         assert!(matches!(p.status, ProposalStatus::Accepted { .. }));
+        assert!(p.replay_comparison.is_some());
+    }
+
+    #[test]
+    fn evaluate_runs_stores_regression_evaluation() {
+        use crate::{
+            CandidateTracePolicy, EvalThresholds, RegressionPolicy, StructuralPolicy, TraceDiffMode,
+        };
+
+        let mut p = ProposalLifecycle::new(make_improvement());
+        p.record_policy_validation(true, vec![]).unwrap();
+        p.attach_baseline_run(make_run());
+        p.attach_candidate_run(make_run());
+        let policy = RegressionPolicy {
+            metrics: EvalThresholds {
+                min_score_delta: -1.0,
+                max_latency_ratio: 100.0,
+            },
+            structure: StructuralPolicy {
+                mode: TraceDiffMode::Compatible,
+                confidence_tolerance: 1.0,
+                compare_outputs: false,
+                candidate_trace: CandidateTracePolicy::LiveOnly,
+            },
+            expected_output: None,
+            invariants: vec![],
+        };
+
+        p.evaluate_runs(&policy).expect("evaluate must succeed");
+        assert!(p.regression_evaluation.as_ref().is_some_and(|e| e.passed));
+    }
+
+    #[test]
+    fn replay_comparison_allowed_while_awaiting_approval() {
+        let mut p = ProposalLifecycle::new(make_improvement());
+        p.record_policy_validation(true, vec![]).unwrap();
+        p.request_approval().unwrap();
+        p.record_replay_comparison(make_comparison(Verdict::Neutral))
+            .expect("gatekeeper needs replay evidence before deciding");
         assert!(p.replay_comparison.is_some());
     }
 

@@ -3,8 +3,12 @@
 //! Re-exports core trace types from `crux-types` and defines the
 //! improvement vocabulary: strategies, diffs, comparisons, and policies.
 
+/// JSON file adapter for the proposal store port.
+pub mod file_store;
 /// Persisted lifecycle for improvement proposals.
 pub mod proposal;
+/// Domain service driving proposals through validation, approval, and promotion.
+pub mod service;
 /// Persistence port and in-memory adapter for proposals.
 pub mod store;
 
