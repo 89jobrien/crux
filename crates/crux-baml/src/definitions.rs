@@ -17,7 +17,7 @@ use crux_script::HandlerOutput;
 use serde_json::{Map, Value, json};
 
 use crate::baml_client::async_client::B;
-use crate::registry::BamlFunctionDef;
+use crate::registry::{BamlFunctionContract, BamlFunctionDef, BamlFunctionRegistry};
 
 // ---------------------------------------------------------------------------
 // Helper macro: reduces the boilerplate for extracting a required string field
@@ -605,4 +605,37 @@ pub fn all_definitions() -> Vec<BamlFunctionDef> {
         suggest_related_def(),
         classify_ci_failure_def(),
     ]
+}
+
+/// Handler-free contracts for every generated BAML function, sorted by name.
+///
+/// Callers use these to discover supported functions and their input contracts
+/// without invoking any handler.
+pub fn function_contracts() -> Vec<BamlFunctionContract> {
+    BamlFunctionRegistry::from_defs(all_definitions()).contracts()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn function_contracts_cover_every_generated_function() {
+        let mut expected: Vec<&str> = all_definitions().iter().map(|d| d.name).collect();
+        expected.sort_unstable();
+        let contracts = function_contracts();
+        let names: Vec<&str> = contracts.iter().map(|c| c.name).collect();
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn contracts_declare_required_inputs() {
+        let contracts = function_contracts();
+        let classify_ci = contracts
+            .iter()
+            .find(|c| c.name == "ClassifyCIFailure")
+            .expect("ClassifyCIFailure contract should exist");
+        assert_eq!(classify_ci.required_inputs(), vec!["failure_output"]);
+        assert_eq!(classify_ci.timeout_ms, 20_000);
+    }
 }
