@@ -11,7 +11,7 @@ do_not_add:
   - reason: "Pipeline execution or replay"
     target: crux-runtime or crux-script
   - reason: "CLI rendering"
-    target: crux-cli
+    target: crux-dsl-cli
 ---
 
 # Agents: crux-regression
