@@ -158,6 +158,7 @@ pub use output::{
 pub use registry::{HandlerRegistry, RegistryError};
 pub use resolve::{ResolveError, TargetResolver};
 pub use runner::Runner;
+#[allow(deprecated)]
 pub use step_runner::{
     RunnerCapability, StepContext, StepFuture, StepInvocation, StepOutput, StepRunner,
     StepRunnerRegistry,

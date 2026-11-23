@@ -77,6 +77,10 @@ pub struct StepOutput {
 }
 
 /// Legacy synchronous runner retained until the canonical registry migration completes.
+#[deprecated(
+    since = "0.5.0",
+    note = "use `StepRunner` registered through `HandlerRegistry` (built-ins via `HandlerRegistry::with_builtin_runners`)"
+)]
 pub trait LegacyStepRunner: Send + Sync {
     /// Returns the stable handler kind registered for this runner.
     fn kind(&self) -> &'static str;
@@ -86,14 +90,24 @@ pub trait LegacyStepRunner: Send + Sync {
     fn run(&self, ctx: StepContext) -> Result<StepOutput>;
 }
 
-/// Registry of step runners, auditable by kind and capability.
+/// Registry of legacy step runners, auditable by kind and capability.
+///
+/// Deprecated: use [`HandlerRegistry`](crate::HandlerRegistry), which holds
+/// both handlers and typed runners. Built-in runners are registered with
+/// [`HandlerRegistry::with_builtin_runners`](crate::HandlerRegistry::with_builtin_runners).
 ///
 /// Starts empty; call [`register_builtin_runners`](Self::register_builtin_runners)
 /// to populate with the five built-in kinds.
+#[deprecated(
+    since = "0.5.0",
+    note = "use `HandlerRegistry` (built-ins via `HandlerRegistry::with_builtin_runners`)"
+)]
+#[allow(deprecated)]
 pub struct StepRunnerRegistry {
     entries: Vec<Box<dyn LegacyStepRunner>>,
 }
 
+#[allow(deprecated)]
 impl StepRunnerRegistry {
     /// Creates an empty legacy runner registry.
     pub fn new() -> Self {
@@ -133,6 +147,7 @@ impl StepRunnerRegistry {
     }
 }
 
+#[allow(deprecated)]
 impl Default for StepRunnerRegistry {
     fn default() -> Self {
         Self::new()
@@ -140,9 +155,13 @@ impl Default for StepRunnerRegistry {
 }
 
 // ── Built-in runners ────────────────────────────────────────────────────────
-// TODO(feature-idea-11): Consolidate these runners with the production HandlerRegistry surface.
+// Legacy `LegacyStepRunner` impls for the deprecated StepRunnerRegistry surface.
+// Built-in registration goes through `HandlerRegistry::with_builtin_runners`, which
+// uses the `StepRunner` impls below. TODO(feature-idea-11): delete these legacy impls
+// once `StepRunnerRegistry` is removed.
 
 pub struct ShellRunner;
+#[allow(deprecated)]
 impl LegacyStepRunner for ShellRunner {
     fn kind(&self) -> &'static str {
         "shell"
@@ -167,6 +186,7 @@ impl LegacyStepRunner for ShellRunner {
 }
 
 pub struct FsWriteRunner;
+#[allow(deprecated)]
 impl LegacyStepRunner for FsWriteRunner {
     fn kind(&self) -> &'static str {
         "fs-write"
@@ -185,6 +205,7 @@ impl LegacyStepRunner for FsWriteRunner {
 }
 
 pub struct GitCommitRunner;
+#[allow(deprecated)]
 impl LegacyStepRunner for GitCommitRunner {
     fn kind(&self) -> &'static str {
         "git-commit"
@@ -209,6 +230,7 @@ impl LegacyStepRunner for GitCommitRunner {
 }
 
 pub struct JsonUpdateRunner;
+#[allow(deprecated)]
 impl LegacyStepRunner for JsonUpdateRunner {
     fn kind(&self) -> &'static str {
         "json-update"
@@ -237,6 +259,7 @@ impl LegacyStepRunner for JsonUpdateRunner {
 }
 
 pub struct LlmCallRunner;
+#[allow(deprecated)]
 impl LegacyStepRunner for LlmCallRunner {
     fn kind(&self) -> &'static str {
         "llm-call"
@@ -287,7 +310,7 @@ fn config_str_owned(config: &Value, key: &str) -> std::result::Result<String, Cr
 
 // ── Production StepRunner implementations ──────────────────────────────────
 // These give the built-in runners a first-class presence in the production
-// HandlerRegistry surface (see HandlerRegistry::register_builtin_runners).
+// HandlerRegistry surface (see HandlerRegistry::with_builtin_runners).
 
 impl StepRunner for ShellRunner {
     fn metadata(&self) -> &HandlerMetadata {
