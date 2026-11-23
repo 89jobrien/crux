@@ -1,4 +1,4 @@
-// Default LLM clients used by cruxx-agentic extraction functions.
+// Default LLM clients used by crux-agentic extraction functions.
 //
 // Model selection: set OPENAI_MODEL / ANTHROPIC_MODEL env vars to override
 // the defaults below. If unset, falls back to the hardcoded defaults.

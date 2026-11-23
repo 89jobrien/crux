@@ -13,7 +13,7 @@
       "Bash(echo:*)",
       "Bash(uv:*)",
       "Bash(devloop:*)",
-      "Bash(cruxx:*)",
+      "Bash(crux:*)",
       "Bash(devkit:*)",
       "Bash(baml-cli:*)",
       "Bash(head:*)",

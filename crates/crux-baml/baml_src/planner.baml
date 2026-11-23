@@ -74,11 +74,11 @@ class PipelineDef {
 function GeneratePipeline(goal: string, available_handlers: string[], constraints: string?) -> PipelineDef {
   client OpenAIDefault
   prompt #"
-    You are a pipeline generator for cruxx-script, a YAML-based pipeline DSL.
+    You are a pipeline generator for crux-script, a YAML-based pipeline DSL.
 
-    Generate a valid cruxx-script pipeline from the given goal.
+    Generate a valid crux-script pipeline from the given goal.
 
-    ## cruxx-script pipeline grammar
+    ## crux-script pipeline grammar
 
     A pipeline has a top-level `pipeline` name and a list of `steps`.
     Optional top-level `budget` with keys: tokens, calls, duration_ms, cost_cents.

@@ -6,7 +6,7 @@ STUBS_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)/stubs"
 
 setup_repo() {
     REPO="$BATS_TMPDIR/repo"
-    mkdir -p "$REPO/crates/cruxx-agentic/src"
+    mkdir -p "$REPO/crates/crux-agentic/src"
     cd "$REPO"
     git init -q
     git config user.email "test@test.com"
@@ -22,7 +22,7 @@ setup_repo() {
 stage_file() {
     local f="$1" content="${2:-// placeholder}"
     mkdir -p "$(dirname "$f")"
-    printf '%s\n' "$content" > "$f"
+    printf '%s\n' "$content" >"$f"
     git add "$f"
 }
 

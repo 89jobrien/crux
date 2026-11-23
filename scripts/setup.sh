@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cruxx developer setup — bash version
+# crux developer setup — bash version
 #
 # PARITY NOTICE: this script must stay in sync with setup.nu and setup.fish.
 # All three must perform the same steps in the same order. When editing one,
@@ -12,9 +12,12 @@ set -euo pipefail
 errors=0
 
 header() { printf "\n\033[1;34m==> %s\033[0m\n" "$1"; }
-ok()     { printf "  \033[32m[ok]\033[0m %s\n" "$1"; }
-warn()   { printf "  \033[33m[warn]\033[0m %s\n" "$1"; }
-fail()   { printf "  \033[31m[fail]\033[0m %s\n" "$1"; errors=$((errors + 1)); }
+ok() { printf "  \033[32m[ok]\033[0m %s\n" "$1"; }
+warn() { printf "  \033[33m[warn]\033[0m %s\n" "$1"; }
+fail() {
+    printf "  \033[31m[fail]\033[0m %s\n" "$1"
+    errors=$((errors + 1))
+}
 
 # --- 1. Rust toolchain ---
 header "Rust toolchain"
@@ -65,7 +68,7 @@ fi
 
 # --- 4. Generate BAML client ---
 header "BAML client generation"
-baml_dir="crates/cruxx-agentic"
+baml_dir="crates/crux-agentic"
 if [ -d "$baml_dir/baml_src" ]; then
     if command -v mise >/dev/null 2>&1; then
         if (cd "$baml_dir" && mise exec -- baml-cli generate) 2>&1; then

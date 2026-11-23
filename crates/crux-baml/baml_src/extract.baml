@@ -1,4 +1,4 @@
-// Structured extraction functions for cruxx-agentic llm::extract handler.
+// Structured extraction functions for crux-agentic llm::extract handler.
 
 // ============================================================================
 // Entity Extraction
@@ -226,7 +226,7 @@ test TestClassifyCIFailureObfsck {
   functions [ClassifyCIFailure]
   args {
     failure_output #"
-      [obfsck] Potential secret detected in crates/cruxx-agentic/src/handlers/llm.rs:42
+      [obfsck] Potential secret detected in crates/crux-agentic/src/handlers/llm.rs:42
       Pattern: API_KEY assignment
       Match: api_key = "test_fixture_value"
       Exit code: 1
@@ -244,7 +244,7 @@ test TestClassifyCIFailureRealClippy {
   args {
     failure_output #"
       error[E0502]: cannot borrow `ctx` as mutable because it is also borrowed as immutable
-        --> crates/cruxx-core/src/ctx.rs:88:9
+        --> crates/crux-core/src/ctx.rs:88:9
          |
       85 |     let step = ctx.current_step();
          |                --- immutable borrow occurs here

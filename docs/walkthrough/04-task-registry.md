@@ -21,7 +21,7 @@ On restart you have three bad options:
 2. Ad-hoc checkpointing — custom "save after this step" code in every agent, always slightly wrong.
 3. Ship it and pray.
 
-Cruxx gives you a fourth: the runtime persists every step as it happens, and replay is a language
+Crux gives you a fourth: the runtime persists every step as it happens, and replay is a language
 feature, not a library bolted on afterward.
 
 ## The two types

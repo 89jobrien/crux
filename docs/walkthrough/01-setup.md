@@ -1,6 +1,6 @@
 # Chapter 01 — Setup and First Agent
 
-<!-- TODO(docs): Replace stale Cruxx naming and align Agent, confidence, attempt, event, and ID details with current types. -->
+<!-- TODO(docs): Replace stale Crux naming and align Agent, confidence, attempt, event, and ID details with current types. -->
 
 This chapter walks from zero to a working agent. By the end you will have a project that compiles,
 runs a two-step agent, and prints a structured trace as JSON.
@@ -9,7 +9,7 @@ runs a two-step agent, and prints a structured trace as JSON.
 
 ## Toolchain Requirements
 
-Cruxx requires **Rust 1.89.0 or later** and **edition 2024**.
+Crux requires **Rust 1.89.0 or later** and **edition 2024**.
 
 The two key language features that make the programming model work are:
 
@@ -204,7 +204,7 @@ Key methods:
 
 ## Mental Model: Hand-Rolled vs. Crux
 
-Without Cruxx, a typical agent looks like this:
+Without Crux, a typical agent looks like this:
 
 ```rust
 async fn hello(name: String) -> Result<String, MyError> {
@@ -221,7 +221,7 @@ This is perfectly fine Rust. What it cannot do is answer questions after the fac
 - What was the intermediate value at each stage?
 - Did a downstream caller delegate to this agent, and what did it pass?
 
-Cruxx makes the execution structure inspectable by turning the implicit call stack into an explicit
+Crux makes the execution structure inspectable by turning the implicit call stack into an explicit
 `Vec<Step>` that travels alongside the value. A caller that receives `Crux<String>` gets both the
 result and the full audit trail, serializable to JSON, storable in a registry, and replayable
 deterministically.

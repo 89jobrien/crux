@@ -1,5 +1,5 @@
 ---
-source: crates/cruxx-planner/tests/llm_planner_snapshots.rs
+source: crates/crux-planner/tests/llm_planner_snapshots.rs
 assertion_line: 37
 expression: yaml
 ---

@@ -31,11 +31,11 @@ fake_stage() {
 
 @test "pre-commit: creates baml stub if missing" {
     setup_repo
-    rm -f "$REPO/crates/cruxx-agentic/src/baml_client/mod.rs"
-    fake_stage "crates/cruxx-agentic/src/lib.rs" "fn main(){}"
+    rm -f "$REPO/crates/crux-agentic/src/baml_client/mod.rs"
+    fake_stage "crates/crux-agentic/src/lib.rs" "fn main(){}"
     run run_pre_commit
     [ "$status" -eq 0 ]
-    [ -f "$REPO/crates/cruxx-agentic/src/baml_client/mod.rs" ]
+    [ -f "$REPO/crates/crux-agentic/src/baml_client/mod.rs" ]
 }
 
 @test "pre-commit: staged .rs file invokes cargo fmt check" {
