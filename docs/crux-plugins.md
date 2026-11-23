@@ -12,8 +12,13 @@ protocol over stdin/stdout.
    [[plugin]]
    name = "github"
    path = "/usr/local/bin/crux-github"
-   env = { GITHUB_TOKEN = "ghp_..." }
+   env = { GITHUB_TOKEN = "env://GITHUB_TOKEN" }
    ```
+
+   Secret-looking keys (ending in `_TOKEN`, `_KEY`, `_SECRET`, `_PASSWORD`, or
+   `_PASSPHRASE`) must use an `env://VAR` reference; a literal value is rejected
+   when the manifest is loaded. Export the variable in the host environment
+   before running crux.
 
 2. Run a pipeline that uses plugin handlers:
 
@@ -69,7 +74,10 @@ check consumers statically instead of treating the output as `Dynamic`:
       {
         "name": "github::list_labels",
         "description": "List labels in a repository",
-        "output_schema": { "type": "array", "definition": { "items": { "type": "string" } } }
+        "output_schema": {
+          "type": "array",
+          "definition": { "items": { "type": "string" } }
+        }
       }
     ]
   }
