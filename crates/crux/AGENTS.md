@@ -15,7 +15,6 @@ common_tasks:
     location: "crates/crux/tests/"
 commands:
   ci: "just ci"
-  test: "cargo nextest run -p crux"
 ---
 
 # Agents: crux

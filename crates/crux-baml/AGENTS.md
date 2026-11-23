@@ -15,8 +15,6 @@ howto:
 pitfalls:
   - "All tests require API keys"
   - "baml_client/ is gitignored — must regenerate after clone"
-commands:
-  test: "just sops-run crux dev cargo nextest run -p crux-baml"
 ---
 
 # Agents: crux-baml

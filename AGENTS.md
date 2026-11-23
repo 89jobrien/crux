@@ -23,21 +23,13 @@ just fix                          # cargo fmt --all (in-place)
 just build                        # cargo build --all-targets
 ```
 
-Always use `cargo nextest run` instead of `cargo test`.
-
-```bash
-cargo nextest run -p crux-runtime    # Single crate
-cargo nextest run test_name          # Single test
-cargo nextest run --features redb    # Include redb adapter tests
-```
-
 ## Workspace Structure
 
 All crates live in `crates/`:
 
 | Crate          | Role                                                                      |
 | -------------- | ------------------------------------------------------------------------- |
-| `crux-dsl`     | Facade -- re-exports runtime + macros. Integration tests here.            |
+| `crux`         | Facade -- re-exports runtime + macros. Integration tests here.            |
 | `crux-runtime` | Core types, traits, runtime. All domain logic.                            |
 | `crux-types`   | Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxErr`). Minimal deps. |
 | `crux-macros`  | `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.      |
@@ -93,7 +85,7 @@ Lenient mode does a forward name scan for recovery.
 
 ## Pipeline Binary
 
-The CLI binary is `crux` (not `crux-run`), built from `crux-dsl-cli`:
+The CLI binary is `crux` (not `crux-run`), built from `crux-cli`:
 
 ```bash
 cargo build -p crux-dsl-cli --bin crux --release
@@ -132,9 +124,7 @@ See `docs/editor-integration.md`.
 
 ## Conventions
 
-- Run `cargo clippy` and `cargo nextest run` after changes.
 - Run tests before committing.
-- Use `cargo nextest run` for test filtering, not `cargo test`.
 - Pipeline definitions use `.crux` extension.
 - Do not modify generated files (`baml_client/`, `target/`).
 

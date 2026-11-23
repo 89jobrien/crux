@@ -7,9 +7,7 @@ with code in this repository.
 
 Crux is an agentic DSL for Rust -- macros, traits, and types that make agentic control flow
 explicit in the type system. Every step, delegation, speculation, and failure is a first-class
-value (`Crux<T>`) that is inspectable, serializable, and replayable. Rust edition 2024, MSRV 1.88.
-
-<!-- TODO(docs): Update the documented MSRV to the workspace's Rust 1.89 requirement. -->
+value (`Crux<T>`) that is inspectable, serializable, and replayable. Rust edition 2024, MSRV 1.89.
 
 ## Build Commands
 
@@ -21,19 +19,13 @@ just fmt                             # cargo fmt --all -- --check
 just fix                             # cargo fmt --all (in-place)
 just build                           # cargo build --all-targets
 just hooks                           # Install git hooks from .githooks/
-
-cargo nextest run -p crux-runtime       # Test a single crate
-cargo nextest run test_name          # Run a single test
-cargo nextest run --features redb    # Include redb adapter tests
 ```
-
-Always use `cargo nextest run` instead of `cargo test`.
 
 ## Workspace Structure
 
 Crates in `crates/`:
 
-- **`crux-dsl`** -- Facade crate. Re-exports `crux-domain`, `crux-derive`, `crux-runtime` (optional
+- **`crux`** -- Facade crate. Re-exports `crux-domain`, `crux-derive`, `crux-runtime` (optional
   `crux-script`). Integration tests live here (`tests/agent_macro.rs`, `checkpoint.rs`,
   `combinators.rs`, `conformance.rs`, `delegation.rs`, `evolve_macro.rs`, `harness_macro.rs`,
   `research_pipeline.rs`, `speculation.rs`, `streaming.rs`, `substrate_integration.rs`,
@@ -43,20 +35,19 @@ Crates in `crates/`:
   (`SafetyPolicy`, `ApprovalGate`).
 - **`crux-macros`** (package name `crux-derive`, renamed for crates.io publishing) --
   `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
-- **`crux-agentic`** -- Step handlers: shell, fs, git, json, llm, container, harness. Adapters:
-  `AutoApproveGate`, `TerminalApprovalGate`.
-- **`crux-dsl-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
+- **`crux-agentic`** -- Step handlers: llm, container, harness, sqlite, rx, task, ci, review.
+  Adapters: `AutoApproveGate`, `TerminalApprovalGate`.
+- **`crux-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
   for handlers/registry.
-
-<!-- TODO(docs): Attribute shell, fs, git, JSON, text, and control handlers to `crux-stdlib`. -->
-
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
   harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
 - **`crux-script`** -- YAML-driven pipeline scripting.
-- **`crux-types`** -- Wire-format types (`Crux<T>`, `Step`, `Budget`, `CruxId`, `CruxErr`) with
-  minimal deps (serde, chrono, ulid). `crux-runtime` re-exports everything — no breaking change.
-  External consumers (minibox) depend on this to avoid pulling the full runtime. `RecoveryKind`
-  is the serializable subset of `Recovery<T>` (closure variants stay in core).
+- **`crux-types`** -- Wire-format types (`Step`, `Budget`, `CruxId`, `CruxErr`, `RecoveryKind`,
+  `RunMetrics`) with minimal deps (serde, chrono, ulid). `crux-runtime` re-exports everything — no
+  breaking change. External consumers (minibox) depend on this to avoid pulling the full runtime.
+  `RecoveryKind` is the serializable subset of `Recovery<T>` (closure variants stay in core).
+- **`crux-schema`** -- Home of `Crux<T>` (the trace-fused result value) plus `Delegation`,
+  `FinalPhase`, and `StepRecord`. `crux-runtime` re-exports it as `types::crux_value`.
 - **`crux-model`** -- Canonical model ID types and provider-specific parsers.
 - **`crux-plugin`** -- Subprocess plugin host for pipelines.
 - **`crux-domain`** -- Pure domain types for the crux agentic DSL -- no async, no LLM deps.
@@ -94,7 +85,8 @@ The `RegistryBackend` trait is the persistence port. Two adapters exist:
 
 ### Key Types
 
-- `Crux<T>` (`types/crux_value.rs`) -- execution trace fused with result
+- `Crux<T>` (`crates/crux-schema/src/crux_value.rs`) -- execution trace fused with result;
+  runtime code imports it as `crate::types::crux_value::Crux`
 - `Step` (`types/step.rs`) -- recorded unit of work (kind, status, confidence, output, children)
 - `CruxCtx` (`ctx.rs`) -- runtime: `step()`, `delegate()`, `speculate()`, `pipe()`, `join_all()`,
   `route_on_confidence()`
@@ -119,11 +111,9 @@ recovery path, not a fallback.
 
 `#[crux::agent]` on `async fn foo(input: T) -> Crux<U>` generates:
 
-1. Inner function with `CruxCtx` injected as `t`
+1. Inner function with `CruxCtx` injected as `x`
 2. Public wrapper that creates `CruxCtx` and calls `finalize()`
 3. `FooAgent` struct implementing the `Agent` trait
-
-<!-- TODO(docs): Change the documented injected `CruxCtx` binding from `t` to `x`. -->
 
 `#[crux::harness]` on a struct marks it as a managed container/process harness. The struct
 must have `image: String` and any additional fields mapped to `HarnessProfile`.
