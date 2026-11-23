@@ -63,6 +63,17 @@ pub struct BamlFunctionDef {
 }
 
 impl BamlFunctionDef {
+    /// Handler-free contract for this function.
+    pub fn contract(&self) -> BamlFunctionContract {
+        BamlFunctionContract {
+            name: self.name,
+            description: self.description,
+            input_schema: self.input_schema.clone(),
+            output_schema: self.output_schema.clone(),
+            timeout_ms: self.timeout_ms,
+        }
+    }
+
     /// Invoke the handler with the given inputs.
     pub async fn invoke(
         &self,
@@ -81,6 +92,33 @@ impl std::fmt::Debug for BamlFunctionDef {
             .field("description", &self.description)
             .field("timeout_ms", &self.timeout_ms)
             .finish_non_exhaustive()
+    }
+}
+
+/// Handler-free description of a [`BamlFunctionDef`]: everything a caller needs
+/// to discover a generated function and build a valid request for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BamlFunctionContract {
+    /// BAML function name, as accepted by the `function` field of `llm::extract`.
+    pub name: &'static str,
+    /// One-line human-readable description.
+    pub description: &'static str,
+    /// JSON Schema for the input map.
+    pub input_schema: Value,
+    /// JSON Schema for the output payload.
+    pub output_schema: Value,
+    /// Advisory wall-clock timeout in milliseconds.
+    pub timeout_ms: u64,
+}
+
+impl BamlFunctionContract {
+    /// Field names listed as `required` in the input schema, in schema order.
+    pub fn required_inputs(&self) -> Vec<&str> {
+        self.input_schema
+            .get("required")
+            .and_then(Value::as_array)
+            .map(|fields| fields.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -115,6 +153,14 @@ impl BamlFunctionRegistry {
         let mut names: Vec<_> = self.defs.keys().copied().collect();
         names.sort_unstable();
         names
+    }
+
+    /// Contracts for all registered functions, sorted by name.
+    pub fn contracts(&self) -> Vec<BamlFunctionContract> {
+        let mut contracts: Vec<BamlFunctionContract> =
+            self.defs.values().map(BamlFunctionDef::contract).collect();
+        contracts.sort_by_key(|contract| contract.name);
+        contracts
     }
 
     /// Register the `llm::extract` handler on `registry`.
@@ -236,5 +282,33 @@ mod tests {
             .map(|_| ())
             .ok_or_else(|| "not found".to_string());
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn contracts_are_sorted_and_carry_metadata() {
+        let reg = BamlFunctionRegistry::from_defs([dummy_def("Zeta"), dummy_def("Alpha")]);
+        let contracts = reg.contracts();
+        let names: Vec<_> = contracts.iter().map(|c| c.name).collect();
+        assert_eq!(names, vec!["Alpha", "Zeta"]);
+        assert_eq!(contracts[0].description, "test");
+        assert_eq!(contracts[0].timeout_ms, 5_000);
+    }
+
+    #[test]
+    fn contract_reports_required_inputs_in_schema_order() {
+        let def = BamlFunctionDef {
+            input_schema: json!({
+                "type": "object",
+                "required": ["text", "labels"],
+                "properties": {
+                    "text": { "type": "string" },
+                    "labels": { "type": "array" }
+                }
+            }),
+            ..dummy_def("Classify")
+        };
+        let reg = BamlFunctionRegistry::from_defs([def]);
+        let contracts = reg.contracts();
+        assert_eq!(contracts[0].required_inputs(), vec!["text", "labels"]);
     }
 }
