@@ -37,22 +37,31 @@ pub fn cmd_handlers(format: HandlerFormat, plugins: Option<&str>, output: Option
                 if handler.args.args.is_empty() {
                     buf.push_str("No declared arguments.\n\n");
                 } else {
-                    buf.push_str("| Name | Required | Schema | Description |\n");
-                    buf.push_str("| --- | --- | --- | --- |\n");
-                    for argument in &handler.args.args {
-                        buf.push_str(&format!(
-                            "| `{}` | {} | `{:?}` | {} |\n",
-                            argument.name,
-                            argument.required,
-                            argument.schema,
-                            argument.description.as_deref().unwrap_or("")
-                        ));
-                    }
+                    let rows: Vec<Vec<String>> = handler
+                        .args
+                        .args
+                        .iter()
+                        .map(|argument| {
+                            vec![
+                                format!("`{}`", argument.name),
+                                argument.required.to_string(),
+                                format!("`{:?}`", argument.schema),
+                                argument.description.clone().unwrap_or_default(),
+                            ]
+                        })
+                        .collect();
+                    push_table(
+                        &mut buf,
+                        &["Name", "Required", "Schema", "Description"],
+                        &rows,
+                    );
                     buf.push('\n');
                 }
                 buf.push_str("### Output\n\n");
                 buf.push_str(&format!("`{:?}`\n\n", handler.output_schema));
             }
+            buf.truncate(buf.trim_end().len());
+            buf.push('\n');
             buf
         }
     };
@@ -65,6 +74,37 @@ pub fn cmd_handlers(format: HandlerFormat, plugins: Option<&str>, output: Option
             });
         }
         None => print!("{content}"),
+    }
+}
+
+/// Writes a Markdown table with each column padded to its widest cell, which is
+/// the layout the repository's markdown formatter leaves checked-in tables in.
+fn push_table(buf: &mut String, headers: &[&str], rows: &[Vec<String>]) {
+    let widths: Vec<usize> = headers
+        .iter()
+        .enumerate()
+        .map(|(col, header)| {
+            rows.iter()
+                .map(|row| row[col].chars().count())
+                .fold(header.chars().count(), usize::max)
+        })
+        .collect();
+
+    let push_line = |buf: &mut String, cells: Vec<String>| {
+        buf.push('|');
+        for (cell, width) in cells.iter().zip(&widths) {
+            buf.push_str(&format!(" {cell:<width$} |", width = *width));
+        }
+        buf.push('\n');
+    };
+
+    push_line(
+        buf,
+        headers.iter().map(|header| header.to_string()).collect(),
+    );
+    push_line(buf, widths.iter().map(|width| "-".repeat(*width)).collect());
+    for row in rows {
+        push_line(buf, row.clone());
     }
 }
 
