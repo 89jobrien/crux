@@ -1,4 +1,4 @@
-# crux-cli
+# crux-dsl-cli
 
 Command-line interface for discovering, validating, planning, executing, replaying, and persisting
 Crux pipeline traces. The package installs the `crux` binary.
@@ -55,7 +55,6 @@ targets gain a target suffix.
 ## Development and testing
 
 ```console
-cargo nextest run -p crux-dsl-cli
 cargo nextest run -p crux-dsl-cli
 cargo clippy -p crux-dsl-cli --all-targets --all-features -- -D warnings
 ./target/debug/crux --help

@@ -21,6 +21,16 @@ just build                           # cargo build --all-targets
 just hooks                           # Install git hooks from .githooks/
 ```
 
+## Package Names
+
+- Facade package is `crux-dsl` (lib name `crux`); CLI package is `crux-dsl-cli` (bin `crux`). Use `-p crux-dsl` / `-p crux-dsl-cli`; `-p crux` fails.
+- `taskit.toml` `pkg` and `[[workspace.propagation]]` dependents must match Cargo package names, or lint fails with "package ID specification ... did not match any packages".
+
+## Commit Gotchas
+
+- The pre-commit hook re-stages staged `.md` files from the working tree. Do not stage a HEAD-based blob for a file that has uncommitted edits; it will be overwritten. Stage a file only when its working copy is the content you want committed.
+- `Cargo.lock` re-sorts after package renames, so expect ordering-only diffs alongside the rename.
+
 ## Workspace Structure
 
 Crates in `crates/`:
@@ -37,7 +47,7 @@ Crates in `crates/`:
   `#[crux::agent]`, `#[crux::harness]`, `#[crux::evolve]` proc macros.
 - **`crux-agentic`** -- Step handlers: llm, container, harness, sqlite, rx, task, ci, review.
   Adapters: `AutoApproveGate`, `TerminalApprovalGate`.
-- **`crux-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
+- **`crux-dsl-cli`** -- `crux` CLI binary (`list`/`run`/`plan` subcommands), depends on `crux-agentic`
   for handlers/registry.
 - **`crux-planner`** -- `EvolutionPlanner`: deterministic, metrics-driven
   harness profile evolution. Accepts `RunMetrics`, emits `HarnessDiff`.
@@ -87,13 +97,13 @@ The `RegistryBackend` trait is the persistence port. Two adapters exist:
 
 - `Crux<T>` (`crates/crux-schema/src/crux_value.rs`) -- execution trace fused with result;
   runtime code imports it as `crate::types::crux_value::Crux`
-- `Step` (`types/step.rs`) -- recorded unit of work (kind, status, confidence, output, children)
+- `Step` (`crates/crux-types/src/step.rs`) -- recorded unit of work (kind, status, confidence, output, children)
 - `CruxCtx` (`ctx.rs`) -- runtime: `step()`, `delegate()`, `speculate()`, `pipe()`, `join_all()`,
   `route_on_confidence()`
 - `Agent` trait (`agent.rs`) -- `name()`, `run(ctx, input)`, `budget()`, lifecycle hooks
 - `TaskRegistry<B>` (`registry/mod.rs`) -- submit/get/update_status/checkpoint/pending with CAS
 - `Recovery<T>` (`types/recovery.rs`) -- hook return: Continue, Skip, Retry, Escalate, Substitute(T)
-- `Budget` (`types/budget.rs`) -- token/step/time limits, scoped per delegation
+- `Budget` (`crates/crux-types/src/budget.rs`) -- token/step/time limits, scoped per delegation
 - `HarnessProfile` (`types/harness.rs`) -- resource spec for a container/process harness
 - `ResourceHints` -- advisory scheduling metadata attached to a profile
 - `HarnessDiff` -- incremental description of profile changes
@@ -134,8 +144,8 @@ Pipeline definitions use the `.crux` file extension (YAML syntax). Previously `.
   `generators.baml` exactly. When bumping baml, update both files together.
 - `baml-cli` is managed via `.mise.toml` — always use `mise exec -- baml-cli generate` from
   `crates/crux-agentic/`. Never run bare `baml-cli generate`; the global shim may be stale.
-- Build `crux` with `cargo build -p crux-dsl-cli --bin crux --features baml` or
-  `llm::extract` / `llm::decompose` won't register.
+- Build `crux` with `cargo build -p crux-dsl-cli --bin crux`. `crux-baml` is a plain
+  dependency, so no feature flag is needed.
 - Run pipeline examples: `dotenvx run --env-file=$HOME/dev/.env -- ./target/debug/crux
 examples/<pipeline>.crux examples/input_<name>.json`
 - BAML integration tests and examples require API keys from `~/dev/.env` — see `CLAUDE.local.md`

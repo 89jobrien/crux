@@ -111,7 +111,7 @@ crux checkout and reports a reinstall command when they differ.
 
 `crux schema` exports the pipeline JSON Schema. `crux schema --editor
 yaml-language-server` prints a ready-to-paste `yaml.schemas` snippet, and
-`crux init` scaffolds `.vscode/crux-schema.json` plus `.vscode/settings.json`.
+`crux schema -o .vscode/crux-schema.json` writes the schema file, and the `--editor` snippet goes in `.vscode/settings.json`.
 See `docs/editor-integration.md`.
 
 ## BAML
