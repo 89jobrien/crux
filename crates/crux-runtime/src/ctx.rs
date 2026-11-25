@@ -1137,20 +1137,6 @@ impl CruxCtx {
     /// reserving budget or polling `f`; pre-execution rejection also leaves `f`
     /// untouched. Handler integrations should normally use [`InvocationMeter`] so
     /// they can distinguish those cases before recording duration and usage.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use crux_runtime::prelude::{Budget, Context, CruxCtx};
-    ///
-    /// # async fn example() -> Result<(), crux_runtime::prelude::CruxErr> {
-    /// let mut ctx = CruxCtx::new("example");
-    /// ctx.set_budget(Budget::steps(1));
-    /// let value = ctx.step_budgeted("fetch", || async { Ok(42_u32) }).await?;
-    /// assert_eq!(value, 42);
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) async fn step_budgeted<F, Fut, T>(&mut self, name: &str, f: F) -> Result<T, CruxErr>
     where
         F: FnOnce() -> Fut + Send,

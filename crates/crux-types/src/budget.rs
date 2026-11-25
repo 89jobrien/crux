@@ -14,7 +14,7 @@ use crate::error::CruxErr;
 /// # Examples
 ///
 /// ```
-/// use crux_types::UsdAmount;
+/// use crux_types::budget::UsdAmount;
 ///
 /// let amount = UsdAmount::from_micros(1_250_000);
 /// assert_eq!(amount.micros(), 1_250_000);
@@ -408,7 +408,8 @@ impl Default for Budget {
 /// # Examples
 ///
 /// ```
-/// use crux_types::{Budget, BudgetTracker, CruxErr, HandlerUsage, UsdAmount};
+/// use crux_types::budget::{Budget, BudgetTracker, HandlerUsage, UsdAmount};
+/// use crux_types::error::CruxErr;
 ///
 /// let mut tracker = BudgetTracker::new(Budget::combined(vec![
 ///     Budget::steps(1),
